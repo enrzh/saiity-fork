@@ -1,157 +1,151 @@
 // DictusApp/Views/HomeView.swift
-// Home dashboard showing model status, last transcription, and test dictation link.
+// Home dashboard showing real model readiness, dictation, and recent output.
 import SwiftUI
 import DictusCore
 
-/// Home tab dashboard — the first screen users see after onboarding.
-///
-/// WHY a dedicated HomeView instead of reusing ContentView:
-/// ContentView combined navigation, diagnostics, and model prompts in one view.
-/// HomeView is focused: it's a dashboard showing current status and quick actions.
-/// Diagnostics move to Settings (Plan 04-02), model management is its own tab.
 struct HomeView: View {
     @EnvironmentObject var coordinator: DictationCoordinator
     @EnvironmentObject var proStatus: ProStatusManager
     @ObservedObject var modelManager: ModelManager
+    var onModelsRequested: (() -> Void)?
+
     @State private var showCopiedFeedback = false
 
-    /// Read active model name from App Group for display.
-    private var activeModelName: String? {
-        AppGroup.defaults.string(forKey: SharedKeys.activeModel)
+    init(modelManager: ModelManager, onModelsRequested: (() -> Void)? = nil) {
+        self.modelManager = modelManager
+        self.onModelsRequested = onModelsRequested
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: 20) {
+                header
+                greeting
+                modelStatusSurface
 
-            // Logo mark
-            logoSection
+                if modelManager.isModelReady {
+                    newDictationButton
+                } else if let onModelsRequested {
+                    Button(action: onModelsRequested) {
+                        Label("Open Models", systemImage: "arrow.down.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
 
-            // Model status card
-            modelStatusCard
+                if let result = coordinator.lastResult, !result.isEmpty {
+                    recentActivity(result: result)
+                }
 
-            // Last transcription preview
-            if let result = coordinator.lastResult {
-                transcriptionCard(result: result)
+                if PremiumFlags.paywallVisible {
+                    ProBannerView()
+                }
             }
-
-            // Test dictation button
-            if modelManager.isModelReady {
-                testDictationLink
-            }
-
-            // Pro banner (hidden when subscribed).
-            // Gated behind PremiumFlags.paywallVisible until the first Pro
-            // feature ships and ASC setup is done (#236, #79, #215).
-            if PremiumFlags.paywallVisible {
-                ProBannerView()
-            }
-
-            Spacer()
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
-        .padding()
-        .background(Color.dictusBackground.ignoresSafeArea())
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
-            // Refresh model state every time HomeView appears.
             modelManager.loadState()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DictusOnboardingCompleted"))) { _ in
-            // WHY onReceive in addition to onAppear:
-            // HomeView mounts behind the onboarding fullScreenCover, so onAppear fires
-            // before the model is downloaded. When onboarding completes and dismisses
-            // the cover, onAppear does NOT re-fire. This notification-based refresh
-            // ensures HomeView shows the correct model state immediately.
             modelManager.loadState()
         }
     }
 
-    // MARK: - Logo Section
-
-    /// Static 3-bar brand logo at the top of the home screen.
-    /// Subscribers see the Dictus Pro gradient wordmark from the paywall hero,
-    /// a quiet permanent reminder of what they unlocked.
-    private var logoSection: some View {
-        VStack(spacing: 8) {
-            DictusLogo(height: 60)
-                .padding(.top, 8)
-            if proStatus.isProActive {
-                Text("sAiity Pro")
-                    .font(.dictusHeading)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.dictusGradientStart, .dictusGradientEnd],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            } else {
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("sAiity")
-                    .font(.dictusHeading)
-                    .foregroundColor(.dictusAccent)
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(.primary)
+                if proStatus.isProActive {
+                    Text("Pro")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.dictusAccent)
+                }
             }
+            Spacer()
+            DictusLogo(height: 34)
+                .accessibilityHidden(true)
         }
-        .padding(.bottom, 8)
+        .padding(.horizontal, 4)
     }
 
-    // MARK: - Model Status Card
+    private var greeting: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(greetingTitle)
+                .font(.system(.title3, design: .rounded, weight: .semibold))
+            Text(readinessSubtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-    /// Shows active model name and ready status, or prompts to download.
-    ///
-    /// WHY a prominent card for "no model" state:
-    /// First-time users need clear guidance. Without a model, the app can't transcribe.
-    /// The card makes the first required action obvious (navigate to Models tab).
-    private var modelStatusCard: some View {
+    private var modelStatusSurface: some View {
         Group {
-            if modelManager.isModelReady, let modelName = activeModelName {
-                // Active model display using ModelInfo for human-readable name/size.
-                // WHY ModelInfo.forIdentifier: The raw identifier (e.g. "openai_whisper-small")
-                // is not user-friendly. ModelInfo maps it to "Small" + "~250 MB".
-                HStack {
-                    let info = ModelInfo.forIdentifier(modelName)
+            if let modelIdentifier = modelManager.activeModel,
+               modelManager.isModelReady {
+                let info = ModelInfo.forIdentifier(modelIdentifier)
+                HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Active model")
-                            .font(.dictusCaption)
-                            .foregroundColor(.secondary)
-                        Text(info?.displayName ?? modelName)
-                            .font(.dictusSubheading)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(info?.displayName ?? modelIdentifier)
+                            .font(.system(.title3, design: .rounded, weight: .semibold))
                         if let size = info?.sizeLabel {
                             Text(size)
-                                .font(.dictusCaption)
-                                .foregroundColor(.secondary)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    Spacer()
+                    Spacer(minLength: 12)
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.dictusSuccess)
+                        .font(.title)
+                        .foregroundStyle(Color.dictusSuccess)
+                        .accessibilityLabel("Ready")
                 }
-                .padding()
-                .dictusGlass()
             } else {
-                // No model — prompt to download
-                VStack(spacing: 12) {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.dictusAccent)
-                    Text("Download a model to get started")
-                        .font(.dictusSubheading)
-                        .multilineTextAlignment(.center)
-                    Text("Go to the Models tab to download your first transcription model.")
-                        .font(.dictusCaption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                HStack(spacing: 14) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.title2)
+                        .foregroundStyle(Color.dictusAccent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("No model selected")
+                            .font(.system(.body, design: .rounded, weight: .semibold))
+                        Text("Download a model to start dictating.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding()
-                .dictusGlass()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .dictusGlass(in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Last Transcription Card
+    private var newDictationButton: some View {
+        Button {
+            coordinator.startDictation()
+        } label: {
+            Label("New dictation", systemImage: "waveform")
+                .font(.system(.body, design: .rounded, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: 56)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.dictusAccent)
+        .controlSize(.large)
+        .accessibilityIdentifier("home.newDictation")
+    }
 
-    /// Shows the most recent transcription result in a tappable glass card.
-    /// Tap to copy to clipboard (same behavior as RecordingView result).
-    private func transcriptionCard(result: String) -> some View {
+    private func recentActivity(result: String) -> some View {
         Button {
             UIPasteboard.general.string = result
             HapticFeedback.recordingStopped()
@@ -162,54 +156,64 @@ struct HomeView: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(showCopiedFeedback ? "Copied!" : "Last transcription")
-                        .font(.dictusCaption)
-                        .foregroundColor(showCopiedFeedback ? .dictusSuccess : .secondary)
-                        .animation(.easeOut(duration: 0.2), value: showCopiedFeedback)
+                    Text("Recent activity")
+                        .font(.subheadline.weight(.semibold))
                     Spacer()
+                    Text(showCopiedFeedback ? "Copied" : "Tap to copy")
+                        .font(.caption)
+                        .foregroundStyle(showCopiedFeedback ? Color.dictusSuccess : .secondary)
                     Image(systemName: "doc.on.doc")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Text(result)
-                    .font(.dictusBody)
-                    .foregroundColor(.primary)
+                    .font(.body)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .dictusGlass()
+            .padding(16)
+            .dictusGlass(in: RoundedRectangle(cornerRadius: 18))
         }
-        .buttonStyle(GlassPressStyle(pressedScale: 0.97))
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home.recentActivity")
     }
 
-    // MARK: - Test Dictation Link
-
-    /// Prominent button to test dictation. Only shown when a model is ready.
-    ///
-    /// WHY a Button instead of NavigationLink to TestDictationView:
-    /// NavigationLink pushes TestDictationView inside the NavigationStack. Meanwhile,
-    /// MainTabView shows a RecordingView overlay when coordinator.status != .idle.
-    /// This creates TWO stacked RecordingViews. When the overlay dismisses (status → idle),
-    /// the pushed TestDictationView is still there with its nav bar visible.
-    /// A Button just starts dictation — the MainTabView overlay handles the full UI.
-    private var testDictationLink: some View {
-        Button {
-            coordinator.startDictation()
-        } label: {
-            HStack {
-                Image(systemName: "waveform")
-                Text("New dictation")
-                    .font(.dictusBody)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.dictusAccent)
-            .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+    private var greetingTitle: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:
+            return "Good morning"
+        case 12..<18:
+            return "Good afternoon"
+        default:
+            return "Good evening"
         }
-        .buttonStyle(GlassPressStyle())
+    }
+
+    private var readinessSubtitle: String {
+        if !modelManager.isModelReady {
+            return "Choose a local model to begin."
+        }
+
+        let presentation = HomeRecordingPresentation(
+            status: coordinator.status,
+            insertionAcknowledged: false
+        )
+        switch coordinator.status {
+        case .idle, .ready:
+            return "Offline dictation, ready when you are."
+        case .failed:
+            return userFacingError(DictationErrorChannel.current ?? presentation.label)
+        default:
+            return presentation.label
+        }
+    }
+
+    private func userFacingError(_ message: String) -> String {
+        message
+            .replacingOccurrences(of: "Dictus", with: "sAiity")
+            .replacingOccurrences(of: "dictus", with: "sAiity")
     }
 }
 

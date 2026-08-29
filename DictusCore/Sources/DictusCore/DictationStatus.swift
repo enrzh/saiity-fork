@@ -31,3 +31,34 @@ public enum DictationStatus: String, Codable, CaseIterable, Sendable {
     case ready        // Transcription result available in shared storage
     case failed       // Something went wrong
 }
+
+/// User-facing state for the app's recording surface.
+///
+/// The app can produce a result before the keyboard has acknowledged inserting it.
+/// Keeping that distinction at the presentation boundary prevents a successful
+/// transcription from being described as inserted too early.
+public struct HomeRecordingPresentation: Equatable, Sendable {
+    public let label: String
+
+    public init(status: DictationStatus, insertionAcknowledged: Bool) {
+        if insertionAcknowledged {
+            label = "Inserted"
+            return
+        }
+
+        switch status {
+        case .idle, .ready:
+            label = "Ready"
+        case .requested:
+            label = "Starting"
+        case .recording:
+            label = "Recording"
+        case .transcribing:
+            label = "Transcribing"
+        case .processing:
+            label = "Processing"
+        case .failed:
+            label = "Could not complete"
+        }
+    }
+}

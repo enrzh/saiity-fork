@@ -86,7 +86,9 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        HomeView(modelManager: modelManager)
+                        HomeView(modelManager: modelManager) {
+                            selectedTab = 1
+                        }
                     }
                     .tabItem {
                         Label("Home", systemImage: "house.fill")
