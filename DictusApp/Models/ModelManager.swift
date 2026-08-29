@@ -14,7 +14,9 @@ import FluidAudio
 /// state handling exhaustive via switch — the compiler ensures every state is handled.
 enum ModelState: Equatable {
     case notDownloaded
+    case queued
     case downloading
+    case cancelling
     case prewarming
     case ready
     case error(String)
@@ -76,8 +78,15 @@ class ModelManager: ObservableObject {
 
     /// Serial prewarm lock — only one CoreML compilation at a time.
     /// The Neural Engine cannot handle multiple models compiling simultaneously
-    /// (causes ANE "E5 bundle" errors). Downloads are parallel, prewarms are serial.
+    /// (causes ANE "E5 bundle" errors).
     private var isPrewarming = false
+
+    /// One manager-owned FIFO keeps download and preparation work serial. The
+    /// queue remains active until the operation has cleaned up after cancellation
+    /// or failure, so the next request cannot start early.
+    private var downloadQueue = ModelDownloadQueue()
+    private var downloadTasks: [String: Task<Void, Never>] = [:]
+    private var downloadWaiters: [String: [CheckedContinuation<Void, Error>]] = [:]
 
     /// Directory inside the App Group container where model files are stored.
     /// Using the shared container means the keyboard extension could also access
@@ -176,14 +185,91 @@ class ModelManager: ObservableObject {
     /// restoration, app lifecycle handling). For v1, foreground download with visible
     /// progress is simpler and sufficient. Users will have the app open during download.
     func downloadModel(_ identifier: String) async throws {
-        // Check if this is a Parakeet model and route accordingly
-        let modelInfo = ModelInfo.forIdentifier(identifier)
-        if modelInfo?.engine == .parakeet {
-            try await downloadParakeetModel(identifier)
+        let request = downloadQueue.request(identifier)
+        switch request {
+        case .started:
+            startDownloadOperation(identifier)
+        case .queued:
+            modelStates[identifier] = .queued
+        case .alreadyActive, .alreadyQueued:
+            break
+        }
+
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                downloadWaiters[identifier, default: []].append(continuation)
+            }
+        }, onCancel: { [weak self] in
+            Task { @MainActor in
+                self?.cancelDownload(identifier)
+            }
+        })
+    }
+
+    /// Cancels a queued or active request. The manager owns the operation task so
+    /// a view reconstruction cannot lose the cancellation handle or state.
+    func cancelDownload(_ identifier: String) {
+        if modelStates[identifier] == .queued {
+            _ = downloadQueue.cancel(identifier)
+            modelStates[identifier] = .notDownloaded
+            clearDownloadProgress(for: identifier)
+            resumeWaiters(for: identifier, with: .failure(CancellationError()))
             return
         }
 
-        try await downloadWhisperKitModel(identifier)
+        guard let task = downloadTasks[identifier] else { return }
+        guard modelStates[identifier] != .cancelling else { return }
+        modelStates[identifier] = .cancelling
+        task.cancel()
+    }
+
+    private func startDownloadOperation(_ identifier: String) {
+        guard downloadTasks[identifier] == nil else { return }
+        modelStates[identifier] = .downloading
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                if ModelInfo.forIdentifier(identifier)?.engine == .parakeet {
+                    try await self.downloadParakeetModel(identifier)
+                } else {
+                    try await self.downloadWhisperKitModel(identifier)
+                }
+                self.finishDownload(identifier, error: nil)
+            } catch {
+                self.finishDownload(identifier, error: error)
+            }
+        }
+        downloadTasks[identifier] = task
+    }
+
+    private func finishDownload(_ identifier: String, error: Error?) {
+        downloadTasks.removeValue(forKey: identifier)
+
+        if let error, !(error is CancellationError), modelStates[identifier] == .downloading {
+            modelStates[identifier] = .error(error.localizedDescription)
+            clearDownloadProgress(for: identifier)
+        }
+
+        resumeWaiters(
+            for: identifier,
+            with: error.map { .failure($0) } ?? .success(())
+        )
+
+        if let next = downloadQueue.finish(identifier) {
+            startDownloadOperation(next)
+        }
+    }
+
+    private func resumeWaiters(for identifier: String, with result: Result<Void, Error>) {
+        let waiters = downloadWaiters.removeValue(forKey: identifier) ?? []
+        for waiter in waiters {
+            switch result {
+            case .success:
+                waiter.resume()
+            case .failure(let error):
+                waiter.resume(throwing: error)
+            }
+        }
     }
 
     /// Download a WhisperKit model variant from HuggingFace.
@@ -322,11 +408,14 @@ class ModelManager: ObservableObject {
             // RAM-resident WhisperKit instance. The compile above used a throwaway
             // WhisperKit just to populate the Core ML cache.
             DictationCoordinator.shared.preloadActiveModel()
+        } catch is CancellationError {
+            modelStates[identifier] = .notDownloaded
+            clearDownloadProgress(for: identifier)
+            cleanupModelFiles(identifier)
+            throw CancellationError()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
+            clearDownloadProgress(for: identifier)
 
             if downloadPhaseCompleted {
                 // Prewarm failure: clean up. ANE compilation failures (E5 bundle
@@ -430,11 +519,14 @@ class ModelManager: ObservableObject {
 
             // Issue #144: same proactive load as the WhisperKit path — see comment there.
             DictationCoordinator.shared.preloadActiveModel()
+        } catch is CancellationError {
+            modelStates[identifier] = .notDownloaded
+            clearDownloadProgress(for: identifier)
+            cleanupModelFiles(identifier)
+            throw CancellationError()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
+            clearDownloadProgress(for: identifier)
 
             // Deliberately NO cleanupModelFiles here after a download failure:
             // the downloader moves each file into place atomically, so anything on
@@ -465,6 +557,12 @@ class ModelManager: ObservableObject {
                 mbTotal: Int(progress.totalBytes / 1_000_000)
             ))
         }
+    }
+
+    private func clearDownloadProgress(for identifier: String) {
+        downloadProgress.removeValue(forKey: identifier)
+        downloadByteInfo.removeValue(forKey: identifier)
+        lastLoggedDeciles.removeValue(forKey: identifier)
     }
 
     /// Sets the active model for transcription and eagerly loads it into RAM.

@@ -192,7 +192,7 @@ struct ModelDownloadPage: View {
             return active
         }
         switch modelManager.modelStates[recommendedModel] ?? .notDownloaded {
-        case .prewarming, .downloading:
+        case .queued, .downloading, .cancelling, .prewarming:
             return recommendedModel
         default:
             return nil

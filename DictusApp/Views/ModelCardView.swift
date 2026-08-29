@@ -6,9 +6,8 @@ import DictusCore
 /// Renders one catalog model as a native List row.
 ///
 /// The row reads all metadata and lifecycle state from ModelInfo and ModelManager.
-/// Download tasks are kept here because the existing manager API exposes the
-/// async download operation, while cancellation is performed by cancelling that
-/// operation's Task.
+/// Download and cancellation lifecycles belong to ModelManager so they survive
+/// SwiftUI view reconstruction.
 struct ModelCardView: View {
     let model: ModelInfo
     @ObservedObject var modelManager: ModelManager
@@ -22,8 +21,6 @@ struct ModelCardView: View {
     var onDeletePartialRequest: (() -> Void)?
 
     @State private var showsLanguageInfo = false
-    @State private var isCancelling = false
-    @State private var downloadTask: Task<Void, Never>?
 
     private var state: ModelState {
         modelManager.modelStates[model.identifier] ?? .notDownloaded
@@ -101,7 +98,7 @@ struct ModelCardView: View {
             Label("Unavailable · \(incompatibilityReason.localizedText)", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        } else if isCancelling {
+        } else if state == .cancelling {
             Label("Cancelling", systemImage: "xmark.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -115,10 +112,18 @@ struct ModelCardView: View {
                 Label("Not installed", systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            case .queued:
+                Label("Queued", systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(Color.dictusAccent)
             case .downloading:
                 Label("Downloading", systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(Color.dictusAccent)
+            case .cancelling:
+                Label("Cancelling", systemImage: "xmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             case .prewarming:
                 Label("Preparing", systemImage: "gearshape")
                     .font(.caption)
@@ -139,12 +144,11 @@ struct ModelCardView: View {
     private var actionContent: some View {
         if incompatibilityReason != nil {
             EmptyView()
-        } else if isCancelling {
+        } else if isLoading || state == .prewarming || state == .cancelling {
             ProgressView()
-                .accessibilityLabel("Cancelling")
-        } else if isLoading || state == .prewarming {
-            ProgressView()
-                .accessibilityLabel(Text(isLoading ? "Loading" : "Preparing"))
+                .accessibilityLabel(Text(
+                    state == .cancelling ? "Cancelling" : (isLoading ? "Loading" : "Preparing")
+                ))
         } else {
             switch state {
             case .notDownloaded:
@@ -155,13 +159,18 @@ struct ModelCardView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityHint("Downloads this model")
-            case .downloading:
-                if downloadTask != nil {
-                    Button("Cancel", role: .cancel) {
-                        cancelDownload()
-                    }
-                    .buttonStyle(.borderless)
+            case .queued:
+                Button("Cancel", role: .cancel) {
+                    modelManager.cancelDownload(model.identifier)
                 }
+                .buttonStyle(.borderless)
+            case .downloading:
+                Button("Cancel", role: .cancel) {
+                    modelManager.cancelDownload(model.identifier)
+                }
+                .buttonStyle(.borderless)
+            case .cancelling:
+                EmptyView()
             case .prewarming:
                 EmptyView()
             case .ready:
@@ -233,25 +242,15 @@ struct ModelCardView: View {
     }
 
     private func startDownload() {
-        guard downloadTask == nil else { return }
-        isCancelling = false
-        downloadTask = Task { @MainActor in
+        Task { @MainActor in
             do {
                 try await modelManager.downloadModel(model.identifier)
             } catch is CancellationError {
-                modelManager.cleanupFailedModel(model.identifier)
+                // Manager cancellation resolves the request to .notDownloaded.
             } catch {
                 onDownloadError(error.localizedDescription)
             }
-            downloadTask = nil
-            isCancelling = false
         }
-    }
-
-    private func cancelDownload() {
-        guard let downloadTask else { return }
-        isCancelling = true
-        downloadTask.cancel()
     }
 }
 

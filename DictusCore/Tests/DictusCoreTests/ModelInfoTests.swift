@@ -12,6 +12,31 @@ final class ModelInfoTests: XCTestCase {
         ])
     }
 
+    func testRedesignCatalogPreservesApprovedOrderAndMetadata() {
+        struct ExpectedModel {
+            let identifier: String
+            let sizeLabel: String
+            let engine: String
+        }
+
+        let expected = [
+            ExpectedModel(identifier: "openai_whisper-tiny", sizeLabel: "~40 MB", engine: SpeechEngine.whisperKit.rawValue),
+            ExpectedModel(identifier: "openai_whisper-base", sizeLabel: "~75 MB", engine: SpeechEngine.whisperKit.rawValue),
+            ExpectedModel(identifier: "openai_whisper-small", sizeLabel: "~250 MB", engine: SpeechEngine.whisperKit.rawValue),
+            ExpectedModel(identifier: "openai_whisper-small_216MB", sizeLabel: "~216 MB", engine: SpeechEngine.whisperKit.rawValue),
+            ExpectedModel(identifier: "openai_whisper-medium", sizeLabel: "~750 MB", engine: SpeechEngine.whisperKit.rawValue),
+            ExpectedModel(identifier: "parakeet-tdt-0.6b-v3", sizeLabel: "~800 MB", engine: SpeechEngine.parakeet.rawValue),
+            ExpectedModel(identifier: "openai_whisper-large-v3_turbo_954MB", sizeLabel: "~954 MB", engine: SpeechEngine.whisperKit.rawValue)
+        ]
+
+        XCTAssertEqual(ModelInfo.redesignCatalog.count, expected.count)
+        for (actual, expected) in zip(ModelInfo.redesignCatalog, expected) {
+            XCTAssertEqual(actual.identifier, expected.identifier)
+            XCTAssertEqual(actual.sizeLabel, expected.sizeLabel)
+            XCTAssertEqual(actual.engine.rawValue, expected.engine)
+        }
+    }
+
     // MARK: - Catalog visibility
 
     func testAllContainsOnlyAvailableModels() {
@@ -30,8 +55,8 @@ final class ModelInfoTests: XCTestCase {
         XCTAssertTrue(ids.contains("openai_whisper-large-v3_turbo_954MB"))
     }
 
-    func testAllIncludingDeprecatedContainsEight() {
-        // allIncludingDeprecated should contain the same 7 integrated models.
+    func testAllIncludingDeprecatedKeepsCompatibilityAliasForCurrentCatalog() {
+        // Compatibility alias: the current catalog has no deprecated entries.
         XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 7)
         let deprecated = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .deprecated }
         XCTAssertEqual(deprecated.count, 0)
