@@ -7,10 +7,10 @@ import DictusCore
 ///
 /// WHY a dedicated view:
 /// Apple App Store guidelines require attribution for open-source licenses.
-/// Placing them in Settings > A propos > Licences follows the standard iOS
+/// Placing them in Settings > Legal & Help > Licenses follows the standard iOS
 /// convention (e.g., Settings > General > Legal & Regulatory).
 ///
-/// All 5 dependencies are listed alphabetically: DeviceKit, Dictus, FluidAudio,
+/// All 5 dependencies are listed alphabetically: DeviceKit, the original project,
 /// giellakbd-ios, WhisperKit. FluidAudio uses Apache 2.0; all others use MIT.
 struct LicensesView: View {
     var body: some View {
@@ -25,7 +25,7 @@ struct LicensesView: View {
                 )
 
                 licenseBlock(
-                    name: "Dictus",
+                    name: "Original project",
                     author: "PIVI Solutions",
                     url: "https://github.com/getdictus/dictus-ios",
                     license: mitLicense(copyright: "Copyright (c) 2026 PIVI Solutions")

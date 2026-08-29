@@ -31,4 +31,13 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertTrue(SharedKeys.hapticsEnabled.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.hasCompletedOnboarding.hasPrefix("dictus."))
     }
+
+    func testAutomaticLanguageUsesExistingAppGroupPreference() {
+        let defaults = UserDefaults(suiteName: AppGroup.identifier)!
+        defaults.removeObject(forKey: SharedKeys.transcriptionLanguage)
+        XCTAssertEqual(
+            TranscriptionLanguageMode(storedValue: defaults.string(forKey: SharedKeys.transcriptionLanguage)),
+            .followKeyboard
+        )
+    }
 }
