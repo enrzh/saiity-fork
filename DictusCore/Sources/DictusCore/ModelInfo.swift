@@ -84,8 +84,8 @@ public struct ModelInfo: Identifiable {
         }
     }()
 
-    /// All known models, including any retained for backward compatibility.
-    public static let allIncludingDeprecated: [ModelInfo] = [
+    /// The complete set of model identifiers currently loadable by the app.
+    public static let redesignCatalog: [ModelInfo] = [
         ModelInfo(
             identifier: "openai_whisper-tiny",
             displayName: "Tiny",
@@ -181,6 +181,9 @@ public struct ModelInfo: Identifiable {
             visibility: .available
         )
     ]
+
+    /// All known models, including any retained for backward compatibility.
+    public static let allIncludingDeprecated: [ModelInfo] = redesignCatalog
 
     /// Set of all supported model identifiers for quick lookup.
     /// Uses allIncludingDeprecated so downloaded Tiny/Base models still resolve.

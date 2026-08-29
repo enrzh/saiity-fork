@@ -153,11 +153,11 @@ struct ModelLanguageDetailView: View {
 }
 
 #Preview("Whisper small") {
-    ModelLanguageDetailView(model: ModelInfo.all[0])
+    ModelLanguageDetailView(model: ModelInfo.redesignCatalog[0])
 }
 
 #Preview("Parakeet") {
     ModelLanguageDetailView(
-        model: ModelInfo.allIncludingDeprecated.first { $0.engine == .parakeet } ?? ModelInfo.all[0]
+        model: ModelInfo.redesignCatalog.first { $0.engine == .parakeet } ?? ModelInfo.redesignCatalog[0]
     )
 }

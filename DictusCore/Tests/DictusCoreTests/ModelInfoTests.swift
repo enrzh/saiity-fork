@@ -4,6 +4,14 @@ import XCTest
 
 final class ModelInfoTests: XCTestCase {
 
+    func testRedesignCatalogContainsExactlySevenApprovedIdentifiers() {
+        XCTAssertEqual(Set(ModelInfo.redesignCatalog.map(\.id)), [
+            "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small",
+            "openai_whisper-small_216MB", "openai_whisper-medium",
+            "parakeet-tdt-0.6b-v3", "openai_whisper-large-v3_turbo_954MB"
+        ])
+    }
+
     // MARK: - Catalog visibility
 
     func testAllContainsOnlyAvailableModels() {
