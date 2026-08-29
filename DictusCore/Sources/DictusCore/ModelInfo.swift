@@ -210,6 +210,15 @@ public struct ModelInfo: Identifiable {
         redesignCatalog[3], redesignCatalog[4], redesignCatalog[5], redesignCatalog[6]
     ]
 
+    /// Removes duplicate identifiers while preferring the last metadata entry.
+    /// Reversing again preserves the original catalog order for the retained rows.
+    public static func installedRows(from models: [ModelInfo]) -> [ModelInfo] {
+        var seen = Set<String>()
+        return models.reversed()
+            .filter { seen.insert($0.identifier).inserted }
+            .reversed()
+    }
+
     /// Set of all supported model identifiers for quick lookup.
     /// Uses allIncludingDeprecated so downloaded Tiny/Base models still resolve.
     public static let supportedIdentifiers: Set<String> = Set(allIncludingDeprecated.map(\.identifier))

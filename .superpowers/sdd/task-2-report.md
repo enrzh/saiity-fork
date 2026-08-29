@@ -177,3 +177,50 @@ xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/pla
 - regression test 位于现有 core test target，以 source-contract 方式锁定 app View 的去重策略；没有新增测试 target 或抽象层。
 - 测试/build 输出包含既有 warning：未处理的 polish-harness README、Swift 6 Sendable/NSLock warning，以及脚本 build phase 每次运行提示；均未改变且与本修复无关。
 - 未恢复旧键盘/设置入口，未修改 keyboard 文件或 ModelInfo catalog；工作区其它 dirty 文件未暂存、未重置。未进行 physical iPhone 验证。
+
+## Task 2 re-review Important 修复：行为测试替代源码断言
+
+### RED
+
+将 `ModelInfoTests.testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata` 改为实际构造重复 identifier 的 `ModelInfo` 数组，并断言去重数量、current metadata 优先和 deprecated-only 条目保留。实现尚未添加时运行：
+
+```text
+swift test --package-path DictusCore --filter ModelInfoTests/testInstalledModelsDeduplicateIdentifiersPreferCurrentMetadataAndKeepDeprecatedOnly
+error: type 'ModelInfo' has no member 'installedRows'
+```
+
+这是预期 RED，失败原因是待实现行为缺失，而不是测试运行时错误。
+
+### GREEN
+
+在 `ModelInfo` 增加纯函数 `installedRows(from:)`，按 identifier 去重、保留数组中最后出现的 metadata，并恢复原有顺序；`ModelManagerView.installedModels` 改为使用该函数后再按实际安装状态过滤。`allIncludingDeprecated` 未改变，旧入口/设置入口未恢复。
+
+Focused test：
+
+```text
+swift test --package-path DictusCore --filter ModelInfoTests/testInstalledModelsDeduplicateIdentifiersPreferCurrentMetadataAndKeepDeprecatedOnly
+Executed 1 test, with 0 failures (0 unexpected)
+```
+
+完整 DictusCore suite：
+
+```text
+swift test --package-path DictusCore --enable-code-coverage
+Executed 1032 tests, with 10 tests skipped and 0 failures (0 unexpected)
+Test Suite 'All tests' passed
+```
+
+相关 App build：
+
+```text
+xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+** BUILD SUCCEEDED **
+```
+
+`git diff --check` 无输出。
+
+### 文件、提交与顾虑
+
+本轮修改文件为 `DictusCore/Sources/DictusCore/ModelInfo.swift`、`DictusApp/Views/ModelManagerView.swift`、`DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift` 和本报告；提交 SHA：`30bc1f5`。其他 dirty 文件未暂存、未重置。
+
+顾虑：验证使用 Simulator/build 和 macOS DictusCore suite，未进行 physical iPhone 验证。测试与 build 保留既有 unhandled README、Swift 6 Sendable/NSLock warning，以及测试中的坏 JSON 诊断输出；均不影响退出码且与本次无关。

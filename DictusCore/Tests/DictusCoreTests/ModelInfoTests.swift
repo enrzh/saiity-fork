@@ -91,18 +91,49 @@ final class ModelInfoTests: XCTestCase {
         XCTAssertTrue(rows.allSatisfy { $0.isSupported(on: device) || $0.identifier == ModelInfo.recommendedIdentifier(for: device) })
     }
 
-    func testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata() throws {
-        let viewPath = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("DictusApp/Views/ModelManagerView.swift")
-        let source = try String(contentsOf: viewPath, encoding: .utf8)
+    func testInstalledModelsDeduplicateIdentifiersPreferCurrentMetadataAndKeepDeprecatedOnly() {
+        let deprecated = makeModel(
+            identifier: "shared",
+            displayName: "Deprecated shared",
+            visibility: .deprecated
+        )
+        let current = makeModel(
+            identifier: "shared",
+            displayName: "Current shared",
+            visibility: .available
+        )
+        let deprecatedOnly = makeModel(
+            identifier: "legacy",
+            displayName: "Legacy",
+            visibility: .deprecated
+        )
 
-        XCTAssertTrue(source.contains("allIncludingDeprecated.reversed()"))
-        XCTAssertTrue(source.contains("seen.insert($0.identifier).inserted"))
-        XCTAssertTrue(source.contains(".reversed()"))
+        let rows = ModelInfo.installedRows(from: [deprecated, current, deprecatedOnly])
+
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.map(\.identifier), ["shared", "legacy"])
+        XCTAssertEqual(rows.first?.displayName, "Current shared")
+        XCTAssertEqual(rows.first?.visibility, .available)
+        XCTAssertEqual(rows.last?.displayName, "Legacy")
+        XCTAssertEqual(rows.last?.visibility, .deprecated)
+    }
+
+    private func makeModel(
+        identifier: String,
+        displayName: String,
+        visibility: CatalogVisibility
+    ) -> ModelInfo {
+        ModelInfo(
+            identifier: identifier,
+            displayName: displayName,
+            sizeLabel: "~1 MB",
+            sizeBytes: 1_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.5,
+            speedScore: 0.5,
+            description: "Test model",
+            visibility: visibility
+        )
     }
 
     // MARK: - Gauge scores
