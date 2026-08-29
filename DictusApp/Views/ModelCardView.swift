@@ -21,6 +21,7 @@ struct ModelCardView: View {
     var onDeletePartialRequest: (() -> Void)?
 
     @State private var showsLanguageInfo = false
+    @State private var downloadTask: Task<Void, Never>?
 
     private var state: ModelState {
         modelManager.modelStates[model.identifier] ?? .notDownloaded
@@ -98,10 +99,6 @@ struct ModelCardView: View {
             Label("Unavailable · \(incompatibilityReason.localizedText)", systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        } else if state == .cancelling {
-            Label("Cancelling", systemImage: "xmark.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         } else if isLoading {
             Label("Loading", systemImage: "arrow.down.circle")
                 .font(.caption)
@@ -112,18 +109,10 @@ struct ModelCardView: View {
                 Label("Not installed", systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            case .queued:
-                Label("Queued", systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(Color.dictusAccent)
             case .downloading:
                 Label("Downloading", systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(Color.dictusAccent)
-            case .cancelling:
-                Label("Cancelling", systemImage: "xmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             case .prewarming:
                 Label("Preparing", systemImage: "gearshape")
                     .font(.caption)
@@ -144,10 +133,10 @@ struct ModelCardView: View {
     private var actionContent: some View {
         if incompatibilityReason != nil {
             EmptyView()
-        } else if isLoading || state == .prewarming || state == .cancelling {
+        } else if isLoading || state == .prewarming {
             ProgressView()
                 .accessibilityLabel(Text(
-                    state == .cancelling ? "Cancelling" : (isLoading ? "Loading" : "Preparing")
+                    isLoading ? "Loading" : "Preparing"
                 ))
         } else {
             switch state {
@@ -159,18 +148,11 @@ struct ModelCardView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityHint("Downloads this model")
-            case .queued:
-                Button("Cancel", role: .cancel) {
-                    modelManager.cancelDownload(model.identifier)
-                }
-                .buttonStyle(.borderless)
             case .downloading:
                 Button("Cancel", role: .cancel) {
-                    modelManager.cancelDownload(model.identifier)
+                    downloadTask?.cancel()
                 }
                 .buttonStyle(.borderless)
-            case .cancelling:
-                EmptyView()
             case .prewarming:
                 EmptyView()
             case .ready:
@@ -242,7 +224,7 @@ struct ModelCardView: View {
     }
 
     private func startDownload() {
-        Task { @MainActor in
+        downloadTask = Task { @MainActor in
             do {
                 try await modelManager.downloadModel(model.identifier)
             } catch is CancellationError {

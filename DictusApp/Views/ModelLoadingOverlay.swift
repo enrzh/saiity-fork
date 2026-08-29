@@ -42,9 +42,7 @@ struct ModelLoadingOverlay: View {
     @State private var hasSeenWorkPhase = false
 
     private enum Phase {
-        case queued
         case downloading
-        case cancelling
         case compiling
         case loading
         case ready
@@ -250,12 +248,8 @@ struct ModelLoadingOverlay: View {
 
     private var rawPhase: Phase {
         switch currentModelState {
-        case .queued:
-            return .queued
         case .downloading:
             return .downloading
-        case .cancelling:
-            return .cancelling
         case .prewarming:
             return .compiling
         case .ready:
@@ -276,9 +270,7 @@ struct ModelLoadingOverlay: View {
 
     private var phaseLabel: LocalizedStringKey {
         switch currentPhase {
-        case .queued: return "Queued"
         case .downloading: return "Downloading"
-        case .cancelling: return "Cancelling"
         case .compiling: return "Optimizing"
         case .loading: return "Loading"
         case .ready: return "Ready"
@@ -287,11 +279,6 @@ struct ModelLoadingOverlay: View {
 
     private func phrases(for phase: Phase) -> [String] {
         switch phase {
-        case .queued:
-            return [
-                String(localized: "Waiting for another model download…"),
-                String(localized: "Download queued…")
-            ]
         case .downloading:
             return [
                 String(localized: "Downloading the model…"),
@@ -300,8 +287,6 @@ struct ModelLoadingOverlay: View {
                 String(localized: "Almost there…"),
                 String(localized: "Finishing the download…")
             ]
-        case .cancelling:
-            return [String(localized: "Cancelling the download…")]
         case .compiling:
             // Turbo's compile takes ~2 minutes — needs enough variety so the
             // copy doesn't visibly loop within that window.

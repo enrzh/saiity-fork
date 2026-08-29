@@ -183,7 +183,10 @@ public struct ModelInfo: Identifiable {
     ]
 
     /// All known models, including any retained for backward compatibility.
-    public static let allIncludingDeprecated: [ModelInfo] = redesignCatalog
+    public static let allIncludingDeprecated: [ModelInfo] = [
+        redesignCatalog[0], redesignCatalog[1], redesignCatalog[2],
+        redesignCatalog[3], redesignCatalog[4], redesignCatalog[5], redesignCatalog[6]
+    ]
 
     /// Set of all supported model identifiers for quick lookup.
     /// Uses allIncludingDeprecated so downloaded Tiny/Base models still resolve.

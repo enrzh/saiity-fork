@@ -96,7 +96,7 @@ Expected: FAIL because `redesignCatalog` does not yet exist.
 
 - [ ] **Step 3: Implement the minimal catalog-backed List presentation**
 
-Use the existing catalog and manager state. Add explicit text/accessibility values for active, installed, downloading, cancelling, failed, unavailable, loading, and queued states. Keep real sizes, engine data, availability filtering, retry behavior, and recommendation ordering. Do not add preview fixtures or fake model metadata.
+Use the existing catalog and manager state. Add explicit text/accessibility values for active, installed, downloading, failed, unavailable, and loading states. Keep the existing `ModelManager` download and cancellation behavior unchanged, including real sizes, engine data, availability filtering, retry behavior, and recommendation ordering. Do not add a queue, injected download operation, or `queued`/`cancelling` lifecycle states. Do not add preview fixtures or fake model metadata.
 
 - [ ] **Step 4: Run model tests and verify app compilation**
 
