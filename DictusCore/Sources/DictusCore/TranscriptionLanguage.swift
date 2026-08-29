@@ -52,7 +52,8 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// Stored marker for `.autoDetect`.
     public static let autoStoredValue = "auto"
 
-    /// Parse the App Group stored value. Missing values use the product default.
+    /// Parse the App Group stored value. Missing values preserve the legacy behavior;
+    /// DictusApp writes the new product default once when the key is absent.
     public init(storedValue: String?) {
         switch storedValue {
         case Self.autoStoredValue:
@@ -65,7 +66,7 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
                 self = .followKeyboard
             }
         case .none:
-            self = .autoDetect
+            self = .followKeyboard
         }
     }
 

@@ -4,6 +4,7 @@ import UIKit
 import DictusCore
 
 struct SettingsView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
     @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionLanguage = TranscriptionLanguageMode.autoDetect.storedValue
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = false
@@ -23,9 +24,12 @@ struct SettingsView: View {
             Section("Features") {
                 Toggle("Live Activity", isOn: $liveActivityEnabled)
                     .onChange(of: liveActivityEnabled) { _, enabled in
-                        if enabled {
+                        if LiveActivityStateMachine.shouldStartStandbyActivity(
+                            isEnabled: enabled,
+                            isBackground: scenePhase == .background
+                        ) {
                             LiveActivityManager.shared.startStandbyActivity()
-                        } else {
+                        } else if !enabled {
                             LiveActivityManager.shared.stopStandbyActivity()
                         }
                     }

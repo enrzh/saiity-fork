@@ -17,6 +17,12 @@ import Foundation
 /// aliasing. LiveActivityManager owns a single instance and calls transition(to:).
 public struct LiveActivityStateMachine {
 
+    /// Whether a settings toggle may request standby activity startup.
+    /// The app supplies scene phase without coupling DictusCore to SwiftUI.
+    public static func shouldStartStandbyActivity(isEnabled: Bool, isBackground: Bool) -> Bool {
+        isEnabled && isBackground
+    }
+
     /// Phases of the Live Activity lifecycle.
     /// Maps 1:1 to the private LiveActivityPhase enum in LiveActivityManager.
     public enum Phase: String, Sendable {

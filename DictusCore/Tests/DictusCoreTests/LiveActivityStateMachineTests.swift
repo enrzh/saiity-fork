@@ -6,6 +6,12 @@ import XCTest
 
 final class LiveActivityStateMachineTests: XCTestCase {
 
+    func testStandbyToggleStartsOnlyWhenEnabledInBackground() {
+        XCTAssertTrue(LiveActivityStateMachine.shouldStartStandbyActivity(isEnabled: true, isBackground: true))
+        XCTAssertFalse(LiveActivityStateMachine.shouldStartStandbyActivity(isEnabled: true, isBackground: false))
+        XCTAssertFalse(LiveActivityStateMachine.shouldStartStandbyActivity(isEnabled: false, isBackground: true))
+    }
+
     // MARK: - Valid Transitions
 
     func testIdleToStandbySucceeds() {
