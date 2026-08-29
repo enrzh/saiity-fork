@@ -245,17 +245,40 @@ class ModelManager: ObservableObject {
     private func finishDownload(_ identifier: String, error: Error?) {
         downloadTasks.removeValue(forKey: identifier)
 
-        if let error, !(error is CancellationError), modelStates[identifier] == .downloading {
-            modelStates[identifier] = .error(error.localizedDescription)
+        let result: ModelDownloadQueue.CompletionResult
+        if let error {
+            if error is CancellationError {
+                cleanupModelFiles(identifier, reason: "download-cancelled")
+                result = .cancelled
+            } else {
+                let message = error.localizedDescription
+                modelStates[identifier] = .error(message)
+                clearDownloadProgress(for: identifier)
+                result = .failed(message)
+            }
+        } else {
+            result = .succeeded
+        }
+
+        guard let completion = downloadQueue.complete(identifier, result: result) else {
+            resumeWaiters(for: identifier, with: error.map { .failure($0) } ?? .success(()))
+            return
+        }
+
+        switch completion.finalState {
+        case .ready:
+            modelStates[identifier] = .ready
+        case .notDownloaded:
+            modelStates[identifier] = .notDownloaded
+            clearDownloadProgress(for: identifier)
+        case .error(let message):
+            modelStates[identifier] = .error(message)
             clearDownloadProgress(for: identifier)
         }
 
-        resumeWaiters(
-            for: identifier,
-            with: error.map { .failure($0) } ?? .success(())
-        )
+        resumeWaiters(for: identifier, with: error.map { .failure($0) } ?? .success(()))
 
-        if let next = downloadQueue.finish(identifier) {
+        if let next = completion.nextIdentifier {
             startDownloadOperation(next)
         }
     }
@@ -409,9 +432,6 @@ class ModelManager: ObservableObject {
             // WhisperKit just to populate the Core ML cache.
             DictationCoordinator.shared.preloadActiveModel()
         } catch is CancellationError {
-            modelStates[identifier] = .notDownloaded
-            clearDownloadProgress(for: identifier)
-            cleanupModelFiles(identifier)
             throw CancellationError()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
@@ -520,9 +540,6 @@ class ModelManager: ObservableObject {
             // Issue #144: same proactive load as the WhisperKit path — see comment there.
             DictationCoordinator.shared.preloadActiveModel()
         } catch is CancellationError {
-            modelStates[identifier] = .notDownloaded
-            clearDownloadProgress(for: identifier)
-            cleanupModelFiles(identifier)
             throw CancellationError()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
@@ -661,7 +678,7 @@ class ModelManager: ObservableObject {
 
     /// Removes partially downloaded or corrupted model files from disk.
     /// Called after download/prewarm failure so a retry starts clean.
-    private func cleanupModelFiles(_ identifier: String) {
+    private func cleanupModelFiles(_ identifier: String, reason: String = "download-or-prewarm-failure") {
         // Clean from App Group container
         if let modelsDir = modelsDirectory {
             let modelPath = modelsDir.appendingPathComponent(identifier)
@@ -681,7 +698,7 @@ class ModelManager: ObservableObject {
             }
         }
 
-        PersistentLog.log(.modelCleanupPerformed(name: identifier, reason: "download-or-prewarm-failure"))
+        PersistentLog.log(.modelCleanupPerformed(name: identifier, reason: reason))
 
         // Remove from downloaded list if it was added prematurely
         downloadedModels.removeAll { $0 == identifier }
