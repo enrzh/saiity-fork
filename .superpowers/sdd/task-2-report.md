@@ -81,3 +81,43 @@ xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/pla
 - `xcodebuild` 仍报告既有 warning：`AVAudioSession.recordPermission` 在 iOS 17.0 deprecated；不属于本 task，未扩大改动范围。
 - 工作区仍存在其它既有 dirty 文件，包括 `Dictus.xcodeproj/project.pbxproj`、keyboard/core 文件、`.superpowers/` 和 `PRODUCT.md`；均未纳入本次提交。
 - 未进行 physical iPhone 验证；本次仅完成 focused core tests、source contract 和 generic iOS Simulator app build。
+
+## Task 2 审查修复：兼容旧模型保留在 Installed
+
+### 问题
+
+`ModelManagerView` 从 `ModelInfo.redesignCatalog` 构建 Installed，导致 manager state 中已下载的 deprecated Tiny/Base 没有对应 row；Available 也额外按 redesign catalog ID 过滤，混淆了当前 runtime catalog 与兼容解析 catalog。
+
+### TDD RED
+
+在实现前运行 source contract：
+
+```text
+if rg -n 'ModelInfo\\.redesignCatalog\\.filter|catalogIDs|ModelInfo\\.redesignCatalog\\.first' DictusApp/Views/ModelManagerView.swift; then exit 1; fi
+```
+
+结果为 RED，命中 Installed、Available 和 prewarming 的 `redesignCatalog` 依赖。
+
+### 修复与 GREEN
+
+- Installed 改为从 `ModelInfo.allIncludingDeprecated` 按 `downloadedModels`/`modelStates[identifier] == .ready` 过滤，因此已安装的 deprecated Tiny/Base 保留在页面。
+- Available 直接使用 `ModelInfo.available(on: deviceCapabilities)`，只按实际 manager state 排除已安装项；不再通过 redesign catalog ID 二次裁剪或制造重复。
+- prewarming 查找也使用完整 catalog，保证兼容旧模型的活动状态可解析。
+- 增加 `testAvailableCatalogHasUniqueDownloadableDeviceCompatibleRows`，覆盖可用 catalog 的唯一标识、下载可见性和设备兼容性契约。
+
+验证命令及结果：
+
+```text
+swift test --package-path DictusCore --filter ModelInfoTests
+Executed 32 tests, with 0 failures
+
+xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+** BUILD SUCCEEDED **
+
+git diff --check
+无输出
+```
+
+### 范围与顾虑
+
+本次只修改 `ModelManagerView.swift`、`ModelInfoTests.swift` 和本报告；未恢复旧键盘/设置入口，未修改键盘文件。工作区中其他既有 dirty 文件未暂存、未重置。测试与 build 均未替代 physical iPhone 验证。

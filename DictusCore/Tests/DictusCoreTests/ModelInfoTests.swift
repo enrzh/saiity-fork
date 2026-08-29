@@ -82,6 +82,15 @@ final class ModelInfoTests: XCTestCase {
         XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-tiny")?.visibility, .deprecated)
     }
 
+    func testAvailableCatalogHasUniqueDownloadableDeviceCompatibleRows() {
+        let device = makeCapabilities(ramGB: 8, model: "iPhone16,2")
+        let rows = ModelInfo.available(on: device)
+
+        XCTAssertEqual(rows.map(\.identifier).count, Set(rows.map(\.identifier)).count)
+        XCTAssertTrue(rows.allSatisfy { $0.visibility == .available || $0.identifier == ModelInfo.recommendedIdentifier(for: device) })
+        XCTAssertTrue(rows.allSatisfy { $0.isSupported(on: device) || $0.identifier == ModelInfo.recommendedIdentifier(for: device) })
+    }
+
     // MARK: - Gauge scores
 
     func testGaugeScoresInValidRange() {

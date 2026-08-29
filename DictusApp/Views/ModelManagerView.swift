@@ -21,13 +21,12 @@ struct ModelManagerView: View {
     private let deviceCapabilities = DeviceCapabilities.current()
 
     private var installedModels: [ModelInfo] {
-        ModelInfo.redesignCatalog.filter { isInstalled($0) }
+        ModelInfo.allIncludingDeprecated.filter { isInstalled($0) }
     }
 
     private var availableModels: [ModelInfo] {
-        let catalogIDs = Set(ModelInfo.redesignCatalog.map(\.identifier))
         return ModelInfo.available(on: deviceCapabilities)
-            .filter { catalogIDs.contains($0.identifier) && !isInstalled($0) }
+            .filter { !isInstalled($0) }
     }
 
     private func isInstalled(_ model: ModelInfo) -> Bool {
@@ -41,7 +40,7 @@ struct ModelManagerView: View {
            let active = modelManager.activeModel {
             return active
         }
-        return ModelInfo.redesignCatalog.first { model in
+        return ModelInfo.allIncludingDeprecated.first { model in
             modelManager.modelStates[model.identifier] == .prewarming
         }?.identifier
     }
