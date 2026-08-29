@@ -282,7 +282,7 @@ struct RecordingView: View {
                 .font(.system(size: 20, weight: .light, design: .monospaced))
                 .foregroundStyle(.secondary)
         } else if displayedStatus == .transcribing {
-            Text("\(recordingPresentation.label)...")
+            Text("\(displayedStatus.recordingLabel)...")
                 .font(.dictusCaption)
                 .foregroundStyle(.secondary)
         } else if displayedStatus == .processing {
@@ -290,7 +290,7 @@ struct RecordingView: View {
             // not: naming the wrong stage is the complaint #267 exists to fix, and
             // it costs a user dictating inside DictusApp the same six seconds of
             // wondering whether the app has hung.
-            Text("\(recordingPresentation.label)...")
+            Text("\(displayedStatus.recordingLabel)...")
                 .font(.dictusCaption)
                 .foregroundStyle(.secondary)
         } else if showCopiedFeedback {
@@ -365,10 +365,6 @@ struct RecordingView: View {
     private func stopRecording() {
         HapticFeedback.recordingStopped()
         coordinator.stopDictation()
-    }
-
-    private var recordingPresentation: HomeRecordingPresentation {
-        HomeRecordingPresentation(status: displayedStatus, insertionAcknowledged: false)
     }
 
     private func userFacingError(_ message: String) -> String {

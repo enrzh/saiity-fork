@@ -1,6 +1,7 @@
 // DictusApp/Views/HomeView.swift
 // Home dashboard showing real model readiness, dictation, and recent output.
 import SwiftUI
+import AVFoundation
 import DictusCore
 
 struct HomeView: View {
@@ -10,6 +11,8 @@ struct HomeView: View {
     var onModelsRequested: (() -> Void)?
 
     @State private var showCopiedFeedback = false
+    @State private var microphonePermission = MicrophonePermissionState.undetermined
+    @Environment(\.scenePhase) private var scenePhase
 
     init(modelManager: ModelManager, onModelsRequested: (() -> Void)? = nil) {
         self.modelManager = modelManager
@@ -50,9 +53,16 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             modelManager.loadState()
+            refreshMicrophonePermission()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DictusOnboardingCompleted"))) { _ in
             modelManager.loadState()
+            refreshMicrophonePermission()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                refreshMicrophonePermission()
+            }
         }
     }
 
@@ -82,6 +92,15 @@ struct HomeView: View {
             Text(readinessSubtitle)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if microphonePermission.isRecoverable {
+                Button {
+                    openSystemSettings()
+                } label: {
+                    Label("Open Settings", systemImage: "arrow.up.right")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -192,22 +211,46 @@ struct HomeView: View {
     }
 
     private var readinessSubtitle: String {
+        if let recoveryMessage = microphonePermission.recoveryMessage {
+            return recoveryMessage
+        }
+
+        if !microphonePermission.isAuthorized {
+            return "Microphone access has not been granted yet."
+        }
+
         if !modelManager.isModelReady {
             return "Choose a local model to begin."
         }
 
-        let presentation = HomeRecordingPresentation(
-            status: coordinator.status,
-            insertionAcknowledged: false
-        )
         switch coordinator.status {
         case .idle, .ready:
             return "Offline dictation, ready when you are."
         case .failed:
-            return userFacingError(DictationErrorChannel.current ?? presentation.label)
+            return userFacingError(DictationErrorChannel.current ?? coordinator.status.recordingLabel)
         default:
-            return presentation.label
+            return coordinator.status.recordingLabel
         }
+    }
+
+    private func refreshMicrophonePermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            microphonePermission = .authorized
+        case .denied:
+            microphonePermission = .denied
+        case .notDetermined:
+            microphonePermission = .undetermined
+        case .restricted:
+            microphonePermission = .restricted
+        @unknown default:
+            microphonePermission = .restricted
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func userFacingError(_ message: String) -> String {

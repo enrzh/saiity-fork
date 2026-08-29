@@ -30,35 +30,49 @@ public enum DictationStatus: String, Codable, CaseIterable, Sendable {
     case processing   // Main app is running the LLM stage on the transcript
     case ready        // Transcription result available in shared storage
     case failed       // Something went wrong
+
+    /// The truthful label for the app's recording surface.
+    public var recordingLabel: String {
+        switch self {
+        case .idle, .ready:
+            return "Ready"
+        case .requested:
+            return "Starting"
+        case .recording:
+            return "Recording"
+        case .transcribing:
+            return "Transcribing"
+        case .processing:
+            return "Processing"
+        case .failed:
+            return "Could not complete"
+        }
+    }
 }
 
-/// User-facing state for the app's recording surface.
-///
-/// The app can produce a result before the keyboard has acknowledged inserting it.
-/// Keeping that distinction at the presentation boundary prevents a successful
-/// transcription from being described as inserted too early.
-public struct HomeRecordingPresentation: Equatable, Sendable {
-    public let label: String
+/// App-facing mapping of AVAudioSession.RecordPermission.
+public enum MicrophonePermissionState: Equatable, Sendable {
+    case authorized
+    case denied
+    case restricted
+    case undetermined
 
-    public init(status: DictationStatus, insertionAcknowledged: Bool) {
-        if insertionAcknowledged {
-            label = "Inserted"
-            return
-        }
+    public var isAuthorized: Bool {
+        self == .authorized
+    }
 
-        switch status {
-        case .idle, .ready:
-            label = "Ready"
-        case .requested:
-            label = "Starting"
-        case .recording:
-            label = "Recording"
-        case .transcribing:
-            label = "Transcribing"
-        case .processing:
-            label = "Processing"
-        case .failed:
-            label = "Could not complete"
+    public var isRecoverable: Bool {
+        self == .denied || self == .restricted
+    }
+
+    public var recoveryMessage: String? {
+        switch self {
+        case .denied:
+            return "Microphone access is off. Enable it in Settings."
+        case .restricted:
+            return "Microphone access is restricted. Check device restrictions."
+        case .authorized, .undetermined:
+            return nil
         }
     }
 }
