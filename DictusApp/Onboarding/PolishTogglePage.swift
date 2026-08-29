@@ -51,7 +51,7 @@ struct PolishTogglePage: View {
 
             // Explanation — what polish does, faithful to the issue copy:
             // local model, light corrections, possible added processing time.
-            Text("Dictus can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections.")
+            Text("sAiity can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

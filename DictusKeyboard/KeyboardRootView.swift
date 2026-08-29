@@ -35,6 +35,7 @@ struct KeyboardRootView: View {
     @ObservedObject private var state = KeyboardState.shared
     @ObservedObject private var waveformDriver = KeyboardWaveformDriver.shared
     @State private var instanceID = String(UUID().uuidString.prefix(8))
+    @State private var pressStarted = false
     /// Observable state for the suggestion bar, owned by KeyboardViewController.
     /// WHY @ObservedObject (not @StateObject): The controller creates and owns SuggestionState,
     /// injecting the same instance into both this view (for display) and the bridge (for updates).
@@ -176,6 +177,159 @@ struct KeyboardRootView: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(uiColor: .secondarySystemBackground).ignoresSafeArea()
+
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("sAiity")
+                            .font(.subheadline.weight(.semibold))
+                        Text("AUTO")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(.thinMaterial, in: Capsule())
+                        Spacer()
+                        utilityButton(
+                            systemName: "chevron.down",
+                            accessibilityLabel: "Switch keyboard",
+                            identifier: "switch-keyboard"
+                        ) {
+                            state.controller?.advanceToNextInputMode()
+                        }
+                    }
+                    .frame(width: 44, alignment: .leading)
+
+                    Spacer(minLength: 0)
+
+                    VStack(spacing: 8) {
+                        Text(dictationTitle)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .strokeBorder(.white.opacity(0.22))
+                            Image(systemName: dictationSymbol)
+                                .font(.system(size: 32, weight: .semibold))
+                                .foregroundStyle(dictationColor)
+                                .symbolEffect(.pulse, isActive: state.dictationStatus == .recording)
+                        }
+                        .frame(width: 148, height: 94)
+                        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { _ in
+                                    guard !pressStarted else { return }
+                                    pressStarted = true
+                                    state.startRecording()
+                                }
+                                .onEnded { _ in
+                                    defer { pressStarted = false }
+                                    guard state.dictationStatus == .requested
+                                            || state.dictationStatus == .recording
+                                    else { return }
+                                    state.requestStop()
+                                }
+                        )
+                        .accessibilityIdentifier("dictate-button")
+                        .accessibilityLabel("Hold to dictate")
+                        .accessibilityValue(dictationTitle)
+
+                        Text(state.statusMessage ?? " ")
+                            .font(.caption2)
+                            .foregroundStyle(state.dictationStatus == .failed ? .red : .secondary)
+                            .lineLimit(1)
+                            .frame(height: 14)
+                    }
+                    .frame(width: 160)
+
+                    Spacer(minLength: 0)
+
+                    VStack(spacing: 10) {
+                        utilityButton(
+                            systemName: "delete.backward",
+                            accessibilityLabel: "Delete backward",
+                            identifier: "delete-backward"
+                        ) {
+                            state.controller?.textDocumentProxy.deleteBackward()
+                        }
+                        utilityButton(
+                            systemName: "return",
+                            accessibilityLabel: "Insert return",
+                            identifier: "return-key"
+                        ) {
+                            state.controller?.textDocumentProxy.insertText("\n")
+                        }
+                        Spacer()
+                        utilityButton(
+                            systemName: "keyboard.chevron.compact.down",
+                            accessibilityLabel: "Dismiss keyboard",
+                            identifier: "dismiss-keyboard"
+                        ) {
+                            state.controller?.dismissKeyboard()
+                        }
+                    }
+                    .frame(width: 44)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 12)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+
+    private var dictationTitle: String {
+        switch state.dictationStatus {
+        case .idle, .ready: return "Hold to dictate"
+        case .requested: return "Getting ready..."
+        case .recording: return "Listening..."
+        case .transcribing: return "Transcribing..."
+        case .processing: return "Cleaning up..."
+        case .failed: return "Try again"
+        }
+    }
+
+    private var dictationSymbol: String {
+        switch state.dictationStatus {
+        case .recording: return "waveform"
+        case .requested, .transcribing, .processing: return "ellipsis"
+        case .failed: return "arrow.clockwise"
+        case .idle, .ready: return "mic.fill"
+        }
+    }
+
+    private var dictationColor: Color {
+        switch state.dictationStatus {
+        case .recording: return .blue
+        case .failed: return .orange
+        default: return .primary
+        }
+    }
+
+    private func utilityButton(
+        systemName: String,
+        accessibilityLabel: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 40, height: 40)
+                .background(.thinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var legacyBody: some View {
         VStack(spacing: 0) {
             switch presentedMode {
             case .recording:

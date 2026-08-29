@@ -34,7 +34,7 @@ struct MicPermissionPage: View {
                 .padding(.bottom, 16)
 
             // Explanation
-            Text("Dictus needs the microphone to transcribe your voice. Your recordings stay on your device.")
+            Text("sAiity needs the microphone to transcribe your voice. Your recordings stay on your device.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

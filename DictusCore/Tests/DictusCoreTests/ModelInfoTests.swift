@@ -7,35 +7,35 @@ final class ModelInfoTests: XCTestCase {
     // MARK: - Catalog visibility
 
     func testAllContainsOnlyAvailableModels() {
-        // ModelInfo.all should contain 5 available models (4 WhisperKit + 1 Parakeet).
+        // ModelInfo.all should contain every integrated model (6 WhisperKit + 1 Parakeet).
         // Phase 37 (issue #104) re-introduced Whisper Turbo to the catalog with per-device
         // gating — it is present here regardless of device; UI filtering happens via
         // `available(on:)` using `isSupported(on:)` in the view layer.
-        XCTAssertEqual(ModelInfo.all.count, 5)
+        XCTAssertEqual(ModelInfo.all.count, 7)
         let ids = Set(ModelInfo.all.map(\.identifier))
+        XCTAssertTrue(ids.contains("openai_whisper-tiny"))
+        XCTAssertTrue(ids.contains("openai_whisper-base"))
         XCTAssertTrue(ids.contains("openai_whisper-small"))
         XCTAssertTrue(ids.contains("openai_whisper-small_216MB"))
         XCTAssertTrue(ids.contains("openai_whisper-medium"))
         XCTAssertTrue(ids.contains("parakeet-tdt-0.6b-v3"))
         XCTAssertTrue(ids.contains("openai_whisper-large-v3_turbo_954MB"))
-        XCTAssertFalse(ids.contains("openai_whisper-tiny"))
-        XCTAssertFalse(ids.contains("openai_whisper-base"))
     }
 
     func testAllIncludingDeprecatedContainsEight() {
-        // allIncludingDeprecated should contain all 7 models (2 deprecated + 5 available).
+        // allIncludingDeprecated should contain the same 7 integrated models.
         XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 7)
         let deprecated = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .deprecated }
-        XCTAssertEqual(deprecated.count, 2)
+        XCTAssertEqual(deprecated.count, 0)
         let available = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .available }
-        XCTAssertEqual(available.count, 5)
+        XCTAssertEqual(available.count, 7)
     }
 
     func testDeprecatedModelStillResolvable() {
         // Tiny and Base must still be found by forIdentifier (backward compat)
         XCTAssertNotNil(ModelInfo.forIdentifier("openai_whisper-tiny"))
         XCTAssertNotNil(ModelInfo.forIdentifier("openai_whisper-base"))
-        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-tiny")?.visibility, .deprecated)
+        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-tiny")?.visibility, .available)
     }
 
     // MARK: - Gauge scores
@@ -207,13 +207,11 @@ final class ModelInfoTests: XCTestCase {
         let rows = ModelInfo.available(on: iphone11)
         let identifiers = Set(rows.map(\.identifier))
 
-        // Everything visible, plus Base via the #362 recommendation exception.
-        XCTAssertEqual(identifiers, Set(ModelInfo.all.map(\.identifier)).union(["openai_whisper-base"]))
+        // The complete integrated catalogue remains visible.
+        XCTAssertEqual(identifiers, Set(ModelInfo.all.map(\.identifier)))
         XCTAssertEqual(rows.filter { $0.isSupported(on: iphone11) }.map(\.identifier),
-                       ["openai_whisper-base"])
-        // Tiny is deprecated AND not recommended: superseded, not unrunnable, so it
-        // has nothing to explain and stays out.
-        XCTAssertFalse(identifiers.contains("openai_whisper-tiny"))
+                       ["openai_whisper-tiny", "openai_whisper-base"])
+        XCTAssertTrue(identifiers.contains("openai_whisper-tiny"))
     }
 
     /// Every disabled row must be able to say why. A row greyed with no sentence is
@@ -256,15 +254,13 @@ final class ModelInfoTests: XCTestCase {
         }
     }
 
-    /// The dead-end guard. Base is `.deprecated` and therefore absent from `all`, so
-    /// without the exception in `available(on:)` an iPhone 11 user who deleted Base
-    /// had no way to reinstall it and no usable model left.
-    func testRecommendedModelIsAlwaysOfferedEvenWhenDeprecated() {
+    /// The recommended model must remain reachable from the available list.
+    func testRecommendedModelIsAlwaysOffered() {
         let iphone11 = makeCapabilities(ramGB: 4, model: "iPhone12,1")
 
         XCTAssertEqual(ModelInfo.recommendedIdentifier(for: iphone11), "openai_whisper-base")
-        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-base")?.visibility, .deprecated)
-        XCTAssertFalse(ModelInfo.all.map(\.identifier).contains("openai_whisper-base"))
+        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-base")?.visibility, .available)
+        XCTAssertTrue(ModelInfo.all.map(\.identifier).contains("openai_whisper-base"))
         XCTAssertTrue(ModelInfo.available(on: iphone11).map(\.identifier).contains("openai_whisper-base"))
     }
 
@@ -293,8 +289,8 @@ final class ModelInfoTests: XCTestCase {
         let offered = ModelInfo.available(on: iphone12).map(\.identifier)
 
         XCTAssertTrue(offered.contains("openai_whisper-small"))
-        XCTAssertFalse(offered.contains("openai_whisper-base"))
-        XCTAssertFalse(offered.contains("openai_whisper-tiny"))
+        XCTAssertTrue(offered.contains("openai_whisper-base"))
+        XCTAssertTrue(offered.contains("openai_whisper-tiny"))
         // Issue #369: Turbo is present but disabled here, not absent.
         XCTAssertTrue(offered.contains("openai_whisper-large-v3_turbo_954MB"))
     }

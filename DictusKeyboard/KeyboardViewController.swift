@@ -188,6 +188,9 @@ class KeyboardViewController: UIInputViewController {
         let theme = Theme.current(for: traitCollection)
         let keyboard = GiellaKeyboardView(definition: definition, theme: theme)
         keyboard.translatesAutoresizingMaskIntoConstraints = false
+        // sAiity is a voice-only keyboard. Keep the legacy Giella view wired for
+        // state/callback compatibility, but never expose its key grid.
+        keyboard.isHidden = true
 
         // --- 2. Create and wire the delegate bridge ---
         let keyBridge = DictusKeyboardBridge()
@@ -331,6 +334,9 @@ class KeyboardViewController: UIInputViewController {
 
         // Assign as the controller's inputView -- this activates audio feedback
         self.inputView = kbInputView
+        hostingHeightConstraint?.constant = computeKeyboardHeight()
+        hostingBottomToKeyboardTop?.isActive = false
+        hostingBottomToInputBottom?.isActive = true
 
         // --- 7. Wire post-transcription suggestion refresh ---
         // After dictation inserts text, update the suggestion bar with completions
@@ -1040,14 +1046,15 @@ class KeyboardViewController: UIInputViewController {
 
         switch mode {
         case .keys:
-            giellaKeyboard?.isHidden = false
-            hostingHeightConstraint?.constant = toolbarHeight
-            setHostingExpanded(false)
+            giellaKeyboard?.isHidden = true
+            let fullHeight = computeKeyboardHeight()
+            hostingHeightConstraint?.constant = fullHeight
+            setHostingExpanded(true)
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "hostingSet_idle",
-                details: "old=\(oldHosting) new=\(toolbarHeight) status=\(status) mode=\(mode.rawValue)"
+                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=\(mode.rawValue)"
             ))
 
         case .emoji:
@@ -1287,6 +1294,7 @@ class KeyboardViewController: UIInputViewController {
         hostingBottomToInputBottom?.isActive = false
 
         self.giellaKeyboard = keyboard
+        keyboard.isHidden = true
 
         // Re-apply whatever the keyboard area presents, rather than hardcoding the
         // toolbar height. Leaving the hosting view at full height would squash the

@@ -54,9 +54,9 @@ enum SpeechModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .modelNotInstalled:
-            return String(localized: "This model is not installed. Open Dictus and download it in the Models tab.")
+            return String(localized: "This model is not installed. Open sAiity and download it in the Models tab.")
         case .engineLoadFailed:
-            return String(localized: "The transcription model could not be loaded. Open Dictus and try again.")
+            return String(localized: "The transcription model could not be loaded. Open sAiity and try again.")
         }
     }
 

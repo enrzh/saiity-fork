@@ -62,7 +62,7 @@ struct GlobeKeyTutorialPage: View {
                 // Title — changes based on state
                 Group {
                     if !dictusKeyboardActive {
-                        Text("Hold \(Image(systemName: "globe")) and select Dictus")
+                        Text("Hold \(Image(systemName: "globe")) and select sAiity")
                     } else {
                         Text("Tap the mic and start dictating")
                     }
@@ -430,7 +430,7 @@ private struct KeyboardSwitchAnimation: View {
             Divider().opacity(0.2)
             pickerRow("Emoji")
             Divider().opacity(0.2)
-            pickerRow("Dictus", highlighted: dictusHighlighted, accent: dictusHighlighted)
+            pickerRow("sAiity", highlighted: dictusHighlighted, accent: dictusHighlighted)
 
             // Keyboard type icons (dock/split/full)
             HStack(spacing: 12) {
@@ -599,7 +599,7 @@ private struct KeyboardDetectingTextField: UIViewRepresentable {
                 return
             }
 
-            let isDictus = identifier.contains("com.pivi.dictus")
+            let isDictus = identifier.contains("de.aiity.saiity.ios")
             DispatchQueue.main.async {
                 self.parent.onKeyboardChange(isDictus)
             }

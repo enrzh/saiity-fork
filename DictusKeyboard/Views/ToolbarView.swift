@@ -321,7 +321,7 @@ struct ToolbarView: View {
             barIcon(systemName: "gearshape", size: 19, width: iconDiameter, shape: .circle)
         }
         .buttonStyle(GlassPressStyle())
-        .accessibilityLabel(Text("Open Dictus"))
+        .accessibilityLabel(Text("Open sAiity"))
     }
 
     /// Width and height of `AnimatedMicButton`'s pill body, mirrored here so the
@@ -383,7 +383,7 @@ struct ToolbarView: View {
             HapticFeedback.keyTapped()
             onProTap?()
         } label: {
-            Text(verbatim: "Dictus Pro")
+            Text(verbatim: "sAiity Pro")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(
                     LinearGradient(
@@ -404,6 +404,6 @@ struct ToolbarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(GlassPressStyle())
-        .accessibilityLabel(Text(verbatim: "Dictus Pro"))
+        .accessibilityLabel(Text(verbatim: "sAiity Pro"))
     }
 }

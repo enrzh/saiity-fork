@@ -42,12 +42,12 @@
         }
       }
     },
-    "Enable Full Access in Settings > Keyboards > Dictus to use dictation." : {
+    "Enable Full Access in Settings > Keyboards > sAiity to use dictation." : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Active l’Accès complet dans Réglages > Claviers > Dictus pour utiliser la dictée."
+            "value" : "Activez l’Accès complet dans Réglages > Claviers > sAiity pour utiliser la dictée."
           }
         }
       }
@@ -113,12 +113,12 @@
         }
       }
     },
-    "Open Dictus" : {
+    "Open sAiity" : {
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ouvrir Dictus"
+            "value" : "Ouvrir sAiity"
           }
         }
       }

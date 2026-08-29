@@ -178,7 +178,7 @@ struct PaywallView: View {
                 .shadow(color: Color.dictusAccent.opacity(0.7), radius: 10)
                 .shadow(color: Color.dictusAccent.opacity(0.4), radius: 20)
 
-            Text("Dictus Pro")
+            Text("sAiity Pro")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .foregroundStyle(
                     LinearGradient(
@@ -241,7 +241,7 @@ struct PaywallView: View {
                 .font(.title2)
                 .foregroundColor(.dictusSuccess)
 
-            Text("Dictus Pro Active")
+                Text("sAiity Pro Active")
                 .font(.dictusSubheading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,7 +298,7 @@ struct PaywallView: View {
     /// anything on Dictus infrastructure carries a per-user marginal cost that
     /// a single payment cannot fund. "Local" only approximated that line.
     private var lifetimeScopeFootnote: some View {
-        Text("The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on Dictus infrastructure is a separate offering.")
+        Text("The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on sAiity infrastructure is a separate offering.")
             .font(.dictusCaption)
             .foregroundColor(.secondary)
             // Long copy inside a VStack of fixed-height cards: without this it
@@ -629,7 +629,7 @@ struct PaywallView: View {
                 .opacity(successEntrance ? 1 : 0)
                 .animation(.spring(response: 0.45, dampingFraction: 0.6), value: successEntrance)
 
-            Text("Welcome to Dictus Pro")
+            Text("Welcome to sAiity Pro")
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(
                     LinearGradient(

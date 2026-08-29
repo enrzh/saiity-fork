@@ -11,7 +11,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
-			<string>Activer Dictus</string>
+			<string>Activer sAiity</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -27,7 +27,7 @@
 			<key>Type</key>
 			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
-			<string>2. Activez Dictus</string>
+			<string>2. Activez sAiity</string>
 			<key>Key</key>
 			<string>step2</string>
 			<key>DefaultValue</key>
@@ -50,7 +50,7 @@
 			<key>Title</key>
 			<string>Vie privee</string>
 			<key>FooterText</key>
-			<string>Dictus ne stocke ni ne transmet vos donnees vocales. L'acces complet permet uniquement au clavier de communiquer avec l'app pour la transcription.</string>
+			<string>sAiity ne stocke ni ne transmet vos donnees vocales. L'acces complet permet uniquement au clavier de communiquer avec l'app pour la transcription.</string>
 		</dict>
 		<!-- Troubleshooting -->
 		<dict>
@@ -59,7 +59,7 @@
 			<key>Title</key>
 			<string>Claviers introuvable ?</string>
 			<key>FooterText</key>
-			<string>Fermez les Reglages puis reessayez. Ou ouvrez Dictus et touchez Activer dans les Reglages.</string>
+			<string>Fermez les Reglages puis reessayez. Ou ouvrez sAiity et touchez Activer dans les Reglages.</string>
 		</dict>
 		<!-- Version -->
 		<dict>

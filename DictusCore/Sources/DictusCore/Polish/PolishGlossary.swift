@@ -8,7 +8,7 @@ import Foundation
 /// Evolves by PR as terms appear mistranscribed in debug logs.
 public enum PolishGlossary {
     public static let terms: [String] = [
-        "Dictus",
+        "sAiity",
         "WhisperKit",
         "Parakeet v3",
         "FluidAudio",

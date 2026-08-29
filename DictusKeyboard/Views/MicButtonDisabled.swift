@@ -21,7 +21,7 @@ struct MicButtonDisabled: View {
             VStack(spacing: 8) {
                 Text("Full access required")
                     .font(.headline)
-                Text("Enable Full Access in Settings > Keyboards > Dictus to use dictation.")
+                Text("Enable Full Access in Settings > Keyboards > sAiity to use dictation.")
                     .font(.caption)
                     .multilineTextAlignment(.center)
                 // Force unwrap: "app-settings:" is a compile-time literal and a

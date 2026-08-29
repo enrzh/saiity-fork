@@ -5,7 +5,7 @@ import XCTest
 final class DictusCoreTests: XCTestCase {
 
     func testAppGroupIdentifier() {
-        XCTAssertEqual(AppGroup.identifier, "group.solutions.pivi.dictus")
+        XCTAssertEqual(AppGroup.identifier, "group.de.aiity.saiity.ios")
     }
 
     func testDictationStatusRawValues() {

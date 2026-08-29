@@ -87,7 +87,7 @@ struct KeyboardSetupPage: View {
             // Settings, iOS's TCC daemon forcibly terminates Dictus to enforce
             // the new permission. This can look like a crash. Telling the user
             // it's expected prevents support tickets and reduces anxiety.
-            Text("Dictus may restart automatically — this is normal")
+            Text("sAiity may restart automatically — this is normal")
                 .font(.dictusCaption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -228,7 +228,7 @@ struct KeyboardSetupPage: View {
                 Image(systemName: "gearshape.fill")
                     .foregroundStyle(.secondary)
                     .font(.footnote)
-                Text(showKeyboardsScreen ? "Settings > Dictus > Keyboards" : "Settings > Dictus")
+                Text(showKeyboardsScreen ? "Settings > sAiity > Keyboards" : "Settings > sAiity")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .animation(.none, value: showKeyboardsScreen)
@@ -356,7 +356,7 @@ struct KeyboardSetupPage: View {
     /// adopt the native Liquid Glass style on iOS 26.
     private var keyboardsTogglesPhase: some View {
         VStack(spacing: 0) {
-            Toggle("Dictus", isOn: $dictusToggleOn)
+            Toggle("sAiity", isOn: $dictusToggleOn)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dictusToggleOn)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -452,7 +452,7 @@ struct KeyboardSetupPage: View {
     /// This is the only public API to detect installed keyboards. It returns
     /// an array of UITextInputMode objects whose `value(forKey: "identifier")`
     /// contains the bundle identifier. We look for our keyboard extension's
-    /// bundle ID "com.pivi.dictus.keyboard".
+    /// bundle ID "de.aiity.saiity.ios.keyboard".
     ///
     /// WHY defensive coding:
     /// UITextInputMode.activeInputModes can be unstable during rapid scenePhase
@@ -467,7 +467,7 @@ struct KeyboardSetupPage: View {
             guard let identifier = mode.value(forKey: "identifier") as? String else {
                 continue
             }
-            if identifier.contains("com.pivi.dictus") {
+            if identifier.contains("de.aiity.saiity.ios") {
                 PersistentLog.log(.onboardingKeyboardDetected(identifier: identifier))
                 keyboardDetected = true
                 return

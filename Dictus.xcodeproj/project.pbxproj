@@ -1204,7 +1204,7 @@
 				INFOPLIST_FILE = DictusApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1227,7 +1227,7 @@
 				INFOPLIST_FILE = DictusApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1254,7 +1254,7 @@
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1282,7 +1282,7 @@
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1305,7 +1305,7 @@
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1327,7 +1327,7 @@
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pivi.dictus.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

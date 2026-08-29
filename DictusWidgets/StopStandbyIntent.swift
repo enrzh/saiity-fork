@@ -18,7 +18,7 @@ import DictusCore
 
 struct StopStandbyIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Stop Standby"
-    static var description = IntentDescription("Turn off Dictus standby mode")
+    static var description = IntentDescription("Turn off sAiity standby mode")
 
     func perform() async throws -> some IntentResult {
         // End all Live Activities

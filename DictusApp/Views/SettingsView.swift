@@ -4,7 +4,7 @@ import SwiftUI
 import UIKit
 import DictusCore
 
-/// Settings screen: Dictus Pro, Transcription, Keyboard, Pro Features, About.
+/// Settings screen: Dictus Pro, Transcription, Keyboard, and Pro Features.
 ///
 /// WHY @AppStorage with App Group store:
 /// Preferences need to be readable by both the main app AND the keyboard extension.
@@ -19,42 +19,6 @@ struct SettingsView: View {
     @EnvironmentObject var proStatus: ProStatusManager
 
     // MARK: - Preferences (App Group persisted)
-
-    @AppStorage(SharedKeys.language, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var language = "fr"
-
-    /// Transcription (STT) language mode, decoupled from the keyboard language (#226).
-    /// Stored as its raw App Group encoding: "follow" (default), "auto", or an
-    /// explicit code ("fr"/"en"/"es"/"de"). "follow" preserves the historical
-    /// behavior where STT tracks the keyboard language.
-    @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var transcriptionLanguage = TranscriptionLanguageMode.followStoredValue
-
-    /// Bumped whenever the Layout picker writes, to re-evaluate the body.
-    ///
-    /// WHY not @AppStorage like every other preference here: since #272 the layout is
-    /// stored per keyboard language (`KeyboardLayoutPreference`), so there is no single
-    /// key for @AppStorage to observe — the value the picker shows depends on the
-    /// language selected in the row above it.
-    @State private var layoutRevision = 0
-
-    @AppStorage(SharedKeys.hapticsEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var hapticsEnabled = true
-
-    /// Persistent digit row above the letter rows (#331). Off by default: it makes the
-    /// keyboard a fifth taller, and nobody's keyboard may change shape on update.
-    /// Portrait only — the keyboard reads this through `NumberRowPreference` and never draws
-    /// the row in landscape, where it would take 72% of the screen.
-    @AppStorage(SharedKeys.numberRowEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var numberRowEnabled = false
-
-    @AppStorage(SharedKeys.activeModel, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var activeModel = "openai_whisper-small"
-
-    /// WHY default true: Most users expect autocorrect to be active by default.
-    /// Power users who find it annoying can toggle it off here.
-    @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var autocorrectEnabled = true
 
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
     private var liveActivityEnabled = true
@@ -71,48 +35,7 @@ struct SettingsView: View {
     private var autocorrectDebugLogging = false
     #endif
 
-    /// The keyboard language the pickers below operate on.
-    private var keyboardLanguage: SupportedLanguage {
-        SupportedLanguage(rawValue: language) ?? .french
-    }
-
-    /// The Layout picker's selection: the layout of whichever keyboard language is
-    /// currently selected above it (#272).
-    ///
-    /// The getter reads `layoutRevision` so a write re-renders the picker; the setter is
-    /// the only thing that records an explicit layout from this screen. Changing the
-    /// *language* runs neither — which is the whole point, the language no longer
-    /// overwrites the layout.
-    private var layoutSelection: Binding<LayoutType> {
-        let selectedLanguage = keyboardLanguage
-        return Binding(
-            get: {
-                _ = layoutRevision
-                return KeyboardLayoutPreference.layout(for: selectedLanguage)
-            },
-            set: { newLayout in
-                KeyboardLayoutPreference.setLayout(newLayout, for: selectedLanguage)
-                layoutRevision += 1
-            }
-        )
-    }
-
-    /// Whether the currently active model uses the Parakeet engine (CTC/TDT).
-    /// Parakeet auto-detects language — the language picker has no effect on it.
-    private var isParakeetActive: Bool {
-        ModelInfo.forIdentifier(activeModel)?.engine == .parakeet
-    }
-
     /// Tracks log export async operation for spinner display.
-    @State private var isExporting = false
-    @State private var exportURL: URL?
-
-    /// Hidden polish debug screen (#141). Reached via long-press 3s on the Version row.
-    @State private var showPolishDebug = false
-
-    /// Confirmation dialog for resetting the learned-words dictionary (#222).
-    @State private var showResetDictionaryConfirmation = false
-
     /// Drives the paywall cover. Shared by the Dictus Pro row and every locked
     /// feature row: they open the same screen, so one flag serves both.
     @State private var showPaywall = false
@@ -132,7 +55,7 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "crown.fill")
                                 .foregroundColor(.dictusAccent)
-                            Text("Dictus Pro")
+                            Text("sAiity Pro")
                                 .foregroundColor(.primary)
                             Spacer()
                             if proStatus.isProActive {
@@ -152,27 +75,6 @@ struct SettingsView: View {
 
             // Section 1: Transcription
             Section {
-                // STT language, decoupled from the keyboard language (#226).
-                // "Follow keyboard language" is the default and preserves the
-                // historical coupled behavior. "Auto-detect" lets Whisper pick
-                // the language itself, unlocking languages without a Dictus
-                // keyboard (Chinese, Italian, …). Explicit entries stay limited
-                // to the four tested languages by product decision — the long
-                // tail goes through Auto-detect only.
-                Picker("Transcription language", selection: $transcriptionLanguage) {
-                    Text("Follow keyboard language")
-                        .tag(TranscriptionLanguageMode.followStoredValue)
-                    Text("Auto-detect")
-                        .tag(TranscriptionLanguageMode.autoStoredValue)
-                    ForEach(SupportedLanguage.allCases, id: \.rawValue) { lang in
-                        Text(lang.displayName).tag(lang.rawValue)
-                    }
-                }
-                if isParakeetActive {
-                    Text("Parakeet automatically detects the spoken language. This setting only applies to Whisper models.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 if PolishAvailability.isToggleVisible {
                     Toggle("Polish transcription", isOn: $polishEnabled)
                     polishStateFooter
@@ -180,99 +82,11 @@ struct SettingsView: View {
             } header: {
                 Text("Transcription")
             } footer: {
-                // Explain Auto-detect behavior (#226) — since #239 polish runs
-                // in this mode with the language-agnostic prompt — plus a
-                // pointer to the per-model language details (#240).
-                // The Whisper-specific line is hidden while Parakeet is active
-                // (the caveat above already says the setting has no effect
-                // there), but the per-model language pointer stays useful for
-                // both engines.
-                if transcriptionLanguage == TranscriptionLanguageMode.autoStoredValue {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if !isParakeetActive {
-                            Text("Auto-detect lets you dictate in any language Whisper supports. Polish adapts to the language you speak.")
-                        }
-                        Text("Language support varies by model. Tap ⓘ on a model card in Models for details.")
-                    }
-                }
+                Text("Dictation language is detected automatically.")
             }
 
             // Section 2: Clavier
-            // All toggles are always visible — there's only one keyboard type now.
             Section {
-                // Keyboard language: drives layout, key labels, and
-                // autocorrect/prediction dictionaries. Moved here from the
-                // Transcription section in #226 — it no longer drives STT by
-                // itself (only when the transcription language is "Follow
-                // keyboard language").
-                Picker("Keyboard language", selection: $language) {
-                    // Iterate over SupportedLanguage so adding a new language
-                    // (German PR2, future onboardings) only requires the enum case.
-                    ForEach(SupportedLanguage.allCases, id: \.rawValue) { lang in
-                        Text(lang.displayName).tag(lang.rawValue)
-                    }
-                }
-                .onChange(of: language) { _, newLang in
-                    // The layout is NOT touched here anymore (#272): it belongs to the
-                    // language being selected, and overwriting it is what made "English
-                    // autocorrect on an AZERTY keyboard" unreachable. The Layout picker
-                    // below now shows the new language's own layout instead.
-                    //
-                    // Routing through activate() keeps the legacy mirror in step — the
-                    // @AppStorage write above has already stored the language, so this
-                    // only adds the mirror.
-                    if let lang = SupportedLanguage(rawValue: newLang) {
-                        SupportedLanguage.activate(lang)
-                    }
-                }
-
-                DefaultLayerPicker()
-
-                Picker("Layout", selection: layoutSelection) {
-                    // Iterate over LayoutType so adding a layout (QWERTZ in #151,
-                    // any future one) only requires the enum case — the entries used
-                    // to be hardcoded here and in the keyboard panel separately.
-                    ForEach(LayoutType.allCases, id: \.self) { layout in
-                        Text(layout.displayName).tag(layout)
-                    }
-                }
-
-                // Sits under the Layout picker because it changes the same thing: the shape
-                // of the key grid. It applies to every layout and every keyboard language —
-                // a number row is a hardware habit, not a language one (#331).
-                Toggle("Number row", isOn: $numberRowEnabled)
-
-                Toggle("Haptic feedback", isOn: $hapticsEnabled)
-
-                NavigationLink("Sounds") {
-                    SoundSettingsView()
-                }
-
-                Toggle("Autocorrect", isOn: $autocorrectEnabled)
-
-                // Reset the learned-words dictionary (#222). Words learned by
-                // the keyboard bypass autocorrect forever, so users need a way
-                // to recover from accidental learning (e.g. typos recorded
-                // before the search-field learning gate existed).
-                Button("Reset learned words", role: .destructive) {
-                    // Sync from App Group first: words learned by the keyboard
-                    // process since app launch aren't in this process's cache.
-                    UserDictionary.shared.reload()
-                    showResetDictionaryConfirmation = true
-                }
-                .confirmationDialog(
-                    "Reset learned words?",
-                    isPresented: $showResetDictionaryConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Forget \(UserDictionary.shared.count) learned words", role: .destructive) {
-                        UserDictionary.shared.resetAll()
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Words the keyboard learned from your typing will be forgotten and autocorrect will apply to them again.")
-                }
-
                 Toggle("Live Activity", isOn: $liveActivityEnabled)
                     .onChange(of: liveActivityEnabled) { _, enabled in
                         if !enabled {
@@ -293,9 +107,6 @@ struct SettingsView: View {
                 // compatibility mode, which is the only way an iPad reaches this app. A second
                 // copy of device detection in a second target, for a device class Dictus does
                 // not target, costs more than a sentence that is simply true on both.
-                if numberRowEnabled {
-                    Text("The number row is shown on iPhone in portrait only.")
-                }
                 if !liveActivityEnabled {
                     Text("Dynamic Island and Lock Screen notification are disabled.")
                 }
@@ -371,85 +182,11 @@ struct SettingsView: View {
             }
             #endif
 
-            // Section 4: A propos
-            Section("About") {
-                LabeledContent("Version", value: appVersion)
-                    .contentShape(Rectangle())
-                    // Five quick taps reveals the polish debug ring. Replaces
-                    // the previous 3-second long-press — taps are easier to
-                    // perform on the device than holding still on a List row,
-                    // and the secret-gesture posture stays the same.
-                    .onTapGesture(count: 5) {
-                        showPolishDebug = true
-                    }
-
-                // WHY Button instead of Link:
-                // Link doesn't respond to ButtonStyle and gets no press highlight
-                // in a List with .scrollContentBackground(.hidden). Using Button
-                // with UIApplication.shared.open gives native row press feedback.
-                Button {
-                    // Force unwrap is safe: compile-time constant URL that cannot be malformed.
-                    // swiftlint:disable:next force_unwrapping
-                    UIApplication.shared.open(URL(string: "https://github.com/Pivii/dictus")!)
-                } label: {
-                    HStack {
-                        Text("GitHub")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                NavigationLink("Licenses") {
-                    LicensesView()
-                }
-
-                NavigationLink("Diagnostic") {
-                    diagnosticView
-                }
-
-                NavigationLink("Debug Logs") {
-                    DebugLogView()
-                }
-
-                Button {
-                    exportLogs()
-                } label: {
-                    HStack {
-                        Text("Export logs")
-                        Spacer()
-                        if isExporting {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .disabled(isExporting)
-            }
         }
         .scrollContentBackground(.hidden)
         .background(Color.dictusBackground.ignoresSafeArea())
         .navigationTitle("Settings")
-        .navigationDestination(isPresented: $showPolishDebug) {
-            PolishDebugView()
-        }
         .paywallCover(isPresented: $showPaywall)
-        .sheet(isPresented: Binding(
-            get: { exportURL != nil },
-            set: { isPresented in
-                if !isPresented {
-                    exportURL = nil
-                }
-            }
-        )) {
-            if let exportURL {
-                ShareSheet(items: [exportURL])
-            }
-        }
     }
 
     // MARK: - Private
@@ -461,34 +198,6 @@ struct SettingsView: View {
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.tertiary)
             .accessibilityHidden(true)
-    }
-
-    /// Export logs via iOS share sheet.
-    ///
-    /// WHY write to a temp file instead of sharing raw text:
-    /// UIActivityViewController with a file URL shows the file name ("dictus-logs.txt")
-    /// in the share sheet and lets the user save, AirDrop, or attach it to email/GitHub.
-    /// Raw text sharing doesn't give a meaningful filename.
-    /// WHY async with isExporting flag:
-    /// Log gathering reads from disk and can take a moment on large log files.
-    /// The spinner gives visual feedback that something is happening. The share
-    /// sheet presentation must happen on the main thread (UIKit requirement).
-    private func exportLogs() {
-        guard !isExporting else { return }
-        isExporting = true
-        Task {
-            let start = CFAbsoluteTimeGetCurrent()
-            let content = PersistentLog.exportContent()
-            let duration = CFAbsoluteTimeGetCurrent() - start
-            PersistentLog.log(.logExportCompleted(durationMs: Int(duration * 1000), sizeBytes: content.utf8.count))
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("dictus-logs.txt")
-            try? content.write(to: tempURL, atomically: true, encoding: .utf8)
-
-            await MainActor.run {
-                isExporting = false
-                exportURL = tempURL
-            }
-        }
     }
 
     /// Footer row under the polish toggle — surfaces the specific reason
@@ -532,40 +241,10 @@ struct SettingsView: View {
         case .osTooOld:
             return "Polish requires iOS 26 or later."
         case .sdkMissing:
-            return "Polish isn't available in this build of Dictus."
+            return "Polish isn't available in this build of sAiity."
         case .other(let reason):
             return "Apple Intelligence is unavailable (\(reason))."
         }
     }
 
-    /// App version string from Info.plist — marketing version + build number.
-    ///
-    /// Format: "1.6.0 (10)" — lets testers report bugs against a specific build,
-    /// since TestFlight ships multiple builds under the same marketing version.
-    private var appVersion: String {
-        let marketing = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "\(marketing) (\(build))"
-    }
-
-    /// Diagnostic detail view showing App Group health.
-    ///
-    /// WHY inline computation:
-    /// DiagnosticDetailView requires a DiagnosticResult, which we compute
-    /// on demand by running the diagnostic check. This is cheap (reads/writes
-    /// a single UserDefaults key) and always shows fresh results.
-    private var diagnosticView: some View {
-        DiagnosticDetailView(result: AppGroupDiagnostic.run())
-            .navigationTitle("Diagnostic")
-    }
-}
-
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

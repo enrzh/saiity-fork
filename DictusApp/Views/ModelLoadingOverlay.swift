@@ -220,7 +220,7 @@ struct ModelLoadingOverlay: View {
     private var explanationText: LocalizedStringKey {
         switch activeContext {
         case .onboarding:
-            return "Dictus prepares your transcription model for offline dictation."
+            return "sAiity prepares your transcription model for offline dictation."
         case .modelSelection:
             return "This preparation may take a moment and is usually not needed for every dictation."
         case .keyboardColdStart:
@@ -297,7 +297,7 @@ struct ModelLoadingOverlay: View {
                 String(localized: "Adapting the model to your iPhone…"),
                 String(localized: "Configuring voice transcription…"),
                 String(localized: "Preparing the final steps…"),
-                String(localized: "Getting Dictus ready…"),
+                String(localized: "Getting sAiity ready…"),
                 String(localized: "Setting up the transcription engine…"),
                 String(localized: "Checking the model…"),
                 String(localized: "Almost ready…"),

@@ -535,7 +535,7 @@ class KeyboardState: ObservableObject {
     /// documented path for an app extension, and SwiftUI's `openURL` has no
     /// success result and can fail silently in a keyboard extension.
     func openDictusApp(intent: String) {
-        guard let url = URL(string: "dictus://open?source=keyboard&intent=\(intent)") else {
+        guard let url = URL(string: "saiity://open?source=keyboard&intent=\(intent)") else {
             return
         }
         logProbe("openDictusApp", details: "intent=\(intent)")
@@ -1305,7 +1305,7 @@ class KeyboardState: ObservableObject {
                 // well-formed absolute URL, so the failable initializer cannot
                 // return nil. Nothing at runtime can change this string.
                 // swiftlint:disable:next force_unwrapping
-                let url = URL(string: "dictus://dictate?source=keyboard")!
+                let url = URL(string: "saiity://dictate?source=keyboard")!
                 self.openDictusURL(url)
             }
         }
@@ -1314,7 +1314,7 @@ class KeyboardState: ObservableObject {
     /// Open Dictus without creating a recording request. The user explicitly
     /// starts dictation with a second tap once preparation has completed (#262).
     private func openModelPreparation() {
-        guard let url = URL(string: "dictus://dictate?source=keyboard&intent=prepare") else {
+        guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else {
             return
         }
         openDictusURL(url)

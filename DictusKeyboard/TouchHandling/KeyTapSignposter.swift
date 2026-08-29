@@ -18,7 +18,7 @@ import os
 /// - T3 (touchUp -> insertText): <= 33ms (two frames)
 enum KeyTapSignposter {
     private static let signposter = OSSignposter(
-        subsystem: "com.pivi.dictus.keyboard",
+        subsystem: "de.aiity.saiity.keyboard",
         category: "KeyPress"
     )
 

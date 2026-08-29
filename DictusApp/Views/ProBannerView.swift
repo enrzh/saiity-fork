@@ -25,7 +25,7 @@ struct ProBannerView: View {
                         .foregroundColor(.dictusAccent)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Unlock Dictus Pro")
+                        Text("Unlock sAiity Pro")
                             .font(.dictusSubheading)
                             .foregroundColor(.primary)
                         Text("AI reformulation, history & more")

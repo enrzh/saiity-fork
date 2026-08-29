@@ -238,5 +238,5 @@ public struct PolishMetrics: Sendable, Codable {
 
 private enum PolishLog {
     @available(iOS 14.0, macOS 11.0, *)
-    static let logger = Logger(subsystem: "com.pivi.dictus", category: "polish")
+    static let logger = Logger(subsystem: "de.aiity.saiity", category: "polish")
 }

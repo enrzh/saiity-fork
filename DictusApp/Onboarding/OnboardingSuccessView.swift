@@ -47,7 +47,7 @@ struct OnboardingSuccessView: View {
                         .font(.dictusHeading)
                         .foregroundStyle(.primary)
 
-                    Text("Dictus is set up and ready to use")
+                    Text("sAiity is set up and ready to use")
                         .font(.dictusBody)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -2,9 +2,9 @@
 // The single rule that recognises the dictation URLs the keyboard sends to the app.
 import Foundation
 
-/// What the keyboard is asking the app to do with a `dictus://dictate` URL.
+/// What the keyboard is asking the app to do with a `saiity://dictate` URL.
 public enum KeyboardDictationIntent: String, Sendable, Equatable, CaseIterable {
-    /// Start a dictation now (`dictus://dictate?source=keyboard`).
+    /// Start a dictation now (`saiity://dictate?source=keyboard`).
     case record
     /// Only load the active model, without recording (`&intent=prepare`, issue #262).
     case prepare
@@ -23,7 +23,7 @@ public enum KeyboardDictationIntent: String, Sendable, Equatable, CaseIterable {
 /// build its URLs from the same vocabulary.
 public enum KeyboardDictationURL {
     /// The scheme registered by DictusApp in `CFBundleURLTypes`.
-    private static let scheme = "dictus"
+    private static let scheme = "saiity"
     /// The only host that carries a dictation request.
     private static let host = "dictate"
 
@@ -31,7 +31,7 @@ public enum KeyboardDictationURL {
     /// dictation request.
     ///
     /// Returning `nil` covers everything the caller must not treat as a keyboard
-    /// dictation: another scheme, `dictus://stop`, and the widget's `dictus://dictate`
+    /// dictation: another scheme, `saiity://stop`, and the widget's `saiity://dictate`
     /// deep link, which has no `source=keyboard` query item.
     public static func intent(from url: URL) -> KeyboardDictationIntent? {
         guard url.scheme?.lowercased() == scheme,

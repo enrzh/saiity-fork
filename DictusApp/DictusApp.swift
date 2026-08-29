@@ -87,6 +87,10 @@ struct DictusApp: App {
         // WHY `if nil` check: Only write if the key doesn't exist yet. If user already
         // set a language preference (e.g., "en"), don't overwrite it.
         let defaults = UserDefaults(suiteName: AppGroup.identifier)
+        defaults?.set(
+            TranscriptionLanguageMode.autoStoredValue,
+            forKey: SharedKeys.transcriptionLanguage
+        )
         if defaults?.string(forKey: SharedKeys.language) == nil {
             defaults?.set("fr", forKey: SharedKeys.language)
         }
@@ -221,7 +225,7 @@ struct DictusApp: App {
     private static var hasBeenActive = false
 
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "dictus" else { return }
+        guard url.scheme == "saiity" else { return }
 
         // Temporary diagnostic: log all URL components for cold start investigation.
         // This captures what information IS available from the URL itself (host, query params).

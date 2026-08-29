@@ -75,7 +75,7 @@ struct HomeView: View {
             DictusLogo(height: 60)
                 .padding(.top, 8)
             if proStatus.isProActive {
-                Text("Dictus Pro")
+                Text("sAiity Pro")
                     .font(.dictusHeading)
                     .foregroundStyle(
                         LinearGradient(
@@ -85,7 +85,7 @@ struct HomeView: View {
                         )
                     )
             } else {
-                Text("Dictus")
+                Text("sAiity")
                     .font(.dictusHeading)
                     .foregroundColor(.dictusAccent)
             }

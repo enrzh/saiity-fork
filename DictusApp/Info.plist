@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Dictus</string>
+	<string>sAiity</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +22,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.pivi.dictus</string>
+			<string>de.aiity.saiity.ios</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>dictus</string>
+				<string>saiity</string>
 			</array>
 		</dict>
 	</array>
@@ -49,7 +49,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Dictus needs microphone access to transcribe your voice.</string>
+	<string>sAiity needs microphone access to transcribe your voice.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -3,10 +3,8 @@ import Foundation
 
 /// Visibility state of a model in the download catalog.
 ///
-/// WHY soft deprecation instead of removal:
-/// Users who already downloaded Tiny/Base models should still be able to use them.
-/// We hide deprecated models from the "new download" catalog but keep them resolvable
-/// so ModelManager can display and manage them if present on device.
+/// Visibility distinguishes models that are currently selectable from models kept
+/// only for backward compatibility.
 public enum CatalogVisibility {
     case available
     case deprecated
@@ -41,7 +39,7 @@ public struct ModelInfo: Identifiable {
     /// Short English description for the model selection UI.
     public let description: String
 
-    /// Whether this model is shown in the download catalog or only kept for backward compat.
+    /// Whether this model is shown in the download catalog or only kept for backward compatibility.
     public let visibility: CatalogVisibility
 
     // MARK: - Deprecated label properties (backward compat)
@@ -68,7 +66,7 @@ public struct ModelInfo: Identifiable {
 
     // MARK: - Catalog
 
-    /// Models available for new downloads. Excludes deprecated Tiny/Base.
+    /// Models available for new downloads. Includes every integrated runtime.
     /// On iOS 17+, includes Parakeet models. On iOS 16, Parakeet is filtered out.
     ///
     /// WHY runtime OS version check instead of #available:
@@ -86,8 +84,7 @@ public struct ModelInfo: Identifiable {
         }
     }()
 
-    /// All known models including deprecated ones. Used for backward compatibility
-    /// so already-downloaded Tiny/Base models still resolve and function.
+    /// All known models, including any retained for backward compatibility.
     public static let allIncludingDeprecated: [ModelInfo] = [
         ModelInfo(
             identifier: "openai_whisper-tiny",
@@ -98,7 +95,7 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.3,
             speedScore: 1.0,
             description: "Fast but inaccurate",
-            visibility: .deprecated
+            visibility: .available
         ),
         ModelInfo(
             identifier: "openai_whisper-base",
@@ -109,7 +106,7 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.4,
             speedScore: 0.9,
             description: "Fast but inaccurate",
-            visibility: .deprecated
+            visibility: .available
         ),
         // Speed scores recalibrated 2026-05-09 from measured RTF on iPhone 15 Pro Max
         // (issue #168 audit / PR #170): small ~17×, medium ~4×, turbo ~2.7×.
