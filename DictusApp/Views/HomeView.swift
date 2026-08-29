@@ -49,7 +49,11 @@ struct HomeView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .contentMargins(.bottom, 96, for: .scrollContent)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: 96)
+                .accessibilityHidden(true)
+        }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {

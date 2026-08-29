@@ -96,7 +96,11 @@ struct ModelManagerView: View {
                 modelEngineFooter(for: availableModels)
             }
         }
-        .contentMargins(.bottom, 96, for: .scrollContent)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: 96)
+                .accessibilityHidden(true)
+        }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .navigationTitle("Models")
