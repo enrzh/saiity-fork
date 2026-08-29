@@ -195,7 +195,7 @@ struct KeyboardRootView: View {
                             state.controller?.advanceToNextInputMode()
                         }
                     }
-                    .frame(width: 44, alignment: .leading)
+                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), alignment: .leading)
 
                     Spacer(minLength: 0)
 
@@ -241,7 +241,7 @@ struct KeyboardRootView: View {
 
                     Spacer(minLength: 0)
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
                         utilityButton(
                             systemName: "delete.backward",
                             accessibilityLabel: "Delete backward",
@@ -271,11 +271,15 @@ struct KeyboardRootView: View {
                             state.controller?.dismissKeyboard()
                         }
                     }
-                    .frame(width: 44)
+                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-            .frame(width: min(proxy.size.width, 390), height: 220)
+                .padding(.vertical, CGFloat(VoiceOnlyKeyboardPolicy.verticalPadding))
+            .frame(
+                maxWidth: .infinity,
+                minHeight: CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight),
+                maxHeight: CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
+            )
             .background(Color(uiColor: .secondarySystemBackground))
         }
     }

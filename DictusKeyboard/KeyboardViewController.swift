@@ -176,35 +176,17 @@ class KeyboardViewController: UIInputViewController {
         kbInputView.backgroundColor = .clear
         kbInputView.isOpaque = false
 
-        // --- 1. Create the giellakbd-ios UIKit keyboard ---
-        // needsInputModeSwitchKey is false on recent iPhones (system draws its own globe)
-        // and true on iPad / older iPhones, where we must supply a next-keyboard key (4.4.1).
-        // NOTE: read here it is inaccurate (host connection not yet established); the value
-        // is re-checked and the layout rebuilt if needed in viewWillAppear.
-        let needsGlobe = needsInputModeSwitchKey
-        builtNeedsGlobe = needsGlobe
-        builtNumberRow = KeyboardLayouts.drawsDigitRow
-        let definition = KeyboardLayouts.current(needsGlobe: needsGlobe)
-        let theme = Theme.current(for: traitCollection)
-        let keyboard = GiellaKeyboardView(definition: definition, theme: theme)
-        keyboard.translatesAutoresizingMaskIntoConstraints = false
-        // sAiity is a voice-only keyboard. Keep the legacy Giella view wired for
-        // state/callback compatibility, but never expose its key grid.
-        keyboard.isHidden = true
-
-        // --- 2. Create and wire the delegate bridge ---
+        // Keep the bridge for legacy text-change and callback compatibility. The
+        // voice-only path deliberately does not allocate a Giella keyboard view.
         let keyBridge = DictusKeyboardBridge()
         keyBridge.controller = self
-        keyBridge.keyboardView = keyboard
-        keyboard.delegate = keyBridge
         keyBridge.suggestionState = suggestionState
         keyBridge.onEmojiToggle = { [weak self] in
             self?.toggleEmojiPicker()
         }
         self.bridge = keyBridge
-        self.giellaKeyboard = keyboard
 
-        // --- 3. Create SwiftUI hosting for toolbar + recording overlay ONLY ---
+        // --- 2. Create SwiftUI hosting for the voice surface ---
         // NOTE: do NOT pass `self` into KeyboardRootView. Storing the controller on
         // the View struct creates a strong ref cycle through UIHostingController that
         // prevents stale controllers from deiniting across app-switches (#134).
@@ -251,10 +233,8 @@ class KeyboardViewController: UIInputViewController {
         // displacing FR/mic to the middle of the screen.
         hosting.view.isHidden = true
 
-        // --- 4. Add both views to kbInputView ---
-        // Order matters: hosting (toolbar) at top, keyboard below
+        // The voice surface owns the entire input view.
         kbInputView.addSubview(hosting.view)
-        kbInputView.addSubview(keyboard)
         hosting.didMove(toParent: self)
 
         // --- 5. Set up Auto Layout constraints ---
@@ -275,23 +255,7 @@ class KeyboardViewController: UIInputViewController {
         // must be able to EXPAND to full height during recording overlay.
         hosting.view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
-        // Pin keyboard grid to a fixed height (key grid only) so it never stretches
-        // beyond its natural 224pt — even when iOS forces the inputView to 504pt
-        // during the entry animation. With a bottom-anchor pin the giellaKeyboard
-        // would stretch to ~452pt → "double-size keys" flash (#116 / ba12a69).
-        let keyGridHeight = computeKeyboardHeight() - toolbarHeight
-        let keyboardHeight = keyboard.heightAnchor.constraint(equalToConstant: keyGridHeight)
-        keyboardHeight.priority = UILayoutPriority(999)
-
-        // #92 fix: bottom-anchor the content stack inside kbInputView (matches
-        // upstream giellakbd-ios). Combined with kbInputView.backgroundColor =
-        // .clear, this makes the 228pt empty zone appear at the TOP of the
-        // expanded inputView during the entry animation transient — i.e. in
-        // the host-app-content region right above the toolbar — instead of at
-        // the bottom (between keys and screen edge), which was extremely
-        // visible. With the inputView transparent the host app shows through,
-        // matching what Apple's own keyboards render in that area.
-        let hostingBottomIdle = hosting.view.bottomAnchor.constraint(equalTo: keyboard.topAnchor)
+        let hostingBottomIdle = hosting.view.bottomAnchor.constraint(equalTo: kbInputView.bottomAnchor)
         let hostingBottomExpanded = hosting.view.bottomAnchor.constraint(equalTo: kbInputView.bottomAnchor)
         hostingBottomIdle.isActive = true
         hostingBottomExpanded.isActive = false
@@ -299,13 +263,7 @@ class KeyboardViewController: UIInputViewController {
         self.hostingBottomToInputBottom = hostingBottomExpanded
 
         NSLayoutConstraint.activate([
-            // UIKit keyboard pinned to the bottom of the inputView
-            keyboard.bottomAnchor.constraint(equalTo: kbInputView.bottomAnchor),
-            keyboard.leadingAnchor.constraint(equalTo: kbInputView.leadingAnchor),
-            keyboard.trailingAnchor.constraint(equalTo: kbInputView.trailingAnchor),
-            keyboardHeight,
-
-            // Toolbar (SwiftUI hosting) — bottom anchor swapped at runtime
+            // Voice surface hosting — bottom anchor swapped at runtime
             // (see hostingBottomToKeyboardTop / hostingBottomToInputBottom)
             hosting.view.leadingAnchor.constraint(equalTo: kbInputView.leadingAnchor),
             hosting.view.trailingAnchor.constraint(equalTo: kbInputView.trailingAnchor),
@@ -402,29 +360,9 @@ class KeyboardViewController: UIInputViewController {
         hasAppeared = true
         isAttached = true
 
-        // 4.4.1 next-keyboard globe: the host connection now exists, so
-        // needsInputModeSwitchKey is finally accurate. If viewDidLoad built the
-        // layout with the wrong value (its early read is inaccurate and UIKit warns
-        // about it), rebuild once now so the globe matches reality. Skipped in the
-        // common case where the value already matched — reloadKeyboardLayout is a
-        // full ~200ms UICollectionView rebuild we don't want on every appearance.
-        let accurateNeedsGlobe = needsInputModeSwitchKey
-        if builtNeedsGlobe != accurateNeedsGlobe {
-            PersistentLog.log(.diagnosticProbe(
-                component: "KeyboardViewController",
-                instanceID: controllerID,
-                action: "globeMismatchReload",
-                details: "built=\(builtNeedsGlobe.map(String.init(describing:)) ?? "nil") accurate=\(accurateNeedsGlobe)"
-            ))
-            reloadKeyboardLayout()
-        }
-
-        // Number row (#331): the user can only reach the toggle in DictusApp's Settings, and
-        // this keyboard is not on screen while they are there — so an appearance is the first
-        // moment we can find out. Same guarded shape as the globe above: the rebuild is a full
-        // ~200 ms UICollectionView teardown, so it only runs when the answer actually moved.
-        // With the setting off the value is false in both orientations and this never fires.
-        reloadIfNumberRowChanged(trigger: "viewWillAppear")
+        // There is no UIKit key grid in the voice-only path.
+        builtNeedsGlobe = needsInputModeSwitchKey
+        builtNumberRow = KeyboardLayouts.drawsDigitRow
 
         // (Re)subscribe to the keyboard area mode here, not in viewDidLoad.
         // WHY: iOS caches UIInputViewController instances across app-switches and
@@ -1241,6 +1179,7 @@ class KeyboardViewController: UIInputViewController {
     /// Destroys the current GiellaKeyboardView and creates a new one
     /// with the current language and layout preferences from App Group.
     private func reloadKeyboardLayout() {
+        guard giellaKeyboard != nil else { return }
         guard let kbInputView = inputView else { return }
 
         PersistentLog.log(.diagnosticProbe(
