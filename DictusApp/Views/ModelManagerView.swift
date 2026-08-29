@@ -21,7 +21,10 @@ struct ModelManagerView: View {
     private let deviceCapabilities = DeviceCapabilities.current()
 
     private var installedModels: [ModelInfo] {
-        ModelInfo.allIncludingDeprecated.filter { isInstalled($0) }
+        var seen = Set<String>()
+        return ModelInfo.allIncludingDeprecated.reversed()
+            .filter { isInstalled($0) && seen.insert($0.identifier).inserted }
+            .reversed()
     }
 
     private var availableModels: [ModelInfo] {

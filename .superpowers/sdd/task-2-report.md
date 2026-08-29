@@ -121,3 +121,59 @@ git diff --check
 ### 范围与顾虑
 
 本次只修改 `ModelManagerView.swift`、`ModelInfoTests.swift` 和本报告；未恢复旧键盘/设置入口，未修改键盘文件。工作区中其他既有 dirty 文件未暂存、未重置。测试与 build 均未替代 physical iPhone 验证。
+
+## Task 2 re-review Important 修复：Installed identifier 去重
+
+### RED
+
+新增 focused regression test：`ModelInfoTests.testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata`。
+
+先运行：
+
+```text
+swift test --filter ModelInfoTests/testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata
+```
+
+结果为预期 RED：测试执行 1 项、3 failures；三个断言均因 `ModelManagerView` 尚未包含去重逻辑而失败，未发生编译错误。
+
+### GREEN
+
+在 `ModelManagerView.installedModels` 中反向遍历 `allIncludingDeprecated`，用 `Set` 按 identifier 保留一行，再反转恢复 catalog 顺序。由于 current 条目位于 deprecated 条目之后，重复 identifier 会选择 current metadata；只有 deprecated 条目时仍会保留。
+
+GREEN focused test：
+
+```text
+swift test --filter ModelInfoTests/testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata
+Executed 1 test, with 0 failures (0 unexpected)
+```
+
+覆盖测试：
+
+```text
+swift test --enable-code-coverage
+Executed 1032 tests, with 10 tests skipped and 0 failures (0 unexpected)
+Test Suite 'All tests' passed
+```
+
+相关 iOS Simulator App build：
+
+```text
+xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+** BUILD SUCCEEDED **
+```
+
+`git diff --check` 无输出。
+
+### 变更文件与提交
+
+- `DictusApp/Views/ModelManagerView.swift`
+- `DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift`
+- `.superpowers/sdd/task-2-report.md`
+
+提交：`8871aea`（amend 后 SHA 以最终 git 输出为准）。
+
+### 顾虑
+
+- regression test 位于现有 core test target，以 source-contract 方式锁定 app View 的去重策略；没有新增测试 target 或抽象层。
+- 测试/build 输出包含既有 warning：未处理的 polish-harness README、Swift 6 Sendable/NSLock warning，以及脚本 build phase 每次运行提示；均未改变且与本修复无关。
+- 未恢复旧键盘/设置入口，未修改 keyboard 文件或 ModelInfo catalog；工作区其它 dirty 文件未暂存、未重置。未进行 physical iPhone 验证。

@@ -91,6 +91,20 @@ final class ModelInfoTests: XCTestCase {
         XCTAssertTrue(rows.allSatisfy { $0.isSupported(on: device) || $0.identifier == ModelInfo.recommendedIdentifier(for: device) })
     }
 
+    func testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata() throws {
+        let viewPath = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("DictusApp/Views/ModelManagerView.swift")
+        let source = try String(contentsOf: viewPath, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("allIncludingDeprecated.reversed()"))
+        XCTAssertTrue(source.contains("seen.insert($0.identifier).inserted"))
+        XCTAssertTrue(source.contains(".reversed()"))
+    }
+
     // MARK: - Gauge scores
 
     func testGaugeScoresInValidRange() {
