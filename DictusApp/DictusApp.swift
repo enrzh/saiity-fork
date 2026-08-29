@@ -81,16 +81,12 @@ struct DictusApp: App {
             DictusLogger.app.info("ngramDiagnostic: \(ngramDiag, privacy: .public)")
         }
 
-        // Persist language default so TranscriptionService always reads "fr"
-        // even before user visits Settings. @AppStorage defaults are in-memory only
-        // and never written to UserDefaults until the Picker is interacted with.
-        // WHY `if nil` check: Only write if the key doesn't exist yet. If user already
-        // set a language preference (e.g., "en"), don't overwrite it.
+        // Persist the product default before transcription starts. Do not overwrite
+        // an explicit choice made in Settings.
         let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        defaults?.set(
-            TranscriptionLanguageMode.autoStoredValue,
-            forKey: SharedKeys.transcriptionLanguage
-        )
+        if defaults?.string(forKey: SharedKeys.transcriptionLanguage) == nil {
+            defaults?.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
+        }
         if defaults?.string(forKey: SharedKeys.language) == nil {
             defaults?.set("fr", forKey: SharedKeys.language)
         }

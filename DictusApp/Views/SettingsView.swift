@@ -5,20 +5,29 @@ import DictusCore
 
 struct SettingsView: View {
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
+    @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionLanguage = TranscriptionLanguageMode.autoDetect.storedValue
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = false
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
 
     var body: some View {
         List {
             Section("Transcription") {
-                LabeledContent("Language", value: "Auto")
+                Picker("Language", selection: $transcriptionLanguage) {
+                    ForEach(TranscriptionLanguageMode.settingsOptions, id: \.storedValue) { mode in
+                        Text(mode.settingsDisplayName).tag(mode.storedValue)
+                    }
+                }
                 if PolishAvailability.isToggleVisible { Toggle("Polish transcription", isOn: $polishEnabled) }
                 polishStateFooter
             }
             Section("Features") {
                 Toggle("Live Activity", isOn: $liveActivityEnabled)
                     .onChange(of: liveActivityEnabled) { _, enabled in
-                        if !enabled { LiveActivityManager.shared.stopStandbyActivity() }
+                        if enabled {
+                            LiveActivityManager.shared.startStandbyActivity()
+                        } else {
+                            LiveActivityManager.shared.stopStandbyActivity()
+                        }
                     }
             }
             Section("Permissions") {

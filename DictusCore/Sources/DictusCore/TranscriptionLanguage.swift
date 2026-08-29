@@ -33,6 +33,18 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// untested languages are reachable through `.autoDetect` only.
     case explicit(SupportedLanguage)
 
+    /// Options shown by the app settings picker, in product order.
+    public static let settingsOptions: [TranscriptionLanguageMode] =
+        [.autoDetect, .followKeyboard] + SupportedLanguage.allCases.map { .explicit($0) }
+
+    public var settingsDisplayName: String {
+        switch self {
+        case .autoDetect: return "Auto"
+        case .followKeyboard: return "Follow keyboard"
+        case .explicit(let language): return language.displayName
+        }
+    }
+
     // MARK: - App Group encoding
 
     /// Stored marker for `.followKeyboard`.
@@ -40,9 +52,7 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// Stored marker for `.autoDetect`.
     public static let autoStoredValue = "auto"
 
-    /// Parse the App Group stored value. `nil` (key never written) and any
-    /// unrecognized string resolve to `.followKeyboard` so existing installs
-    /// upgrade with zero behavior change.
+    /// Parse the App Group stored value. Missing values use the product default.
     public init(storedValue: String?) {
         switch storedValue {
         case Self.autoStoredValue:
@@ -55,7 +65,7 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
                 self = .followKeyboard
             }
         case .none:
-            self = .followKeyboard
+            self = .autoDetect
         }
     }
 

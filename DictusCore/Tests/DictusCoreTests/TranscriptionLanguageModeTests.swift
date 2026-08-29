@@ -19,10 +19,29 @@ final class TranscriptionLanguageModeTests: XCTestCase {
 
     // MARK: - Parsing (App Group stored value -> mode)
 
-    func testMissingValueParsesAsFollow() {
-        // Fresh installs and pre-#226 upgrades have no stored value:
-        // they must behave exactly as today (STT follows the keyboard).
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: nil), .followKeyboard)
+    func testMissingValueUsesProductDefaultAuto() {
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: nil), .autoDetect)
+    }
+
+    func testSettingsOptionsIncludeAutoFollowAndEverySupportedLanguage() {
+        XCTAssertEqual(
+            TranscriptionLanguageMode.settingsOptions,
+            [.autoDetect, .followKeyboard] + SupportedLanguage.allCases.map { .explicit($0) }
+        )
+    }
+
+    func testAppGroupPersistenceRoundTripsSelectedMode() {
+        let defaults = UserDefaults(suiteName: "DictusCoreTests.transcription")!
+        defaults.removePersistentDomain(forName: "DictusCoreTests.transcription")
+        defer { defaults.removePersistentDomain(forName: "DictusCoreTests.transcription") }
+
+        let selected = TranscriptionLanguageMode.explicit(.german)
+        defaults.set(selected.storedValue, forKey: SharedKeys.transcriptionLanguage)
+
+        XCTAssertEqual(
+            TranscriptionLanguageMode(storedValue: defaults.string(forKey: SharedKeys.transcriptionLanguage)),
+            selected
+        )
     }
 
     func testFollowMarkerParsesAsFollow() {
