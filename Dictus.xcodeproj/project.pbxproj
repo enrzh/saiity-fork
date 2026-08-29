@@ -137,6 +137,8 @@
 		SS000002 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS100002 /* PaywallView.swift */; };
 		SS000003 /* ProBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS100003 /* ProBannerView.swift */; };
 		SS000009 /* PaywallPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS100009 /* PaywallPresentation.swift */; };
+		DD000001 /* ModelManagerLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD100001 /* ModelManagerLifecycleTests.swift */; };
+		DD000010 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD100002 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -153,6 +155,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = BB500001;
 			remoteInfo = DictusWidgets;
+		};
+		DD050001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA500001;
+			remoteInfo = DictusApp;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -314,6 +323,9 @@
 		SS100003 /* ProBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProBannerView.swift; sourceTree = "<group>"; };
 		SS100004 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
 		SS100009 /* PaywallPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallPresentation.swift; sourceTree = "<group>"; };
+		DD100001 /* ModelManagerLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerLifecycleTests.swift; sourceTree = "<group>"; };
+		DD100002 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		DD200001 /* DictusAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DictusAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -345,6 +357,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD300001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD000010 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -352,11 +372,20 @@
 			isa = PBXGroup;
 			children = (
 				AA400001 /* DictusApp */,
+				DD400001 /* DictusAppTests */,
 				AA400002 /* DictusKeyboard */,
 				BB400001 /* DictusWidgets */,
 				AA400003 /* DictusCore (local package) */,
 				AA400004 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		DD400001 /* DictusAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				DD100001 /* ModelManagerLifecycleTests.swift */,
+			);
+			path = DictusAppTests;
 			sourceTree = "<group>";
 		};
 		AA400001 /* DictusApp */ = {
@@ -431,6 +460,7 @@
 				AA200001 /* DictusApp.app */,
 				AA200002 /* DictusKeyboard.appex */,
 				BB200001 /* DictusWidgets.appex */,
+				DD200001 /* DictusAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -784,6 +814,24 @@
 			productReference = BB200001 /* DictusWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		DD500001 /* DictusAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD700001 /* Build configuration list for PBXNativeTarget "DictusAppTests" */;
+			buildPhases = (
+				DD600001 /* Sources */,
+				DD300001 /* Frameworks */,
+				DD600002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DD070001 /* PBXTargetDependency */,
+			);
+			name = DictusAppTests;
+			productName = DictusAppTests;
+			productReference = DD200001 /* DictusAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -802,6 +850,10 @@
 					};
 					BB500001 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					DD500001 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AA500001;
 					};
 				};
 			};
@@ -828,6 +880,7 @@
 				AA500001 /* DictusApp */,
 				AA500002 /* DictusKeyboard */,
 				BB500001 /* DictusWidgets */,
+				DD500001 /* DictusAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -867,6 +920,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB600002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD600002 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1059,6 +1119,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD600001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD000001 /* ModelManagerLifecycleTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -1071,6 +1139,11 @@
 			isa = PBXTargetDependency;
 			target = BB500001 /* DictusWidgets */;
 			targetProxy = BB050001 /* PBXContainerItemProxy */;
+		};
+		DD070001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA500001 /* DictusApp */;
+			targetProxy = DD050001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1335,6 +1408,42 @@
 			};
 			name = Release;
 		};
+		DD750001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = H8FW6W6K2D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DictusApp.app/DictusApp";
+			};
+			name = Debug;
+		};
+		DD750002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = H8FW6W6K2D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DictusApp.app/DictusApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1370,6 +1479,15 @@
 			buildConfigurations = (
 				BB740001 /* Debug */,
 				BB740002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DD700001 /* Build configuration list for PBXNativeTarget "DictusAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD750001 /* Debug */,
+				DD750002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

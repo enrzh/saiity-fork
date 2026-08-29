@@ -87,6 +87,7 @@ class ModelManager: ObservableObject {
     private var downloadQueue = ModelDownloadQueue()
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var downloadWaiters: [String: [CheckedContinuation<Void, Error>]] = [:]
+    private let injectedDownloadOperation: ((String) async throws -> Void)?
 
     /// Directory inside the App Group container where model files are stored.
     /// Using the shared container means the keyboard extension could also access
@@ -113,7 +114,8 @@ class ModelManager: ObservableObject {
 
     // MARK: - Init
 
-    init() {
+    init(downloadOperation: ((String) async throws -> Void)? = nil) {
+        injectedDownloadOperation = downloadOperation
         loadState()
         // Initialize states for all known models (including deprecated Tiny/Base so
         // already-downloaded deprecated models still get their state set to .ready).
@@ -229,7 +231,9 @@ class ModelManager: ObservableObject {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                if ModelInfo.forIdentifier(identifier)?.engine == .parakeet {
+                if let injectedDownloadOperation = self.injectedDownloadOperation {
+                    try await injectedDownloadOperation(identifier)
+                } else if ModelInfo.forIdentifier(identifier)?.engine == .parakeet {
                     try await self.downloadParakeetModel(identifier)
                 } else {
                     try await self.downloadWhisperKitModel(identifier)
