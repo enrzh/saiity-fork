@@ -28,20 +28,14 @@ class KeyboardViewController: UIInputViewController {
     /// The voice surface uses the full 220pt input area.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
-    /// Idle-state bottom anchor: hosting sits directly above the keyboard.
-    /// Active when not recording / emoji. Deactivated when expanding to fill
-    /// the full keyboard area, where we instead pin hosting's bottom to
-    /// kbInputView's bottom so the overlay fills the entire keyboard.
+    /// Bottom anchor for the voice surface.
     private var hostingBottomToKeyboardTop: NSLayoutConstraint?
 
-    /// Expanded-state bottom anchor: hosting's bottom == kbInputView's bottom.
-    /// Active during recording overlay or emoji picker (when keyboard is
-    /// hidden). With this active + height=276, hosting fills the whole
-    /// keyboard area without leaving stripes off-screen.
+    /// Explicit full-surface anchor used by mode transitions.
     private var hostingBottomToInputBottom: NSLayoutConstraint?
 
     /// Fixed height of the voice-only input surface.
-    private let toolbarHeight: CGFloat = 220
+    private let toolbarHeight = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
 
     /// Whether viewWillAppear has fired at least once. Guards the Combine handler
     /// from changing hosting height before the controller is registered with KeyboardState.
@@ -148,14 +142,10 @@ class KeyboardViewController: UIInputViewController {
         kbInputView.backgroundColor = .clear
         kbInputView.isOpaque = false
 
-        // Keep the bridge for legacy text-change and callback compatibility. The
-        // voice-only path deliberately does not allocate a Giella keyboard view.
+        // Keep the bridge for prediction insertion and host-field policy updates.
         let keyBridge = DictusKeyboardBridge()
         keyBridge.controller = self
         keyBridge.suggestionState = suggestionState
-        keyBridge.onEmojiToggle = { [weak self] in
-            self?.toggleEmojiPicker()
-        }
         self.bridge = keyBridge
 
         // --- 2. Create SwiftUI hosting for the voice surface ---
@@ -275,7 +265,6 @@ class KeyboardViewController: UIInputViewController {
             guard let self = self else { return }
             let context = self.textDocumentProxy.documentContextBeforeInput
             self.suggestionState.updateAsync(context: context)
-            self.bridge?.updateCapitalization()
         }
 
         // --- 8. Wire post-undo cleanup (#266) ---
@@ -286,7 +275,6 @@ class KeyboardViewController: UIInputViewController {
         KeyboardState.shared.onDictationUndone = { [weak self] in
             guard let self = self else { return }
             self.suggestionState.clear()
-            self.bridge?.updateCapitalization()
         }
 
         // Memory after all viewDidLoad allocations — delta vs entry tells us
@@ -396,7 +384,6 @@ class KeyboardViewController: UIInputViewController {
         // Set initial shift state based on the text field's autocapitalization setting.
         // WHY here and not viewDidLoad: The textDocumentProxy is not fully connected
         // until the view is about to appear. Calling in viewDidLoad would read stale data.
-        bridge?.updateCapitalization()
 
         // Read the host field's input traits now that the connection exists (#200).
         // Search/URL/email fields disable autocorrect and suggestions.
@@ -718,60 +705,16 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Keyboard Height
 
-    /// Calculate the total keyboard height using giellakbd-ios KeyboardHeightProvider
-    /// for the key grid height, plus toolbar and padding.
+    /// The voice-only keyboard always occupies the policy-defined surface height.
     private func computeKeyboardHeight() -> CGFloat {
-        // The voice surface owns the entire extension canvas; the legacy grid remains
-        // hidden only as a lifecycle-compatible bridge target.
-        return toolbarHeight
-        /*
-        let deviceContext = DeviceContext.current
-        // The number row grows the grid instead of shrinking the keys (#331): the provider
-        // divides its per-device height by a normal row count and multiplies by ours, so
-        // asking for 5 rows keeps every cell at exactly the height it has today. Shrinking
-        // the keys 20% into the existing height was measured and rejected — this codebase
-        // has already paid for dead zones three times (#56, #59, #138).
-        //
-        // WHY nil rather than 4 when the row is off: `height` early-returns the base height
-        // for a nil row count, so an install without the feature gets the same CGFloat it
-        // got before this line existed, with no divide-and-multiply in between.
-        //
-        // The provider's `rowCount > 4 && isLandscape` subtraction is unreachable from here:
-        // `drawsDigitRow` is false in landscape, by decision. Its large-iPad branch — where the
-        // normal row count is already 5, so asking for 5 rows returns the base height and the
-        // cells shrink instead of the grid growing — is unreachable for the same reason since
-        // #336: `drawsDigitRow` is false on any iPad, so this passes nil there and the provider
-        // early-returns the height it has always returned.
-        let keyGridHeight = KeyboardHeightProvider.height(
-            for: deviceContext,
-            traitCollection: traitCollection,
-            rowCount: KeyboardLayouts.drawsDigitRow ? 5 : nil
-        )
-        // bottomPadding was previously 8pt but had no real effect — keyboard view's
-        // bottomAnchor is pinned to kbInputView.bottomAnchor, so the extra height got
-        // divided across 4 row cells (+2pt per row), making each visible key 2.3pt
-        // taller than Apple's. Setting to 0 restores Apple-matched cell height (#117).
-        let bottomPadding: CGFloat = 0
-        let total = keyGridHeight + toolbarHeight + bottomPadding
-        let screen = UIScreen.main.bounds.size
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "computeKbHeight",
-            // numberRow= is the composed predicate, not the preference: it is the value the
-            // grid was built from, so a log where it disagrees with the height is the #331
-            // failure mode (five rows in a four-row box, or the reverse).
-            details: "grid=\(keyGridHeight) total=\(total) screen=\(Int(screen.width))x\(Int(screen.height)) landscape=\(deviceContext.isLandscape) numberRow=\(KeyboardLayouts.drawsDigitRow)"
-        ))
-        return total
-        */
+        CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
     }
 
     // MARK: - Keyboard Area Mode Observation
 
     /// Observe KeyboardState.areaMode to keep the UIKit side of the keyboard area
     /// in step with what SwiftUI renders: hosting height, hosting bottom anchor,
-    /// and whether the key grid is hidden.
+    /// and the voice surface's presentation state.
     ///
     /// WHY areaModePublisher and not $dictationStatus: the mode is recomputed in
     /// `dictationStatus`'s `didSet`, which runs *after* `$dictationStatus` has
@@ -893,7 +836,7 @@ class KeyboardViewController: UIInputViewController {
     /// The keyboard area's layout, one branch per mode.
     ///
     /// Every case sets all three things explicitly — hosting height, hosting
-    /// bottom anchor, key-grid visibility — with no fallthrough. Before #271 this
+    /// bottom anchor — with no fallthrough. Before #271 this
     /// was a chain of negated guards where restoring the collapsed toolbar height
     /// was conditional on the emoji flag being false, so a full-area state that
     /// was not added to the chain collapsed while still rendering.
@@ -929,8 +872,7 @@ class KeyboardViewController: UIInputViewController {
 
         case .panel:
             // Same geometry as the emoji picker: the bar keeps its height and the panel
-            // fills the rest. A grid rebuild triggered from the panel (a language or
-            // layout pick) ends by re-applying this case, so the panel survives it.
+            // fills the rest of the voice surface.
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)

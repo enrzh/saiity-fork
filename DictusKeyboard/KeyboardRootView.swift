@@ -3,33 +3,19 @@ import SwiftUI
 import Combine
 import DictusCore
 
-/// Bridge between DictusCore's DefaultKeyboardLayer and DictusKeyboard's KeyboardLayerType.
-extension DefaultKeyboardLayer {
-    var asLayerType: KeyboardLayerType {
-        switch self {
-        case .letters: return .letters
-        case .numbers: return .numbers
-        }
-    }
-}
-
 /// Root SwiftUI view for the keyboard extension chrome (toolbar + full-area
 /// presentations).
 ///
-/// Phase 18 architecture change: The keyboard grid is now a UIKit GiellaKeyboardView
-/// added as a direct subview in KeyboardViewController. This SwiftUI view only renders:
+/// This voice-only SwiftUI view renders:
 /// - ToolbarView (always visible when not recording)
 /// - RecordingOverlay (replaces keyboard area during recording)
-/// - EmojiPickerView (replaces the key grid, toolbar stays)
+/// - EmojiPickerView (shown below the toolbar)
 ///
 /// Which of those it renders is decided by a single `KeyboardAreaMode` read from
 /// KeyboardState (#271) — the same value KeyboardViewController switches on for
 /// the layout, so the two layers cannot drift apart.
 ///
-/// WHY SwiftUI for toolbar/overlay but UIKit for keys:
-/// The toolbar and recording overlay are simple SwiftUI layouts that don't need
-/// zero-latency touch handling. The key grid needs UICollectionView's proven touch
-/// pipeline for zero dead zones. Mixing UIKit keys + SwiftUI chrome gives us both.
+/// All visible keyboard controls are part of this SwiftUI voice surface.
 struct KeyboardRootView: View {
     let controllerID: String
     @ObservedObject private var state = KeyboardState.shared
@@ -49,7 +35,7 @@ struct KeyboardRootView: View {
     var bridge: DictusKeyboardBridge?
 
     /// Callback when the user picks a language in the hamburger panel.
-    /// The controller uses this to reload the GiellaKeyboardView with the new layout.
+    /// The controller refreshes language-dependent prediction state.
     var onLanguageChanged: ((SupportedLanguage) -> Void)?
 
     /// Callback when the user picks a layout for a language in the panel (#272).
@@ -72,7 +58,7 @@ struct KeyboardRootView: View {
     /// chain. We capture it here and inject it into KeyboardState via .onAppear.
     @Environment(\.openURL) private var openURL
 
-    /// Fixed toolbar height, matching `KeyboardViewController.toolbarHeight`.
+    /// Toolbar height within the 220pt voice surface.
     private let toolbarHeight: CGFloat = 52
 
     /// What this view presents.
@@ -110,11 +96,11 @@ struct KeyboardRootView: View {
 
     /// The toolbar as it renders above a full-area presentation.
     ///
-    /// The suggestion slots stay empty: the key grid is hidden in these modes, so
+    /// The suggestion slots stay empty: voice input does not expose a typing grid, so
     /// there is no word being typed to suggest for. Tapping the mic needs no
     /// dismissal call — `.recording` supersedes whatever fills the area.
     ///
-    /// `isPanelOpen` picks between the two presentations of the same 52 pt bar:
+    /// `isPanelOpen` picks between the two presentations of the same toolbar:
     /// the dictation cockpit, and the panel header that replaces the mic with the
     /// gear (#241).
     private func fullAreaToolbar(isPanelOpen: Bool = false) -> some View {
@@ -334,7 +320,6 @@ struct KeyboardRootView: View {
             switch presentedMode {
             case .recording:
                 // Recording overlay fills the full area (toolbar + keyboard space).
-                // The UIKit keyboard is hidden by KeyboardViewController when recording.
                 RecordingOverlay(
                     dictationStatus: state.displayedDictationStatus,
                     waveformEnergy: state.waveformEnergy,
@@ -377,7 +362,7 @@ struct KeyboardRootView: View {
             case .panel:
                 // The hamburger panel (#241). Same layout contract #271 reserved:
                 // the bar on top, the panel filling the rest. The bar keeps its
-                // 52 pt and swaps its contents, so opening the panel moves no
+                // toolbar height and swaps its contents, so opening the panel moves no
                 // geometry the mode change had not already moved.
                 GeometryReader { geo in
                     VStack(spacing: 0) {
@@ -402,7 +387,7 @@ struct KeyboardRootView: View {
                     }
                 }
             case .keys:
-                // Toolbar only -- the keyboard grid is UIKit, managed by KeyboardViewController
+                // Idle voice surface.
                 ToolbarView(
                     hasFullAccess: state.controller?.hasFullAccess ?? false,
                     dictationStatus: state.dictationStatus,
@@ -421,7 +406,7 @@ struct KeyboardRootView: View {
                     onPanelToggle: { togglePanel() }
                 )
                 // No KeyboardView here -- it's UIKit, added directly by KeyboardViewController
-                // No bottom spacer -- the UIKit keyboard handles its own height
+                // The voice surface owns its height; no bottom spacer is needed.
             }
         }
         // Issue #142: force the body to fill its hosting frame top-aligned.

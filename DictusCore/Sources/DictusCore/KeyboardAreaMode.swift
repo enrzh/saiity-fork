@@ -2,7 +2,7 @@
 // Single value describing what the keyboard extension's keyboard area presents.
 import Foundation
 
-/// What the keyboard area — the region below the 52 pt toolbar — is presenting.
+/// What the voice-only keyboard surface is presenting.
 ///
 /// Before #271 this was three independent flags spread over two layers: a SwiftUI
 /// `@State` for the emoji picker in `KeyboardRootView`, a separate `Bool` for the
@@ -15,13 +15,13 @@ import Foundation
 ///
 /// With one value, mutual exclusion is a consequence of the type. Both layers
 /// switch on it: SwiftUI to pick the branch it renders, the view controller to set
-/// the hosting height, the hosting bottom anchor and the key grid's visibility.
+/// the hosting height and presentation state.
 ///
 /// Lives in DictusCore rather than DictusKeyboard so the transition rule below is
 /// unit-testable — the keyboard extension target has no test bundle. Same
 /// reasoning as `DefaultKeyboardLayer` and `LayoutType`.
 public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
-    /// The UIKit key grid. Toolbar sits above it at 52 pt.
+    /// The idle voice surface with the toolbar visible.
     case keys
     /// The emoji picker fills the area; the toolbar stays visible above it.
     case emoji
@@ -35,8 +35,8 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
     ///
     /// A dictation owns the entire keyboard area while it is in flight, so
     /// entering an owning status is the explicit transition that dismisses the
-    /// emoji picker (or, later, the #241 panel). Leaving it returns to the key
-    /// grid: a picker the user had open before dictating is not restored, which
+    /// emoji picker (or, later, the #241 panel). Leaving it returns to the idle
+    /// voice surface: a picker the user had open before dictating is not restored, which
     /// is what the pre-#271 code did by clearing its emoji flag on overlay show.
     public static func resolving(
         status: DictationStatus,
