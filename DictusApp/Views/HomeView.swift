@@ -133,7 +133,7 @@ struct HomeView: View {
                 HStack(spacing: 14) {
                     Image(systemName: "arrow.down.circle")
                         .font(.title2)
-                        .foregroundStyle(Color.dictusAccent)
+                        .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("No model selected")
                             .font(.system(.body, design: .rounded, weight: .semibold))
@@ -159,7 +159,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.dictusAccent)
+        .tint(.accentColor)
         .controlSize(.large)
         .accessibilityIdentifier("home.newDictation")
     }
