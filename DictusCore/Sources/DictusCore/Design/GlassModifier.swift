@@ -17,7 +17,9 @@ public struct GlassModifier<S: Shape>: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
+        if reduceTransparency {
+            content.background(shape.fill(Color(.secondarySystemBackground)))
+        } else if #available(iOS 26, *) {
             content
                 .glassEffect(.regular, in: shape)
         } else {
@@ -25,6 +27,8 @@ public struct GlassModifier<S: Shape>: ViewModifier {
                 .background(shape.fill(.regularMaterial))
         }
     }
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 }
 
 /// Button style mimicking iOS Liquid Glass press interaction.

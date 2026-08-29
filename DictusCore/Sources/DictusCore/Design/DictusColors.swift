@@ -3,7 +3,7 @@
 // Brand color system with hex initializer and light/dark mode support.
 import SwiftUI
 
-/// Brand color palette for Dictus.
+/// Shared sAiity color tokens. The dictus names remain as source-compatible API.
 ///
 /// WHY Color(hex:) instead of Asset Catalog:
 /// The project has no .xcassets directory yet for DictusApp. Using hex initializers
@@ -16,11 +16,11 @@ import SwiftUI
 public extension Color {
     // MARK: - Brand Colors (fixed, non-adaptive)
 
-    /// Primary accent blue (#3D7EFF)
-    static let dictusAccent = Color(hex: 0x3D7EFF)
+    /// Primary sAiity teal, matching the legacy app icon.
+    static let dictusAccent = Color(hex: 0x16A6A8)
 
-    /// Lighter accent highlight (#6BA3FF)
-    static let dictusAccentHighlight = Color(hex: 0x6BA3FF)
+    /// Accessible teal highlight used for secondary emphasis.
+    static let dictusAccentHighlight = Color(hex: 0x0B7F82)
 
     /// Recording state red (#EF4444)
     static let dictusRecording = Color(hex: 0xEF4444)
@@ -28,19 +28,19 @@ public extension Color {
     /// Success state green (#22C55E)
     static let dictusSuccess = Color(hex: 0x22C55E)
 
-    /// Smart mode purple (#8B5CF6)
-    static let dictusSmartMode = Color(hex: 0x8B5CF6)
+    /// Smart mode uses the same restrained brand accent.
+    static let dictusSmartMode = Color(hex: 0x0B7F82)
 
     // MARK: - Adaptive Colors (light/dark mode)
 
-    /// Background color: #0A1628 dark / system background light
+    /// System background with a stable dark counterpart.
     static var dictusBackground: Color {
-        Color(light: Color(hex: 0xF2F2F7), dark: Color(hex: 0x0A1628))
+        Color(light: Color(.systemBackground), dark: Color(hex: 0x101718))
     }
 
-    /// Surface color for cards: #161C2C dark / secondary system background light
+    /// System surface with a stable dark counterpart.
     static var dictusSurface: Color {
-        Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x161C2C))
+        Color(light: Color(.secondarySystemBackground), dark: Color(hex: 0x1B2324))
     }
 
     // MARK: - Keyboard pill controls
@@ -63,13 +63,13 @@ public extension Color {
         )
     }
 
-    // MARK: - Gradient Colors (for BrandWaveform)
+    // MARK: - Legacy color aliases
 
-    /// Gradient start for center bar (#6BA3FF)
-    static let dictusGradientStart = Color(hex: 0x6BA3FF)
+    /// Compatibility alias; intentionally solid to avoid introducing gradients.
+    static let dictusGradientStart = Color.dictusAccent
 
-    /// Gradient end for center bar (#2563EB)
-    static let dictusGradientEnd = Color(hex: 0x2563EB)
+    /// Compatibility alias; intentionally solid to avoid introducing gradients.
+    static let dictusGradientEnd = Color.dictusAccent
 
     // MARK: - Hex Initializer
 
