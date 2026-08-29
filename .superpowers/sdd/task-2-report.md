@@ -170,7 +170,7 @@ xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/pla
 - `DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift`
 - `.superpowers/sdd/task-2-report.md`
 
-提交：`8871aea`（amend 后 SHA 以最终 git 输出为准）。
+实现提交：`be3b6fcacd467e0009251c2dccb895426d8dd40a`。
 
 ### 顾虑
 
