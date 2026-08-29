@@ -15,34 +15,6 @@ class KeyboardViewController: UIInputViewController {
     /// KeyboardViewController.deinit; the singleton makes the leak benign.
     private let suggestionState = SuggestionState.shared
 
-    /// The giellakbd-ios UICollectionView keyboard, added as a direct UIKit subview.
-    /// WHY not wrapped in UIViewRepresentable: SwiftUI recreates representable views
-    /// on state changes, which would destroy/rebuild the UICollectionView and lose
-    /// scroll position, active key state, and long-press overlays. Adding as a direct
-    /// sibling subview of kbInputView avoids this entirely.
-    private var giellaKeyboard: GiellaKeyboardView?
-
-    /// The `needsInputModeSwitchKey` value used the last time the layout was built.
-    /// viewDidLoad runs before the host connection is established, so the flag read
-    /// there is inaccurate (UIKit logs a warning). We record what we built with and,
-    /// once the connection exists (viewWillAppear), rebuild only if the accurate
-    /// value now differs — so the next-keyboard globe (4.4.1) is never wrongly
-    /// shown or hidden. nil = never built yet.
-    private var builtNeedsGlobe: Bool?
-
-    /// The `KeyboardLayouts.drawsDigitRow` value used the last time the grid was built (#331).
-    ///
-    /// It stores the *composed* decision — the preference AND portrait — not the raw
-    /// preference, because that is what the geometry depends on: the number of rows in the
-    /// grid and the height asked for must both follow the same value.
-    ///
-    /// WHY a built-with marker rather than an observer: the setting is toggled in DictusApp's
-    /// Settings, and while Settings is on screen this keyboard is not, so there is no live
-    /// keyboard to notify. Comparing what we built with against what is true now, on the two
-    /// occasions the answer can have changed under us — the next appearance, and a rotation —
-    /// is the same shape `builtNeedsGlobe` uses for the 4.4.1 globe. nil = never built yet.
-    private var builtNumberRow: Bool?
-
     /// Delegate adapter that translates giellakbd-ios key events into Dictus actions.
     private var bridge: DictusKeyboardBridge?
 
@@ -53,7 +25,7 @@ class KeyboardViewController: UIInputViewController {
     private var heightConstraint: NSLayoutConstraint?
 
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
-    /// Changes from toolbarHeight (52pt) to full height when recording overlay is active.
+    /// The voice surface uses the full 220pt input area.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
     /// Idle-state bottom anchor: hosting sits directly above the keyboard.
@@ -68,7 +40,7 @@ class KeyboardViewController: UIInputViewController {
     /// keyboard area without leaving stripes off-screen.
     private var hostingBottomToInputBottom: NSLayoutConstraint?
 
-    /// Fixed toolbar height matching ToolbarView (52pt: 48pt content + 4pt top padding).
+    /// Fixed height of the voice-only input surface.
     private let toolbarHeight: CGFloat = 220
 
     /// Whether viewWillAppear has fired at least once. Guards the Combine handler
@@ -249,7 +221,7 @@ class KeyboardViewController: UIInputViewController {
 
         // Prevent SwiftUI content from fighting the height constraint.
         // WHY: UIHostingController sets compression resistance at .defaultHigh (750).
-        // When content switches from RecordingOverlay (full height) to ToolbarView (52pt),
+        // When content switches between the voice toolbar and recording surface,
         // the stale intrinsic size can compete with our constraint at equal priority.
         // NOTE: Only lower compression resistance, NOT content hugging — the hosting view
         // must be able to EXPAND to full height during recording overlay.
@@ -318,8 +290,8 @@ class KeyboardViewController: UIInputViewController {
         }
 
         // Memory after all viewDidLoad allocations — delta vs entry tells us
-        // per-controller allocation cost (UIHostingController + GiellaKeyboardView
-        // + SuggestionState + DictusKeyboardBridge + constraints).
+        // per-controller allocation cost (UIHostingController + SuggestionState
+        // + DictusKeyboardBridge + constraints).
         let memExit = MemoryFootprint.residentMB()
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
@@ -361,8 +333,6 @@ class KeyboardViewController: UIInputViewController {
         isAttached = true
 
         // There is no UIKit key grid in the voice-only path.
-        builtNeedsGlobe = needsInputModeSwitchKey
-        builtNumberRow = KeyboardLayouts.drawsDigitRow
 
         // (Re)subscribe to the keyboard area mode here, not in viewDidLoad.
         // WHY: iOS caches UIInputViewController instances across app-switches and
@@ -423,11 +393,6 @@ class KeyboardViewController: UIInputViewController {
         // unhide. The constraint is updated but the visual frame is stale without this.
         inputView?.layoutIfNeeded()
 
-        // Update theme when keyboard reappears (dark/light mode may have changed)
-        if let keyboard = giellaKeyboard {
-            keyboard.updateTheme(theme: Theme.current(for: traitCollection))
-        }
-
         // Set initial shift state based on the text field's autocapitalization setting.
         // WHY here and not viewDidLoad: The textDocumentProxy is not fully connected
         // until the view is about to appear. Calling in viewDidLoad would read stale data.
@@ -442,14 +407,6 @@ class KeyboardViewController: UIInputViewController {
         // dictionary in the app, this cached keyboard process must drop the
         // stale copy or learned words keep bypassing autocorrect.
         UserDictionary.shared.reload()
-
-        // Set default opening layer from user preference.
-        // WHY here not viewDidLoad: viewWillAppear fires each time the keyboard appears,
-        // allowing the user to change settings in the app and see the effect immediately.
-        let defaultLayer = DefaultKeyboardLayer.active
-        if defaultLayer == .numbers {
-            giellaKeyboard?.page = .symbols1
-        }
 
         // The user dictionary's one-shot prune (#287), attempted BEFORE the load
         // below and not after it. The engine is process-wide, so at this instant
@@ -558,7 +515,7 @@ class KeyboardViewController: UIInputViewController {
     }
 
     /// Swap hosting view's bottom anchor between idle and expanded positions.
-    /// - Idle: hosting.bottom = keyboard.top (sits above the keys at 52pt).
+    /// - Idle: hosting fills the 220pt voice surface.
     /// - Expanded: hosting.bottom = kbInputView.bottom (fills the full
     ///   keyboard area, used when the recording overlay or emoji picker is
     ///   shown and the keyboard view is hidden).
@@ -590,14 +547,13 @@ class KeyboardViewController: UIInputViewController {
     /// answer turns out to be `false`.
     private func logLayoutSnapshot(action: String) {
         let inputBounds = inputView?.bounds.size ?? .zero
-        let keyboardFrame = giellaKeyboard?.frame.size ?? .zero
         let hostingFrame = hostingController?.view.frame.size ?? .zero
         let viewBounds = view.bounds.size
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
             action: action,
-            details: "inputBounds=\(Int(inputBounds.width))x\(Int(inputBounds.height)) viewBounds=\(Int(viewBounds.width))x\(Int(viewBounds.height)) keyboardFrame=\(Int(keyboardFrame.width))x\(Int(keyboardFrame.height)) hostingFrame=\(Int(hostingFrame.width))x\(Int(hostingFrame.height)) hostingConst=\(hostingHeightConstraint?.constant ?? -1) heightConst=\(heightConstraint?.constant ?? -1) status=\(KeyboardState.shared.dictationStatus.rawValue) mode=\(KeyboardState.shared.areaMode.rawValue) onScreen=\(isOnScreen) \(windowAttachmentProbeDetails) memMB=\(MemoryFootprint.residentMB())"
+            details: "inputBounds=\(Int(inputBounds.width))x\(Int(inputBounds.height)) viewBounds=\(Int(viewBounds.width))x\(Int(viewBounds.height)) hostingFrame=\(Int(hostingFrame.width))x\(Int(hostingFrame.height)) hostingConst=\(hostingHeightConstraint?.constant ?? -1) heightConst=\(heightConstraint?.constant ?? -1) status=\(KeyboardState.shared.dictationStatus.rawValue) mode=\(KeyboardState.shared.areaMode.rawValue) onScreen=\(isOnScreen) \(windowAttachmentProbeDetails) memMB=\(MemoryFootprint.residentMB())"
         ))
     }
 
@@ -712,42 +668,6 @@ class KeyboardViewController: UIInputViewController {
                 // Bounded at 2-3 lines per controller.
                 + " onScreen=\(isOnScreen)"
         ))
-        // Update keyboard theme when dark/light mode changes while keyboard is visible.
-        if hadColorChange {
-            let newTheme = Theme.current(for: traitCollection)
-            giellaKeyboard?.updateTheme(theme: newTheme)
-        }
-    }
-
-    /// Rotation. Until #331 nothing on this controller reacted to it, because nothing about
-    /// the keyboard depended on the orientation: the height provider reads it per call, and
-    /// the layout was the same four rows either way. The number row breaks that — it is drawn
-    /// in portrait and not in landscape — so the grid has to be rebuilt across a rotation.
-    ///
-    /// WHY here and not in a layout callback: `viewDidLayoutSubviews` and friends run inside
-    /// iOS's layout pass and can be re-entered by the rebuild they trigger. That is exactly
-    /// how #202 happened (bounds change → rebuild → bounds change), and it reached App Review.
-    /// `viewWillTransition` fires once per rotation and is not a layout callback.
-    ///
-    /// WHY the completion block: `DeviceContext.isLandscape` compares `UIScreen.main.bounds`,
-    /// which has not turned yet when this method is entered. `size` here is the input view's,
-    /// not the screen's, so it cannot stand in for it either.
-    ///
-    /// With the number row off, `drawsDigitRow` is false in both orientations, the guard
-    /// inside never opens, and this override adds nothing but a `super` call.
-    ///
-    /// WHY the `isOnScreen` guard: iOS caches UIInputViewController instances and rarely
-    /// deallocates them (#128), so a rotation must not be taken as licence for a stale
-    /// controller to rebuild its grid — that is the class of bug `observeKeyboardAreaMode`
-    /// is subscribed in `viewWillAppear` to avoid. Nothing is lost by skipping: a controller
-    /// that later becomes the live keyboard runs `viewWillAppear`, which checks the same
-    /// mismatch. `onScreen=` is logged so a device capture can say which controllers got here.
-    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        super.viewWillTransition(to: size, with: coordinator)
-        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
-            guard let self, self.isOnScreen else { return }
-            self.reloadIfNumberRowChanged(trigger: "rotation")
-        }
     }
 
     deinit {
@@ -771,18 +691,15 @@ class KeyboardViewController: UIInputViewController {
         // claim the area (see applyAreaMode).
         KeyboardState.shared.registerControllerDeallocation(controllerID: controllerID)
 
-        // Symmetric tear-down for the addChild()/didMove(toParent:) we did in viewDidLoad.
+        // Symmetric tear-down for the addChild()/didMove(toParent:) in viewDidLoad.
         // Without this, UIKit holds the hosting controller in `children` and SwiftUI may
         // keep its observation graph alive past our own deinit, perpetuating the
         // KeyboardRootView zombies seen receiving activeControllerChanged broadcasts in
-        // logs (#134). Same reasoning applies to giellaKeyboard's superview membership.
+        // logs (#134).
         hostingController?.willMove(toParent: nil)
         hostingController?.view.removeFromSuperview()
         hostingController?.removeFromParent()
         hostingController = nil
-
-        giellaKeyboard?.removeFromSuperview()
-        giellaKeyboard = nil
 
         bridge = nil
 
@@ -872,7 +789,7 @@ class KeyboardViewController: UIInputViewController {
             // (Darwin observer dispatches to main, key taps are UI actions).
             // Staying synchronous ensures the constraint change lands in the same
             // turn as the mode change, BEFORE SwiftUI draws. Without this, there's a
-            // 1-frame delay where the overlay renders at 52pt (toolbar height)
+            // 1-frame delay where the overlay renders at its full voice height
             // before the hosting view expands to full height — causing the waveform
             // to flash at the top then drop to center.
             .sink { [weak self] mode in
@@ -979,7 +896,7 @@ class KeyboardViewController: UIInputViewController {
     /// bottom anchor, key-grid visibility — with no fallthrough. Before #271 this
     /// was a chain of negated guards where restoring the collapsed toolbar height
     /// was conditional on the emoji flag being false, so a full-area state that
-    /// was not added to the chain collapsed to 52 pt while still rendering.
+    /// was not added to the chain collapsed while still rendering.
     ///
     /// None of these branches touches `heightConstraint`, the keyboard's own
     /// declared height — that remains a no-go zone (#166).
@@ -989,7 +906,6 @@ class KeyboardViewController: UIInputViewController {
 
         switch mode {
         case .keys:
-            giellaKeyboard?.isHidden = true
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
@@ -1001,7 +917,6 @@ class KeyboardViewController: UIInputViewController {
             ))
 
         case .emoji:
-            giellaKeyboard?.isHidden = true
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
@@ -1016,7 +931,6 @@ class KeyboardViewController: UIInputViewController {
             // Same geometry as the emoji picker: the bar keeps its height and the panel
             // fills the rest. A grid rebuild triggered from the panel (a language or
             // layout pick) ends by re-applying this case, so the panel survives it.
-            giellaKeyboard?.isHidden = true
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
@@ -1028,7 +942,6 @@ class KeyboardViewController: UIInputViewController {
             ))
 
         case .recording:
-            giellaKeyboard?.isHidden = true
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
@@ -1110,17 +1023,8 @@ class KeyboardViewController: UIInputViewController {
     // MARK: - Language Change
 
     /// Handles a language cycle from the toolbar's LanguageSwitcherView.
-    ///
-    /// WHY full rebuild: GiellaKeyboardView (UICollectionView) does not support
-    /// hot-swapping its KeyboardDefinition. The cleanest approach is to remove the
-    /// old view and create a new one with the updated definition. The ~200ms rebuild
-    /// is masked by the language code animation in the toolbar.
     private func handleLanguageChange(_ newLang: SupportedLanguage) {
-        // 1. Reload suggestion/autocorrect dictionaries for the new language
         suggestionState.setLanguage(newLang.rawValue)
-
-        // 2. Rebuild the keyboard grid with the new layout
-        reloadKeyboardLayout()
 
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
@@ -1131,14 +1035,8 @@ class KeyboardViewController: UIInputViewController {
     }
 
     /// Handles a layout pick from the keyboard panel (#272).
-    ///
-    /// Only the active language's layout is on screen. A layout chosen for one of the
-    /// other rows is already stored, and costing the user a ~200 ms grid rebuild to
-    /// redraw the same keys is worse than doing nothing.
     private func handleLayoutChange(_ layout: LayoutType, for language: SupportedLanguage) {
         guard language == SupportedLanguage.active else { return }
-
-        reloadKeyboardLayout()
 
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
@@ -1146,132 +1044,6 @@ class KeyboardViewController: UIInputViewController {
             action: "layoutChanged",
             details: "lang=\(language.rawValue) layout=\(LayoutType.active.rawValue)"
         ))
-    }
-
-    // MARK: - Number Row (#331)
-
-    /// Rebuilds the grid when the digit row should appear or disappear, and only then.
-    ///
-    /// WHY this goes through `reloadKeyboardLayout()` and not through a height recalculation:
-    /// three constraints have to move together — the grid's row data, the key grid's own
-    /// `keyboard.heightAnchor` constraint, and the inputView's declared `heightConstraint`.
-    /// Only the reload touches all three; the key grid's constraint is created there and in
-    /// `viewDidLoad` and refreshed nowhere else. Growing the inputView alone would leave the
-    /// grid at its old height, which is a gap between the toolbar and the keys — the shape
-    /// `reloadLayout_heightRecalc` was added to catch.
-    ///
-    /// `trigger` names the caller in the log so a device capture says whether the change was
-    /// noticed on appearance or on rotation.
-    private func reloadIfNumberRowChanged(trigger: String) {
-        let drawsDigitRow = KeyboardLayouts.drawsDigitRow
-        guard builtNumberRow != drawsDigitRow else { return }
-
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "numberRowMismatchReload",
-            details: "trigger=\(trigger) built=\(builtNumberRow.map(String.init(describing:)) ?? "nil") "
-                + "current=\(drawsDigitRow) landscape=\(DeviceContext.current.isLandscape) onScreen=\(isOnScreen)"
-        ))
-        reloadKeyboardLayout()
-    }
-
-    /// Destroys the current GiellaKeyboardView and creates a new one
-    /// with the current language and layout preferences from App Group.
-    private func reloadKeyboardLayout() {
-        guard giellaKeyboard != nil else { return }
-        guard let kbInputView = inputView else { return }
-
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "reloadLayout_begin",
-            details: "status=\(KeyboardState.shared.dictationStatus.rawValue) oldHosting=\(hostingHeightConstraint?.constant ?? -1) oldHeight=\(heightConstraint?.constant ?? -1) inputBounds=\(Int(kbInputView.bounds.width))x\(Int(kbInputView.bounds.height))"
-        ))
-
-        // Remove old keyboard
-        giellaKeyboard?.removeFromSuperview()
-
-        // Create new keyboard with updated definition
-        // needsInputModeSwitchKey is false on recent iPhones (system draws its own globe)
-        // and true on iPad / older iPhones, where we must supply a next-keyboard key (4.4.1).
-        let needsGlobe = needsInputModeSwitchKey
-        builtNeedsGlobe = needsGlobe
-        builtNumberRow = KeyboardLayouts.drawsDigitRow
-        let definition = KeyboardLayouts.current(needsGlobe: needsGlobe)
-        let theme = Theme.current(for: traitCollection)
-        let keyboard = GiellaKeyboardView(definition: definition, theme: theme)
-        keyboard.translatesAutoresizingMaskIntoConstraints = false
-
-        // Re-wire the bridge
-        bridge?.keyboardView = keyboard
-        keyboard.delegate = bridge
-
-        // Add to view hierarchy below the hosting view
-        kbInputView.addSubview(keyboard)
-
-        // Re-create constraints. Mirrors the bottom-anchor layout from viewDidLoad
-        // (#92 fix): keyboard pinned to kbInputView.bottomAnchor with a fixed
-        // height, hosting view sits directly above it.
-        //
-        // Note: the old hostingBottomToKeyboardTop pointed at the previous
-        // keyboard view (about to be deallocated) — we deactivate it and
-        // create a new one referencing the new keyboard.
-        hostingBottomToKeyboardTop?.isActive = false
-        if let hostingView = hostingController?.view {
-            let keyGridHeight = computeKeyboardHeight() - toolbarHeight
-            let keyboardHeight = keyboard.heightAnchor.constraint(equalToConstant: keyGridHeight)
-            keyboardHeight.priority = UILayoutPriority(999)
-            let newHostingBottomIdle = hostingView.bottomAnchor.constraint(equalTo: keyboard.topAnchor)
-            NSLayoutConstraint.activate([
-                keyboard.bottomAnchor.constraint(equalTo: kbInputView.bottomAnchor),
-                keyboard.leadingAnchor.constraint(equalTo: kbInputView.leadingAnchor),
-                keyboard.trailingAnchor.constraint(equalTo: kbInputView.trailingAnchor),
-                keyboardHeight,
-                newHostingBottomIdle
-            ])
-            self.hostingBottomToKeyboardTop = newHostingBottomIdle
-        }
-        // The rebuild above always produces a fresh, visible key grid pinned to the
-        // idle anchor, so make sure the expanded bottom anchor isn't lingering
-        // active from the state we're about to re-derive.
-        hostingBottomToInputBottom?.isActive = false
-
-        self.giellaKeyboard = keyboard
-        keyboard.isHidden = true
-
-        // Re-apply whatever the keyboard area presents, rather than hardcoding the
-        // toolbar height. Leaving the hosting view at full height would squash the
-        // new key grid below a large empty area (the key-shrinking bug on language
-        // switch); hardcoding 52pt instead squashed the emoji picker, which keeps
-        // the language switcher in its toolbar and can therefore trigger a reload
-        // while it owns the area. The switch is the only thing that gets both right.
-        applyLayout(for: KeyboardState.shared.areaMode)
-
-        // Force height recalculation — the new GiellaKeyboardView may have different
-        // intrinsic content size during initial layout. Without this, iOS keeps the
-        // stale height constraint from before the rebuild, causing a visible gap
-        // between the toolbar and the key grid.
-        let oldHeightRL = heightConstraint?.constant ?? -1
-        let newHeightRL = computeKeyboardHeight()
-        heightConstraint?.constant = newHeightRL
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "reloadLayout_heightRecalc",
-            details: "old=\(oldHeightRL) new=\(newHeightRL)"
-        ))
-        kbInputView.setNeedsLayout()
-        kbInputView.layoutIfNeeded()
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "reloadLayout_end",
-            details: "inputBounds=\(Int(kbInputView.bounds.width))x\(Int(kbInputView.bounds.height)) keyboardFrame=\(Int(keyboard.frame.width))x\(Int(keyboard.frame.height)) hostingFrame=\(Int(hostingController?.view.frame.width ?? 0))x\(Int(hostingController?.view.frame.height ?? 0))"
-        ))
-
-        // Apply current shift state
-        bridge?.updateCapitalization()
     }
 
     // MARK: - Emoji Picker

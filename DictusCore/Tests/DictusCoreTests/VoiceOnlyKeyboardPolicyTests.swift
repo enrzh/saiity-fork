@@ -17,6 +17,11 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(layout.centerX, 215)
     }
 
+    func testVoiceOnlySurfaceDoesNotUseLegacyKeyGrid() {
+        XCTAssertFalse(VoiceOnlyKeyboardPolicy.usesLegacyKeyGrid)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 220)
+    }
+
     func testVoiceOnlyActionMappingUsesExistingCommands() {
         XCTAssertEqual(KeyboardCommand.delete.proxyAction, .deleteBackward)
         XCTAssertEqual(KeyboardCommand.returnKey.proxyAction, .insertText("\n"))

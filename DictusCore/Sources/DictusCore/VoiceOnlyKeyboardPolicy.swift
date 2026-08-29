@@ -1,6 +1,7 @@
 import Foundation
 
 public enum VoiceOnlyKeyboardPolicy {
+    public static let usesLegacyKeyGrid = false
     public static let surfaceHeight: Double = 220
     public static let controlSize: Double = 44
     public static let railSpacing: Double = 4
