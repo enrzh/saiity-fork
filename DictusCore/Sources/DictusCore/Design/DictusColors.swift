@@ -6,8 +6,9 @@ import SwiftUI
 /// Shared sAiity color tokens. The dictus names remain as source-compatible API.
 ///
 /// WHY Color(hex:) instead of Asset Catalog:
-/// The project has no .xcassets directory yet for DictusApp. Using hex initializers
-/// provides exact brand colors from the brand kit without needing asset catalog setup.
+/// The app's .xcassets currently contains the legacy app icon, while this shared
+/// color system is defined in code so it is also available to DictusCore clients
+/// without duplicating color resources. Hex initializers provide exact brand colors.
 /// Colors adapt to light/dark mode via the colorScheme-aware static properties.
 ///
 /// WHY static computed properties returning adaptive colors:
