@@ -76,7 +76,7 @@ public struct ModelInfo: Identifiable {
     /// they can't download or use.
     public static let all: [ModelInfo] = {
         let isIOS17OrLater = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 17
-        return allIncludingDeprecated.filter { model in
+        return redesignCatalog.filter { model in
             guard model.visibility == .available else { return false }
             // Hide Parakeet models on iOS 16
             if model.engine == .parakeet && !isIOS17OrLater { return false }
@@ -184,6 +184,28 @@ public struct ModelInfo: Identifiable {
 
     /// All known models, including any retained for backward compatibility.
     public static let allIncludingDeprecated: [ModelInfo] = [
+        ModelInfo(
+            identifier: "openai_whisper-tiny",
+            displayName: "Tiny",
+            sizeLabel: "~40 MB",
+            sizeBytes: 40_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.3,
+            speedScore: 1.0,
+            description: "Fast but inaccurate",
+            visibility: .deprecated
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-base",
+            displayName: "Base",
+            sizeLabel: "~75 MB",
+            sizeBytes: 75_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.4,
+            speedScore: 0.9,
+            description: "Fast but inaccurate",
+            visibility: .deprecated
+        ),
         redesignCatalog[0], redesignCatalog[1], redesignCatalog[2],
         redesignCatalog[3], redesignCatalog[4], redesignCatalog[5], redesignCatalog[6]
     ]
@@ -339,14 +361,12 @@ public struct ModelInfo: Identifiable {
     /// device regardless of OS. A bare identifier match would smuggle Parakeet back
     /// onto iOS 16. This exception must undo deprecation and nothing else.
     ///
-    /// Filters `allIncludingDeprecated` rather than `all` so the rendered order stays
-    /// catalog order instead of appending the recommendation at the end.
+    /// Starts from `all` so compatibility entries never duplicate current UI rows.
     public static func available(on capabilities: DeviceCapabilities) -> [ModelInfo] {
         let recommended = recommendedIdentifier(for: capabilities)
-        let visibleIdentifiers = Set(all.map(\.identifier))
-        return allIncludingDeprecated.filter { model in
-            if visibleIdentifiers.contains(model.identifier) { return true }
-            return model.visibility == .deprecated && model.identifier == recommended
+        if all.contains(where: { $0.identifier == recommended }) { return all }
+        return all + allIncludingDeprecated.filter {
+            $0.visibility == .deprecated && $0.identifier == recommended
         }
     }
 }

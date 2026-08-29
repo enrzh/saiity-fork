@@ -37,6 +37,17 @@ final class ModelInfoTests: XCTestCase {
         }
     }
 
+    func testCatalogKeepsDeprecatedTinyAndBaseOutsideRedesignCatalog() {
+        XCTAssertTrue(ModelInfo.allIncludingDeprecated.contains {
+            $0.identifier == "openai_whisper-tiny" && $0.visibility == .deprecated
+        })
+        XCTAssertTrue(ModelInfo.allIncludingDeprecated.contains {
+            $0.identifier == "openai_whisper-base" && $0.visibility == .deprecated
+        })
+        XCTAssertEqual(ModelInfo.redesignCatalog.count, 7)
+        XCTAssertEqual(ModelInfo.all.count, Set(ModelInfo.all.map(\.id)).count)
+    }
+
     // MARK: - Catalog visibility
 
     func testAllContainsOnlyAvailableModels() {
@@ -57,9 +68,9 @@ final class ModelInfoTests: XCTestCase {
 
     func testAllIncludingDeprecatedKeepsCompatibilityAliasForCurrentCatalog() {
         // Compatibility alias: the current catalog has no deprecated entries.
-        XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 7)
+        XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 9)
         let deprecated = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .deprecated }
-        XCTAssertEqual(deprecated.count, 0)
+        XCTAssertEqual(deprecated.count, 2)
         let available = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .available }
         XCTAssertEqual(available.count, 7)
     }
@@ -68,7 +79,7 @@ final class ModelInfoTests: XCTestCase {
         // Tiny and Base must still be found by forIdentifier (backward compat)
         XCTAssertNotNil(ModelInfo.forIdentifier("openai_whisper-tiny"))
         XCTAssertNotNil(ModelInfo.forIdentifier("openai_whisper-base"))
-        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-tiny")?.visibility, .available)
+        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-tiny")?.visibility, .deprecated)
     }
 
     // MARK: - Gauge scores
@@ -103,7 +114,7 @@ final class ModelInfoTests: XCTestCase {
     func testEngineAssignment() {
         let whisperKitModels = ModelInfo.allIncludingDeprecated.filter { $0.engine == .whisperKit }
         let parakeetModels = ModelInfo.allIncludingDeprecated.filter { $0.engine == .parakeet }
-        XCTAssertEqual(whisperKitModels.count, 6, "Should have 6 WhisperKit models (incl. Turbo)")
+        XCTAssertEqual(whisperKitModels.count, 8, "Should have 8 WhisperKit models including deprecated Tiny/Base")
         XCTAssertEqual(parakeetModels.count, 1, "Should have 1 Parakeet model")
         XCTAssertEqual(parakeetModels.first?.identifier, "parakeet-tdt-0.6b-v3")
     }
@@ -292,7 +303,7 @@ final class ModelInfoTests: XCTestCase {
         let iphone11 = makeCapabilities(ramGB: 4, model: "iPhone12,1")
 
         XCTAssertEqual(ModelInfo.recommendedIdentifier(for: iphone11), "openai_whisper-base")
-        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-base")?.visibility, .available)
+        XCTAssertEqual(ModelInfo.forIdentifier("openai_whisper-base")?.visibility, .deprecated)
         XCTAssertTrue(ModelInfo.all.map(\.identifier).contains("openai_whisper-base"))
         XCTAssertTrue(ModelInfo.available(on: iphone11).map(\.identifier).contains("openai_whisper-base"))
     }
@@ -352,7 +363,7 @@ final class ModelInfoTests: XCTestCase {
 
     func testSupportedIdentifiersMatchesAllIncludingDeprecated() {
         let ids = ModelInfo.supportedIdentifiers
-        XCTAssertEqual(ids.count, ModelInfo.allIncludingDeprecated.count)
+        XCTAssertEqual(ids.count, 7)
         for model in ModelInfo.allIncludingDeprecated {
             XCTAssertTrue(ids.contains(model.identifier))
         }
