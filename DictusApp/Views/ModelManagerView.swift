@@ -54,7 +54,7 @@ struct ModelManagerView: View {
 
     var body: some View {
         List {
-            Section("Installed") {
+            Section {
                 if installedModels.isEmpty {
                     Text("No models installed")
                         .foregroundStyle(.secondary)
@@ -69,12 +69,16 @@ struct ModelManagerView: View {
                                         Label("Delete", systemImage: "trash")
                                     }
                                 }
-                            }
+                        }
                     }
                 }
+            } header: {
+                Text("Installed")
+            } footer: {
+                modelEngineFooter(for: installedModels)
             }
 
-            Section("Available") {
+            Section {
                 if availableModels.isEmpty {
                     Text("All available models are installed")
                         .foregroundStyle(.secondary)
@@ -86,6 +90,10 @@ struct ModelManagerView: View {
                         )
                     }
                 }
+            } header: {
+                Text("Available")
+            } footer: {
+                modelEngineFooter(for: availableModels)
             }
         }
         .listStyle(.insetGrouped)
@@ -183,6 +191,19 @@ struct ModelManagerView: View {
     private func presentError(_ error: String) {
         downloadError = error
         showErrorAlert = true
+    }
+
+    @ViewBuilder
+    private func modelEngineFooter(for models: [ModelInfo]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if models.contains(where: { $0.engine == .whisperKit }) {
+                Text("WhisperKit runs speech recognition locally on Apple silicon.")
+            }
+            if models.contains(where: { $0.engine == .parakeet }) {
+                Text("Parakeet is a fast on-device recognition engine from NVIDIA.")
+            }
+        }
+        .font(.caption)
     }
 }
 

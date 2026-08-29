@@ -61,7 +61,7 @@ struct ModelCardView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text(model.displayName)
-                    .font(.headline)
+                    .font(.dictusSubheading)
                     .lineLimit(2)
 
                 if modelManager.isRecommended(model.identifier) {
@@ -71,9 +71,27 @@ struct ModelCardView: View {
                 }
             }
 
-            Text("\(model.engine.displayName) · \(model.sizeLabel)")
-                .font(.caption)
+            Text(model.localizedDescription)
+                .font(.dictusCaption)
                 .foregroundStyle(.secondary)
+
+            Label("\(model.engine.displayName) · \(model.sizeLabel)", systemImage: "internaldrive")
+                .font(.dictusCaption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 16) {
+                GaugeBarView(
+                    value: model.accuracyScore,
+                    label: "Accuracy",
+                    color: .dictusAccent
+                )
+
+                GaugeBarView(
+                    value: model.speedScore,
+                    label: "Speed",
+                    color: .dictusAccentHighlight
+                )
+            }
 
             statusContent
 
