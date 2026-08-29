@@ -115,7 +115,6 @@
 		CC00000E /* Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000E /* Audio.swift */; };
 		CC00000F /* DeviceKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC900001 /* DeviceKit */; };
 		CC000010 /* KeyboardLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100010 /* KeyboardLayouts.swift */; };
-		CC000020 /* DictusKeyboardBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100020 /* DictusKeyboardBridge.swift */; };
 		CC000030 /* KeyboardMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100030 /* KeyboardMetrics.swift */; };
 		CC000040 /* HostInputTraits.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100040 /* HostInputTraits.swift */; };
 		CC000050 /* KeySoundPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100050 /* KeySoundPolicy.swift */; };
@@ -1024,7 +1023,6 @@
 				CC000030 /* KeyboardMetrics.swift in Sources */,
 				CC000050 /* KeySoundPolicy.swift in Sources */,
 				CC000010 /* KeyboardLayouts.swift in Sources */,
-				CC000020 /* DictusKeyboardBridge.swift in Sources */,
 				CC000040 /* HostInputTraits.swift in Sources */,
 				CC000001 /* GiellaUtils.swift in Sources */,
 				CC000002 /* KeyDefinition.swift in Sources */,

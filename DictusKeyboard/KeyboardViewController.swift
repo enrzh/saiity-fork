@@ -10,14 +10,6 @@ class KeyboardViewController: UIInputViewController {
     private var hostingController: UIHostingController<KeyboardRootView>?
     private var areaModeCancellable: AnyCancellable?
 
-    /// Process-wide SuggestionState (see SuggestionState.shared). Per-controller
-    /// instances leaked via SwiftUI @ObservedObject backing storage that survives
-    /// KeyboardViewController.deinit; the singleton makes the leak benign.
-    private let suggestionState = SuggestionState.shared
-
-    /// Delegate adapter that translates giellakbd-ios key events into Dictus actions.
-    private var bridge: DictusKeyboardBridge?
-
     /// Explicit height constraint on inputView to prevent layout issues after app switch.
     /// WHY: Without this, iOS may not recalculate the keyboard height correctly when the
     /// extension is brought back to foreground after a URL scheme app switch. The system
@@ -142,12 +134,6 @@ class KeyboardViewController: UIInputViewController {
         kbInputView.backgroundColor = .clear
         kbInputView.isOpaque = false
 
-        // Keep the bridge for prediction insertion and host-field policy updates.
-        let keyBridge = DictusKeyboardBridge()
-        keyBridge.controller = self
-        keyBridge.suggestionState = suggestionState
-        self.bridge = keyBridge
-
         // --- 2. Create SwiftUI hosting for the voice surface ---
         // NOTE: do NOT pass `self` into KeyboardRootView. Storing the controller on
         // the View struct creates a strong ref cycle through UIHostingController that
@@ -155,15 +141,7 @@ class KeyboardViewController: UIInputViewController {
         // The view accesses the controller through KeyboardState.shared.controller
         // (weak), which is set in viewWillAppear below.
         let rootView = KeyboardRootView(
-            controllerID: controllerID,
-            suggestionState: suggestionState,
-            bridge: keyBridge,
-            onLanguageChanged: { [weak self] newLang in
-                self?.handleLanguageChange(newLang)
-            },
-            onLayoutChanged: { [weak self] layout, language in
-                self?.handleLayoutChange(layout, for: language)
-            }
+            controllerID: controllerID
         )
         let hosting = UIHostingController(rootView: rootView)
         PersistentLog.log(.diagnosticProbe(
@@ -258,28 +236,7 @@ class KeyboardViewController: UIInputViewController {
         hostingBottomToKeyboardTop?.isActive = false
         hostingBottomToInputBottom?.isActive = true
 
-        // --- 7. Wire post-transcription suggestion refresh ---
-        // After dictation inserts text, update the suggestion bar with completions
-        // for the last word of the transcription.
-        KeyboardState.shared.onTranscriptionInserted = { [weak self] in
-            guard let self = self else { return }
-            let context = self.textDocumentProxy.documentContextBeforeInput
-            self.suggestionState.updateAsync(context: context)
-        }
-
-        // --- 8. Wire post-undo cleanup (#266) ---
-        // The suggestions on screen were computed from the last word of a
-        // transcription that no longer exists, so they are emptied rather than
-        // recomputed: after an undo the caret is back where it was before the
-        // dictation, with nothing half-typed to suggest for.
-        KeyboardState.shared.onDictationUndone = { [weak self] in
-            guard let self = self else { return }
-            self.suggestionState.clear()
-        }
-
-        // Memory after all viewDidLoad allocations — delta vs entry tells us
-        // per-controller allocation cost (UIHostingController + SuggestionState
-        // + DictusKeyboardBridge + constraints).
+        // Memory after all viewDidLoad allocations.
         let memExit = MemoryFootprint.residentMB()
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
@@ -387,8 +344,6 @@ class KeyboardViewController: UIInputViewController {
 
         // Read the host field's input traits now that the connection exists (#200).
         // Search/URL/email fields disable autocorrect and suggestions.
-        bridge?.refreshHostPolicy()
-
         // Re-sync the learned-words dictionary from the App Group (#222).
         // The singleton caches in memory per process; if the user reset the
         // dictionary in the app, this cached keyboard process must drop the
@@ -402,14 +357,6 @@ class KeyboardViewController: UIInputViewController {
         // race in it. `setLanguage` on the next line unloads that dictionary
         // synchronously, which is exactly what kept the prune from ever running
         // off the load completion alone. Costs one boolean read once it has run.
-        suggestionState.pruneUserDictionaryIfPossible(trigger: "keyboard-appeared")
-
-        // Refresh prediction language from App Group on every keyboard appearance.
-        // WHY here not viewDidLoad: The user can change language in the app between
-        // keyboard appearances. viewWillAppear fires each time, picking up the change.
-        let lang = AppGroup.defaults.string(forKey: SharedKeys.language) ?? "fr"
-        suggestionState.setLanguage(lang)
-
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
@@ -688,8 +635,6 @@ class KeyboardViewController: UIInputViewController {
         hostingController?.removeFromParent()
         hostingController = nil
 
-        bridge = nil
-
         // live=0 on this line marks the exact moment the extension has no
         // controller left, which is the start of the #281 window (#281).
         let liveAfter = didCountIntoLiveCensus
@@ -908,25 +853,12 @@ class KeyboardViewController: UIInputViewController {
         // itself a text change, so clearing here would cancel the offer at the
         // moment it is made.
         KeyboardState.shared.revalidateDictationUndo()
-        // Invalidate autocorrect undo on external text changes (paste, cursor tap, host autocorrect).
-        bridge?.suggestionState?.pendingUndo = nil
-        // When text changes externally (paste, cursor move, autocorrect by host app),
-        // recheck autocapitalization. This ensures shift state stays correct even when
-        // the user moves the cursor to a different position in the text.
-        bridge?.updateCapitalization()
-        // The focused field may have changed (e.g. tapping another field in the
-        // same app) — re-read its input traits (#200).
-        bridge?.refreshHostPolicy()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         // A caret the user moved is a caret the insertion is no longer behind (#266).
         KeyboardState.shared.revalidateDictationUndo()
-        // Some hosts move focus between fields without emitting textDidChange.
-        // Re-read the field's input traits so the autocorrect/suggestions policy
-        // matches the newly-focused field (#200).
-        bridge?.refreshHostPolicy()
     }
 
     // MARK: - Window Gesture Delay
@@ -962,36 +894,9 @@ class KeyboardViewController: UIInputViewController {
         disabledGestureHashes.removeAll()
     }
 
-    // MARK: - Language Change
-
-    /// Handles a language cycle from the toolbar's LanguageSwitcherView.
-    private func handleLanguageChange(_ newLang: SupportedLanguage) {
-        suggestionState.setLanguage(newLang.rawValue)
-
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "languageChanged",
-            details: "lang=\(newLang.rawValue) layout=\(LayoutType.active.rawValue)"
-        ))
-    }
-
-    /// Handles a layout pick from the keyboard panel (#272).
-    private func handleLayoutChange(_ layout: LayoutType, for language: SupportedLanguage) {
-        guard language == SupportedLanguage.active else { return }
-
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "layoutChanged",
-            details: "lang=\(language.rawValue) layout=\(LayoutType.active.rawValue)"
-        ))
-    }
-
     // MARK: - Emoji Picker
 
-    /// Toggle emoji picker visibility, called by the bridge's emoji key through
-    /// the onEmojiToggle closure.
+    /// Toggle emoji picker visibility for the shared keyboard state.
     ///
     /// It only moves the shared mode: the layout follows from the $areaMode
     /// subscription and SwiftUI re-renders off the same value. Before #271 this
