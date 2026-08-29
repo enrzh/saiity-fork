@@ -90,7 +90,6 @@ struct MainTabView: View {
                             selectedTab = 1
                         }
                     }
-                    .safeAreaPadding(.bottom, 16)
                     .tabItem {
                         Label("Home", systemImage: "house.fill")
                     }
@@ -100,7 +99,6 @@ struct MainTabView: View {
                     NavigationStack {
                         ModelManagerView(modelManager: modelManager)
                     }
-                    .safeAreaPadding(.bottom, 16)
                     .tabItem {
                         Label("Models", systemImage: "cpu")
                     }
@@ -110,7 +108,6 @@ struct MainTabView: View {
                     NavigationStack {
                         SettingsView()
                     }
-                    .safeAreaPadding(.bottom, 16)
                     .tabItem {
                         Label("Settings", systemImage: "gearshape.fill")
                     }

@@ -96,6 +96,7 @@ struct ModelManagerView: View {
                 modelEngineFooter(for: availableModels)
             }
         }
+        .contentMargins(.bottom, 96, for: .scrollContent)
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .navigationTitle("Models")

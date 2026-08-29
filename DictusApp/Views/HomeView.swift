@@ -49,6 +49,7 @@ struct HomeView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
+        .contentMargins(.bottom, 96, for: .scrollContent)
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {

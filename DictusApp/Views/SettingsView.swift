@@ -55,6 +55,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .contentMargins(.bottom, 96, for: .scrollContent)
         .navigationTitle("Settings")
         .onAppear { microphonePermission = AVAudioSession.sharedInstance().recordPermission }
     }
