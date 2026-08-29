@@ -178,13 +178,8 @@ struct KeyboardRootView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                Color(uiColor: .secondarySystemBackground).ignoresSafeArea()
-
                 HStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("sAiity")
-                            .font(.subheadline.weight(.semibold))
                         Text("AUTO")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -193,7 +188,7 @@ struct KeyboardRootView: View {
                             .background(.thinMaterial, in: Capsule())
                         Spacer()
                         utilityButton(
-                            systemName: "chevron.down",
+                            systemName: "globe",
                             accessibilityLabel: "Switch keyboard",
                             identifier: "switch-keyboard"
                         ) {
@@ -210,16 +205,11 @@ struct KeyboardRootView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
 
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .strokeBorder(.white.opacity(0.22))
-                            Image(systemName: dictationSymbol)
-                                .font(.system(size: 32, weight: .semibold))
-                                .foregroundStyle(dictationColor)
-                                .symbolEffect(.pulse, isActive: state.dictationStatus == .recording)
-                        }
+                        Image(systemName: dictationSymbol)
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(dictationColor)
+                            .symbolEffect(.pulse, isActive: state.dictationStatus == .recording)
+                            .dictusGlass(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .frame(width: 148, height: 94)
                         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .gesture(
@@ -266,7 +256,13 @@ struct KeyboardRootView: View {
                         ) {
                             state.controller?.textDocumentProxy.insertText("\n")
                         }
-                        Spacer()
+                        utilityButton(
+                            systemName: "at",
+                            accessibilityLabel: "Insert at sign",
+                            identifier: "at-key"
+                        ) {
+                            state.controller?.textDocumentProxy.insertText("@")
+                        }
                         utilityButton(
                             systemName: "keyboard.chevron.compact.down",
                             accessibilityLabel: "Dismiss keyboard",
@@ -278,9 +274,9 @@ struct KeyboardRootView: View {
                     .frame(width: 44)
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 12)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+                .padding(.vertical, 8)
+            .frame(width: min(proxy.size.width, 390), height: 220)
+            .background(Color(uiColor: .secondarySystemBackground))
         }
     }
 
@@ -321,7 +317,7 @@ struct KeyboardRootView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 16, weight: .semibold))
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .background(.thinMaterial, in: Circle())
         }
         .buttonStyle(.plain)

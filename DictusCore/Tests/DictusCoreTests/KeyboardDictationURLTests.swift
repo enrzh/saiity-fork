@@ -5,6 +5,12 @@ import XCTest
 
 final class KeyboardDictationURLTests: XCTestCase {
 
+    func testKeyboardCommandMappingPreservesLiteralActions() {
+        XCTAssertEqual(KeyboardCommand.delete.proxyAction, .deleteBackward)
+        XCTAssertEqual(KeyboardCommand.returnKey.proxyAction, .insertText("\n"))
+        XCTAssertEqual(KeyboardCommand.at.proxyAction, .insertText("@"))
+    }
+
     /// The URL the keyboard opens on a microphone tap (KeyboardState).
     func testRecordURLFromKeyboard() {
         let url = URL(string: "saiity://dictate?source=keyboard")!

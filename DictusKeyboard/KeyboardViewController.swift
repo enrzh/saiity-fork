@@ -69,7 +69,7 @@ class KeyboardViewController: UIInputViewController {
     private var hostingBottomToInputBottom: NSLayoutConstraint?
 
     /// Fixed toolbar height matching ToolbarView (52pt: 48pt content + 4pt top padding).
-    private let toolbarHeight: CGFloat = 52
+    private let toolbarHeight: CGFloat = 220
 
     /// Whether viewWillAppear has fired at least once. Guards the Combine handler
     /// from changing hosting height before the controller is registered with KeyboardState.
@@ -866,6 +866,10 @@ class KeyboardViewController: UIInputViewController {
     /// Calculate the total keyboard height using giellakbd-ios KeyboardHeightProvider
     /// for the key grid height, plus toolbar and padding.
     private func computeKeyboardHeight() -> CGFloat {
+        // The voice surface owns the entire extension canvas; the legacy grid remains
+        // hidden only as a lifecycle-compatible bridge target.
+        return toolbarHeight
+        /*
         let deviceContext = DeviceContext.current
         // The number row grows the grid instead of shrinking the keys (#331): the provider
         // divides its per-device height by a normal row count and multiplies by ours, so
@@ -905,6 +909,7 @@ class KeyboardViewController: UIInputViewController {
             details: "grid=\(keyGridHeight) total=\(total) screen=\(Int(screen.width))x\(Int(screen.height)) landscape=\(deviceContext.isLandscape) numberRow=\(KeyboardLayouts.drawsDigitRow)"
         ))
         return total
+        */
     }
 
     // MARK: - Keyboard Area Mode Observation
