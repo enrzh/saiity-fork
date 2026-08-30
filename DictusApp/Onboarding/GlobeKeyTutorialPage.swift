@@ -21,6 +21,8 @@ import DictusCore
 struct GlobeKeyTutorialPage: View {
     let onComplete: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// WHY @EnvironmentObject coordinator:
     /// The user may dictate during this tutorial via the Dictus keyboard, which
     /// goes through DictationCoordinator. If we don't reset the coordinator before
@@ -111,7 +113,11 @@ struct GlobeKeyTutorialPage: View {
                         autoFocus: true,
                         onKeyboardChange: { isDictus in
                             if isDictus {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                withAnimation(
+                                    AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                                        ? .spring(response: 0.3, dampingFraction: 0.7)
+                                        : nil
+                                ) {
                                     dictusKeyboardActive = true
                                 }
                                 PersistentLog.log(.onboardingDictusKeyboardActivated)
@@ -197,6 +203,7 @@ struct GlobeKeyTutorialPage: View {
 /// Frame 2: Picker, "Dictus" highlighted (user's target)
 /// Frame 3: Dictus keyboard visible (with branding on spacebar)
 private struct KeyboardSwitchAnimation: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animationFrame = 0
     @State private var globePressed = false
     @State private var animationTimer: Timer?
@@ -255,12 +262,30 @@ private struct KeyboardSwitchAnimation: View {
                 fakeKeyboardPicker(dictusHighlighted: animationFrame == 2)
                     .padding(.leading, 8)
                     .padding(.bottom, 44)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottomLeading)))
+                    .transition(
+                        reduceMotion
+                            ? .identity
+                            : .opacity.combined(with: .scale(scale: 0.9, anchor: .bottomLeading))
+                    )
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: animationFrame)
-        .animation(.easeInOut(duration: 0.15), value: globePressed)
-        .onAppear { startAnimation() }
+        .animation(
+            AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                ? .easeInOut(duration: 0.3)
+                : nil,
+            value: animationFrame
+        )
+        .animation(
+            AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                ? .easeInOut(duration: 0.15)
+                : nil,
+            value: globePressed
+        )
+        .onAppear {
+            if !reduceMotion {
+                startAnimation()
+            }
+        }
         .onDisappear {
             animationTimer?.invalidate()
             animationTimer = nil
@@ -300,7 +325,7 @@ private struct KeyboardSwitchAnimation: View {
             // Row 2: shift + letters + delete
             HStack(spacing: 4) {
                 Image(systemName: "shift")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .frame(width: 36, height: 36)
                     .background(keyCapsule(dark: true))
@@ -310,7 +335,7 @@ private struct KeyboardSwitchAnimation: View {
                 }
 
                 Image(systemName: "delete.left")
-                    .font(.system(size: 13))
+                    .font(.body)
                     .foregroundStyle(.primary)
                     .frame(width: 36, height: 36)
                     .background(keyCapsule(dark: true))
@@ -325,20 +350,20 @@ private struct KeyboardSwitchAnimation: View {
                     .background(keyCapsule(dark: true))
 
                 Text("😊")
-                    .font(.system(size: 16))
+                    .font(.body)
                     .frame(width: 36, height: 36)
                     .background(keyCapsule(dark: true))
 
                 // Space bar
                 Text(spaceLabel)
-                    .font(.system(size: 13))
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                     .background(keyCapsule(dark: false))
 
                 Image(systemName: "return")
-                    .font(.system(size: 13))
+                    .font(.body)
                     .foregroundStyle(.primary)
                     .frame(width: 64, height: 36)
                     .background(keyCapsule(dark: true))
@@ -383,14 +408,14 @@ private struct KeyboardSwitchAnimation: View {
         HStack {
             // Language label (FR/EN)
             Text(isFrench ? "FR" : "EN")
-                .font(.system(size: 13, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
             Spacer()
 
             // Blue mic pill — matches real Dictus mic button
             Image(systemName: "mic.fill")
-                .font(.system(size: 14))
+                .font(.body)
                 .foregroundColor(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
@@ -405,7 +430,7 @@ private struct KeyboardSwitchAnimation: View {
     /// A single keyboard key cell.
     private func keyCell(_ letter: String) -> some View {
         Text(letter)
-            .font(.system(size: 16, weight: .regular))
+            .font(.body)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
             .frame(height: 36)
@@ -416,7 +441,6 @@ private struct KeyboardSwitchAnimation: View {
     private func keyCapsule(dark: Bool) -> some View {
         RoundedRectangle(cornerRadius: 5)
             .fill(Color.primary.opacity(dark ? 0.08 : 0.05))
-            .shadow(color: .black.opacity(0.08), radius: 0.5, y: 1)
     }
 
     // MARK: - Fake Keyboard Picker
@@ -447,21 +471,20 @@ private struct KeyboardSwitchAnimation: View {
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(.ultraThickMaterial)
-                .shadow(color: .black.opacity(0.2), radius: 10, y: 2)
         )
     }
 
     private func pickerRow(_ text: String, dimmed: Bool = false, highlighted: Bool = false, accent: Bool = false) -> some View {
         Text(text)
             .font(.callout)
-            .foregroundColor(accent ? .dictusAccent : (dimmed ? .secondary : .primary))
+            .foregroundColor(accent ? .accentColor : (dimmed ? .secondary : .primary))
             .fontWeight(highlighted || accent ? .medium : .regular)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(highlighted ? Color.primary.opacity(0.1) : (accent ? Color.dictusAccent.opacity(0.12) : Color.clear))
+                    .fill(highlighted ? Color.primary.opacity(0.1) : (accent ? Color.accentColor.opacity(0.12) : Color.clear))
                     .padding(.horizontal, 4)
             )
     }

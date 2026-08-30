@@ -15,6 +15,7 @@ struct KeyboardSetupPage: View {
     let onNext: () -> Void
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var keyboardDetected = false
 
@@ -53,8 +54,8 @@ struct KeyboardSetupPage: View {
 
             // Keyboard icon
             Image(systemName: "keyboard")
-                .font(.system(size: 64))
-                .foregroundColor(.dictusAccent)
+                .font(.system(.largeTitle, weight: .semibold))
+                .foregroundColor(.accentColor)
                 .padding(.bottom, 24)
 
             // Title

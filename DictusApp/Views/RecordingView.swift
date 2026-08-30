@@ -32,6 +32,7 @@ struct RecordingView: View {
     var onComplete: (() -> Void)?
 
     @EnvironmentObject var coordinator: DictationCoordinator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var transcriptionResult: String?
     @State private var showResult = false
@@ -73,7 +74,7 @@ struct RecordingView: View {
                         Button {
                             HapticFeedback.recordingStopped()
                             // Step 1: animate RecordingView out
-                            withAnimation(.easeOut(duration: 0.25)) {
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                                 isDismissing = true
                             }
                             // Step 2: after animation, reset status (no animation leak to HomeView).
@@ -89,7 +90,8 @@ struct RecordingView: View {
                                 .font(.system(size: 17, weight: .medium))
                                 .foregroundColor(.secondary)
                                 .frame(width: 40, height: 40)
-                                .dictusGlass(in: Circle())
+                                .background(Color(.secondarySystemBackground), in: Circle())
+                                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
                         }
                         .frame(width: 44, height: 44)
                         .buttonStyle(GlassPressStyle(pressedScale: 1.35))
@@ -125,14 +127,15 @@ struct RecordingView: View {
                                         .multilineTextAlignment(.center)
                                         .padding()
                                         .frame(maxWidth: .infinity)
-                                        .dictusGlass(in: RoundedRectangle(cornerRadius: 14))
+                                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
                                 }
                                 .buttonStyle(GlassPressStyle(pressedScale: 0.96))
                                 .padding(.horizontal, 32)
                                 .frame(minHeight: geo.size.height)
                             }
                         }
-                        .transition(.opacity)
+                        .transition(reduceMotion ? .identity : .opacity)
                     } else if showError, let error = errorMessage {
                         VStack(spacing: 12) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -181,8 +184,8 @@ struct RecordingView: View {
             }
         }
         .opacity(isDismissing ? 0 : 1)
-        .animation(.easeOut(duration: 0.3), value: showResult)
-        .animation(.easeOut(duration: 0.3), value: showCopiedFeedback)
+        .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showResult)
+        .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showCopiedFeedback)
         .onChange(of: coordinator.status) { newStatus in
             // `handleStatusChange` is deliberately still driven by the real status: it
             // does not draw a stage, it reveals the result text and the error, and a
@@ -408,7 +411,7 @@ struct RecordingView: View {
         case .ready:
             if let result = coordinator.lastResult, !result.isEmpty {
                 transcriptionResult = result
-                withAnimation(.easeOut(duration: 0.4)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4)) {
                     showResult = true
                 }
                 // Auto-advance to success screen in onboarding mode

@@ -61,35 +61,35 @@ struct ModelCardView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text(model.displayName)
-                    .font(.dictusSubheading)
+                    .font(.headline)
                     .lineLimit(2)
 
                 if modelManager.isRecommended(model.identifier) {
                     Text("Recommended")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.dictusAccent)
+                        .foregroundStyle(.tint)
                 }
             }
 
             Text(model.localizedDescription)
-                .font(.dictusCaption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
 
             Label("\(model.engine.displayName) · \(model.sizeLabel)", systemImage: "internaldrive")
-                .font(.dictusCaption)
+                .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 16) {
                 GaugeBarView(
                     value: model.accuracyScore,
                     label: "Accuracy",
-                    color: .dictusAccent
+                    color: .blue
                 )
 
                 GaugeBarView(
                     value: model.speedScore,
                     label: "Speed",
-                    color: .dictusAccentHighlight
+                    color: .green
                 )
             }
 
@@ -98,7 +98,7 @@ struct ModelCardView: View {
             if case .downloading = state,
                let progress = modelManager.downloadProgress[model.identifier] {
                 ProgressView(value: Double(progress), total: 1)
-                    .tint(Color.dictusAccent)
+                    .tint(.blue)
                     .accessibilityValue(Text("\(Int(progress * 100)) percent"))
 
                 if let bytes = modelManager.downloadByteInfo[model.identifier] {
@@ -120,7 +120,7 @@ struct ModelCardView: View {
         } else if isLoading {
             Label("Loading", systemImage: "arrow.down.circle")
                 .font(.caption)
-                .foregroundStyle(Color.dictusAccent)
+                .foregroundStyle(.tint)
         } else {
             switch state {
             case .notDownloaded:
@@ -130,15 +130,15 @@ struct ModelCardView: View {
             case .downloading:
                 Label("Downloading", systemImage: "arrow.down.circle")
                     .font(.caption)
-                    .foregroundStyle(Color.dictusAccent)
+                    .foregroundStyle(.tint)
             case .prewarming:
                 Label("Preparing", systemImage: "gearshape")
                     .font(.caption)
-                    .foregroundStyle(Color.dictusAccent)
+                    .foregroundStyle(.tint)
             case .ready:
                 Label(isActive ? "Active" : "Installed", systemImage: isActive ? "checkmark.circle.fill" : "checkmark.circle")
                     .font(.caption)
-                    .foregroundStyle(isActive ? Color.dictusSuccess : .secondary)
+                    .foregroundStyle(isActive ? .green : .secondary)
             case .error:
                 Label("Failed", systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -199,8 +199,10 @@ struct ModelCardView: View {
             showsLanguageInfo = true
         } label: {
             Image(systemName: "info.circle")
+                .frame(minWidth: 44, minHeight: 44)
         }
         .buttonStyle(.borderless)
+        .contentShape(Rectangle())
         .accessibilityLabel("Supported languages")
 
         if state == .ready || isFailed {
@@ -263,5 +265,4 @@ struct ModelCardView: View {
         )
     }
     .listStyle(.insetGrouped)
-    .background(Color.dictusBackground)
 }
