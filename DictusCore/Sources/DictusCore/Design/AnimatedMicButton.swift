@@ -106,6 +106,13 @@ public struct AnimatedMicButton: View {
             handleStatusChange(from: previousStatus, to: newStatus)
             previousStatus = newStatus
         }
+        .onChange(of: reduceMotion) { _, isReduced in
+            guard isReduced else { return }
+            pulseScale = 1.0
+            glowOpacity = 0.3
+            shimmerOffset = -1.0
+            showSuccessFlash = false
+        }
         .onAppear {
             if !reduceMotion { startIdleAnimation() }
         }

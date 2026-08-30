@@ -73,7 +73,7 @@ struct KeyboardSetupPage: View {
             Button(action: openSettings) {
                 Label("Open Settings", systemImage: "arrow.up.right")
                     .font(.dictusBody)
-                    .foregroundColor(.dictusAccent)
+                    .foregroundColor(.accentColor)
             }
             .padding(.bottom, 20)
 
@@ -112,20 +112,22 @@ struct KeyboardSetupPage: View {
             // space is reserved so the screen doesn't jump when it appears.
             Button(action: onNext) {
                 Text("Continue")
-                    .font(.dictusSubheading)
-                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.dictusAccent)
-                    )
             }
+            .font(.headline)
+            .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
+            .controlSize(.large)
             .padding(.horizontal, 32)
             .padding(.bottom, 16)
             .opacity(keyboardDetected ? 1 : 0)
             .allowsHitTesting(keyboardDetected)
-            .animation(.easeInOut(duration: 0.3), value: keyboardDetected)
+            .animation(
+                AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                    ? .easeInOut(duration: 0.3)
+                    : nil,
+                value: keyboardDetected
+            )
         }
         .onAppear {
             checkKeyboardInstalled()
@@ -202,7 +204,11 @@ struct KeyboardSetupPage: View {
                 animationTimer?.invalidate()
                 animationTimer = nil
                 // Show the toggles page with both toggles ON (final success state)
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                withAnimation(
+                    AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                        ? .spring(response: 0.3, dampingFraction: 0.7)
+                        : nil
+                ) {
                     showKeyboardsScreen = true
                     keyboardsRowHighlighted = false
                     dictusToggleOn = true
@@ -210,7 +216,12 @@ struct KeyboardSetupPage: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: keyboardDetected)
+        .animation(
+            AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                ? .easeInOut(duration: 0.3)
+                : nil,
+            value: keyboardDetected
+        )
     }
 
     // MARK: - Fake Settings Card
@@ -246,24 +257,33 @@ struct KeyboardSetupPage: View {
                 if !showKeyboardsScreen {
                     // Phase 1: Dictus settings page — shows "Keyboards" row to tap
                     dictusSettingsPhase
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
+                        .transition(
+                            reduceMotion
+                                ? .identity
+                                : .asymmetric(
+                                    insertion: .move(edge: .leading).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                )
+                        )
                 } else {
                     // Phase 2: Keyboards toggles page — shows Dictus + Full Access toggles
                     keyboardsTogglesPhase
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .trailing).combined(with: .opacity)
-                        ))
+                        .transition(
+                            reduceMotion
+                                ? .identity
+                                : .asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .trailing).combined(with: .opacity)
+                                )
+                        )
                 }
             }
             .clipped()
-            .animation(.easeInOut(duration: 0.3), value: showKeyboardsScreen)
+            .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showKeyboardsScreen)
         }
         .padding(.bottom, 4)
-        .dictusGlass(in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
     }
 
     /// Phase 1: Fake "Dictus" settings page with Keyboards row + placeholder rows.
@@ -284,7 +304,7 @@ struct KeyboardSetupPage: View {
             )
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.dictusAccent.opacity(keyboardsRowHighlighted ? 0.15 : 0))
+                    .fill(Color.accentColor.opacity(keyboardsRowHighlighted ? 0.15 : 0))
                     .padding(.horizontal, 4)
             )
 
@@ -358,7 +378,12 @@ struct KeyboardSetupPage: View {
     private var keyboardsTogglesPhase: some View {
         VStack(spacing: 0) {
             Toggle("sAiity", isOn: $dictusToggleOn)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dictusToggleOn)
+                .animation(
+                    AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                        ? .spring(response: 0.3, dampingFraction: 0.7)
+                        : nil,
+                    value: dictusToggleOn
+                )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
 
@@ -367,7 +392,12 @@ struct KeyboardSetupPage: View {
                 .padding(.leading, 16)
 
             Toggle("Allow full access", isOn: $fullAccessToggleOn)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: fullAccessToggleOn)
+                .animation(
+                    AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                        ? .spring(response: 0.3, dampingFraction: 0.7)
+                        : nil,
+                    value: fullAccessToggleOn
+                )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
         }
@@ -397,6 +427,14 @@ struct KeyboardSetupPage: View {
         dictusToggleOn = false
         fullAccessToggleOn = false
 
+        guard AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion) else {
+            // Show a useful, stable end state when motion is disabled.
+            showKeyboardsScreen = true
+            dictusToggleOn = true
+            fullAccessToggleOn = true
+            return
+        }
+
         // Run first cycle
         runAnimationCycle()
 
@@ -417,7 +455,11 @@ struct KeyboardSetupPage: View {
     private func runAnimationCycle() {
         // Step 1: Highlight the "Keyboards" row
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(
+                AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                    ? .spring(response: 0.3, dampingFraction: 0.7)
+                    : nil
+            ) {
                 keyboardsRowHighlighted = true
             }
         }
