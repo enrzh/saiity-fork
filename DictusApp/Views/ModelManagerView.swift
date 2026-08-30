@@ -184,7 +184,7 @@ struct ModelManagerView: View {
                 showPartialDeleteAlert = true
             }
         )
-        .listRowBackground(Color.dictusSurface)
+        .listRowBackground(Color(uiColor: .secondarySystemGroupedBackground))
         .listRowSeparator(.visible)
     }
 

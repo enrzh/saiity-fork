@@ -89,6 +89,11 @@ struct MainTabView: View {
                         HomeView(modelManager: modelManager) {
                             selectedTab = 1
                         }
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            Color.clear
+                                .frame(height: 96)
+                                .accessibilityHidden(true)
+                        }
                     }
                     .tabItem {
                         Label("Home", systemImage: "house.fill")
@@ -98,6 +103,11 @@ struct MainTabView: View {
                     // Tab 1: Model management
                     NavigationStack {
                         ModelManagerView(modelManager: modelManager)
+                            .safeAreaInset(edge: .bottom, spacing: 0) {
+                                Color.clear
+                                    .frame(height: 96)
+                                    .accessibilityHidden(true)
+                            }
                     }
                     .tabItem {
                         Label("Models", systemImage: "cpu")
@@ -107,6 +117,11 @@ struct MainTabView: View {
                     // Tab 2: Settings
                     NavigationStack {
                         SettingsView()
+                            .safeAreaInset(edge: .bottom, spacing: 0) {
+                                Color.clear
+                                    .frame(height: 96)
+                                    .accessibilityHidden(true)
+                            }
                     }
                     .tabItem {
                         Label("Settings", systemImage: "gearshape.fill")

@@ -55,11 +55,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: 96)
-                .accessibilityHidden(true)
-        }
         .navigationTitle("Settings")
         .onAppear { microphonePermission = AVAudioSession.sharedInstance().recordPermission }
     }

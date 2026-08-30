@@ -49,13 +49,9 @@ struct HomeView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: 96)
-                .accessibilityHidden(true)
-        }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("sAiity")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             modelManager.loadState()
             refreshMicrophonePermission()
