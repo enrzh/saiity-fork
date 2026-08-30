@@ -44,7 +44,7 @@ struct ModelDownloadPage: View {
             // Download icon
             Image(systemName: downloadComplete ? "checkmark.circle.fill" : "arrow.down.circle.fill")
                 .font(.system(.largeTitle, weight: .semibold))
-                .foregroundColor(downloadComplete ? .dictusSuccess : .dictusAccent)
+                .foregroundColor(downloadComplete ? .dictusSuccess : .accentColor)
                 .padding(.bottom, 24)
 
             // Title

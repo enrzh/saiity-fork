@@ -124,7 +124,7 @@ public struct AnimatedMicButton: View {
                 .dictusGlass(in: isPill ? AnyShape(Capsule()) : AnyShape(Circle()))
                 .overlay(
                     mainShape()
-                        .stroke(Color.dictusAccent.opacity(glowOpacity), lineWidth: 2)
+                        .stroke(Color.accentColor.opacity(glowOpacity), lineWidth: 2)
                         .frame(width: ringWidth, height: ringHeight)
                 )
 
@@ -149,7 +149,7 @@ public struct AnimatedMicButton: View {
                 .dictusGlass(in: isPill ? AnyShape(Capsule()) : AnyShape(Circle()))
                 .overlay(
                     mainShape()
-                        .stroke(Color.dictusAccent.opacity(0.4), lineWidth: 2)
+                        .stroke(Color.accentColor.opacity(0.4), lineWidth: 2)
                         .frame(width: ringWidth, height: ringHeight)
                 )
         }
@@ -187,7 +187,7 @@ public struct AnimatedMicButton: View {
         case .transcribing, .processing:
             return .dictusAccentHighlight.opacity(0.5)
         default:
-            return .dictusAccent
+            return .accentColor
         }
     }
 
@@ -238,6 +238,7 @@ public struct AnimatedMicButton: View {
     }
 
     private func startIdleAnimation() {
+        guard !reduceMotion else { return }
         pulseScale = 1.0
         withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
             glowOpacity = 0.6
@@ -245,6 +246,7 @@ public struct AnimatedMicButton: View {
     }
 
     private func startRecordingAnimation() {
+        guard !reduceMotion else { return }
         glowOpacity = 0.5
         withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
             pulseScale = 1.3
@@ -252,6 +254,7 @@ public struct AnimatedMicButton: View {
     }
 
     private func startTranscribingAnimation() {
+        guard !reduceMotion else { return }
         pulseScale = 1.0
         glowOpacity = 0.4
         shimmerOffset = -1.0

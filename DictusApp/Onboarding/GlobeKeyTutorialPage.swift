@@ -92,7 +92,7 @@ struct GlobeKeyTutorialPage: View {
                     .padding(14)
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 24)
-                    .transition(.opacity)
+                    .transition(reduceMotion ? .identity : .opacity)
                 } else {
                     // State 1: Animated keyboard switch illustration
 
@@ -102,7 +102,7 @@ struct GlobeKeyTutorialPage: View {
                     KeyboardSwitchAnimation()
                         .padding(.horizontal, 24)
                         .padding(.bottom, 8)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.95)))
 
                     // Hidden text field to bring up the real keyboard immediately.
                     // WHY hidden: The user needs the real system keyboard visible so

@@ -115,7 +115,7 @@ struct PaywallView: View {
             // Celebrate instead of silently ejecting the user who just paid:
             // the thank-you screen takes over and Continue dismisses.
             if newState == .success {
-                withAnimation(.easeOut(duration: 0.25)) {
+                withAnimation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion)) {
                     showPurchaseSuccess = true
                 }
             }
@@ -123,7 +123,7 @@ struct PaywallView: View {
         .overlay {
             if showPurchaseSuccess {
                 purchaseSuccessView
-                    .transition(.opacity)
+                    .transition(reduceMotion ? .identity : .opacity)
             }
         }
         .alert("Purchase Error", isPresented: showErrorAlert) {
@@ -398,7 +398,7 @@ struct PaywallView: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundColor(isSelected ? .dictusAccent : .secondary)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -407,7 +407,7 @@ struct PaywallView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(isSelected ? Color.dictusAccent : .clear, lineWidth: 2)
+                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
             )
             // Make the whole card tappable: without an explicit content
             // shape, hit-testing only registers on rendered content (text,
