@@ -96,15 +96,8 @@ struct ModelManagerView: View {
                 modelEngineFooter(for: availableModels)
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: 96)
-                .accessibilityHidden(true)
-        }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
         .navigationTitle("Models")
-        .background(Color.dictusBackground.ignoresSafeArea())
         .onAppear {
             modelManager.loadState()
         }
@@ -184,7 +177,6 @@ struct ModelManagerView: View {
                 showPartialDeleteAlert = true
             }
         )
-        .listRowBackground(Color(uiColor: .secondarySystemGroupedBackground))
         .listRowSeparator(.visible)
     }
 

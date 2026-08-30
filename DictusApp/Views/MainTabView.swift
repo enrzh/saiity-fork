@@ -63,6 +63,16 @@ struct MainTabView: View {
         modelManager.activeModel ?? Self.persistedActiveModelIdentifier
     }
 
+    private func tabContent<Content: View>(_ content: Content) -> some View {
+        // Measured iOS 26 floating tab bar clearance for scroll content; this is
+        // visual breathing room, not the system safe area itself.
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: 96)
+                .accessibilityHidden(true)
+        }
+    }
+
     var body: some View {
         ZStack {
             if let preparingModelID {
@@ -86,14 +96,9 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        HomeView(modelManager: modelManager) {
+                        tabContent(HomeView(modelManager: modelManager) {
                             selectedTab = 1
-                        }
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            Color.clear
-                                .frame(height: 96)
-                                .accessibilityHidden(true)
-                        }
+                        })
                     }
                     .tabItem {
                         Label("Home", systemImage: "house.fill")
@@ -102,12 +107,7 @@ struct MainTabView: View {
 
                     // Tab 1: Model management
                     NavigationStack {
-                        ModelManagerView(modelManager: modelManager)
-                            .safeAreaInset(edge: .bottom, spacing: 0) {
-                                Color.clear
-                                    .frame(height: 96)
-                                    .accessibilityHidden(true)
-                            }
+                        tabContent(ModelManagerView(modelManager: modelManager))
                     }
                     .tabItem {
                         Label("Models", systemImage: "cpu")
@@ -116,12 +116,7 @@ struct MainTabView: View {
 
                     // Tab 2: Settings
                     NavigationStack {
-                        SettingsView()
-                            .safeAreaInset(edge: .bottom, spacing: 0) {
-                                Color.clear
-                                    .frame(height: 96)
-                                    .accessibilityHidden(true)
-                            }
+                        tabContent(SettingsView())
                     }
                     .tabItem {
                         Label("Settings", systemImage: "gearshape.fill")
