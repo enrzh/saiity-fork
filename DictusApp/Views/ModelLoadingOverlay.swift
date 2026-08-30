@@ -19,6 +19,7 @@ import DictusCore
 ///    `.loading` once `DictationCoordinator.preloadActiveModel` is in flight.
 struct ModelLoadingOverlay: View {
     @ObservedObject var modelManager: ModelManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Identifier of the model the user just acted on (download or select).
     /// Drives the phase logic and which copy is shown.
@@ -81,7 +82,7 @@ struct ModelLoadingOverlay: View {
                 // ratios — iPad letterboxed compatibility mode, iPhone SE. Same
                 // height/opacity as the onboarding welcome screen; edge-to-edge
                 // width, no horizontal padding.
-                BrandWaveform(maxHeight: 100, animation: .sweep)
+                BrandWaveform(maxHeight: 100, animation: reduceMotion ? .still : .sweep)
                     .opacity(0.55)
                     .allowsHitTesting(false)
 
@@ -91,10 +92,10 @@ struct ModelLoadingOverlay: View {
                 ZStack {
                     if showCompletion {
                         completionView
-                            .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                            .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.94)))
                     } else {
                         activeView
-                            .transition(.opacity)
+                            .transition(reduceMotion ? .identity : .opacity)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -142,8 +143,7 @@ struct ModelLoadingOverlay: View {
             }
             Text(phaseLabel)
                 .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
-                .foregroundStyle(Color.dictusAccent)
+                .foregroundStyle(.tint)
                 .tracking(labelTracking)
                 .padding(.leading, labelTracking)
                 .frame(maxWidth: .infinity)
@@ -160,7 +160,7 @@ struct ModelLoadingOverlay: View {
                 VStack(spacing: 6) {
                     ProgressView(value: Double(progress), total: 1.0)
                         .progressViewStyle(.linear)
-                        .tint(.dictusAccent)
+                        .tint(.accentColor)
                         .frame(maxWidth: 240)
                     Text("\(Int(progress * 100)) %")
                         .font(.dictusCaption.monospacedDigit())
@@ -182,7 +182,7 @@ struct ModelLoadingOverlay: View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48, weight: .semibold))
-                .foregroundStyle(Color.dictusAccent)
+                .foregroundStyle(.tint)
             Text("Model ready")
                 .font(.dictusSubheading)
                 .foregroundStyle(.primary)
@@ -349,14 +349,14 @@ struct ModelLoadingOverlay: View {
         }
         guard !showCompletion else { return }
 
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             showCompletion = true
         }
 
         // Brief celebration moment before the cover slides away.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
-            withAnimation(.easeOut(duration: 0.4)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4)) {
                 isPresented = false
             }
         }

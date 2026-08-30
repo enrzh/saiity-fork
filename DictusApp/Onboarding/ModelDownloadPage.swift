@@ -43,7 +43,7 @@ struct ModelDownloadPage: View {
 
             // Download icon
             Image(systemName: downloadComplete ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-                .font(.system(size: 72))
+                .font(.system(.largeTitle, weight: .semibold))
                 .foregroundColor(downloadComplete ? .dictusSuccess : .dictusAccent)
                 .padding(.bottom, 24)
 
@@ -70,7 +70,7 @@ struct ModelDownloadPage: View {
             if isDownloading, let progress = modelManager.downloadProgress[recommendedModel] {
                 VStack(spacing: 8) {
                     ProgressView(value: Double(progress))
-                        .tint(.dictusAccent)
+                        .tint(.accentColor)
                         .padding(.horizontal, 32)
 
                     Text("\(Int(progress * 100))%")
@@ -92,7 +92,7 @@ struct ModelDownloadPage: View {
             if modelManager.modelStates[recommendedModel] == .prewarming {
                 VStack(spacing: 8) {
                     ProgressView()
-                        .tint(.dictusAccent)
+                        .tint(.accentColor)
                     Text("Optimizing...")
                         .font(.dictusCaption)
                         .foregroundStyle(.secondary)
@@ -116,30 +116,24 @@ struct ModelDownloadPage: View {
             if downloadComplete {
                 Button(action: onNext) {
                     Text("Continue")
-                        .font(.dictusSubheading)
-                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.dictusAccent)
-                        )
                 }
+                .font(.headline)
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .controlSize(.large)
                 .padding(.horizontal, 32)
                 .padding(.bottom, 48)
             } else if !isDownloading {
                 VStack(spacing: 16) {
                     Button(action: startDownload) {
                         Text("Install model")
-                            .font(.dictusSubheading)
-                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(Color.dictusAccent)
-                            )
                     }
+                    .font(.headline)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.accentColor)
+                    .controlSize(.large)
                     .padding(.horizontal, 32)
                 }
                 .padding(.bottom, 48)
@@ -223,11 +217,12 @@ struct ModelDownloadPage: View {
 
             Text("Recommended for your iPhone")
                 .font(.dictusCaption)
-                .foregroundColor(.dictusAccent)
+                .foregroundColor(.accentColor)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .dictusGlass()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
     }
 
     // MARK: - Private

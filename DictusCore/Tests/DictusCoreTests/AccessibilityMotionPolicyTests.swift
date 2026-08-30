@@ -14,4 +14,8 @@ final class AccessibilityMotionPolicyTests: XCTestCase {
         XCTAssertNil(AccessibilityMotionPolicy.animation(reduceMotion: true))
         XCTAssertNotNil(AccessibilityMotionPolicy.animation(reduceMotion: false))
     }
+
+    func testReducedMotionDisablesRepeatingAnimation() {
+        XCTAssertFalse(AccessibilityMotionPolicy.permitsAnimation(reduceMotion: true))
+    }
 }

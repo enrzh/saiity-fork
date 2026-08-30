@@ -45,7 +45,7 @@ struct GlobeKeyTutorialPage: View {
 
     var body: some View {
         ZStack {
-            Color.dictusBackground
+            Color(.systemGroupedBackground)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -55,7 +55,7 @@ struct GlobeKeyTutorialPage: View {
                     Button(action: skipTutorial) {
                         Text("Skip")
                             .font(.dictusBody)
-                            .foregroundColor(.dictusAccent)
+                            .foregroundColor(.accentColor)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -90,7 +90,7 @@ struct GlobeKeyTutorialPage: View {
                     )
                     .frame(minHeight: 140, maxHeight: 220)
                     .padding(14)
-                    .dictusGlass(in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 24)
                     .transition(.opacity)
                 } else {
@@ -140,7 +140,12 @@ struct GlobeKeyTutorialPage: View {
             // Using fullScreenCover guarantees a proper full-screen context.
             OnboardingSuccessView(onComplete: finishOnboarding)
         }
-        .animation(.easeInOut(duration: 0.3), value: dictusKeyboardActive)
+        .animation(
+            AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
+                ? .easeInOut(duration: 0.3)
+                : nil,
+            value: dictusKeyboardActive
+        )
         .onChange(of: textFieldContent) { newValue in
             // Auto-advance when the user has dictated enough text.
             // WHY minTextLength: Prevents a single accidental keystroke from
@@ -421,7 +426,7 @@ private struct KeyboardSwitchAnimation: View {
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(Color.dictusAccent)
+                        .fill(Color.accentColor)
                 )
         }
         .padding(.horizontal, 8)

@@ -19,6 +19,7 @@ struct CyclingLoadingText: View {
     var interval: TimeInterval = 2.5
 
     @State private var index: Int = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text(currentPhrase)
@@ -32,9 +33,10 @@ struct CyclingLoadingText: View {
             // .id forces SwiftUI to treat each phrase as a distinct view so the
             // .transition runs on every change rather than animating in place.
             .id(currentPhrase)
-            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.97)))
             .task(id: phrases) {
                 guard !phrases.isEmpty else { return }
+                guard !reduceMotion else { return }
                 index = 0
                 while !Task.isCancelled {
                     do {
@@ -43,7 +45,7 @@ struct CyclingLoadingText: View {
                         return
                     }
                     if Task.isCancelled { return }
-                    withAnimation(.easeInOut(duration: 0.45)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.45)) {
                         index = (index + 1) % phrases.count
                     }
                 }

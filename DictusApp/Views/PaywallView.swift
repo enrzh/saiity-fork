@@ -5,6 +5,7 @@ import StoreKit
 import DictusCore
 
 struct PaywallView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var subscriptionManager: SubscriptionManager
     @EnvironmentObject var proStatus: ProStatusManager
     @Environment(\.dismiss) private var dismiss
@@ -87,9 +88,9 @@ struct PaywallView: View {
             }
             .padding(.horizontal, 16)
         }
-        .background(Color.dictusBackground.ignoresSafeArea())
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         // Empty bar title: the hero's gradient title is the screen title.
-        .navigationTitle("")
+        .navigationTitle("sAiity Pro")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { closeButton }
         .task {
@@ -165,28 +166,11 @@ struct PaywallView: View {
             DictusLogo(height: 48)
                 .environment(\.colorScheme, .dark)
                 .padding(20)
-                .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: 0x0D2040), Color(hex: 0x071020)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .shadow(color: Color.dictusAccent.opacity(0.7), radius: 10)
-                .shadow(color: Color.dictusAccent.opacity(0.4), radius: 20)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
 
             Text("sAiity Pro")
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.dictusGradientStart, .dictusGradientEnd],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(.primary)
 
             Text("Your voice, unlimited")
                 .font(.dictusBody)
@@ -220,7 +204,8 @@ struct PaywallView: View {
             Spacer()
         }
         .padding(12)
-        .dictusGlass()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(feature.displayName): \(feature.paywallDescription)")
     }
@@ -246,7 +231,8 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .dictusGlass()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
     }
 
     // MARK: - Plan Selector
@@ -417,7 +403,8 @@ struct PaywallView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .foregroundColor(.primary)
-            .dictusGlass()
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(isSelected ? Color.dictusAccent : .clear, lineWidth: 2)
@@ -518,11 +505,10 @@ struct PaywallView: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(Color.dictusAccent)
-            .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(GlassPressStyle())
+        .buttonStyle(.borderedProminent)
+        .tint(.accentColor)
+        .controlSize(.large)
         .disabled(selectedProduct == nil || subscriptionManager.purchaseState == .purchasing)
         .opacity(selectedProduct == nil ? 0.5 : 1.0)
         .accessibilityLabel(ctaLabel)
@@ -621,27 +607,19 @@ struct PaywallView: View {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 72))
+                .font(.largeTitle)
                 .foregroundStyle(.white, Color.dictusSuccess)
-                .shadow(color: Color.dictusSuccess.opacity(0.6), radius: 12)
-                .shadow(color: Color.dictusSuccess.opacity(0.3), radius: 28)
-                .scaleEffect(successEntrance ? 1 : 0.4)
+                .scaleEffect(reduceMotion ? 1 : (successEntrance ? 1 : 0.4))
                 .opacity(successEntrance ? 1 : 0)
-                .animation(.spring(response: 0.45, dampingFraction: 0.6), value: successEntrance)
+                .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.6), value: successEntrance)
 
             Text("Welcome to sAiity Pro")
-                .font(.system(.title, design: .rounded, weight: .bold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.dictusGradientStart, .dictusGradientEnd],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .font(.title.weight(.bold))
+                .foregroundStyle(.primary)
                 .padding(.top, 28)
                 .opacity(successEntrance ? 1 : 0)
-                .offset(y: successEntrance ? 0 : 12)
-                .animation(.easeOut(duration: 0.35).delay(0.2), value: successEntrance)
+                .offset(y: reduceMotion ? 0 : (successEntrance ? 0 : 12))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.35).delay(0.2), value: successEntrance)
 
             Text("All Pro features are now unlocked. Thank you for your support.")
                 .font(.dictusBody)
@@ -650,8 +628,8 @@ struct PaywallView: View {
                 .padding(.top, 12)
                 .padding(.horizontal, 24)
                 .opacity(successEntrance ? 1 : 0)
-                .offset(y: successEntrance ? 0 : 12)
-                .animation(.easeOut(duration: 0.35).delay(0.3), value: successEntrance)
+                .offset(y: reduceMotion ? 0 : (successEntrance ? 0 : 12))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.35).delay(0.3), value: successEntrance)
 
             Spacer()
 
@@ -662,18 +640,17 @@ struct PaywallView: View {
                     .font(.dictusSubheading)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.dictusAccent)
-                    .foregroundColor(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-            .buttonStyle(GlassPressStyle())
+            .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
+            .controlSize(.large)
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
             .opacity(successEntrance ? 1 : 0)
-            .animation(.easeOut(duration: 0.35).delay(0.45), value: successEntrance)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.35).delay(0.45), value: successEntrance)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.dictusBackground.ignoresSafeArea())
+        .background(Color(.systemBackground).ignoresSafeArea())
         .onAppear {
             successEntrance = true
             // UIKit generator instead of SwiftUI sensoryFeedback: the state

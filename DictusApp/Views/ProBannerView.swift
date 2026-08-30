@@ -11,6 +11,7 @@ import DictusCore
 /// and navigation target (pushes PaywallView).
 struct ProBannerView: View {
     @EnvironmentObject var proStatus: ProStatusManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showPaywall = false
 
@@ -40,19 +41,12 @@ struct ProBannerView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding(16)
-                .background(
-                    LinearGradient(
-                        colors: [Color.dictusAccent.opacity(0.15), Color.dictusAccentHighlight.opacity(0.15)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                )
-                .dictusGlass()
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
             }
             .buttonStyle(GlassPressStyle(pressedScale: 0.97))
-            .transition(.opacity.combined(with: .scale))
-            .animation(.easeOut(duration: 0.3), value: proStatus.isProActive)
+            .transition(reduceMotion ? .identity : .opacity.combined(with: .scale))
+            .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: proStatus.isProActive)
             .paywallCover(isPresented: $showPaywall)
         }
     }

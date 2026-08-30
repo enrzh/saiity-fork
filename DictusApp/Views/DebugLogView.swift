@@ -49,6 +49,7 @@ private struct LogEntry: Identifiable, Sendable {
 ///
 /// Color-coded by log level with auto-scroll to newest entry.
 struct DebugLogView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The complete retained file. Backs Copy, which must never be bounded.
     @State private var logContent = ""
     @State private var entries: [LogEntry] = []
@@ -110,7 +111,7 @@ struct DebugLogView: View {
                 }
             }
         }
-        .background(Color.dictusBackground.ignoresSafeArea())
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Debug Logs")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -170,7 +171,7 @@ struct DebugLogView: View {
     /// Scroll to the last entry (newest log).
     private func scrollToBottom(proxy: ScrollViewProxy) {
         guard let last = entries.last else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
             proxy.scrollTo(last.id, anchor: .bottom)
         }
     }

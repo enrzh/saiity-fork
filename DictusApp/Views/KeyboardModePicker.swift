@@ -16,6 +16,7 @@ import DictusCore
 /// Owning the @AppStorage directly ensures the picker always reads/writes
 /// the correct value and triggers view updates on selection change.
 struct DefaultLayerPicker: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @AppStorage(SharedKeys.defaultKeyboardLayer, store: UserDefaults(suiteName: AppGroup.identifier))
     var selectedLayer: String = "letters"
@@ -50,7 +51,7 @@ struct DefaultLayerPicker: View {
                         .strokeBorder(Color.dictusAccent.opacity(0.15), lineWidth: 1)
                 )
                 .allowsHitTesting(false)
-                .animation(.easeInOut(duration: 0.2), value: selectedLayer)
+                .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: selectedLayer)
         }
     }
 

@@ -22,6 +22,7 @@ public struct AnimatedMicButton: View {
     public let status: DictationStatus
     public let isPill: Bool
     public let onTap: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(status: DictationStatus, isPill: Bool = false, onTap: @escaping () -> Void) {
         self.status = status
@@ -86,7 +87,7 @@ public struct AnimatedMicButton: View {
                 }
 
                 // Success flash overlay
-                if showSuccessFlash {
+                if showSuccessFlash && !reduceMotion {
                     mainShape()
                         .fill(Color.dictusSuccess.opacity(0.6))
                         .frame(width: buttonWidth, height: buttonHeight)
@@ -106,7 +107,7 @@ public struct AnimatedMicButton: View {
             previousStatus = newStatus
         }
         .onAppear {
-            startIdleAnimation()
+            if !reduceMotion { startIdleAnimation() }
         }
     }
 
@@ -214,19 +215,21 @@ public struct AnimatedMicButton: View {
         // WHY withAnimation instead of asyncAfter: SwiftUI animates the transition
         // from true to false over 0.3s, eliminating the timer race condition.
         if (oldStatus == .transcribing || oldStatus == .processing) && newStatus == .ready {
-            showSuccessFlash = true
-            withAnimation(.easeOut(duration: 0.3)) {
-                showSuccessFlash = false
+            if !reduceMotion {
+                showSuccessFlash = true
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showSuccessFlash = false
+                }
             }
         }
 
         switch newStatus {
         case .idle, .ready, .failed:
-            startIdleAnimation()
+            if !reduceMotion { startIdleAnimation() }
         case .recording:
-            startRecordingAnimation()
+            if !reduceMotion { startRecordingAnimation() }
         case .transcribing, .processing:
-            startTranscribingAnimation()
+            if !reduceMotion { startTranscribingAnimation() }
         case .requested:
             // Static state -- no animations. Button is disabled via isTappable.
             // Visual: standard accent color, no pulse, no glow animation.
