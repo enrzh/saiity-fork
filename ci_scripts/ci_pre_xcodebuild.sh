@@ -2,17 +2,14 @@
 
 set -eu
 
-for root in "${CI_DERIVED_DATA_PATH:-}" /Volumes/workspace/DerivedData "$HOME/Library/Developer/Xcode/DerivedData"; do
-    [ -d "$root" ] || continue
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-    manager_file=$(find "$root" -path '*/SourcePackages/checkouts/FluidAudio/Sources/FluidAudio/ASR/AsrManager.swift' -type f -print -quit 2>/dev/null || true)
-    [ -n "$manager_file" ] || continue
+# Xcode Cloud resolves packages before invoking this hook. Patch the checkout
+# used by the same archive so FluidAudio 0.12.4 is compiled in Swift 5 mode;
+# Swift 6's strict concurrency diagnostics otherwise make the archive fail.
+if [ -z "${CI_DERIVED_DATA_PATH:-}" ]; then
+    echo "error: CI_DERIVED_DATA_PATH is not set; cannot patch the Cloud checkout." >&2
+    exit 1
+fi
 
-    if grep -q 'public final class AsrManager {' "$manager_file"; then
-        perl -0pi -e 's/public final class AsrManager \{/public final class AsrManager: @unchecked Sendable {/' "$manager_file"
-    fi
-
-    exit 0
-done
-
-exit 0
+"$script_dir/../scripts/patch-fluidaudio-swift5.sh" "$CI_DERIVED_DATA_PATH"
