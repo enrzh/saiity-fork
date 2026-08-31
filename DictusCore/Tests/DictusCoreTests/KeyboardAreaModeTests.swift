@@ -102,6 +102,15 @@ final class KeyboardAreaModeTests: XCTestCase {
         XCTAssertNotEqual(KeyboardAreaMode.toggledPanel(from: .panel), .panel)
     }
 
+    func testPanelRouteClosesToKeysAndRestores123Title() {
+        let panel = KeyboardAreaMode.toggledPanel(from: .keys)
+        XCTAssertEqual(panel, .panel)
+        XCTAssertEqual(panel.modeControlTitle, "ABC")
+        let keys = KeyboardAreaMode.toggledPanel(from: panel)
+        XCTAssertEqual(keys, .keys)
+        XCTAssertEqual(keys.modeControlTitle, "123")
+    }
+
     func testModeControlTitleReflectsTheVisibleSurface() {
         XCTAssertEqual(KeyboardAreaMode.keys.modeControlTitle, "123")
         XCTAssertEqual(KeyboardAreaMode.recording.modeControlTitle, "123")

@@ -37,18 +37,18 @@
 
 结果：`BUILD SUCCEEDED`。存在既有 deprecated/API 与 Sendable warnings。
 
-完整 Core 命令 `swift test --package-path DictusCore`：1155 tests，10 skipped，4 failures；失败不属于本任务聚焦键盘测试，需后续单独处理。
+完整 Core 命令 `swift test --package-path DictusCore`（此前基线）：1155 tests，10 skipped，4 failures。失败集合为 `PolishAvailabilityGateTests.testUnavailableAutoModeReturnsTheAutoFloor`、`PolishAvailabilityGateTests.testTheDefaultGateLeavesTheTransformUntouched`、`PolishContextBudgetTests.testTransformRunsAnUnboundedEngineOnAnEnormousInput`、`PolishContextBudgetTests.testTransformStillCallsTheEngineWhenTheInputFits`。本次复跑已为 1155 tests、10 skipped、0 failures。
 
 ## 差异检查与提交
 
 `git diff --check`：通过。
 
-Commit：`48b0494`（报告写入后 amend，最终完整 hash 见最终回复）。
+Commit：历史真实提交 `1702c1c230dc6c09ee647825339f2e4685e4c0c3`；上一轮真实提交 `6ce9f5062d3a8253b4022c757a93e15023747752`。
 
 ## 未验证风险
 
 - 尚未在 SimSlim 中完成实际触控截图/命中回放，因此 123、ABC、emoji、delete、return、dismiss 的真实 UIKit 触控链仍需设备级验证。
-- 完整 Core 测试存在与本任务无关的既有失败。
+- 完整 Core 基线失败集合已在上方列出；本次复跑已清零。
 - 构建使用无签名 simulator generic build，不等同于安装或发布验证。
 
 ## 本轮独立审查修复
@@ -59,4 +59,6 @@ Commit：`48b0494`（报告写入后 amend，最终完整 hash 见最终回复�
 - 删除外层 `EmojiPickerView.onDelete`，保留搜索输入内部 delete；删除 `bottomRow` dead helper 并统一使用空白保留行。
 - 构建：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/saiity-keyboard-fix-build CODE_SIGNING_ALLOWED=NO build`，结果 `BUILD SUCCEEDED`。
 - `git diff --check`：通过。
-- 本轮提交 hash：`3ffcbe1`（报告 amend 后最终完整 hash 以 `git rev-parse HEAD` 为准）。
+- 本轮聚焦修复前 RED 集合：`VoiceOnlyKeyboardContractTests.testUIKitOverlayIsHiddenWhenPolicyHasNoRightRail`、`VoiceOnlyKeyboardPolicyTests.testActionCentersAndRectanglesFitWithoutOverlapAtTargetWidths`、`VoiceOnlyKeyboardPolicyTests.testNormalPhoneWidthsKeepFourUtilityTargetsOutsideCenterSurface`、`VoiceOnlyKeyboardPolicyTests.testRightRailUsesThreeCommandsAndOneSeparateDismissAction`、`VoiceOnlyKeyboardPolicyTests.testVoiceSurfaceExposesStableCenterAreaAndRailGeometry`。
+- 本轮 GREEN：聚焦测试 65 tests，0 failures；完整 Core 复跑 1155 tests、10 skipped、0 failures。
+- 本轮提交 hash：`bd4a0dd`（报告 amend 后的最终完整 hash 以 `git rev-parse HEAD` 为准）。
