@@ -13,7 +13,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let utilityVisualSize: Double = 36
     public static let nextKeyboardVisualSize: Double = 18
     public static let languageVisualWidth: Double = 58
-    public static let rightRailControlCount: Int = 3
+    public static let rightRailControlCount: Int = 2
     public static let leftRailControlCount: Int = 4
     /// The smallest center region that still gives the microphone a usable capsule
     /// on a compact iPhone once the four utility targets and right rail are present.
@@ -142,6 +142,20 @@ public enum VoiceOnlyKeyboardPolicy {
                    width: centerAreaWidth, height: contentHeight)
         }
 
+        /// The hold-to-dictate capsule keeps one frame while its content changes.
+        public var dictateFrame: CGRect {
+            let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
+                availableWidth: surfaceWidth,
+                centerAreaWidth: centerAreaWidth
+            )
+            return CGRect(
+                x: centerX - width / 2,
+                y: (surfaceHeight - VoiceOnlyKeyboardPolicy.primaryControlSize) / 2,
+                width: width,
+                height: VoiceOnlyKeyboardPolicy.primaryControlSize
+            )
+        }
+
         public var actionRectangles: [CGRect] {
             let utilities = leftRailWidth > 0
                 ? [leftUtilityFrames.at, leftUtilityFrames.emoji,
@@ -157,11 +171,7 @@ public enum VoiceOnlyKeyboardPolicy {
             } else {
                 commandRects = []
             }
-            return utilities + commandRects + [
-                CGRect(x: rightBottomCenterX - controlSize / 2,
-                       y: rightBottomCenterY - controlSize / 2,
-                       width: controlSize, height: controlSize)
-            ]
+            return utilities + commandRects + [dismissFrame, dictateFrame]
         }
     }
 
@@ -170,11 +180,11 @@ public enum VoiceOnlyKeyboardPolicy {
         surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
-        let horizontalInset = min(horizontalPadding, max(0, availableWidth / 2))
-        let availableContentWidth = max(0, availableWidth - horizontalInset * 2)
+        let horizontalInset = availableWidth >= Double(leftRailControlCount) * controlSize
+            + actionHitSize.width + controlSize ? 0 : min(horizontalPadding, availableWidth / 2)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount))
         let rightWidth = actionHitSize.width
-        let hasRails = availableContentWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth
+        let hasRails = availableWidth >= Double(leftWidth + rightWidth) + controlSize
         let railWidth = hasRails ? rightWidth : 0
         let resolvedLeftRailWidth = hasRails ? Double(leftWidth) : 0
         let centerAreaWidth = max(0, availableWidth
@@ -200,7 +210,7 @@ public enum VoiceOnlyKeyboardPolicy {
             rightBottomCenterX: availableWidth - horizontalInset - (railWidth > 0 ? railWidth / 2 : controlSize / 2),
             leftBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
             rightBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
-            showsLanguageIndicator: railWidth >= controlSize
+            showsLanguageIndicator: hasRails
         )
     }
 }

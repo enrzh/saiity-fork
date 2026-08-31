@@ -659,9 +659,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
             for: deviceContext,
             traitCollection: traitCollection
         )
-        return deviceContext.isPhone
-            ? nativeHeight
-            : CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
+        return CGFloat(nativeHeight)
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -798,7 +796,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     private func applyLayout(for mode: KeyboardAreaMode) {
         let oldHosting = hostingHeightConstraint?.constant ?? -1
         let status = KeyboardState.shared.dictationStatus.rawValue
-        setVoiceActionControlsHidden(!mode.usesVoiceActionControls)
+        setVoiceActionControlsHidden(false)
 
         switch mode {
         case .keys:
@@ -820,7 +818,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
             numberKeyboardView?.isHidden = true
-            setVoiceActionControlsHidden(true)
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
@@ -833,7 +830,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
-            setVoiceActionControlsHidden(true)
             installNumberKeyboardView()
             numberKeyboardView?.isHidden = false
             numberKeyboardView?.page = .symbols1
@@ -966,12 +962,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
 
     private func setVoiceActionControlsHidden(_ hidden: Bool) {
         guard let controls = actionControlsView else { return }
-        let layout = VoiceOnlyKeyboardPolicy.layout(
-            for: Double(controls.bounds.width),
-            surfaceHeight: Double(max(controls.bounds.height, 1))
-        )
-        let hasRightRail = layout.rightRailWidth > 0
-        controls.isHidden = hidden || !hasRightRail
+        controls.isHidden = hidden
     }
 
     private func handleDismissKeyboard() {
@@ -1001,10 +992,10 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         dismissButton?.frame = layout.dismissFrame
         if let numberKeyboardView {
             numberKeyboardView.frame = CGRect(
-                x: 0,
+                x: CGFloat(layout.horizontalInset + layout.leftRailWidth),
                 y: 0,
-                width: CGFloat(layout.surfaceWidth),
-                height: CGFloat(layout.surfaceHeight)
+                width: max(0, CGFloat(layout.centerAreaWidth)),
+                height: max(0, CGFloat(layout.surfaceHeight))
             )
         }
     }
@@ -1023,6 +1014,9 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         inputView.addSubview(keyboard)
         keyboard.frame = inputView.bounds
         numberKeyboardView = keyboard
+        if let controls = actionControlsView {
+            inputView.bringSubviewToFront(controls)
+        }
     }
 
     private func closeNumberPanel() {

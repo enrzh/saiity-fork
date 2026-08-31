@@ -311,8 +311,8 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            // Row 4: unified bottom row (ABC + emoji + space + return)
-            bottomRow(lang: lang, needsGlobe: needsGlobe)
+            // Row 4 is reserved for the UIKit-owned public actions.
+            blankRow()
         ]
     }
 
@@ -335,18 +335,15 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            // Row 4: unified bottom row (ABC + emoji + space + return)
-            bottomRow(lang: lang, needsGlobe: needsGlobe)
+            // Row 4 is reserved for the UIKit-owned public actions.
+            blankRow()
         ]
     }
 
     // MARK: - Bottom Rows
 
-    /// Next-keyboard (globe) key. Rendered as a globe icon and wired to
-    /// `handleInputModeList(from:with:)` action in `KeyboardViewController`. Inserted only when the
-    /// system does not already provide its own globe (`needsInputModeSwitchKey == true`).
-    private static func globeKey() -> KeyDefinition {
-        KeyDefinition(type: .keyboard, size: CGSize(width: 1.0, height: 1))
+    private static func blankRow() -> [KeyDefinition] {
+        Array(repeating: KeyDefinition(type: .spacer, size: CGSize(width: 1, height: 1)), count: 10)
     }
 
     /// Native-style bottom row used by the vendored key grid, including on symbols pages.
@@ -357,14 +354,12 @@ enum KeyboardLayouts {
     /// 123/ABC and emoji share the same small width; only the space bar changes width, shrinking
     /// by 1.0 when the globe is prepended (needsInputModeSwitchKey, App Store 4.4.1).
     private static func bottomRow(lang: SupportedLanguage, needsGlobe: Bool) -> [KeyDefinition] {
-        var row: [KeyDefinition] = needsGlobe ? [globeKey()] : []
-        row.append(contentsOf: [
+        [
             KeyDefinition(type: .symbols, size: CGSize(width: 1.5, height: 1)),
             KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.5, height: 1)),
-            KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: needsGlobe ? 4.0 : 5.0, height: 1)),
+            KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 5.0, height: 1)),
             KeyDefinition(type: .returnkey(name: lang.returnName), size: CGSize(width: 2.0, height: 1))
-        ])
-        return row
+        ]
     }
 
     // MARK: - Long Press Accents

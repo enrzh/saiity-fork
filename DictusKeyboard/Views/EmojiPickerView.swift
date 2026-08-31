@@ -17,7 +17,6 @@ struct CategoryInfo: Identifiable {
 /// - Category bar at bottom as bookmarks into the grid
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
-    let onClose: () -> Void
     let onDelete: () -> Void
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
@@ -168,8 +167,6 @@ struct EmojiPickerView: View {
                 selectedCategoryID = id
             },
             onSearch: { isSearchActive = true }
-            , onClose: onClose,
-            onDelete: onDelete
         )
     }
 

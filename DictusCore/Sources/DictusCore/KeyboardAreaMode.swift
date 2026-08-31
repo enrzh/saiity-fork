@@ -32,6 +32,10 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
         self == .keys || self == .recording
     }
 
+    public var modeControlTitle: String {
+        self == .keys || self == .recording ? "123" : "ABC"
+    }
+
     /// Toggles the symbols surface from the keyboard's ABC/123 action.
     public static func toggledPanel(from current: KeyboardAreaMode) -> KeyboardAreaMode {
         current == .panel ? .keys : .panel
