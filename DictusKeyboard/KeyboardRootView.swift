@@ -95,7 +95,6 @@ struct KeyboardRootView: View {
                     controller.routeProxyText(emoji)
                     state.closeArea()
                 },
-                onDelete: { state.controller?.textDocumentProxy.deleteBackward() },
                 availableWidth: width,
                 availableHeight: max(0, surfaceHeight - CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
             )

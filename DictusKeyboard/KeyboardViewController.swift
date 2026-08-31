@@ -995,7 +995,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
                 x: CGFloat(layout.horizontalInset + layout.leftRailWidth),
                 y: 0,
                 width: max(0, CGFloat(layout.centerAreaWidth)),
-                height: max(0, CGFloat(layout.surfaceHeight))
+                height: max(0, CGFloat(layout.surfaceHeight - VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
             )
         }
     }

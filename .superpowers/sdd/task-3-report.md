@@ -50,3 +50,13 @@ Commit：`48b0494`（报告写入后 amend，最终完整 hash 见最终回复�
 - 尚未在 SimSlim 中完成实际触控截图/命中回放，因此 123、ABC、emoji、delete、return、dismiss 的真实 UIKit 触控链仍需设备级验证。
 - 完整 Core 测试存在与本任务无关的既有失败。
 - 构建使用无签名 simulator generic build，不等同于安装或发布验证。
+
+## 本轮独立审查修复
+
+- RED：`swift test --package-path DictusCore --filter 'KeyboardAreaModeTests|VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'` 捕获 3 个旧 bottom-row/全宽契约失败。
+- GREEN：同一命令通过，64 tests，0 failures。
+- 修复 number keyboard frame，使 x、width、height 分别与 policy center region 和 alternate content height 一致；保留公共 UIKit controls 及其 hit targets。
+- 删除外层 `EmojiPickerView.onDelete`，保留搜索输入内部 delete；删除 `bottomRow` dead helper 并统一使用空白保留行。
+- 构建：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/saiity-keyboard-fix-build CODE_SIGNING_ALLOWED=NO build`，结果 `BUILD SUCCEEDED`。
+- `git diff --check`：通过。
+- 本轮提交 hash：`3ffcbe1`（报告 amend 后最终完整 hash 以 `git rev-parse HEAD` 为准）。

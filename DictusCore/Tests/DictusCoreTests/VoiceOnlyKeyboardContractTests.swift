@@ -1,4 +1,5 @@
 import XCTest
+@testable import DictusCore
 
 final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
@@ -17,14 +18,14 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
 
         XCTAssertTrue(controller.contains("numberKeyboardView?.page = .symbols2"))
-        XCTAssertTrue(controller.contains("closeNumberPanel()"))
+        XCTAssertTrue(controller.contains("numberKeyboardView?.page = .symbols1"))
+        XCTAssertTrue(controller.contains("numberKeyboardView?.page = .normal"))
         XCTAssertTrue(keyboardView.contains("keyRepeatTimer?.invalidate()"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height"))
         XCTAssertTrue(controller.contains("numberKeyboardView.frame = CGRect("))
-        XCTAssertTrue(layouts.contains("KeyDefinition(type: .symbols"))
-        XCTAssertTrue(layouts.contains("KeyDefinition(type: .input(key: emojiKeyGlyph"))
-        XCTAssertTrue(layouts.contains("KeyDefinition(type: .returnkey(name: lang.returnName"))
-        XCTAssertFalse(layouts.contains("return [KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 10.0, height: 1))]"))
+        XCTAssertTrue(layouts.contains("KeyDefinition(type: .shiftSymbols"))
+        XCTAssertTrue(layouts.contains("blankRow()"))
+        XCTAssertFalse(layouts.contains("bottomRow("))
     }
 
     func testRuntimeSurfaceUsesOneSharedLayoutContract() throws {
@@ -32,8 +33,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(controller.contains("let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))"))
-        XCTAssertTrue(controller.contains("width: CGFloat(layout.surfaceWidth),"))
-        XCTAssertTrue(controller.contains("height: CGFloat(layout.surfaceHeight)"))
+        XCTAssertTrue(controller.contains("x: CGFloat(layout.horizontalInset + layout.leftRailWidth)"))
+        XCTAssertTrue(controller.contains("width: max(0, CGFloat(layout.centerAreaWidth))"))
+        XCTAssertTrue(controller.contains("height: max(0, CGFloat(layout.surfaceHeight - VoiceOnlyKeyboardPolicy.bottomActionHitHeight))"))
         XCTAssertTrue(root.contains("VoiceOnlyKeyboardPolicy.layout("))
         XCTAssertTrue(root.contains("surfaceHeight: Double(surfaceHeight)"))
     }
@@ -115,7 +117,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("setImage(nextKeyboardImage, for: .normal)"))
         XCTAssertTrue(controller.contains("for: .allTouchEvents"))
         XCTAssertFalse(root.contains("utilityGlyph(systemName: \"globe\")"))
-        XCTAssertTrue(root.contains("state.areaMode == .keys || state.areaMode == .recording ? \"123\" : \"ABC\""))
+        XCTAssertTrue(root.contains("state.areaMode.modeControlTitle"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
         XCTAssertTrue(root.contains("languageIndicatorTitle"))
         XCTAssertTrue(root.contains("Color(uiColor: .secondarySystemBackground)"))
@@ -167,7 +169,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains(".frame(width: CGFloat(visualWidth), height: CGFloat(visualHeight))"))
     }
 
-    func testUIKitOverlayIsHiddenWhenPolicyHasNoRightRail() throws {
+    func testUIKitActionOverlayRemainsInteractiveAlongsideSeparateDismissAndDictateControls() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -175,11 +177,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             .deletingLastPathComponent()
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
-        XCTAssertTrue(controller.contains("let hasRightRail = layout.rightRailWidth > 0"))
-        XCTAssertTrue(controller.contains("controls.isHidden = hidden || !hasRightRail"))
+        XCTAssertTrue(controller.contains("controls.isHidden = hidden"))
+        XCTAssertFalse(controller.contains("controls.isHidden = hidden || !hasRightRail"))
+        XCTAssertTrue(controller.contains("layout = VoiceOnlyKeyboardPolicy.layout"))
     }
 
-    func testEmojiAndSymbolsSurfacesUseTheFullAvailableWidth() throws {
+    func testEmojiAndSymbolsSurfacesUseThePolicyCenterRegion() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -188,10 +191,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"), encoding: .utf8)
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
-        XCTAssertTrue(root.contains("availableWidth: CGFloat(availableWidth)"),
-                      "emoji surface must receive the full GeometryReader width")
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = CGRect("),
-                      "symbols surface must span the full keyboard width")
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
+        XCTAssertEqual(layout.centerAreaWidth, 126)
+        XCTAssertTrue(root.contains("availableWidth: width"))
+        XCTAssertTrue(controller.contains("x: CGFloat(layout.horizontalInset + layout.leftRailWidth)"))
+        XCTAssertTrue(controller.contains("width: max(0, CGFloat(layout.centerAreaWidth))"))
     }
 
     func testLanguageIndicatorIsRestrictedToKeysAndRecordingModes() throws {
