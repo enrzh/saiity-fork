@@ -13,17 +13,16 @@ struct DictationStatusView: View {
                 .foregroundColor(iconColor)
 
             VStack(alignment: .leading) {
-                Text(statusLabel)
-                    .font(.headline)
+                Text(status.recordingLabel)
+                    .font(.subheadline.weight(.semibold))
                 Text(statusDescription)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             }
         }
-        .padding()
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .accessibilityElement(children: .combine)
     }
 
     private var iconName: String {
@@ -47,18 +46,6 @@ struct DictationStatusView: View {
         case .processing: return Color.dictusSmartMode
         case .ready: return .green
         case .failed: return .red
-        }
-    }
-
-    private var statusLabel: String {
-        switch status {
-        case .idle: return "Idle"
-        case .requested: return "Requested"
-        case .recording: return "Recording..."
-        case .transcribing: return "Transcribing..."
-        case .processing: return "Processing..."
-        case .ready: return "Ready"
-        case .failed: return "Failed"
         }
     }
 

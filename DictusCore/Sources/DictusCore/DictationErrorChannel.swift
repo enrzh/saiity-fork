@@ -2,6 +2,47 @@
 // The one current reason a dictation failed, shared across the two processes (#320).
 import Foundation
 
+public enum DictationFailureDisposition: String, Codable, Sendable {
+    case recoverableRetry
+    case requiresApp
+}
+
+public enum DictationFailureAction: Equatable, Sendable {
+    case retry
+    case openApp
+
+    public enum RecoveryTransition: Equatable, Sendable {
+        case resetAndRetry
+        case openApp
+        case retainFailed
+    }
+
+    public static func forDisposition(_ disposition: DictationFailureDisposition?) -> Self {
+        disposition == .requiresApp ? .openApp : .retry
+    }
+
+    public static func recoveryTransition(
+        for disposition: DictationFailureDisposition?, urlOpened: Bool
+    ) -> RecoveryTransition {
+        switch forDisposition(disposition) {
+        case .retry:
+            return .resetAndRetry
+        case .openApp:
+            return urlOpened ? .openApp : .retainFailed
+        }
+    }
+
+    public static func fallbackMayOpen(
+        expectedSessionID: String?, currentSessionID: String?,
+        expectedGeneration: Int, currentGeneration: Int,
+        status: DictationStatus
+    ) -> Bool {
+        expectedSessionID == currentSessionID
+            && expectedGeneration == currentGeneration
+            && status == .requested
+    }
+}
+
 /// Why the last dictation failed, written by the app and read by whichever surface the
 /// user happens to be looking at.
 ///
@@ -30,9 +71,10 @@ public enum DictationErrorChannel {
 
     /// Store the reason the current dictation failed. Overwrites any previous one:
     /// this channel holds one reason, not a history.
-    public static func record(_ message: String) {
+    public static func record(_ message: String, disposition: DictationFailureDisposition = .recoverableRetry) {
         let defaults = AppGroup.defaults
         defaults.set(message, forKey: SharedKeys.lastError)
+        defaults.set(disposition.rawValue, forKey: SharedKeys.failureDisposition)
         defaults.synchronize()
     }
 
@@ -44,11 +86,17 @@ public enum DictationErrorChannel {
         AppGroup.defaults.string(forKey: SharedKeys.lastError)
     }
 
+    public static var currentDisposition: DictationFailureDisposition? {
+        guard let raw = AppGroup.defaults.string(forKey: SharedKeys.failureDisposition) else { return nil }
+        return DictationFailureDisposition(rawValue: raw)
+    }
+
     /// Drop the stored reason. Called when a dictation starts, and from nowhere else:
     /// a new attempt is what makes the previous attempt's error stale.
     public static func clear() {
         let defaults = AppGroup.defaults
         defaults.removeObject(forKey: SharedKeys.lastError)
+        defaults.removeObject(forKey: SharedKeys.failureDisposition)
         defaults.synchronize()
     }
 }

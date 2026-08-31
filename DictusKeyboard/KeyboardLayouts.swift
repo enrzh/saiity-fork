@@ -18,12 +18,15 @@ import DictusCore
 /// `drawsDigitRow`. The symbols pages are always four.
 enum KeyboardLayouts {
 
+    /// Symbols pages are deliberately kept at the native four-row geometry.
+    static let symbolsRowCount = 4
+
     /// Glyph carried by the emoji-picker toggle key.
     ///
     /// The toggle has no `KeyType` of its own — it is an `.input` key whose character is
     /// the smiley, and everything downstream tells it apart from a typed character by
     /// comparing against this glyph. Naming it once keeps those comparisons in step
-    /// (`DictusKeyboardBridge.didTriggerKey`, `editsDocument`, `KeySound.category(for:)`).
+    /// (`KeyboardViewController.didTriggerKey`, `editsDocument`, `KeySound.category(for:)`).
     static let emojiKeyGlyph = "\u{1F600}"
 
     // MARK: - Number Row (#331)
@@ -340,15 +343,15 @@ enum KeyboardLayouts {
     // MARK: - Bottom Rows
 
     /// Next-keyboard (globe) key. Rendered as a globe icon and wired to
-    /// `advanceToNextInputMode()` by the vendored KeyView/bridge. Inserted only when the
+    /// `handleInputModeList(from:with:)` action in `KeyboardViewController`. Inserted only when the
     /// system does not already provide its own globe (`needsInputModeSwitchKey == true`).
     private static func globeKey() -> KeyDefinition {
         KeyDefinition(type: .keyboard, size: CGSize(width: 1.0, height: 1))
     }
 
-    /// Bottom row, IDENTICAL across the letters and symbols pages so nothing resizes when the
-    /// user toggles 123/ABC (Apple parity). The `.symbols` key auto-labels "123" on letter
-    /// pages and "ABC" on symbol pages, and the emoji key stays present on every page.
+    /// Native-style bottom row used by the vendored key grid, including on symbols pages.
+    /// The outer voice chrome is hidden while this surface is active, so the grid must
+    /// carry its own ABC/emoji/space/return actions rather than relying on overlays.
     ///
     /// [(🌐 1.0w) 123/ABC 1.5w] [emoji 1.5w] [space 5.0w/4.0w] [return 2.0w] = 10 units.
     /// 123/ABC and emoji share the same small width; only the space bar changes width, shrinking

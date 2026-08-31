@@ -13,28 +13,31 @@ struct DiagnosticDetailView: View {
     let result: DiagnosticResult
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(
-                "App Group: \(result.appGroupID)",
-                systemImage: result.containerExists ? "checkmark.circle.fill" : "xmark.circle.fill"
-            )
-            .foregroundColor(result.containerExists ? .green : .red)
-
-            Label(
-                "Read: \(result.canRead ? "OK" : "Failed")",
-                systemImage: result.canRead ? "checkmark.circle.fill" : "xmark.circle.fill"
-            )
-            .foregroundColor(result.canRead ? .green : .red)
-
-            Label(
-                "Write: \(result.canWrite ? "OK" : "Failed")",
-                systemImage: result.canWrite ? "checkmark.circle.fill" : "xmark.circle.fill"
-            )
-            .foregroundColor(result.canWrite ? .green : .red)
+        List {
+            Section("App Group") {
+                diagnosticRow("Container", result.containerExists)
+                diagnosticRow("Read", result.canRead)
+                diagnosticRow("Write", result.canWrite)
+                LabeledContent("Identifier", value: result.appGroupID)
+                    .font(.caption.monospaced())
+            }
+            Section {
+                Text(result.isHealthy ? "The shared container is ready for the app and keyboard." : "The shared container needs attention.")
+                    .foregroundStyle(.secondary)
+            }
         }
-        .font(.system(.body, design: .monospaced))
-        .padding()
-        .background(Color(.tertiarySystemBackground))
-        .cornerRadius(12)
+        .navigationTitle("Diagnostics")
+        .accessibilityAddTraits(.isModal)
+    }
+
+    @ViewBuilder
+    private func diagnosticRow(_ label: String, _ passed: Bool) -> some View {
+        Label {
+            Text(label)
+        } icon: {
+            Image(systemName: passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(passed ? .green : .red)
+        }
+        .accessibilityValue(passed ? "OK" : "Failed")
     }
 }

@@ -23,4 +23,9 @@ final class DictationStatusTests: XCTestCase {
             "Microphone access is restricted. Check device restrictions."
         )
     }
+
+    func testTranslationAndInsertionRemainBeforeAcknowledgement() {
+        XCTAssertTrue(DictationStatus.processing.ownsKeyboardArea)
+        XCTAssertFalse(DictationStatus.ready.ownsKeyboardArea)
+    }
 }

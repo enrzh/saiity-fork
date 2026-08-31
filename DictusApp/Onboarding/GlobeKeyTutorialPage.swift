@@ -1,27 +1,12 @@
 // DictusApp/Onboarding/GlobeKeyTutorialPage.swift
-// Step 6 of onboarding: interactive globe key tutorial + dictation test.
+// Stage 4: real keyboard switch and first dictation.
 import SwiftUI
 import UIKit
 import DictusCore
 
-/// Interactive tutorial that teaches the user to switch to the Dictus keyboard
-/// via the globe key, then test dictation in a real text field.
-///
-/// WHY this replaces TestRecordingPage:
-/// The old test recording validated the mic/model pipeline inside the app, but
-/// users still didn't know how to USE Dictus in other apps (via the globe key).
-/// This page combines both: the user learns to switch keyboards AND tests
-/// dictation in a single step — matching the real-world usage flow.
-///
-/// UX PATTERN (inspired by Wispr Flow):
-/// State 1: Animated keyboard illustration showing the 4-step globe key flow,
-///          overlaid above the real keyboard (which is open for interaction).
-/// State 2: Once switch detected, animation disappears → text field visible
-///          with keyboard still open. User dictates → auto-advance to success.
 struct GlobeKeyTutorialPage: View {
     let onComplete: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let onReturnToSetup: () -> Void
 
     /// WHY @EnvironmentObject coordinator:
     /// The user may dictate during this tutorial via the Dictus keyboard, which
@@ -32,150 +17,108 @@ struct GlobeKeyTutorialPage: View {
 
     @State private var dictusKeyboardActive = false
     @State private var textFieldContent = ""
-    @State private var showSuccess = false
-
-    /// Guard against multiple auto-advance triggers.
-    @State private var hasAutoAdvanced = false
-
-    /// Minimum text length to trigger auto-advance.
-    /// WHY 3 characters: A single keystroke shouldn't trigger success.
-    /// Dictation typically produces multiple words. 3 chars filters accidental
-    /// key taps while still allowing short dictation ("oui", "non", "ok").
-    private let minTextLength = 3
+    @State private var firstDictationVerified = false
+    @State private var awaitingInsertion = false
+    @State private var accessibilityAnnouncement = ""
+    @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
+    @State private var dictationFailed = false
+    @State private var fullAccessRequired = false
 
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Top bar with Skip button
-                HStack {
-                    Spacer()
-                    Button(action: skipTutorial) {
-                        Text("Skip")
-                            .font(.dictusBody)
-                            .foregroundColor(.accentColor)
+        VStack(alignment: .leading, spacing: 20) {
+            Label(dictusKeyboardActive ? "Dictate a short phrase" : "Switch to sAiity", systemImage: dictusKeyboardActive ? "mic" : "globe")
+                .font(.title2.weight(.semibold))
+            Text(dictusKeyboardActive ? "Tap the microphone in the sAiity keyboard. Your words should appear below." : "Tap and hold the globe key, then choose sAiity.")
+                .font(.body).foregroundStyle(.secondary)
+            KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
+                .frame(minHeight: 150, maxHeight: 260)
+                .padding(14)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("Dictation result")
+            if firstDictationVerified {
+                OnboardingSuccessView(onComplete: finishOnboarding)
+                    .frame(minHeight: 180)
+            } else {
+                if fullAccessRequired {
+                    Text("Full Access required. Switch on Allow Full Access for sAiity in Settings, then return to the keyboard.")
+                        .font(.caption).foregroundStyle(.red)
+                    HStack {
+                        Button("Open Settings", action: openSettings).buttonStyle(.borderedProminent)
+                        Button("Return to setup", action: onReturnToSetup).buttonStyle(.bordered)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
-
-                // Title — changes based on state
-                Group {
-                    if !dictusKeyboardActive {
-                        Text("Hold \(Image(systemName: "globe")) and select sAiity")
-                    } else {
-                        Text("Tap the mic and start dictating")
-                    }
+                Text(accessibilityAnnouncement.isEmpty ? "Waiting for a real dictation insertion" : accessibilityAnnouncement)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityLabel("Dictation status")
+                if dictationFailed {
+                    Button("Return to setup", action: onReturnToSetup)
+                        .buttonStyle(.bordered)
                 }
-                .font(.dictusHeading)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-
-                if dictusKeyboardActive {
-                    // State 2: Text field with keyboard open
-                    // WHY frame minHeight + maxHeight: The UITextView is multi-line
-                    // and needs a bounded frame so SwiftUI can lay it out correctly.
-                    // minHeight 140 gives room for ~5 lines of text, and the text view
-                    // scrolls internally if the dictation is longer than that.
-                    KeyboardDetectingTextField(
-                        text: $textFieldContent,
-                        placeholder: String(localized: "Say something!"),
-                        autoFocus: true,
-                        onKeyboardChange: { _ in }
-                    )
-                    .frame(minHeight: 140, maxHeight: 220)
-                    .padding(14)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
-                    .transition(reduceMotion ? .identity : .opacity)
-                } else {
-                    // State 1: Animated keyboard switch illustration
-
-                    Spacer()
-
-                    // 4-frame animation showing the globe key flow
-                    KeyboardSwitchAnimation()
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 8)
-                        .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.95)))
-
-                    // Hidden text field to bring up the real keyboard immediately.
-                    // WHY hidden: The user needs the real system keyboard visible so
-                    // they can long-press the globe key. Only the keyboard matters.
-                    KeyboardDetectingTextField(
-                        text: $textFieldContent,
-                        placeholder: "",
-                        autoFocus: true,
-                        onKeyboardChange: { isDictus in
-                            if isDictus {
-                                withAnimation(
-                                    AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
-                                        ? .spring(response: 0.3, dampingFraction: 0.7)
-                                        : nil
-                                ) {
-                                    dictusKeyboardActive = true
-                                }
-                                PersistentLog.log(.onboardingDictusKeyboardActivated)
-                            }
-                        }
-                    )
-                    .frame(height: 1)
-                    .opacity(0)
-                }
-
-                Spacer(minLength: 0)
             }
         }
-        .fullScreenCover(isPresented: $showSuccess) {
-            // WHY fullScreenCover instead of ZStack overlay:
-            // When OnboardingSuccessView was overlaid inside this page's ZStack,
-            // it inherited the constrained layout from OnboardingView's VStack
-            // (which reserves space for the step indicator at the bottom). This
-            // made the success button's horizontal padding not render correctly.
-            // Using fullScreenCover guarantees a proper full-screen context.
-            OnboardingSuccessView(onComplete: finishOnboarding)
+        .padding(.vertical, 20)
+        .onAppear { observeTranscriptionReady() }
+        .onDisappear {
+            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
+            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
         }
-        .animation(
-            AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion)
-                ? .easeInOut(duration: 0.3)
-                : nil,
-            value: dictusKeyboardActive
-        )
-        .onChange(of: textFieldContent) { newValue in
-            // Auto-advance when the user has dictated enough text.
-            // WHY minTextLength: Prevents a single accidental keystroke from
-            // triggering success. Dictation produces multiple characters at once.
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if dictusKeyboardActive && trimmed.count >= minTextLength && !hasAutoAdvanced {
-                hasAutoAdvanced = true
-                PersistentLog.log(.onboardingGlobeTutorialTextDetected)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    advanceToSuccess()
+        .onChange(of: textFieldContent) { _, newValue in
+            guard awaitingInsertion, !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard fullAccessVerified else { return }
+            firstDictationVerified = true
+            awaitingInsertion = false
+            accessibilityAnnouncement = "First dictation inserted. Setup is complete."
+            UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+            PersistentLog.log(.onboardingGlobeTutorialTextDetected)
+        }
+    }
+
+    private func handleKeyboardChange(_ isDictus: Bool) {
+        guard isDictus else { return }
+        dictusKeyboardActive = true
+        fullAccessVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        guard fullAccessVerified else {
+            fullAccessRequired = true
+            dictationFailed = true
+            accessibilityAnnouncement = "Full Access required before dictation can start."
+            UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+            return
+        }
+        fullAccessRequired = false
+        accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
+        UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+        PersistentLog.log(.onboardingDictusKeyboardActivated)
+    }
+
+    private func observeTranscriptionReady() {
+        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.transcriptionReady) {
+            DispatchQueue.main.async {
+                guard dictusKeyboardActive else { return }
+                fullAccessVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+                guard fullAccessVerified else {
+                    fullAccessRequired = true
+                    dictationFailed = true
+                    accessibilityAnnouncement = "Full Access required before dictation can start."
+                    return
                 }
+                textFieldContent = ""
+                awaitingInsertion = true
+                accessibilityAnnouncement = "Dictation received. Waiting for insertion."
+                UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+            }
+        }
+        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.statusChanged) {
+            DispatchQueue.main.async {
+                guard AppGroup.defaults.string(forKey: SharedKeys.dictationStatus) == DictationStatus.failed.rawValue else { return }
+                dictationFailed = true
+                accessibilityAnnouncement = "Dictation failed. Return to setup to check keyboard access and model readiness."
             }
         }
     }
 
-    // MARK: - Navigation
-
-    private func advanceToSuccess() {
-        // Dismiss keyboard before showing success screen
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            showSuccess = true
-        }
-    }
-
-    private func skipTutorial() {
-        PersistentLog.log(.onboardingGlobeTutorialSkipped)
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        finishOnboarding()
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     /// Final cleanup before dismissing onboarding.

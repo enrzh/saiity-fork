@@ -15,6 +15,8 @@ struct PolishDebugView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var isExporting = false
+    @State private var showClearConfirmation = false
+    @State private var showExportedFeedback = false
     /// #357 spike, throwaway. Arms ONE Apple FM probe run inside the keyboard
     /// extension; see `DictusKeyboard/AppleFMExtensionProbe.swift`.
     @State private var probeArmed = false
@@ -81,10 +83,7 @@ struct PolishDebugView: View {
                     }
                     .disabled(storedCount == 0 || isExporting)
                     Button(role: .destructive) {
-                        Task {
-                            await PolishCoordinator.shared.clearMetricsRing()
-                            await refresh()
-                        }
+                        showClearConfirmation = true
                     } label: {
                         Label("Clear", systemImage: "trash")
                     }
@@ -118,6 +117,22 @@ struct PolishDebugView: View {
                ),
                actions: { Button("OK", role: .cancel) { exportError = nil } },
                message: { Text(exportError ?? "") })
+        .confirmationDialog("Clear polish diagnostics", isPresented: $showClearConfirmation, titleVisibility: .visible) {
+            Button("Clear polish diagnostics", role: .destructive) {
+                Task {
+                    await PolishCoordinator.shared.clearMetricsRing()
+                    await refresh()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes local polish events. It does not change polish settings.")
+        }
+        .alert("Diagnostics exported", isPresented: $showExportedFeedback) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The complete seven-day polish window is ready to share.")
+        }
         .task { await refresh() }
         .refreshable { await refresh() }
     }
@@ -129,6 +144,7 @@ struct PolishDebugView: View {
         let allEntries = await PolishCoordinator.shared.metricsAllEntries()
         do {
             exportURL = try PolishDebugExporter.writeToTempFile(entries: allEntries)
+            showExportedFeedback = true
         } catch {
             exportError = error.localizedDescription
         }

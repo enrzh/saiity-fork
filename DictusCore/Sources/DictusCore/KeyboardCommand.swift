@@ -17,4 +17,20 @@ public enum KeyboardCommand {
         case .at: return .insertText("@")
         }
     }
+
+    /// Routes through injected closures so the UIKit owner can be tested without
+    /// constructing a text document proxy.
+    public func perform(
+        ifEnabled enabled: Bool = true,
+        deleteBackward: () -> Void,
+        insertText: (String) -> Void
+    ) {
+        guard enabled else { return }
+        switch proxyAction {
+        case .deleteBackward:
+            deleteBackward()
+        case .insertText(let value):
+            insertText(value)
+        }
+    }
 }

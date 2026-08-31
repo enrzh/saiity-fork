@@ -108,6 +108,7 @@ struct ModelLoadingOverlay: View {
                     .padding(.bottom, 40)
             }
         }
+        .accessibilityAddTraits(.isModal)
         .interactiveDismissDisabled(true)
         .onReceive(NotificationCenter.default.publisher(for: .dictusModelLoadStateChanged)) { _ in
             checkForCompletion()
@@ -162,9 +163,10 @@ struct ModelLoadingOverlay: View {
                         .progressViewStyle(.linear)
                         .tint(.accentColor)
                         .frame(maxWidth: 240)
-                    Text("\(Int(progress * 100)) %")
+                    Text(progressLabel(progress))
                         .font(.dictusCaption.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(Text("Download progress"))
                     // Moving byte counter — reads as alive even while the
                     // percentage crawls through the 445 MB Encoder file (#207).
                     if let bytes = modelManager.downloadByteInfo[modelIdentifier] {
@@ -315,6 +317,10 @@ struct ModelLoadingOverlay: View {
         case .ready:
             return []
         }
+    }
+
+    private func progressLabel(_ progress: Float) -> String {
+        "\(Int(progress * 100))%"
     }
 
     private func checkForCompletion() {

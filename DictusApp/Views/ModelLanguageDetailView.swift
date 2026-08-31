@@ -36,22 +36,23 @@ struct ModelLanguageDetailView: View {
                 Section {
                     Label {
                         Text(support.coverage.localizedSummary)
-                            .font(.dictusSubheading)
+                            .font(.headline)
                     } icon: {
                         Image(systemName: "globe")
-                            .foregroundStyle(Color.dictusAccent)
+                            .foregroundStyle(.tint)
                     }
                 }
 
-                // Curated main languages with optional quality notes
+                // Keep the most useful languages at the top, with notes in the
+                // row rather than as a separate color-only treatment.
                 Section {
-                    ForEach(support.highlights, id: \.code) { entry in
+                    ForEach(languageRows, id: \.code) { entry in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ModelLanguageSupport.localizedLanguageName(for: entry.code))
                             if let note = entry.note {
-                                Text(note.localizedText)
-                                    .font(.dictusCaption)
-                                    .foregroundStyle(noteColor(for: note))
+                                Label(note.localizedText, systemImage: noteSymbol(for: note))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -60,13 +61,14 @@ struct ModelLanguageDetailView: View {
                 }
 
                 // Whisper: complete tokenizer language list grouped by
-                // published quality tier (design round). Flowing text per
-                // tier keeps ~100 languages scannable instead of 100 rows.
+                // published quality tier. Each language gets a native row so
+                // VoiceOver and Dynamic Type can scan the list predictably.
                 ForEach(Array(support.tierGroups.enumerated()), id: \.offset) { index, group in
                     Section {
-                        Text(joinedLanguageNames(for: group))
-                            .font(.dictusCaption)
-                            .foregroundStyle(.secondary)
+                        ForEach(languageRows(for: group), id: \.self) { language in
+                            Label(language, systemImage: qualitySymbol(for: group.tier))
+                                .foregroundStyle(.primary)
+                        }
                     } header: {
                         Text(localizedTierHeader(for: group.tier))
                     } footer: {
@@ -84,49 +86,45 @@ struct ModelLanguageDetailView: View {
                 // extra warning row as redundant).
                 if !support.additionalCodes.isEmpty {
                     Section {
-                        Text(additionalLanguagesText)
-                            .font(.dictusCaption)
-                            .foregroundStyle(.secondary)
+                        ForEach(additionalLanguageRows, id: \.self) { language in
+                            Text(language)
+                        }
                     } header: {
                         Text("Also supported")
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color.dictusBackground.ignoresSafeArea())
             .navigationTitle(model.displayName)
             .navigationBarTitleDisplayMode(.inline)
+            .accessibilityAddTraits(.isModal)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
                     }
+                    .accessibilityLabel("Close language support")
                 }
             }
         }
     }
 
-    /// Comma-joined localized names for the non-highlighted documented
-    /// languages (Parakeet's remaining 21), sorted for stable reading order
-    /// in the user's language.
-    private var additionalLanguagesText: String {
-        joinedNames(for: support.additionalCodes)
+    private var languageRows: [ModelLanguageSupport.Entry] {
+        support.highlights
     }
 
-    /// Comma-joined localized names for a Whisper quality tier.
-    /// The highlighted languages (already shown with notes in the "Main
-    /// languages" section) are filtered out so nothing appears twice.
-    private func joinedLanguageNames(for group: ModelLanguageSupport.TierGroup) -> String {
+    private var additionalLanguageRows: [String] {
+        localizedNames(for: support.additionalCodes)
+    }
+
+    private func languageRows(for group: ModelLanguageSupport.TierGroup) -> [String] {
         let highlighted = Set(support.highlights.map(\.code))
-        return joinedNames(for: group.codes.filter { !highlighted.contains($0) })
+        return localizedNames(for: group.codes.filter { !highlighted.contains($0) })
     }
 
-    /// Localize, sort by the user's language, and join with commas.
-    private func joinedNames(for codes: [String]) -> String {
+    private func localizedNames(for codes: [String]) -> [String] {
         codes
             .map { ModelLanguageSupport.localizedLanguageName(for: $0) }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            .joined(separator: ", ")
     }
 
     /// Localized section header for a quality tier.
@@ -141,13 +139,23 @@ struct ModelLanguageDetailView: View {
         }
     }
 
-    /// Warning-tinted color for caveat notes, secondary for positive ones.
-    private func noteColor(for note: ModelLanguageSupport.QualityNote) -> Color {
+    private func noteSymbol(for note: ModelLanguageSupport.QualityNote) -> String {
         switch note {
         case .impreciseUpgradeRecommended:
-            return .orange
+            return "exclamationmark.triangle"
         case .goodOnThisModel:
-            return .secondary
+            return "checkmark.circle"
+        }
+    }
+
+    private func qualitySymbol(for tier: ModelLanguageSupport.QualityTier) -> String {
+        switch tier {
+        case .good:
+            return "checkmark.circle"
+        case .fair:
+            return "circle.lefthalf.filled"
+        case .limited:
+            return "exclamationmark.circle"
         }
     }
 }

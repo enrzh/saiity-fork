@@ -64,18 +64,32 @@ final class FrenchAdaptiveKeyTests: XCTestCase {
         // Restore rather than clear: the suite is shared with every other test class,
         // and clearing would hand them a different language than they started with.
         let previousLanguage = defaults?.string(forKey: SharedKeys.language)
+        let previousSelection = defaults?.string(forKey: SharedKeys.keyboardLanguageSelection)
+        let previousMigrationVersion = defaults?.object(forKey: SharedKeys.keyboardLanguageMigrationVersion)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageSelection)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageMigrationVersion)
         defer {
             if let previousLanguage {
                 defaults?.set(previousLanguage, forKey: SharedKeys.language)
             } else {
                 defaults?.removeObject(forKey: SharedKeys.language)
             }
+            if let previousSelection {
+                defaults?.set(previousSelection, forKey: SharedKeys.keyboardLanguageSelection)
+            } else {
+                defaults?.removeObject(forKey: SharedKeys.keyboardLanguageSelection)
+            }
+            if let previousMigrationVersion {
+                defaults?.set(previousMigrationVersion, forKey: SharedKeys.keyboardLanguageMigrationVersion)
+            } else {
+                defaults?.removeObject(forKey: SharedKeys.keyboardLanguageMigrationVersion)
+            }
         }
 
-        defaults?.set(SupportedLanguage.french.rawValue, forKey: SharedKeys.language)
+        KeyboardLanguageSelection.explicit(.french).persist(to: defaults!)
         XCTAssertEqual(FrenchAdaptiveKey.label(afterTyping: "e"), "\u{00E9}")
 
-        defaults?.set(SupportedLanguage.english.rawValue, forKey: SharedKeys.language)
+        KeyboardLanguageSelection.explicit(.english).persist(to: defaults!)
         XCTAssertEqual(FrenchAdaptiveKey.label(afterTyping: "e"), "'")
     }
 }

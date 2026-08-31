@@ -97,7 +97,12 @@ public enum KeyboardLayoutPreference {
             // The pre-#272 semantics of `LayoutType.active`, reproduced exactly: the stored
             // raw value, AZERTY when it is missing or unreadable.
             let effective = legacyRaw.flatMap(LayoutType.init(rawValue:)) ?? .azerty
-            frozen[SupportedLanguage.active.rawValue] = effective.rawValue
+            // During this migration the legacy language key is the only historical
+            // identity available; the new automatic selection may resolve differently
+            // on the current system locale.
+            let legacyLanguage = defaults.string(forKey: SharedKeys.language)
+                .flatMap(SupportedLanguage.init(rawValue:)) ?? .french
+            frozen[legacyLanguage.rawValue] = effective.rawValue
         }
         defaults.set(frozen, forKey: SharedKeys.keyboardLayoutsByLanguage)
     }

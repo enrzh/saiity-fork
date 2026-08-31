@@ -1,6 +1,7 @@
 // DictusApp/Views/RecordingView.swift
 // Stable-layout recording screen: waveform + mic button always in place, text appears below.
 import SwiftUI
+import UIKit
 import DictusCore
 
 /// Determines the context in which RecordingView is shown.
@@ -95,11 +96,19 @@ struct RecordingView: View {
                         }
                         .frame(width: 44, height: 44)
                         .buttonStyle(GlassPressStyle(pressedScale: 1.35))
+                        .accessibilityLabel("Close dictation")
+                        .accessibilityHint("Returns to Home")
                         .padding(.leading, 20)
                         .padding(.top, 8)
                     }
                     Spacer()
                 }
+
+                Text("Dictation")
+                    .font(.title2.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
 
                 // MARK: - Upper zone: result text (centered between top and waveform)
                 // WHY above waveform: The waveform+mic are anchored in the bottom
@@ -113,25 +122,28 @@ struct RecordingView: View {
                         // that exceeds the zone. Short text sits centered; long text scrolls.
                         GeometryReader { geo in
                             ScrollView {
-                                Button {
-                                    UIPasteboard.general.string = result
-                                    showCopiedFeedback = true
-                                    HapticFeedback.recordingStopped()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                        showCopiedFeedback = false
-                                    }
-                                } label: {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("Processed result")
+                                        .font(.headline)
                                     Text(result)
                                         .font(.dictusBody)
-                                        .foregroundStyle(.primary)
-                                        .multilineTextAlignment(.center)
-                                        .padding()
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Button("Copy") {
+                                        UIPasteboard.general.string = result
+                                        showCopiedFeedback = true
+                                        HapticFeedback.recordingStopped()
+                                        UIAccessibility.post(notification: .announcement, argument: "Copied")
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                            showCopiedFeedback = false
+                                        }
+                                    }
+                                    if showCopiedFeedback {
+                                        Text("Copied")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
-                                .buttonStyle(GlassPressStyle(pressedScale: 0.96))
-                                .padding(.horizontal, 32)
+                                .padding(.horizontal, 24)
                                 .frame(minHeight: geo.size.height)
                             }
                         }
@@ -142,22 +154,33 @@ struct RecordingView: View {
                                 .font(.system(size: 32))
                                 .foregroundColor(.orange)
                             Text(userFacingError(error))
-                                .font(.dictusCaption)
-                                .foregroundColor(.dictusRecording)
+                                .font(.body)
+                                .foregroundStyle(.primary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 32)
 
-                            if mode == .onboarding {
-                                Button("Retry") {
-                                    errorMessage = nil
-                                    showError = false
-                                    showResult = false
+                            Button("Try again") {
+                                retryRecording()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            if mode == .standalone {
+                                Button("Close") {
+                                    dismissRecording()
                                 }
-                                .font(.dictusBody)
-                                .foregroundColor(.dictusAccent)
-                                .padding(.top, 8)
+                                .buttonStyle(.bordered)
                             }
                         }
+                    } else {
+                        VStack(spacing: 8) {
+                            Text("Live transcript")
+                                .font(.headline)
+                            Text(displayedStatus == .recording ? "Listening..." : "Your words will appear after recording.")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
 
                     // Onboarding: auto-advance handled in handleStatusChange
@@ -223,6 +246,8 @@ struct RecordingView: View {
             hold = TranscribingStageHold()
             displayedStatus = .idle
         }
+        .accessibilityAddTraits(.isModal)
+        .accessibilityElement(children: .contain)
         .navigationBarHidden(true)
     }
 
@@ -257,6 +282,7 @@ struct RecordingView: View {
     /// Driven by `displayedStatus` rather than the coordinator's, so the animation and
     /// the label below change together (#309).
     private var waveformAnimation: WaveformAnimation {
+        if reduceMotion { return .still }
         switch displayedStatus {
         case .recording:
             return .micLevels
@@ -280,35 +306,10 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var statusText: some View {
-        if displayedStatus == .recording {
-            Text(formattedTime)
-                .font(.system(size: 20, weight: .light, design: .monospaced))
-                .foregroundStyle(.secondary)
-        } else if displayedStatus == .transcribing {
-            Text("\(displayedStatus.recordingLabel)...")
-                .font(.dictusCaption)
-                .foregroundStyle(.secondary)
-        } else if displayedStatus == .processing {
-            // The waveform is shared between the two stages here, but the label is
-            // not: naming the wrong stage is the complaint #267 exists to fix, and
-            // it costs a user dictating inside DictusApp the same six seconds of
-            // wondering whether the app has hung.
-            Text("\(displayedStatus.recordingLabel)...")
-                .font(.dictusCaption)
-                .foregroundStyle(.secondary)
-        } else if showCopiedFeedback {
-            Text("Copied!")
-                .font(.dictusCaption)
-                .foregroundStyle(Color.dictusSuccess)
-        } else if showResult {
-            Text("Tap text to copy")
-                .font(.dictusCaption)
-                .foregroundStyle(.secondary.opacity(0.6))
-        } else {
-            // Empty placeholder to maintain layout
-            Text(" ")
-                .font(.dictusCaption)
-        }
+        Text(displayedStatus == .recording ? formattedTime : statusTitle)
+            .font(displayedStatus == .recording ? .title3.monospacedDigit() : .subheadline)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(statusTitle)
     }
 
     // MARK: - Mic / Stop Button
@@ -365,6 +366,21 @@ struct RecordingView: View {
         coordinator.startDictation()
     }
 
+    private func retryRecording() {
+        coordinator.resetStatus()
+        startRecording()
+    }
+
+    private func dismissRecording() {
+        HapticFeedback.recordingStopped()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { isDismissing = true }
+        let generation = coordinator.dictationGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            guard coordinator.dictationGeneration == generation else { return }
+            coordinator.resetStatus()
+        }
+    }
+
     private func stopRecording() {
         HapticFeedback.recordingStopped()
         coordinator.stopDictation()
@@ -407,6 +423,7 @@ struct RecordingView: View {
     // MARK: - Status Handling
 
     private func handleStatusChange(_ newStatus: DictationStatus) {
+        UIAccessibility.post(notification: .announcement, argument: statusAnnouncement(for: newStatus))
         switch newStatus {
         case .ready:
             if let result = coordinator.lastResult, !result.isEmpty {
@@ -455,6 +472,31 @@ struct RecordingView: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private var statusTitle: String {
+        if showCopiedFeedback { return "Copied" }
+        if showResult { return "Dictation complete" }
+        switch displayedStatus {
+        case .idle, .ready: return "Ready to record"
+        case .requested: return "Starting dictation"
+        case .recording: return "Recording"
+        case .transcribing: return "Transcribing"
+        case .processing: return "Processing"
+        case .failed: return "Dictation failed"
+        }
+    }
+
+    private func statusAnnouncement(for status: DictationStatus) -> String {
+        switch status {
+        case .idle: return "Ready to record"
+        case .requested: return "Starting dictation"
+        case .recording: return "Recording"
+        case .transcribing: return "Transcribing"
+        case .processing: return "Processing"
+        case .ready: return "Dictation complete"
+        case .failed: return "Dictation failed. Try again or close."
+        }
     }
 }
 

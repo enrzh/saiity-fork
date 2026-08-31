@@ -133,7 +133,17 @@ class LiveActivityManager {
     /// Whether the user has enabled Live Activity in Settings.
     /// WHY UserDefaults read (not @AppStorage): LiveActivityManager is not a SwiftUI view.
     private var isEnabled: Bool {
-        UserDefaults(suiteName: AppGroup.identifier)?.bool(forKey: SharedKeys.liveActivityEnabled) ?? true
+        let defaults = UserDefaults(suiteName: AppGroup.identifier)
+        let activityEnabled = defaults?.object(forKey: SharedKeys.liveActivityEnabled) == nil
+            || defaults?.bool(forKey: SharedKeys.liveActivityEnabled) == true
+        let serviceEnabled = defaults?.object(forKey: SharedKeys.serviceEnabled) == nil
+            || defaults?.bool(forKey: SharedKeys.serviceEnabled) == true
+        return activityEnabled && serviceEnabled
+    }
+
+    private var detectionMuted: Bool {
+        currentActivity?.content.state.detectionMuted
+            ?? AppGroup.defaults.bool(forKey: SharedKeys.detectionMuted)
     }
 
     /// Task for auto-dismiss after result/failure display.
@@ -202,7 +212,7 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityEnded(reason: "audioInterrupted"))
 
         Task {
-            let finalState = DictusLiveActivityAttributes.ContentState(phase: .failed)
+            let finalState = DictusLiveActivityAttributes.ContentState(phase: .failed, detectionMuted: self.detectionMuted)
             await activity.end(
                 .init(state: finalState, staleDate: nil),
                 dismissalPolicy: .immediate
@@ -231,7 +241,7 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityEnded(reason: "warmStateReleased"))
 
         Task {
-            let finalState = DictusLiveActivityAttributes.ContentState(phase: .standby)
+            let finalState = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted)
             await activity.end(
                 .init(state: finalState, staleDate: nil),
                 dismissalPolicy: .immediate
@@ -390,7 +400,7 @@ class LiveActivityManager {
         }
 
         let attributes = DictusLiveActivityAttributes()
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby)
+        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
         // staleDate: if app is killed without willTerminate firing, iOS auto-removes
         // the DI after this interval. 30s is short enough to clear ghosts quickly (#84).
         let staleDate = Date().addingTimeInterval(staleInterval)
@@ -427,7 +437,7 @@ class LiveActivityManager {
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "powerButton"))
         Task {
-            let finalState = DictusLiveActivityAttributes.ContentState(phase: .standby)
+            let finalState = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted)
             await activity.end(
                 .init(state: finalState, staleDate: nil),
                 dismissalPolicy: .immediate
@@ -510,7 +520,8 @@ class LiveActivityManager {
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .recording,
                 recordingStartDate: Date(),
-                waveformLevels: [0.3, 0.5, 0.7, 0.5, 0.3]
+                waveformLevels: [0.3, 0.5, 0.7, 0.5, 0.3],
+                detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> recording")
@@ -523,7 +534,8 @@ class LiveActivityManager {
         let state = DictusLiveActivityAttributes.ContentState(
             phase: .recording,
             recordingStartDate: Date(),
-            waveformLevels: [0.3, 0.5, 0.7, 0.5, 0.3]
+            waveformLevels: [0.3, 0.5, 0.7, 0.5, 0.3],
+            detectionMuted: detectionMuted
         )
         await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(staleInterval)))
         // currentPhase already set to .recording by caller before Task (#49)
@@ -560,7 +572,8 @@ class LiveActivityManager {
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .recording,
                 recordingStartDate: activity.content.state.recordingStartDate,
-                waveformLevels: downsampled
+                waveformLevels: downsampled,
+                detectionMuted: activity.content.state.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
         }
@@ -582,7 +595,8 @@ class LiveActivityManager {
         Task {
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .transcribing,
-                waveformLevels: [0.3, 0.5, 0.4, 0.5, 0.3]
+                waveformLevels: [0.3, 0.5, 0.4, 0.5, 0.3],
+                detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> transcribing")
@@ -606,7 +620,8 @@ class LiveActivityManager {
         Task {
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .processing,
-                waveformLevels: [0.2, 0.5, 0.8, 0.5, 0.2]
+                waveformLevels: [0.2, 0.5, 0.8, 0.5, 0.2],
+                detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> processing")
@@ -639,7 +654,8 @@ class LiveActivityManager {
             let truncatedPreview = preview.map { String($0.prefix(100)) }
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .ready,
-                transcriptionPreview: truncatedPreview
+                transcriptionPreview: truncatedPreview,
+                detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> ready")
@@ -674,7 +690,7 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: "transcribing", to: "failed"))
         currentPhase = .failed  // Update BEFORE async work to prevent races (#49)
         Task {
-            let state = DictusLiveActivityAttributes.ContentState(phase: .failed)
+            let state = DictusLiveActivityAttributes.ContentState(phase: .failed, detectionMuted: self.detectionMuted)
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> failed")
         }
@@ -891,7 +907,7 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: currentPhase.rawValue, to: "standby"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         syncStateMachine(to: .standby)
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby)
+        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
         // Refresh staleDate on each return to standby (#84: 30s clears ghosts after force-quit)
         let staleDate = Date().addingTimeInterval(staleInterval)
         await activity.update(.init(state: state, staleDate: staleDate))
@@ -939,7 +955,7 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: abandoned.rawValue, to: "standby-abandoned"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         Task {
-            let state = DictusLiveActivityAttributes.ContentState(phase: .standby)
+            let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted)
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> standby (abandoned \(abandoned.rawValue, privacy: .public))")
         }
@@ -966,7 +982,7 @@ class LiveActivityManager {
 
                 await activity.end(
                     .init(
-                        state: DictusLiveActivityAttributes.ContentState(phase: .standby),
+                        state: DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted),
                         staleDate: nil
                     ),
                     dismissalPolicy: .immediate
@@ -991,7 +1007,7 @@ class LiveActivityManager {
         let activities = Activity<DictusLiveActivityAttributes>.activities
         guard !activities.isEmpty else { return }
 
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby)
+        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
         for activity in activities {
             Task {
                 await activity.end(

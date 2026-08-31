@@ -17,10 +17,40 @@ import Foundation
 import DictusCore
 
 struct StopStandbyIntent: LiveActivityIntent {
+    @Parameter(title: "Toggle detection") var toggleDetection: Bool
+
+    init() {
+        toggleDetection = false
+    }
+
+    init(toggleDetection: Bool = false) {
+        self.toggleDetection = toggleDetection
+    }
+
     static var title: LocalizedStringResource = "Stop Standby"
     static var description = IntentDescription("Turn off sAiity standby mode")
 
     func perform() async throws -> some IntentResult {
+        if toggleDetection {
+            let defaults = UserDefaults(suiteName: AppGroup.identifier)
+            let muted = !(defaults?.bool(forKey: SharedKeys.detectionMuted) ?? false)
+            defaults?.set(muted, forKey: SharedKeys.detectionMuted)
+            defaults?.synchronize()
+
+            for activity in Activity<DictusLiveActivityAttributes>.activities {
+                let current = activity.content.state
+                let state = DictusLiveActivityAttributes.ContentState(
+                    phase: current.phase,
+                    recordingStartDate: current.recordingStartDate,
+                    waveformLevels: current.waveformLevels,
+                    transcriptionPreview: current.transcriptionPreview,
+                    detectionMuted: muted
+                )
+                await activity.update(.init(state: state, staleDate: nil))
+            }
+            return .result()
+        }
+
         // End all Live Activities
         for activity in Activity<DictusLiveActivityAttributes>.activities {
             await activity.end(

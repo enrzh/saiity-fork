@@ -1,159 +1,132 @@
-// DictusApp/Onboarding/OnboardingView.swift
-// Container for the onboarding flow with programmatic-only step advancement.
 import SwiftUI
+import UIKit
 import DictusCore
 
-/// Onboarding flow presented as a fullScreenCover on first launch.
-/// Steps: Welcome, Mic, Keyboard setup, Transcription polish opt-in (when the
-/// device supports Apple Foundation Models), Model download, Globe tutorial.
-///
-/// WHY switch/case instead of TabView:
-/// TabView(.page) allows the user to swipe between pages, which means they could
-/// skip required steps (mic permission, keyboard setup, model download).
-/// Using a manual switch/case with @State currentPage ensures the user can ONLY
-/// advance via each page's completion button — no swiping. This guarantees every
-/// prerequisite is properly set up before the user reaches the test recording step.
-///
-/// WHY @Binding isComplete:
-/// The parent (DictusApp.swift) owns `hasCompletedOnboarding` via @AppStorage.
-/// When the last page (TestRecordingPage) finishes, it sets isComplete = true,
-/// which writes to App Group UserDefaults and dismisses the fullScreenCover.
+enum OnboardingStage: Int, CaseIterable {
+    case welcome
+    case permissions
+    case availability
+    case tryIt
+}
+
 struct OnboardingView: View {
     @Binding var isComplete: Bool
-
-    /// WHY @AppStorage instead of @SceneStorage:
-    /// @SceneStorage relies on iOS scene restoration which can fail when the
-    /// process is forcibly terminated. When the user enables "Allow Full Access"
-    /// in iOS Settings, iOS's TCC daemon kills the main app because the
-    /// kTCCServiceKeyboardNetwork permission changes. We need the onboarding
-    /// step to survive this termination so the user resumes at the right step.
-    /// @AppStorage writes to UserDefaults (App Group) which is always persisted
-    /// across any app termination.
-    @AppStorage(SharedKeys.onboardingCurrentPage, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var currentPage: Int = 0
-
-    /// Track which steps have been completed to show in the step indicator.
-    @State private var completedSteps: Set<Int> = []
-
-    /// Whether the transcription polish opt-in page is part of the flow (#213).
-    ///
-    /// WHY computed once at init: PolishAvailability queries the Foundation
-    /// Models SDK; the answer can't meaningfully change mid-onboarding, and a
-    /// stable value keeps the page indices coherent for the whole flow.
-    /// When false (device can never run Apple FM), the page is skipped entirely
-    /// so we never show a toggle that does nothing.
-    private let showsPolishPage = PolishAvailability.isToggleVisible
-
-    /// Total number of onboarding steps shown in the indicator
-    /// (Welcome, Mic, Keyboard, [Polish], Model, Test).
-    private var totalSteps: Int { showsPolishPage ? 6 : 5 }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(SharedKeys.onboardingCurrentPage, store: AppGroup.defaults) private var storedStage = 0
+    @State private var stage: OnboardingStage = .welcome
+    @State private var didLoadStage = false
 
     var body: some View {
-        ZStack {
-            Color.dictusBackground
-                .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color(.systemBackground).ignoresSafeArea()
+                ScrollView {
+                    stageContent.frame(maxWidth: 560).frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 24)
+                }.scrollBounceBehavior(.basedOnSize)
+            }
+            .navigationTitle("Set up sAiity")
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom, spacing: 0) { stageProgress.padding(.horizontal, 24).padding(.vertical, 12).background(.bar) }
+            .interactiveDismissDisabled()
+            .onAppear {
+                guard !didLoadStage else { return }
+                stage = OnboardingStage(rawValue: min(max(storedStage, 0), 3)) ?? .welcome
+                didLoadStage = true
+            }
+            .onChange(of: stage) { _, newStage in
+                storedStage = newStage.rawValue
+                UIAccessibility.post(notification: .announcement, argument: "Step \(newStage.rawValue + 1) of 4")
+            }
+        }
+    }
 
-            VStack(spacing: 0) {
-                // Current page content — only one page visible at a time
-                // WHY Group instead of ZStack: Group avoids stacking all 5 pages
-                // on top of each other (unnecessary view hierarchy). Only the
-                // matched case is instantiated.
-                Group {
-                    switch currentPage {
-                    case 0:
-                        WelcomePage(onNext: { advanceToPage(1) })
-                    case 1:
-                        MicPermissionPage(onNext: { advanceToPage(2) })
-                    case 2:
-                        // Skip the polish page index when the device can't run
-                        // Apple Foundation Models at all.
-                        KeyboardSetupPage(onNext: { advanceToPage(showsPolishPage ? 3 : 4) })
-                    case 3 where showsPolishPage:
-                        PolishTogglePage(onNext: { advanceToPage(4) })
-                    case 3:
-                        // Stale persisted index: a user mid-onboarding on the old
-                        // flow (layer choice lived at index 3) relaunching on a
-                        // device without polish support resumes at model download.
-                        ModelDownloadPage(onNext: { advanceToPage(5) })
-                    case 4:
-                        ModelDownloadPage(onNext: { advanceToPage(5) })
-                    case 5:
-                        GlobeKeyTutorialPage(onComplete: {
-                            // Reset currentPage to 0 on completion so a future
-                            // onboarding reset (e.g., via Settings → Reset) starts
-                            // cleanly from the first step instead of resuming here.
-                            currentPage = 0
-                            isComplete = true
-                        })
-                    default:
-                        // Safety fallback — should never happen
-                        WelcomePage(onNext: { advanceToPage(1) })
-                    }
+    @ViewBuilder private var stageContent: some View {
+        switch stage {
+        case .welcome: WelcomePage(onNext: { advance(to: .permissions) })
+        case .permissions: MicPermissionPage(onNext: { advance(to: .availability) })
+        case .availability: AvailabilityPage(onNext: { advance(to: .tryIt) })
+        case .tryIt:
+            GlobeKeyTutorialPage(
+                onComplete: finishOnboarding,
+                onReturnToSetup: { advance(to: .availability) }
+            )
+            .environmentObject(DictationCoordinator.shared)
+        }
+    }
+
+    private var stageProgress: some View {
+        VStack(spacing: 8) {
+            ProgressView(value: Double(stage.rawValue + 1), total: 4).tint(.accentColor)
+            Text("Step \(stage.rawValue + 1) of 4").font(.caption).foregroundStyle(.secondary)
+                .accessibilityLabel("Onboarding progress")
+                .accessibilityValue(Text("Step \(stage.rawValue + 1) of 4"))
+        }
+    }
+
+    private func advance(to next: OnboardingStage) {
+        withAnimation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion)) { stage = next }
+    }
+
+    private func finishOnboarding() { storedStage = 0; isComplete = true }
+}
+
+struct AvailabilityPage: View {
+    let onNext: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var modelManager = ModelManager()
+    @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
+    @AppStorage(SharedKeys.polishEnabled, store: AppGroup.defaults) private var polishEnabled = false
+    @State private var keyboardInstalled = false
+    @State private var isDownloading = false
+    @State private var errorMessage: String?
+    @State private var preparingModelID: String?
+    private var recommendedModel: String { ModelInfo.recommendedIdentifier() }
+    private var modelReady: Bool { modelManager.downloadedModels.contains(recommendedModel) && modelManager.modelStates[recommendedModel] == .ready }
+    private var canContinue: Bool { keyboardInstalled && modelReady }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Label("Make sAiity available", systemImage: "checklist").font(.title2.weight(.semibold))
+            Text("Complete the essentials once. Voice processing stays on this iPhone.").font(.body).foregroundStyle(.secondary)
+            checklistRow("Add sAiity keyboard", detail: keyboardInstalled ? "Installed" : "Open Settings to add it", done: keyboardInstalled, action: openSettings)
+            checklistRow("Allow Full Access", detail: fullAccessVerified ? "Verified by sAiity keyboard" : "Open Settings, enable it, then return to sAiity", done: fullAccessVerified, action: openSettings)
+            VStack(alignment: .leading, spacing: 10) {
+                checklistRow("Install voice model", detail: modelStatus, done: modelReady, action: startDownload)
+                if isDownloading, let progress = modelManager.downloadProgress[recommendedModel] {
+                    ProgressView(value: Double(progress)).tint(.accentColor).accessibilityLabel("Downloading voice model").accessibilityValue("\(Int(progress * 100)) percent")
+                    if let bytes = modelManager.downloadByteInfo[recommendedModel] { Text("\(bytes.downloadedMB) MB of \(bytes.totalMB) MB").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                 }
-                // Slide transition: new page slides in from trailing edge,
-                // old page slides out to leading edge — standard forward navigation feel.
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing),
-                    removal: .move(edge: .leading)
-                ))
-                .id(currentPage) // Force SwiftUI to treat each page as a unique view for transitions
-
-                // Step indicator dots at the bottom
-                stepIndicator
-                    .padding(.bottom, 24)
+                if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.red); Button("Try again", action: startDownload).buttonStyle(.bordered) }
+            }
+            Toggle("Optional cleanup", isOn: $polishEnabled).accessibilityHint("Applies local cleanup after dictation")
+            Button("Try dictation", action: onNext).frame(maxWidth: .infinity).buttonStyle(.borderedProminent).controlSize(.large)
+                .disabled(!canContinue).accessibilityHint(canContinue ? "Continue to the first dictation" : "Add the keyboard, allow Full Access, and install the voice model first")
+            if !fullAccessVerified {
+                Button("Check keyboard status", action: refreshKeyboard)
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityHint("Reads the recent keyboard handshake; switch to sAiity keyboard to verify Full Access")
             }
         }
-        // Prevent interactive dismiss (swipe down) on the fullScreenCover
-        .interactiveDismissDisabled()
-        .animation(.easeInOut(duration: 0.3), value: currentPage)
-    }
-
-    // MARK: - Step Indicator
-
-    /// Row of dots showing onboarding progress.
-    ///
-    /// WHY custom dots instead of TabView's built-in page indicator:
-    /// Since we replaced TabView with manual switch/case, we need our own dots.
-    /// Filled dot = current or completed step. Outlined dot = future step.
-    /// This gives the user a clear sense of progress through the flow.
-    private var stepIndicator: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<totalSteps, id: \.self) { step in
-                Circle()
-                    .fill(dotColor(for: step))
-                    .frame(width: 8, height: 8)
-            }
-        }
-        .padding(.top, 16)
-    }
-
-    /// Map a page index to its dot position in the step indicator.
-    ///
-    /// WHY: when the polish page is hidden the flow skips index 3, so the pages
-    /// after it map to one dot earlier (page 4 → dot 3, page 5 → dot 4). With
-    /// the polish page visible this is the identity mapping.
-    private func displayStep(for page: Int) -> Int {
-        guard !showsPolishPage && page > 3 else { return page }
-        return page - 1
-    }
-
-    /// Determine dot color based on step state.
-    private func dotColor(for step: Int) -> Color {
-        if step == displayStep(for: currentPage) {
-            return .dictusAccent
-        } else if completedSteps.contains(where: { displayStep(for: $0) == step }) {
-            return .dictusAccent.opacity(0.5)
-        } else {
-            return .gray.opacity(0.3)
+        .onAppear { refreshKeyboard(); refreshModel() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { refreshKeyboard(); refreshModel() } }
+        .fullScreenCover(item: Binding<PreparingItem?>(get: { preparingModelID.map(PreparingItem.init) }, set: { preparingModelID = $0?.id })) { item in
+            ModelLoadingOverlay(modelManager: modelManager, modelIdentifier: item.id, context: .onboarding, isPresented: Binding(get: { preparingModelID != nil }, set: { if !$0 { preparingModelID = nil } }))
         }
     }
 
-    // MARK: - Navigation
-
-    private func advanceToPage(_ page: Int) {
-        completedSteps.insert(currentPage)
-        withAnimation {
-            currentPage = page
-        }
+    private var modelStatus: String { if modelReady { return "Ready" }; if modelManager.modelStates[recommendedModel] == .prewarming { return "Preparing" }; if isDownloading { return "Downloading" }; return "Required for offline dictation" }
+    private func checklistRow(_ title: String, detail: String, done: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { HStack(alignment: .top, spacing: 12) { Image(systemName: done ? "checkmark.circle.fill" : "circle").foregroundStyle(done ? .green : .secondary); VStack(alignment: .leading, spacing: 3) { Text(title).font(.body.weight(.medium)); Text(detail).font(.caption).foregroundStyle(.secondary) }; Spacer(); if !done { Image(systemName: "chevron.right").foregroundStyle(.tertiary) } }.contentShape(Rectangle()) }.buttonStyle(.plain).accessibilityValue(done ? "Complete" : detail)
     }
+    private func refreshKeyboard() {
+        keyboardInstalled = UITextInputMode.activeInputModes.contains { ($0.value(forKey: "identifier") as? String)?.contains("de.aiity.saiity.ios") == true }
+        fullAccessVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        UIAccessibility.post(notification: .announcement, argument: fullAccessVerified ? "sAiity keyboard and Full Access verified" : keyboardInstalled ? "sAiity keyboard detected; Full Access will be verified when the keyboard appears" : "Checking for sAiity keyboard")
+    }
+    private func refreshModel() { if modelManager.downloadedModels.contains(recommendedModel) { modelManager.modelStates[recommendedModel] = .ready } }
+    private func startDownload() { guard !isDownloading else { return }; isDownloading = true; errorMessage = nil; preparingModelID = recommendedModel; Task { do { try await modelManager.downloadModel(recommendedModel); isDownloading = false } catch { isDownloading = false; preparingModelID = nil; errorMessage = "Could not install the voice model. Try again." } } }
+    private func openSettings() { guard let url = URL(string: UIApplication.openSettingsURLString) else { return }; UIApplication.shared.open(url) }
+    private struct PreparingItem: Identifiable { let id: String }
 }

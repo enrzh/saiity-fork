@@ -39,6 +39,7 @@ struct KeyboardPanelView: View {
     /// Mirrors the App Group value so the checkmark moves the instant the row is
     /// tapped, without waiting for the ~200 ms grid rebuild that follows.
     @State private var language: SupportedLanguage = .active
+    @State private var isAutomatic = false
 
     /// Effective layout per language, mirrored for the same reason as `language`:
     /// the pill has to fill in on touch-up, not after the grid rebuild.
@@ -79,6 +80,7 @@ struct KeyboardPanelView: View {
             // clips nothing. With four languages it never actually scrolls.
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
+                    automaticRow
                     ForEach(SupportedLanguage.allCases, id: \.self) { entry in
                         languageRow(entry)
                     }
@@ -94,6 +96,7 @@ struct KeyboardPanelView: View {
             // The language and the layouts can have been changed in DictusApp since this
             // view was last built; the panel is cheap to re-read on every open.
             language = .active
+            isAutomatic = KeyboardLanguageSelection.load(from: AppGroup.defaults) == .automatic
             layouts = Dictionary(
                 uniqueKeysWithValues: SupportedLanguage.allCases.map {
                     ($0, KeyboardLayoutPreference.layout(for: $0))
@@ -108,6 +111,28 @@ struct KeyboardPanelView: View {
                 }
             }
         }
+    }
+
+    private var automaticRow: some View {
+        Button {
+            selectAutomatic()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 18)
+                    .opacity(isAutomatic ? 1 : 0)
+                Text("Automatic (System)")
+                    .font(.system(size: 17))
+                Spacer(minLength: 8)
+            }
+            .foregroundColor(Color(.label))
+            .frame(height: rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .accessibilityAddTraits(isAutomatic ? [.isSelected] : [])
     }
 
     /// One row: the language on the left, its layout pills on the right.
@@ -192,6 +217,7 @@ struct KeyboardPanelView: View {
         SupportedLanguage.activate(entry)
         HapticFeedback.keyTapped()
         language = entry
+        isAutomatic = false
 
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardPanelView",
@@ -200,6 +226,16 @@ struct KeyboardPanelView: View {
             details: "language=\(entry.rawValue) layout=\(KeyboardLayoutPreference.layout(for: entry).rawValue)"
         ))
         onLanguageChanged?(entry)
+    }
+
+    private func selectAutomatic() {
+        guard !isAutomatic else { return }
+        KeyboardLanguageSelection.automatic.persist(to: AppGroup.defaults)
+        let resolved = KeyboardLanguageSelection.resolve(locale: .current, defaults: AppGroup.defaults)
+        language = resolved
+        isAutomatic = true
+        HapticFeedback.keyTapped()
+        onLanguageChanged?(resolved)
     }
 
     /// Applies a layout to one language (#272), whether or not it is the active one.

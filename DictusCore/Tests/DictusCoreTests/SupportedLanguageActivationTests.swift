@@ -25,9 +25,15 @@ final class SupportedLanguageActivationTests: XCTestCase {
         defaults?.removeObject(forKey: SharedKeys.language)
         defaults?.removeObject(forKey: SharedKeys.keyboardLayout)
         defaults?.removeObject(forKey: SharedKeys.keyboardLayoutsByLanguage)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageSelection)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageMigrationVersion)
     }
 
     // MARK: - Language write
+
+    func testExtensionFirstInstallDefaultsToAutomaticSystemLanguage() {
+        XCTAssertEqual(SupportedLanguage.active, SupportedLanguage.fromSystem(locale: .current))
+    }
 
     func testActivateWritesLanguage() {
         SupportedLanguage.activate(.spanish)

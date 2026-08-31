@@ -16,20 +16,17 @@ import DictusCore
 struct SwipeBackOverlayView: View {
     @State private var isWaveformAnimating = false
     @State private var swipeProgress: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(hex: 0x0D2040), Color(hex: 0x071020)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color(.systemBackground)
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Text("Dictation in progress")
                     .font(.title2.weight(.semibold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                     .padding(.top, 60)
 
                 Spacer()
@@ -58,8 +55,6 @@ struct SwipeBackOverlayView: View {
                         Circle()
                             .fill(Color.dictusAccent)
                             .frame(width: 14, height: 14)
-                            .shadow(color: Color.dictusAccent.opacity(0.7), radius: 10)
-                            .shadow(color: Color.dictusAccent.opacity(0.4), radius: 20)
                     }
                     .offset(
                         x: -30 + swipeProgress * 80,
@@ -75,7 +70,7 @@ struct SwipeBackOverlayView: View {
                 // Empathetic explanation — short key to avoid Xcode xcstrings duplicate bug
                 Text("swipeback_empathy_text")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                     .padding(.top, 16)
@@ -85,19 +80,21 @@ struct SwipeBackOverlayView: View {
                 // Bottom instruction
                 Text("Swipe right at the bottom of your screen\nto return to your app")
                     .font(.callout.weight(.medium))
-                    .foregroundColor(.dictusAccent)
+                    .foregroundStyle(.tint)
                     .multilineTextAlignment(.center)
                     .padding(.bottom, 40)
             }
         }
         .onAppear {
-            withAnimation(
-                .easeInOut(duration: 0.7)
-                .repeatForever(autoreverses: true)
-            ) {
-                isWaveformAnimating = true
+            if reduceMotion {
+                isWaveformAnimating = false
+                swipeProgress = 1
+            } else {
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    isWaveformAnimating = true
+                }
+                startSwipeLoop()
             }
-            startSwipeLoop()
         }
     }
 
@@ -140,8 +137,8 @@ private struct SwipeHandView: View {
     var body: some View {
         // Hand icon only — chevrons are now on the blue dot above
         Image(systemName: "hand.point.up")
-            .font(.system(size: 28, weight: .light))
-            .foregroundColor(.white.opacity(0.85))
+            .font(.title2)
+            .foregroundStyle(.primary)
             .offset(x: -30 + progress * 80)
             .opacity(1.0 - progress * 0.3)
     }
@@ -181,7 +178,7 @@ private struct IPhoneMockupView: View {
             return .dictusAccent
         } else {
             let opacity = (1.0 - distance) * 0.7 + 0.2
-            return .white.opacity(opacity)
+            return .primary.opacity(opacity)
         }
     }
 
@@ -189,12 +186,12 @@ private struct IPhoneMockupView: View {
         ZStack {
             // Device outline
             RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .stroke(Color.white.opacity(0.3), lineWidth: 2.5)
+                .stroke(Color.primary.opacity(0.3), lineWidth: 2.5)
 
             VStack(spacing: 0) {
                 // Dynamic Island — tight to top edge like a real iPhone
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(0.25))
+                    .fill(Color.primary.opacity(0.14))
                     .frame(width: 58, height: 16)
                     .padding(.top, 14)
 
@@ -223,14 +220,14 @@ private struct IPhoneMockupView: View {
                 // Listening label — FIXED position below the waveform container
                 Text("Listening...")
                     .font(.caption2)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
                     .padding(.top, 10)
 
                 Spacer()
 
                 // Home indicator bar
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.4))
+                    .fill(Color.primary.opacity(0.4))
                     .frame(width: 60, height: 5)
                     .padding(.bottom, 16)
             }

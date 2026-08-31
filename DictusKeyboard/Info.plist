@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>27</string>
+	<string>30</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
@@ -42,7 +42,7 @@
 			<key>IsASCIICapable</key>
 			<true/>
 			<key>PrimaryLanguage</key>
-			<string>fr-FR</string>
+			<string>en-US</string>
 			<key>RequestsOpenAccess</key>
 			<true/>
 		</dict>

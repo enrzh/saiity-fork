@@ -19,10 +19,11 @@ struct OnboardingSuccessView: View {
 
     @State private var checkmarkScale: CGFloat = 0
     @State private var showText = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            Color.dictusBackground
+            Color(.systemBackground)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -35,7 +36,7 @@ struct OnboardingSuccessView: View {
                         .frame(width: 120, height: 120)
 
                     Image(systemName: "checkmark")
-                        .font(.system(size: 48, weight: .bold))
+                        .font(.title.weight(.bold))
                         .foregroundColor(.white)
                 }
                 .scaleEffect(checkmarkScale)
@@ -60,21 +61,23 @@ struct OnboardingSuccessView: View {
                 // Commencer button (same style as other onboarding pages)
                 Button(action: onComplete) {
                     Text("Get started")
-                        .font(.dictusSubheading)
-                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.dictusAccent)
-                        )
                 }
+                .font(.headline)
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .controlSize(.large)
                 .padding(.horizontal, 32)
                 .padding(.bottom, 48)
                 .opacity(showText ? 1 : 0)
             }
         }
         .onAppear {
+            if reduceMotion {
+                checkmarkScale = 1
+                showText = true
+                return
+            }
             // Step 1: Spring the checkmark in (0 -> 1.1 -> 1.0)
             withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                 checkmarkScale = 1.0

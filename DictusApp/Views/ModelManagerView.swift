@@ -46,12 +46,6 @@ struct ModelManagerView: View {
         }?.identifier
     }
 
-    private func canDelete(_ model: ModelInfo) -> Bool {
-        modelManager.modelStates[model.identifier] == .ready
-            && modelManager.activeModel != model.identifier
-            && modelManager.downloadedModels.count > 1
-    }
-
     var body: some View {
         List {
             Section {
@@ -61,15 +55,6 @@ struct ModelManagerView: View {
                 } else {
                     ForEach(installedModels) { model in
                         modelRow(model)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                if canDelete(model) {
-                                    Button(role: .destructive) {
-                                        requestDelete(model)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                        }
                     }
                 }
             } header: {
@@ -77,6 +62,7 @@ struct ModelManagerView: View {
             } footer: {
                 modelEngineFooter(for: installedModels)
             }
+            .listSectionSeparator(.hidden)
 
             Section {
                 if availableModels.isEmpty {
@@ -95,6 +81,7 @@ struct ModelManagerView: View {
             } footer: {
                 modelEngineFooter(for: availableModels)
             }
+            .listSectionSeparator(.hidden)
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Models")
@@ -177,7 +164,7 @@ struct ModelManagerView: View {
                 showPartialDeleteAlert = true
             }
         )
-        .listRowSeparator(.visible)
+        .listRowSeparator(.hidden)
     }
 
     private func requestDelete(_ model: ModelInfo) {

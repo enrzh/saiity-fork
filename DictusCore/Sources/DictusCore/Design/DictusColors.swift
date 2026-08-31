@@ -15,34 +15,30 @@ import SwiftUI
 /// SwiftUI re-evaluates computed properties when colorScheme changes, so the colors
 /// automatically adapt to light/dark mode without manual observation.
 public extension Color {
-    // MARK: - Brand Colors (fixed, non-adaptive)
+    // MARK: - Semantic Colors
 
-    /// Primary sAiity teal, matching the legacy app icon.
-    static let dictusAccent = Color(hex: 0x16A6A8)
+    /// The app tint follows the user's system appearance and accessibility settings.
+    static let dictusAccent = Color.accentColor
 
-    /// Accessible teal highlight used for secondary emphasis.
-    static let dictusAccentHighlight = Color(hex: 0x0B7F82)
+    /// Compatibility emphasis token backed by the system tint.
+    static let dictusAccentHighlight = Color.accentColor
 
-    /// Recording state red (#EF4444)
-    static let dictusRecording = Color(hex: 0xEF4444)
+    /// Recording state uses the system semantic red.
+    static let dictusRecording = Color(.systemRed)
 
-    /// Success state green (#22C55E)
-    static let dictusSuccess = Color(hex: 0x22C55E)
+    /// Success state uses the system semantic green.
+    static let dictusSuccess = Color(.systemGreen)
 
-    /// Smart mode uses the same restrained brand accent.
-    static let dictusSmartMode = Color(hex: 0x0B7F82)
+    /// Smart mode uses the same system tint as other accent actions.
+    static let dictusSmartMode = Color.accentColor
 
     // MARK: - Adaptive Colors (light/dark mode)
 
-    /// System background with a stable dark counterpart.
-    static var dictusBackground: Color {
-        Color(light: Color(.systemBackground), dark: Color(hex: 0x101718))
-    }
+    /// System background that adapts to light/dark appearance.
+    static var dictusBackground: Color { Color(.systemBackground) }
 
-    /// System surface with a stable dark counterpart.
-    static var dictusSurface: Color {
-        Color(light: Color(.secondarySystemBackground), dark: Color(hex: 0x1B2324))
-    }
+    /// System grouped surface that adapts to light/dark appearance.
+    static var dictusSurface: Color { Color(.secondarySystemBackground) }
 
     // MARK: - Keyboard pill controls
 
@@ -54,15 +50,7 @@ public extension Color {
     /// bar and grey in the next reads as two different systems. One token keeps
     /// them from drifting apart the next time either file is edited.
     ///
-    /// WHY 50% rather than full strength: the glass pill is the affordance; the
-    /// glyph only labels it. Full-strength icons compete with the mic and the
-    /// validate button, which are the primary actions in their respective bars.
-    static var dictusPillIconSecondary: Color {
-        Color(
-            light: Color(white: 0.15).opacity(0.5),
-            dark: Color.white.opacity(0.5)
-        )
-    }
+    static var dictusPillIconSecondary: Color { Color(.secondaryLabel) }
 
     // MARK: - Legacy color aliases
 

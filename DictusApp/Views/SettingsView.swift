@@ -9,10 +9,12 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionLanguage = TranscriptionLanguageMode.autoDetect.storedValue
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = false
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
+    @StateObject private var modelManager = ModelManager()
+    @State private var diagnosticResult = AppGroupDiagnostic.run()
 
     var body: some View {
         List {
-            Section("Transcription") {
+            Section("Dictation") {
                 Picker("Language", selection: $transcriptionLanguage) {
                     ForEach(TranscriptionLanguageMode.settingsOptions, id: \.storedValue) { mode in
                         Text(mode.settingsDisplayName).tag(mode.storedValue)
@@ -21,7 +23,15 @@ struct SettingsView: View {
                 if PolishAvailability.isToggleVisible { Toggle("Polish transcription", isOn: $polishEnabled) }
                 polishStateFooter
             }
-            Section("Features") {
+            Section("Keyboard") {
+                NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
+                    Label("Models", systemImage: "square.stack.3d.up.fill")
+                }
+                NavigationLink { SoundSettingsView() } label: {
+                    Label("Sounds", systemImage: "speaker.wave.2.fill")
+                }
+            }
+            Section("Translation & Cleanup") {
                 Toggle("Live Activity", isOn: $liveActivityEnabled)
                     .onChange(of: liveActivityEnabled) { _, enabled in
                         if LiveActivityStateMachine.shouldStartStandbyActivity(
@@ -34,7 +44,7 @@ struct SettingsView: View {
                         }
                     }
             }
-            Section("Permissions") {
+            Section("Feedback") {
                 Button(action: openSystemSettings) {
                     Label("Microphone", systemImage: "mic.fill")
                     Spacer()
@@ -42,11 +52,19 @@ struct SettingsView: View {
                 }
             }
             Section("Privacy") {
-                Link(destination: URL(string: "https://saiity.de/privacy")!) {
-                    Label("Privacy Policy", systemImage: "hand.raised.fill")
+                if let privacyURL = URL(string: "https://aiity.de/privacy") {
+                    Link(destination: privacyURL) {
+                        Label("Privacy Policy", systemImage: "hand.raised.fill")
+                    }
                 }
             }
-            Section("Legal & Help") {
+            Section("Support") {
+                NavigationLink { DebugLogView() } label: {
+                    Label("Debug Logs", systemImage: "wrench.and.screwdriver.fill")
+                }
+                NavigationLink { DiagnosticDetailView(result: diagnosticResult) } label: {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
                 NavigationLink { LicensesView() } label: {
                     Label("Licenses", systemImage: "doc.text.fill")
                 }
@@ -56,7 +74,10 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .onAppear { microphonePermission = AVAudioSession.sharedInstance().recordPermission }
+        .onAppear {
+            microphonePermission = AVAudioSession.sharedInstance().recordPermission
+            diagnosticResult = AppGroupDiagnostic.run()
+        }
     }
 
     @ViewBuilder private var polishStateFooter: some View {

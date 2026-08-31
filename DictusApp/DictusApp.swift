@@ -2,6 +2,9 @@
 import SwiftUI
 import StoreKit
 import DictusCore
+#if canImport(Translation)
+import Translation
+#endif
 
 // MARK: - AppDelegate (sourceApplication diagnostic)
 // Temporary diagnostic: UIApplicationDelegateAdaptor captures sourceApplication
@@ -81,14 +84,14 @@ struct DictusApp: App {
             DictusLogger.app.info("ngramDiagnostic: \(ngramDiag, privacy: .public)")
         }
 
+        let defaults = UserDefaults(suiteName: AppGroup.identifier)
+        if let defaults {
+            KeyboardLanguageSelection.migrateLegacyFrenchIfNeeded(in: defaults)
+        }
         // Persist the product default before transcription starts. Do not overwrite
         // an explicit choice made in Settings.
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
         if defaults?.string(forKey: SharedKeys.transcriptionLanguage) == nil {
             defaults?.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
-        }
-        if defaults?.string(forKey: SharedKeys.language) == nil {
-            defaults?.set("fr", forKey: SharedKeys.language)
         }
         // Freeze the layout an updating install is already typing on, before anything can
         // change the active language (#272). The migration is idempotent and also runs from
@@ -102,6 +105,9 @@ struct DictusApp: App {
         // Without this, existing users upgrading would see Live Activity disabled.
         if defaults?.object(forKey: SharedKeys.liveActivityEnabled) == nil {
             defaults?.set(true, forKey: SharedKeys.liveActivityEnabled)
+        }
+        if defaults?.object(forKey: SharedKeys.serviceEnabled) == nil {
+            defaults?.set(true, forKey: SharedKeys.serviceEnabled)
         }
 
         // Initialize Pro subscription management.
@@ -126,6 +132,11 @@ struct DictusApp: App {
                 .environmentObject(coordinator)
                 .environmentObject(proStatus)
                 .environmentObject(subscriptionManager)
+                .overlay {
+                    if #available(iOS 26.0, *) {
+                        TranslationHost(coordinator: coordinator)
+                    }
+                }
                 .onOpenURL { url in
                     handleIncomingURL(url)
                 }
@@ -290,6 +301,28 @@ struct DictusApp: App {
         }
     }
 }
+
+#if canImport(Translation)
+@available(iOS 26.0, *)
+private struct TranslationHost: View {
+    @ObservedObject var coordinator: DictationCoordinator
+
+    var body: some View {
+        Group {
+            if let configuration = coordinator.translationConfiguration as? TranslationSession.Configuration {
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
+                    .translationTask(configuration) { session in
+                        await coordinator.consumeTranslationSession(session)
+                    }
+            } else {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
+    }
+}
+#endif
 
 extension ScenePhase {
     /// This phase as the App Group marker the keyboard extension reads (#281).

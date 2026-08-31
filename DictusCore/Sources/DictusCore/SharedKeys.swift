@@ -8,6 +8,7 @@ public enum SharedKeys {
     public static let lastTranscription = "dictus.lastTranscription"
     public static let lastTranscriptionTimestamp = "dictus.lastTranscriptionTimestamp"
     public static let lastError = "dictus.lastError"
+    public static let failureDisposition = "dictus.failureDisposition"
 
     // Model management keys (added for Plan 2.3 transcription pipeline)
     public static let activeModel = "dictus.activeModel"
@@ -65,6 +66,10 @@ public enum SharedKeys {
     /// `transcriptionLanguage` below. STT only follows this key when the
     /// transcription language mode is "follow" (the default).
     public static let language = "dictus.language"
+    /// Codable keyboard language selection: automatic system language or explicit code.
+    public static let keyboardLanguageSelection = "dictus.keyboardLanguageSelection"
+    /// One-time marker for migration of the implicit legacy French default.
+    public static let keyboardLanguageMigrationVersion = "dictus.keyboardLanguageMigrationVersion"
 
     // Transcription language decoupling (issue #226)
     /// Transcription (STT) language mode, decoupled from the keyboard language.
@@ -77,6 +82,10 @@ public enum SharedKeys {
     /// switcher keeps writing `language`/`keyboardLayout` and can therefore
     /// never override an explicit or auto transcription choice.
     public static let transcriptionLanguage = "dictus.transcriptionLanguage"
+    /// JSON-free request contract written by the keyboard and consumed by the app.
+    public static let dictationLanguageRequest = "dictus.dictationLanguageRequest"
+    /// Codable Translation.framework source/target readiness snapshot written by the app.
+    public static let translationReadiness = "dictus.translationReadiness"
     /// Whether haptic feedback is enabled, default true
     public static let hapticsEnabled = "dictus.hapticsEnabled"
     /// Whether the user has completed onboarding, default false
@@ -85,6 +94,10 @@ public enum SharedKeys {
     /// resumes at the right step even after iOS TCC-triggered terminations
     /// (e.g., when "Allow Full Access" is toggled during keyboard setup).
     public static let onboardingCurrentPage = "dictus.onboardingCurrentPage"
+    /// Bool handshake written by the keyboard extension from `hasFullAccess`.
+    /// The app cannot inspect the system toggle directly; it only trusts this
+    /// value after the extension has actually appeared with Full Access.
+    public static let onboardingFullAccessVerified = "dictus.onboardingFullAccessVerified"
 
     // Text prediction preferences (added for Phase 08)
     /// Whether autocorrect is enabled, default true
@@ -99,6 +112,10 @@ public enum SharedKeys {
     // Live Activity preference
     /// Whether Live Activity (Dynamic Island + Lock Screen) is enabled, default true
     public static let liveActivityEnabled = "dictus.liveActivityEnabled"
+    /// Whether the dictation service is enabled from the Home toolbar.
+    public static let serviceEnabled = "dictus.serviceEnabled"
+    /// Whether Live Activity detection is muted without ending standby.
+    public static let detectionMuted = "dictus.detectionMuted"
 
     // Post-STT polish (issue #141)
     /// Whether the polish layer runs between STT final output and App Group write, default false.

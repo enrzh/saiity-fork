@@ -4,21 +4,21 @@ import XCTest
 @testable import DictusCore
 
 final class KeyboardAreaModeTests: XCTestCase {
+    func testFullAreaModesOwnTheirOverlaySurface() {
+        XCTAssertTrue(KeyboardAreaMode.keys.usesVoiceActionControls)
+        XCTAssertTrue(KeyboardAreaMode.recording.usesVoiceActionControls)
+        XCTAssertFalse(KeyboardAreaMode.emoji.usesVoiceActionControls)
+        XCTAssertFalse(KeyboardAreaMode.panel.usesVoiceActionControls)
+    }
 
     // MARK: - Cases
 
-    func testEnumHasExactlyFourCases() {
-        XCTAssertEqual(KeyboardAreaMode.allCases.count, 4)
-    }
-
-    func testPanelCaseExistsForIssue241() {
-        XCTAssertTrue(KeyboardAreaMode.allCases.contains(.panel))
+    func testEnumHasOnlyVoiceModes() {
+        XCTAssertEqual(KeyboardAreaMode.allCases, [.keys, .emoji, .panel, .recording])
     }
 
     func testRawValues() {
         XCTAssertEqual(KeyboardAreaMode.keys.rawValue, "keys")
-        XCTAssertEqual(KeyboardAreaMode.emoji.rawValue, "emoji")
-        XCTAssertEqual(KeyboardAreaMode.panel.rawValue, "panel")
         XCTAssertEqual(KeyboardAreaMode.recording.rawValue, "recording")
     }
 
@@ -49,15 +49,6 @@ final class KeyboardAreaModeTests: XCTestCase {
         }
     }
 
-    /// The acceptance criterion "starting a dictation from the emoji picker
-    /// dismisses the picker" is this transition — no coordination between flags.
-    func testStartingADictationDismissesTheEmojiPicker() {
-        XCTAssertEqual(
-            KeyboardAreaMode.resolving(status: .recording, current: .emoji),
-            .recording
-        )
-    }
-
     func testEndingADictationReturnsToTheKeyGrid() {
         for status in [DictationStatus.idle, .ready, .failed] {
             XCTAssertEqual(
@@ -68,16 +59,7 @@ final class KeyboardAreaModeTests: XCTestCase {
         }
     }
 
-    /// The picker is not restored after a dictation that started from it — the
-    /// pre-#271 code cleared its emoji flag when the overlay appeared.
-    func testTheEmojiPickerIsNotRestoredAfterADictation() {
-        let duringDictation = KeyboardAreaMode.resolving(status: .recording, current: .emoji)
-        XCTAssertEqual(KeyboardAreaMode.resolving(status: .idle, current: duringDictation), .keys)
-    }
-
-    func testAnIdleStatusLeavesAFullAreaPresentationAlone() {
-        XCTAssertEqual(KeyboardAreaMode.resolving(status: .idle, current: .emoji), .emoji)
-        XCTAssertEqual(KeyboardAreaMode.resolving(status: .idle, current: .panel), .panel)
+    func testAnIdleStatusReturnsToKeys() {
         XCTAssertEqual(KeyboardAreaMode.resolving(status: .idle, current: .keys), .keys)
     }
 
@@ -89,5 +71,34 @@ final class KeyboardAreaModeTests: XCTestCase {
                 XCTAssertEqual(once, twice, "status=\(status.rawValue) mode=\(mode.rawValue)")
             }
         }
+    }
+
+    func testRecordingOwnsAreaAndPreventsPanelSwitches() {
+        XCTAssertEqual(
+            KeyboardAreaMode.resolving(status: .recording, current: .panel),
+            .recording
+        )
+        XCTAssertEqual(
+            KeyboardAreaMode.resolving(status: .ready, current: .recording),
+            .keys
+        )
+    }
+
+    func testClosingAnAuxiliaryAreaLeavesKeysAvailable() {
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .ready, current: .emoji), .emoji)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .ready, current: .panel), .panel)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .ready, current: .recording), .keys)
+    }
+
+    func testSymbolsActionTogglesBetweenPanelAndKeys() {
+        XCTAssertEqual(KeyboardAreaMode.toggledPanel(from: .keys), .panel)
+        XCTAssertEqual(KeyboardAreaMode.toggledPanel(from: .panel), .keys)
+    }
+
+    func testSymbolsPageHasAnExplicitReturnToABCTransition() {
+        // The symbols page must expose the inverse transition so its ABC
+        // control can return to the normal key page without relying on UI state.
+        XCTAssertEqual(KeyboardAreaMode.toggledPanel(from: .panel), .keys)
+        XCTAssertNotEqual(KeyboardAreaMode.toggledPanel(from: .panel), .panel)
     }
 }

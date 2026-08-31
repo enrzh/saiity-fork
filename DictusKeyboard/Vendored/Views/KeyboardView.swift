@@ -560,9 +560,13 @@ final internal class GiellaKeyboardView: UIView,
                 dismissOverlayTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false, block: { [weak self] _ in
                     self?.removeOverlay(forKey: activeKey.key)
                 })
-                keyRepeatTimer?.invalidate()
-                keyRepeatTimer = nil
-                deleteRepeatCount = 0
+                stopKeyRepeat()
+            }
+
+            if let oldKey = activeKey,
+               oldKey.key.type.supportsRepeatTrigger,
+               oldKey != newValue {
+                stopKeyRepeat()
             }
 
             if let key = newValue, key.key.type.supportsRepeatTrigger, keyRepeatTimer == nil {
@@ -588,6 +592,12 @@ final internal class GiellaKeyboardView: UIView,
             selector: #selector(GiellaKeyboardView.keyRepeatTimerDidTrigger),
             userInfo: nil,
             repeats: true)
+    }
+
+    func stopKeyRepeat() {
+        keyRepeatTimer?.invalidate()
+        keyRepeatTimer = nil
+        deleteRepeatCount = 0
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with _: UIEvent?) {
@@ -731,6 +741,7 @@ final internal class GiellaKeyboardView: UIView,
 
     override func touchesCancelled(_: Set<UITouch>, with _: UIEvent?) {
         longpressController = nil
+        stopKeyRepeat()
         activeKey = nil
     }
 
@@ -738,6 +749,7 @@ final internal class GiellaKeyboardView: UIView,
         if let longpressController = self.longpressController, let touch = touches.first {
             longpressController.touchesEnded(touch.location(in: collectionView))
             removeAllOverlays()
+            stopKeyRepeat()
             activeKey = nil
             return
         }
@@ -758,6 +770,7 @@ final internal class GiellaKeyboardView: UIView,
         if activeKey != nil {
             activeKey = nil
         }
+        stopKeyRepeat()
     }
 
     private func showKeyboardModeOverlay(_ longpressGestureRecognizer: UILongPressGestureRecognizer, key: KeyDefinition) {
@@ -989,7 +1002,14 @@ final internal class GiellaKeyboardView: UIView,
         let key = currentPage[indexPath.section][indexPath.row]
 
         let width = key.size.width * ((bounds.size.width - 1) / rowNumberOfUnits[indexPath.section])
-        let height = bounds.size.height / CGFloat(currentPage.count)
+        let rowCount: Int
+        switch page {
+        case .symbols1, .symbols2:
+            rowCount = KeyboardLayouts.symbolsRowCount
+        default:
+            rowCount = currentPage.count
+        }
+        let height = bounds.size.height / CGFloat(max(rowCount, 1))
         return CGSize(width: width, height: height)
     }
 

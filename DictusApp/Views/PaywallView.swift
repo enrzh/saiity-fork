@@ -1,5 +1,5 @@
 // DictusApp/Views/PaywallView.swift
-// Full-screen paywall pushed via NavigationStack: hero, feature cards, plan selector, CTA.
+// Full-screen paywall presented in a native navigation container.
 import SwiftUI
 import StoreKit
 import DictusCore
@@ -72,6 +72,11 @@ struct PaywallView: View {
                     // Already subscribed
                     alreadyProBanner
                 } else {
+                    if subscriptionManager.products.isEmpty {
+                        Label("Loading plans", systemImage: "hourglass")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     // Plan selector: yearly (preselected), monthly and lifetime
                     planSelector
                     // Subscribe CTA following the selected plan
@@ -155,10 +160,7 @@ struct PaywallView: View {
 
     // MARK: - Hero
 
-    /// Brand hero: app-icon style tile (fixed dark gradient from the brand
-    /// kit) with a blue glow, and the tagline. The screen title comes from
-    /// the navigation bar, so the hero repeats no text.
-    /// Glow uses the double-shadow pattern (tight + wide) from SwipeBackOverlayView.
+    /// Compact brand introduction. The navigation bar carries the screen title.
     private var heroSection: some View {
         VStack(spacing: 12) {
             // Forcing the dark color scheme keeps DictusLogo's side bars
@@ -166,7 +168,6 @@ struct PaywallView: View {
             DictusLogo(height: 48)
                 .environment(\.colorScheme, .dark)
                 .padding(20)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
 
             Text("sAiity Pro")
                 .font(.largeTitle.weight(.bold))
@@ -203,9 +204,7 @@ struct PaywallView: View {
 
             Spacer()
         }
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
+        .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(feature.displayName): \(feature.paywallDescription)")
     }
@@ -230,9 +229,7 @@ struct PaywallView: View {
                 .font(.dictusSubheading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
+        .padding(.vertical, 4)
     }
 
     // MARK: - Plan Selector
@@ -400,21 +397,10 @@ struct PaywallView: View {
                     .font(.title3)
                     .foregroundColor(isSelected ? .accentColor : .secondary)
             }
-            .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .foregroundColor(.primary)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-            )
-            // Make the whole card tappable: without an explicit content
-            // shape, hit-testing only registers on rendered content (text,
-            // icons), not on the Spacer or transparent background areas.
-            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(GlassPressStyle(pressedScale: 0.97))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
@@ -498,6 +484,8 @@ struct PaywallView: View {
                 if subscriptionManager.purchaseState == .purchasing {
                     ProgressView()
                         .tint(.white)
+                } else if subscriptionManager.purchaseState == .pending {
+                    Text("Purchase pending")
                 } else {
                     ctaLabel
                         .font(.dictusSubheading)
@@ -521,7 +509,7 @@ struct PaywallView: View {
     /// out per branch: the period belongs to the price, so one localized
     /// sentence serves every plan and there is no branch left to fall through.
     private var ctaLabel: Text {
-        guard let product = selectedProduct else { return Text(verbatim: "...") }
+        guard let product = selectedProduct else { return Text("Loading plans") }
         let price = priceLabel(for: product)
 
         // No `subscription` means a non-consumable, and "Subscribe" would
@@ -573,17 +561,24 @@ struct PaywallView: View {
     // swiftlint:disable:next force_unwrapping
     private static let termsURL = URL(string: "https://getdictus.com/terms")!
     // swiftlint:disable:next force_unwrapping
-    private static let privacyURL = URL(string: "https://getdictus.com/privacy")!
+    private static let privacyURL = URL(string: "https://aiity.de/privacy")!
 
     private var bottomLinks: some View {
         VStack(spacing: 8) {
             // Hidden while Pro is active: Apple requires a restore mechanism
             // to exist (guideline 3.1.1), not to be shown to subscribers.
             if !proStatus.isProActive {
-                Button("Restore purchases") {
+                Button {
                     Task { await subscriptionManager.restorePurchases() }
+                } label: {
+                    if subscriptionManager.purchaseState == .purchasing {
+                        ProgressView()
+                    } else {
+                        Text("Restore purchases")
+                    }
                 }
                 .font(.dictusCaption)
+                .disabled(subscriptionManager.purchaseState == .purchasing)
                 .accessibilityLabel("Restore previous purchases")
             }
 

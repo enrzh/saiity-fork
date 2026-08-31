@@ -48,7 +48,7 @@ struct DefaultLayerPicker: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.dictusAccent.opacity(0.15), lineWidth: 1)
+                        .strokeBorder(Color.accentColor.opacity(0.15), lineWidth: 1)
                 )
                 .allowsHitTesting(false)
                 .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: selectedLayer)
@@ -81,7 +81,7 @@ struct DefaultLayerPicker: View {
 
             // Mic pill — right side, matching AnimatedMicButton shape
             Capsule()
-                .fill(Color.dictusAccent)
+                .fill(Color.accentColor)
                 .frame(width: 36, height: 18)
                 .overlay(
                     Image(systemName: "mic.fill")
@@ -177,14 +177,14 @@ struct DefaultLayerPicker: View {
         let bg: Color = isSpecial
             ? Color(.systemGray4)
             : isHighlighted
-                ? Color.dictusAccent.opacity(0.2)
+                ? Color.accentColor.opacity(0.2)
                 : Color(.systemGray5)
 
         let maxW: CGFloat = width ?? .infinity
 
         return Text(label)
             .font(.system(size: isSpace ? 6 : 7, weight: .medium))
-            .foregroundStyle(isHighlighted ? Color.dictusAccent : .primary)
+            .foregroundStyle(isHighlighted ? Color.accentColor : .primary)
             .frame(maxWidth: maxW, minHeight: 16)
             .background(
                 RoundedRectangle(cornerRadius: 2)

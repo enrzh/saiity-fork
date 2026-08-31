@@ -37,7 +37,7 @@ struct PolishTogglePage: View {
 
             // Icon
             Image(systemName: "wand.and.stars")
-                .font(.system(size: 72))
+                .font(.system(.largeTitle, weight: .semibold))
                 .foregroundColor(.dictusAccent)
                 .padding(.bottom, 24)
 
@@ -79,7 +79,7 @@ struct PolishTogglePage: View {
                 }
             }
             .padding(16)
-            .dictusGlass(in: RoundedRectangle(cornerRadius: 16))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 32)
             .padding(.bottom, 12)
 
@@ -96,15 +96,12 @@ struct PolishTogglePage: View {
             // as a capsule pill on iOS 26 Liquid Glass).
             Button(action: onNext) {
                 Text("Continue")
-                    .font(.dictusSubheading)
-                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.dictusAccent)
-                    )
             }
+            .font(.headline)
+            .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
+            .controlSize(.large)
             .padding(.horizontal, 32)
             .padding(.bottom, 16)
         }

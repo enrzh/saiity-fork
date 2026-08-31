@@ -63,13 +63,20 @@ public enum SupportedLanguage: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Reads the active language from App Group, defaulting to French.
+    /// Reads the active language from the persisted selection and system locale.
     public static var active: SupportedLanguage {
-        guard let raw = AppGroup.defaults.string(forKey: SharedKeys.language),
-              let lang = SupportedLanguage(rawValue: raw) else {
-            return .french
+        let defaults = AppGroup.defaults
+        KeyboardLanguageSelection.migrateLegacyFrenchIfNeeded(in: defaults)
+        return KeyboardLanguageSelection.resolve(locale: .current, defaults: defaults)
+    }
+
+    public static func fromSystem(locale: Locale) -> SupportedLanguage {
+        switch locale.language.languageCode?.identifier {
+        case "fr": return .french
+        case "es": return .spanish
+        case "de": return .german
+        default: return .english
         }
-        return lang
     }
 
     /// Makes `language` the active keyboard language.
@@ -90,6 +97,7 @@ public enum SupportedLanguage: String, CaseIterable, Codable, Sendable {
         KeyboardLayoutPreference.migrateToPerLanguageLayoutsIfNeeded()
 
         AppGroup.defaults.set(language.rawValue, forKey: SharedKeys.language)
+        KeyboardLanguageSelection.explicit(language).persist(to: AppGroup.defaults)
         // The mirror describes the active language's layout, so it is computed after the
         // switch — see `KeyboardLayoutPreference.mirrorToLegacyKey`.
         KeyboardLayoutPreference.mirrorToLegacyKey(KeyboardLayoutPreference.layout(for: language))

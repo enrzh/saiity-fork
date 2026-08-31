@@ -63,16 +63,6 @@ struct MainTabView: View {
         modelManager.activeModel ?? Self.persistedActiveModelIdentifier
     }
 
-    private func tabContent<Content: View>(_ content: Content) -> some View {
-        // Measured iOS 26 floating tab bar clearance for scroll content; this is
-        // visual breathing room, not the system safe area itself.
-        content.safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: 96)
-                .accessibilityHidden(true)
-        }
-    }
-
     var body: some View {
         ZStack {
             if let preparingModelID {
@@ -96,30 +86,30 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        tabContent(HomeView(modelManager: modelManager) {
+                        HomeView(modelManager: modelManager) {
                             selectedTab = 1
-                        })
+                        }
                     }
                     .tabItem {
-                        Label("Home", systemImage: "house.fill")
+                        Label("Home", systemImage: "waveform")
                     }
                     .tag(0)
 
                     // Tab 1: Model management
                     NavigationStack {
-                        tabContent(ModelManagerView(modelManager: modelManager))
+                        ModelManagerView(modelManager: modelManager)
                     }
                     .tabItem {
-                        Label("Models", systemImage: "cpu")
+                        Label("Models", systemImage: "square.stack.3d.up.fill")
                     }
                     .tag(1)
 
                     // Tab 2: Settings
                     NavigationStack {
-                        tabContent(SettingsView())
+                        SettingsView()
                     }
                     .tabItem {
-                        Label("Settings", systemImage: "gearshape.fill")
+                        Label("Settings", systemImage: "slider.horizontal.3")
                     }
                     .tag(2)
                 }

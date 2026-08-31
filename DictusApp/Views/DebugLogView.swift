@@ -1,6 +1,7 @@
 // DictusApp/Views/DebugLogView.swift
 // Displays persistent debug logs from App Group file with color-coded entries.
 import SwiftUI
+import UIKit
 import DictusCore
 
 /// A single parsed log entry from the persistent log file.
@@ -33,7 +34,7 @@ private struct LogEntry: Identifiable, Sendable {
         case "error":   return "exclamationmark.triangle.fill"
         case "warning": return "exclamationmark.circle.fill"
         case "info":    return "info.circle.fill"
-        case "debug":   return "ant.circle.fill"
+        case "debug":   return "wrench.and.screwdriver.fill"
         default:        return "circle.fill"
         }
     }
@@ -56,6 +57,8 @@ struct DebugLogView: View {
     /// How many older lines the display dropped, so the screen can say so.
     @State private var hiddenLineCount = 0
     @State private var isLoading = false
+    @State private var showClearConfirmation = false
+    @State private var showCopiedFeedback = false
 
     /// Identifies the most recently started reload.
     ///
@@ -117,14 +120,14 @@ struct DebugLogView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button(role: .destructive) {
-                        PersistentLog.clear()
-                        Task { await reloadLogs() }
+                        showClearConfirmation = true
                     } label: {
                         Label("Clear", systemImage: "trash")
                     }
 
                     Button {
                         UIPasteboard.general.string = logContent
+                        showCopiedFeedback = true
                     } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
@@ -138,6 +141,20 @@ struct DebugLogView: View {
         }
         .refreshable {
             await reloadLogs()
+        }
+        .confirmationDialog("Clear logs", isPresented: $showClearConfirmation, titleVisibility: .visible) {
+            Button("Clear logs", role: .destructive) {
+                PersistentLog.clear()
+                Task { await reloadLogs() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes diagnostic logs stored on this iPhone.")
+        }
+        .alert("Logs copied", isPresented: $showCopiedFeedback) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The complete diagnostic log is now in the clipboard.")
         }
     }
 

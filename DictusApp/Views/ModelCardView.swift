@@ -16,12 +16,14 @@ struct ModelCardView: View {
     /// A non-nil reason keeps an unavailable model visible but prevents actions.
     var incompatibilityReason: ModelInfo.IncompatibilityReason?
 
-    /// The parent owns confirmation alerts so swipe and menu deletion share one path.
+    /// The parent owns confirmation alerts so every destructive menu action shares one path.
     var onDeleteRequest: (() -> Void)?
     var onDeletePartialRequest: (() -> Void)?
 
     @State private var showsLanguageInfo = false
     @State private var downloadTask: Task<Void, Never>?
+
+    private let actionColumnWidth: CGFloat = 128
 
     private var state: ModelState {
         modelManager.modelStates[model.identifier] ?? .notDownloaded
@@ -40,14 +42,14 @@ struct ModelCardView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             modelSummary
-            Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             actionContent
+                .frame(width: actionColumnWidth, alignment: .trailing)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .opacity(incompatibilityReason == nil ? 1 : 0.55)
         .accessibilityElement(children: .contain)
         .accessibilityHint(incompatibilityReason.map { Text($0.localizedText) } ?? Text(""))
         .sheet(isPresented: $showsLanguageInfo) {
@@ -58,8 +60,8 @@ struct ModelCardView: View {
     }
 
     private var modelSummary: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(model.displayName)
                     .font(.headline)
                     .lineLimit(2)
@@ -74,41 +76,60 @@ struct ModelCardView: View {
             Text(model.localizedDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
 
-            Label("\(model.engine.displayName) · \(model.sizeLabel)", systemImage: "internaldrive")
-                .font(.caption)
+            Text("\(model.engine.displayName) · \(model.sizeLabel)")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 16) {
-                GaugeBarView(
-                    value: model.accuracyScore,
-                    label: "Accuracy",
-                    color: .blue
-                )
-
-                GaugeBarView(
-                    value: model.speedScore,
-                    label: "Speed",
-                    color: .green
-                )
+                Text("Accuracy \(scoreText(model.accuracyScore))")
+                Text("Speed \(scoreText(model.speedScore))")
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             statusContent
 
-            if case .downloading = state,
-               let progress = modelManager.downloadProgress[model.identifier] {
-                ProgressView(value: Double(progress), total: 1)
-                    .tint(.blue)
-                    .accessibilityValue(Text("\(Int(progress * 100)) percent"))
+            downloadProgressContent
+        }
+    }
 
-                if let bytes = modelManager.downloadByteInfo[model.identifier] {
-                    Text("\(bytes.downloadedMB) MB of \(bytes.totalMB) MB")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+    private var downloadProgressContent: some View {
+        Group {
+            if case .downloading = state {
+                VStack(alignment: .leading, spacing: 3) {
+                    if let progress = modelManager.downloadProgress[model.identifier] {
+                        ProgressView(value: Double(progress), total: 1)
+                            .tint(.accentColor)
+                            .accessibilityValue(Text(downloadProgressLabel(progress)))
+                    } else {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    HStack(spacing: 6) {
+                        if let progress = modelManager.downloadProgress[model.identifier] {
+                            Text(downloadProgressLabel(progress))
+                        }
+                        if let bytes = modelManager.downloadByteInfo[model.identifier] {
+                            Text("· \(bytes.downloadedMB) MB of \(bytes.totalMB) MB")
+                        }
+                    }
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
                 }
+                .frame(height: 32, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func scoreText(_ score: Double) -> String {
+        "\(Int(score * 100))%"
+    }
+
+    private func downloadProgressLabel(_ progress: Float) -> String {
+        "\(Int(progress * 100)) percent"
     }
 
     @ViewBuilder
@@ -149,64 +170,83 @@ struct ModelCardView: View {
 
     @ViewBuilder
     private var actionContent: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            primaryAction
+                .frame(minHeight: 44)
+            HStack(spacing: 0) {
+                Button {
+                    showsLanguageInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Supported languages")
+
+                if state == .ready || isFailed {
+                    deletionMenu
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryAction: some View {
         if incompatibilityReason != nil {
-            EmptyView()
+            Color.clear
+                .frame(height: 44)
+                .accessibilityHidden(true)
         } else if isLoading || state == .prewarming {
             ProgressView()
-                .accessibilityLabel(Text(
-                    isLoading ? "Loading" : "Preparing"
-                ))
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel(Text(isLoading ? "Loading" : "Preparing"))
         } else {
             switch state {
             case .notDownloaded:
                 Button {
                     startDownload()
                 } label: {
-                    Label("Download", systemImage: "arrow.down.circle")
+                    Text("Download")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .buttonStyle(.borderless)
+                .frame(minWidth: 44, minHeight: 44)
                 .accessibilityHint("Downloads this model")
             case .downloading:
                 Button("Cancel", role: .cancel) {
                     downloadTask?.cancel()
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .buttonStyle(.borderless)
+                .frame(minWidth: 44, minHeight: 44)
             case .prewarming:
-                EmptyView()
+                Color.clear.frame(height: 44).accessibilityHidden(true)
             case .ready:
                 if !isActive {
                     Button {
                         modelManager.selectModel(model.identifier)
                     } label: {
-                        Label("Select", systemImage: "checkmark.circle")
+                        Text("Select")
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .buttonStyle(.borderless)
+                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityHint("Uses this model for transcription")
+                } else {
+                    Color.clear.frame(height: 44).accessibilityHidden(true)
                 }
             case .error(let message):
                 Button {
                     startDownload()
                 } label: {
-                    Label("Retry", systemImage: "arrow.clockwise.circle")
+                    Text("Retry")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .buttonStyle(.borderless)
+                .frame(minWidth: 44, minHeight: 44)
                 .foregroundStyle(.orange)
                 .help(message)
             }
-        }
-
-        Button {
-            showsLanguageInfo = true
-        } label: {
-            Image(systemName: "info.circle")
-                .frame(minWidth: 44, minHeight: 44)
-        }
-        .buttonStyle(.borderless)
-        .contentShape(Rectangle())
-        .accessibilityLabel("Supported languages")
-
-        if state == .ready || isFailed {
-            deletionMenu
         }
     }
 

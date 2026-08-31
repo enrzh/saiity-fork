@@ -8,132 +8,219 @@ struct KeyboardRootView: View {
     @ObservedObject private var state = KeyboardState.shared
     @State private var pressStarted = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
     var body: some View {
-        GeometryReader { _ in
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    languageIndicator
-                    Spacer(minLength: 0)
-                    utilityButton(
-                        systemName: "globe",
-                        accessibilityLabel: "Switch keyboard",
-                        identifier: "switch-keyboard"
-                    ) {
-                        state.controller?.advanceToNextInputMode()
-                    }
-                }
-                .padding(.vertical, CGFloat(VoiceOnlyKeyboardPolicy.leftRailVerticalPadding))
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
+        GeometryReader { proxy in
+            let surfaceHeight = max(proxy.size.height, 1)
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: proxy.size.width,
+                surfaceHeight: Double(surfaceHeight)
+            )
+            let usesFullWidthSurface = state.areaMode == .emoji || state.areaMode == .panel
+            let contentWidth = usesFullWidthSurface ? proxy.size.width : CGFloat(layout.centerAreaWidth)
+            let contentCenterX = usesFullWidthSurface ? proxy.size.width / 2 : CGFloat(layout.centerX)
+            let centerSurface = areaSurface(
+                width: contentWidth,
+                availableWidth: proxy.size.width,
+                surfaceHeight: surfaceHeight
+            )
 
-                Spacer(minLength: 0)
-
+            ZStack(alignment: .topLeading) {
                 centerSurface
+                    .frame(
+                        width: contentWidth,
+                        height: CGFloat(layout.contentHeight),
+                        alignment: .top
+                    )
+                    .position(x: contentCenterX, y: surfaceHeight / 2)
 
-                Spacer(minLength: 0)
-
-                VStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
-                    utilityButton(
-                        systemName: "delete.backward",
-                        accessibilityLabel: "Delete backward",
-                        identifier: "delete-backward"
-                    ) {
-                        state.controller?.textDocumentProxy.deleteBackward()
-                    }
-                    utilityButton(
-                        systemName: "return",
-                        accessibilityLabel: "Insert return",
-                        identifier: "return-key"
-                    ) {
-                        state.controller?.textDocumentProxy.insertText("\n")
-                    }
-                    utilityButton(
-                        systemName: "at",
-                        accessibilityLabel: "Insert at sign",
-                        identifier: "at-key"
-                    ) {
-                        state.controller?.textDocumentProxy.insertText("@")
-                    }
-                    utilityButton(
-                        systemName: "keyboard.chevron.compact.down",
-                        accessibilityLabel: "Dismiss keyboard",
-                        identifier: "dismiss-keyboard"
-                    ) {
-                        state.controller?.dismissKeyboard()
-                    }
+                if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
+                    languageIndicator
+                        .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
-                .padding(.vertical, CGFloat(VoiceOnlyKeyboardPolicy.verticalPadding))
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
+
+                if layout.leftRailWidth > 0 {
+                    utilityGlyph(systemName: "at")
+                        .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
+                    utilityGlyph(systemName: "face.smiling")
+                        .position(x: CGFloat(layout.leftUtilityFrames.emoji.midX), y: CGFloat(layout.leftUtilityFrames.emoji.midY))
+                    utilityGlyph(text: state.areaMode == .keys || state.areaMode == .recording ? "123" : "ABC")
+                        .position(x: CGFloat(layout.leftUtilityFrames.number.midX), y: CGFloat(layout.leftUtilityFrames.number.midY))
+                }
+
+                if layout.rightRailWidth > 0 {
+                    utilityGlyph(systemName: "delete.backward", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
+                        .position(x: CGFloat(layout.deleteFrame.midX), y: CGFloat(layout.deleteFrame.midY))
+                    utilityGlyph(systemName: "return", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
+                        .position(x: CGFloat(layout.returnFrame.midX), y: CGFloat(layout.returnFrame.midY))
+
+                    utilityGlyph(systemName: "keyboard.chevron.compact.down", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, usesInteractiveSurface: false)
+                    .position(
+                        x: CGFloat(layout.dismissFrame.midX),
+                        y: CGFloat(layout.dismissFrame.midY)
+                    )
+                }
             }
-            .padding(.horizontal, CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding))
             .frame(
                 maxWidth: .infinity,
-                minHeight: CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight),
-                maxHeight: CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
+                maxHeight: .infinity
             )
-            // systemGray6 is the same semantic dark surface used by Apple's
-            // keyboard. A solid base prevents the host app from bleeding through
-            // the voice-only area while glass controls remain native and subtle.
-            .background(Color(uiColor: .systemGray6))
+            .background {
+                if reduceTransparency {
+                    Color(uiColor: .secondarySystemBackground)
+                } else {
+                    Color(uiColor: .secondarySystemBackground)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func areaSurface(width: Double, availableWidth: Double, surfaceHeight: CGFloat) -> some View {
+        switch state.areaMode {
+        case .keys, .recording:
+            centerSurface(width: width, availableWidth: availableWidth, surfaceHeight: surfaceHeight)
+        case .emoji:
+            EmojiPickerView(
+                onEmojiInsert: { emoji in
+                    guard let controller = state.controller as? KeyboardViewController else {
+                        DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+                        return
+                    }
+                    controller.routeProxyText(emoji)
+                    state.closeArea()
+                },
+                onClose: { state.closeArea() },
+                onDelete: { state.controller?.textDocumentProxy.deleteBackward() },
+                availableWidth: CGFloat(availableWidth),
+                availableHeight: surfaceHeight
+            )
+            .accessibilityIdentifier("emoji-picker-surface")
+        case .panel:
+            Color.clear.accessibilityIdentifier("number-layer-surface")
         }
     }
 
     private var languageIndicator: some View {
-        appleControlSurface(
-            Text("AUTO")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 8)
-                .frame(height: 24),
+        Menu {
+            Button {
+                state.selectTranscription()
+            } label: {
+                Label("Transcribe", systemImage: state.selectedTranslationTarget == nil ? "checkmark" : "waveform")
+            }
+
+            Menu {
+                ForEach(state.translationTargets, id: \.self) { target in
+                    let status = state.translationTargetStatus(target)
+                    Button {
+                        state.selectTranslation(target)
+                    } label: {
+                        Label(
+                            state.translationTargetMenuLabel(target),
+                            systemImage: state.selectedTranslationTarget == target
+                                ? "checkmark"
+                                : status == .supportedNeedsDownload ? "arrow.down.circle" : "character.bubble"
+                        )
+                    }
+                    .accessibilityLabel(state.translationTargetAccessibilityLabel(target))
+                }
+            } label: {
+                Text(state.selectedTranslationTarget.map(state.translationTargetMenuLabel) ?? "Translate")
+            }
+            .disabled(state.translationTargets.isEmpty)
+        } label: {
+            appleControlSurface(
+                    Text(languageIndicatorTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 8)
+                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
+                in: Capsule()
+            )
+        }
+        .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
+        .accessibilityLabel("Transcription language")
+        .accessibilityValue(languageIndicatorTitle)
+    }
+
+    private var languageIndicatorTitle: String {
+        if let target = state.selectedTranslationTarget {
+            return "->\(target.shortCode)"
+        }
+        let code = state.asrCapability.displaySourceCode
+        switch code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "", "--", "UNKNOWN", "N/A", "NA", "NONE", "NULL", "UNAVAILABLE", "UNSUPPORTED", "AUTO":
+            return "Auto"
+        default:
+            return code
+        }
+    }
+
+    @ViewBuilder
+    private func centerSurface(width: Double, availableWidth: Double, surfaceHeight: CGFloat) -> some View {
+        if width > 0 {
+            VStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.contentSpacing)) {
+                dictateButton(width: width, availableWidth: availableWidth)
+                if let statusMessage = state.statusMessage, !statusMessage.isEmpty {
+                    Text(statusMessage)
+                        .font(.caption2)
+                        .foregroundStyle(
+                            state.dictationStatus == .failed || accessibilityContrast == .increased
+                                ? (state.dictationStatus == .failed ? .red : .primary)
+                                : .secondary
+                        )
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: max(44, width - 16))
+                }
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: surfaceHeight,
+                maxHeight: surfaceHeight,
+                alignment: .center
+            )
+        } else {
+            Color.clear
+        }
+    }
+
+    private func dictateButton(width: Double, availableWidth: Double) -> some View {
+            appleControlSurface(
+                VStack(spacing: 1) {
+                    Image(systemName: dictationSymbol)
+                        .font(.system(size: 20, weight: .semibold))
+                        .symbolEffect(
+                            .pulse,
+                            isActive: state.dictationStatus == .recording && !reduceMotion
+                        )
+                    Text(dictationTitle)
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .foregroundStyle(dictationColor)
+                .frame(
+                    width: CGFloat(VoiceOnlyKeyboardPolicy.primaryControlWidth(availableWidth: availableWidth, centerAreaWidth: width)),
+                    height: CGFloat(VoiceOnlyKeyboardPolicy.primaryControlSize)
+                ),
             in: Capsule()
         )
-        .accessibilityLabel("Automatic transcription language")
-    }
-
-    private var centerSurface: some View {
-        ZStack {
-            dictateButton
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .top) {
-            Text(dictationTitle)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.top, 42)
-        }
-        .overlay(alignment: .bottom) {
-            if let statusMessage = state.statusMessage, !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .font(.caption2)
-                    .foregroundStyle(state.dictationStatus == .failed ? .red : .secondary)
-                    .lineLimit(1)
-                    .padding(.bottom, 8)
-            }
-        }
-    }
-
-    private var dictateButton: some View {
-        appleControlSurface(
-            Image(systemName: dictationSymbol)
-                .font(.system(size: 32, weight: .semibold))
-                .foregroundStyle(dictationColor)
-                .symbolEffect(.pulse, isActive: state.dictationStatus == .recording)
-                .frame(
-                    width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize),
-                    height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize)
-                ),
-            in: Circle()
-        )
-        .scaleEffect(pressStarted ? 0.94 : 1)
-        .animation(.easeOut(duration: 0.12), value: pressStarted)
-        .contentShape(Circle())
+        .scaleEffect(reduceMotion ? 1 : (pressStarted ? 0.94 : 1))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: pressStarted)
+            .contentShape(Capsule())
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
                     guard !pressStarted else { return }
                     pressStarted = true
-                    state.startRecording()
+                    if state.dictationStatus == .failed, state.failedRequiresApp {
+                        state.openDictusForRecovery()
+                    } else {
+                        state.startRecording()
+                    }
                 }
                 .onEnded { _ in
                     defer { pressStarted = false }
@@ -155,7 +242,7 @@ struct KeyboardRootView: View {
         case .recording: return "Listening..."
         case .transcribing: return "Transcribing..."
         case .processing: return "Cleaning up..."
-        case .failed: return "Try again"
+        case .failed: return state.failedRequiresApp ? "Open sAiity" : "Try again"
         }
     }
 
@@ -163,7 +250,7 @@ struct KeyboardRootView: View {
         switch state.dictationStatus {
         case .recording: return "waveform"
         case .requested, .transcribing, .processing: return "ellipsis"
-        case .failed: return "arrow.clockwise"
+        case .failed: return state.failedRequiresApp ? "arrow.up.forward.app" : "arrow.clockwise"
         case .idle, .ready: return "mic.fill"
         }
     }
@@ -181,39 +268,68 @@ struct KeyboardRootView: View {
         _ content: Content,
         in shape: S
     ) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || accessibilityContrast == .increased {
             content
-                .background(shape.fill(Color(uiColor: .systemGray5)))
-                .overlay(shape.stroke(Color.white.opacity(0.10), lineWidth: 0.75))
+                .background(shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill)))
         } else if #available(iOS 26, *) {
-            content.glassEffect(.regular, in: shape)
+            content.glassEffect(.regular.interactive(), in: shape)
         } else {
             content
-                .background(shape.fill(Color(uiColor: .systemGray5)))
-                .overlay(shape.stroke(Color.white.opacity(0.10), lineWidth: 0.75))
+                .background(shape.fill(.regularMaterial))
         }
     }
 
-    private func utilityButton(
+    private func utilityGlyph(
         systemName: String,
-        accessibilityLabel: String,
-        identifier: String,
-        action: @escaping () -> Void
+        width: Double = VoiceOnlyKeyboardPolicy.controlSize,
+        height: Double = VoiceOnlyKeyboardPolicy.controlSize,
+        visualSize: Double = VoiceOnlyKeyboardPolicy.utilityVisualSize,
+        visualWidth: Double? = nil,
+        visualHeight: Double? = nil,
+        visualCornerRadius: Double? = nil,
+        usesInteractiveSurface: Bool = true
     ) -> some View {
-        Button(action: action) {
-            appleControlSurface(
+        Group {
+            if usesInteractiveSurface {
+                if let visualWidth, let visualHeight, let visualCornerRadius {
+                    appleControlSurface(
+                        Image(systemName: systemName)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: CGFloat(visualWidth), height: CGFloat(visualHeight)),
+                        in: RoundedRectangle(cornerRadius: CGFloat(visualCornerRadius), style: .continuous)
+                    )
+                } else {
+                    appleControlSurface(
+                        Image(systemName: systemName)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: CGFloat(visualSize), height: CGFloat(visualSize)),
+                        in: Circle()
+                    )
+                }
+            } else {
                 Image(systemName: systemName)
                     .font(.system(size: 16, weight: .semibold))
-                    .frame(
-                        width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize),
-                        height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize)
-                    ),
-                in: Circle()
-            )
+                    .foregroundStyle(.primary)
+                    .frame(width: CGFloat(visualSize), height: CGFloat(visualSize))
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier(identifier)
+        .frame(width: CGFloat(width), height: CGFloat(height))
+        .accessibilityHidden(true)
+    }
+
+    private func utilityGlyph(text: String) -> some View {
+        appleControlSurface(
+            Text(text)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
+            in: Circle()
+        )
+        .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
 }

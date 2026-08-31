@@ -23,7 +23,7 @@ struct ProBannerView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "crown.fill")
                         .font(.title3)
-                        .foregroundColor(.dictusAccent)
+                        .foregroundColor(.accentColor)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Unlock sAiity Pro")

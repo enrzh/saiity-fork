@@ -11,22 +11,17 @@ struct EmojiCategoryBar: View {
     let selectedCategoryID: String
     let onSelectCategory: (String) -> Void
     let onSearch: () -> Void
+    let onClose: () -> Void
     let onDelete: () -> Void
-    let onDismiss: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            // ABC button — return to letter keyboard (fixed left)
-            Button {
-                onDismiss()
-            } label: {
-                Text("ABC")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Color(.label))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+            Button(action: onClose) {
+                Image(systemName: "123")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 44, height: 44)
             }
-            .fixedSize()
+            .accessibilityLabel("Return to letters")
 
             // Search button — 44pt minimum tap target (Apple HIG)
             Button {
@@ -60,7 +55,7 @@ struct EmojiCategoryBar: View {
                                         .foregroundColor(isSelected ? Color(.label) : Color(.tertiaryLabel))
                                 }
                             }
-                            .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
                             .background(
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .fill(isSelected ? Color(.systemGray4) : Color.clear)
@@ -72,20 +67,14 @@ struct EmojiCategoryBar: View {
                 .padding(.horizontal, 2)
             }
 
-            // Delete button (fixed right)
-            Button {
-                HapticFeedback.keyTapped()
-                AudioServicesPlaySystemSound(KeySound.delete)
-                onDelete()
-            } label: {
+            Button(action: onDelete) {
                 Image(systemName: "delete.backward")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color(.label))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 44, height: 44)
             }
-            .fixedSize()
+            .accessibilityLabel("Delete backward")
+
         }
-        .frame(height: 36)
+        .frame(height: 44)
     }
 }

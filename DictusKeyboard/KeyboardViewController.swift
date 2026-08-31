@@ -4,11 +4,32 @@ import SwiftUI
 import Combine
 import DictusCore
 
-class KeyboardViewController: UIInputViewController {
+class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate, GiellaKeyboardViewKeyboardKeyDelegate {
     let controllerID = String(UUID().uuidString.prefix(8))
 
     private var hostingController: UIHostingController<KeyboardRootView>?
+    private var numberKeyboardView: GiellaKeyboardView?
+    private var actionControlsView: UIView?
+    private var atButton: UIButton?
+    private var emojiButton: UIButton?
+    private var numberButton: UIButton?
+    private var nextInputModeButton: UIButton?
+    private var deleteButton: UIButton?
+    private var returnButton: UIButton?
+    private var dismissButton: UIButton?
     private var areaModeCancellable: AnyCancellable?
+
+    private final class PassthroughControlsView: UIView {
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            for subview in subviews.reversed() where !subview.isHidden && subview.alpha > 0 && subview.isUserInteractionEnabled {
+                let localPoint = subview.convert(point, from: self)
+                if let hit = subview.hitTest(localPoint, with: event) {
+                    return hit
+                }
+            }
+            return nil
+        }
+    }
 
     /// Explicit height constraint on inputView to prevent layout issues after app switch.
     /// WHY: Without this, iOS may not recalculate the keyboard height correctly when the
@@ -17,7 +38,7 @@ class KeyboardViewController: UIInputViewController {
     private var heightConstraint: NSLayoutConstraint?
 
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
-    /// The voice surface uses the full 220pt input area.
+    /// The voice surface uses the standard 216pt input area above the system bar.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
     /// Bottom anchor for the voice surface.
@@ -176,6 +197,7 @@ class KeyboardViewController: UIInputViewController {
         // The voice surface owns the entire input view.
         kbInputView.addSubview(hosting.view)
         hosting.didMove(toParent: self)
+        installVoiceActionControls(in: kbInputView)
 
         // --- 5. Set up Auto Layout constraints ---
         // Hosting view (toolbar): pinned to top, leading, trailing. Height = toolbarHeight.
@@ -248,6 +270,10 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // The app cannot inspect iOS' Full Access toggle. The extension can,
+        // so publish this real handshake whenever the keyboard appears.
+        AppGroup.defaults.set(hasFullAccess, forKey: SharedKeys.onboardingFullAccessVerified)
+        AppGroup.defaults.synchronize()
 
         // CRITICAL: Disable touch delay on system gesture recognizers.
         // iOS attaches gesture recognizers to the keyboard's UIWindow that have
@@ -276,8 +302,7 @@ class KeyboardViewController: UIInputViewController {
         KeyboardState.shared.controller = self
         hasAppeared = true
         isAttached = true
-
-        // There is no UIKit key grid in the voice-only path.
+        updateActionAvailability()
 
         // (Re)subscribe to the keyboard area mode here, not in viewDidLoad.
         // WHY: iOS caches UIInputViewController instances across app-switches and
@@ -302,21 +327,9 @@ class KeyboardViewController: UIInputViewController {
 
         // Apply the current keyboard area mode now that we're registered.
         // During cold start, applyAreaMode was skipped (hasAppeared was false).
-        // Now that activeControllerID matches, KeyboardRootView.presentedMode agrees
-        // with us, so the constraint and SwiftUI content change together — no
-        // displaced toolbar. This also restores a picker the user left open when
-        // iOS hands the keyboard to a fresh controller.
+        // Registration precedes the geometry update so the constraint and SwiftUI
+        // content change together.
         let statusBeforeHandle = KeyboardState.shared.dictationStatus.rawValue
-
-        // The hamburger panel does not survive leaving the keyboard (#241 device
-        // feedback). Switching away with the globe and coming back put the user
-        // straight back into the menu instead of the keys, which is not what
-        // returning to a keyboard should mean. The emoji picker deliberately keeps
-        // the old restore behaviour: browsing emoji is a task worth resuming,
-        // choosing a language is not.
-        if KeyboardState.shared.areaMode == .panel {
-            KeyboardState.shared.presentAreaMode(.keys)
-        }
 
         applyAreaMode(KeyboardState.shared.areaMode)
         PersistentLog.log(.diagnosticProbe(
@@ -342,21 +355,6 @@ class KeyboardViewController: UIInputViewController {
         // WHY here and not viewDidLoad: The textDocumentProxy is not fully connected
         // until the view is about to appear. Calling in viewDidLoad would read stale data.
 
-        // Read the host field's input traits now that the connection exists (#200).
-        // Search/URL/email fields disable autocorrect and suggestions.
-        // Re-sync the learned-words dictionary from the App Group (#222).
-        // The singleton caches in memory per process; if the user reset the
-        // dictionary in the app, this cached keyboard process must drop the
-        // stale copy or learned words keep bypassing autocorrect.
-        UserDictionary.shared.reload()
-
-        // The user dictionary's one-shot prune (#287), attempted BEFORE the load
-        // below and not after it. The engine is process-wide, so at this instant
-        // the previous appearance's dictionary is still mmap'd, we are on the main
-        // thread, and no load is in flight — the one moment in the cycle with no
-        // race in it. `setLanguage` on the next line unloads that dictionary
-        // synchronously, which is exactly what kept the prune from ever running
-        // off the load completion alone. Costs one boolean read once it has run.
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
@@ -422,6 +420,7 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        layoutVoiceActionControls()
         if isFirstLayoutPass {
             isFirstLayoutPass = false
             // Defer constraint installation to the next runloop turn so we
@@ -449,7 +448,7 @@ class KeyboardViewController: UIInputViewController {
     }
 
     /// Swap hosting view's bottom anchor between idle and expanded positions.
-    /// - Idle: hosting fills the 220pt voice surface.
+    /// - Idle: hosting fills the standard 216pt voice surface.
     /// - Expanded: hosting.bottom = kbInputView.bottom (fills the full
     ///   keyboard area, used when the recording overlay or emoji picker is
     ///   shown and the keyboard view is hidden).
@@ -531,8 +530,7 @@ class KeyboardViewController: UIInputViewController {
         // dictation session. iOS calls viewDidDisappear on the keyboard right
         // before bringing DictusApp foreground for cold-start; an immediate
         // unregister would flip activeControllerID→nil and isKeyboardVisible
-        // →false, making KeyboardRootView.presentedMode fall back to `.keys` and
-        // SwiftUI swap RecordingOverlay→ToolbarView while hostingConst is still
+        // →false while hostingConst is still
         // 276pt. iOS's keyboard-down animation snapshot then captures that
         // inconsistent layout (toolbar centred in expanded hosting), freezing
         // it on screen for the duration of the transition.
@@ -579,6 +577,9 @@ class KeyboardViewController: UIInputViewController {
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         let hadColorChange = traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection)
+        if hadColorChange {
+            numberKeyboardView?.updateTheme(theme: Theme.current(for: traitCollection))
+        }
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
@@ -650,9 +651,17 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Keyboard Height
 
-    /// The voice-only keyboard always occupies the policy-defined surface height.
+    /// Match the native keyboard's device-aware input height. The shared policy
+    /// remains the geometry source for SwiftUI and UIKit overlays.
     private func computeKeyboardHeight() -> CGFloat {
-        CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
+        let deviceContext = DeviceContext.current
+        let nativeHeight = KeyboardHeightProvider.height(
+            for: deviceContext,
+            traitCollection: traitCollection
+        )
+        return deviceContext.isPhone
+            ? nativeHeight
+            : CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -724,8 +733,8 @@ class KeyboardViewController: UIInputViewController {
         // Ownership is last-writer-wins on appearance, so under churn an instance
         // iOS is about to throw away can hold the area, and when it is deallocated
         // the keyboard the user is looking at is left unable to present the
-        // overlay — ownership is what the guard below and
-        // KeyboardRootView.presentedMode both key on, and nothing re-registers us:
+        // overlay — ownership is what the guard below keys on, and nothing
+        // re-registers us:
         // viewWillAppear already ran.
         //
         // KeyboardState marks such an area reclaimable rather than released, so
@@ -761,10 +770,8 @@ class KeyboardViewController: UIInputViewController {
         // path in viewDidDisappear covers the well-behaved case; this guard
         // short-circuits stale controllers that iOS forgot to notify.
         //
-        // It applies to `.recording` only, mirroring KeyboardRootView.presentedMode
-        // exactly — the two layers have to agree on what is presented, and that is
-        // where the reasoning lives. A picker is opened by a key on the visible
-        // keyboard, which is not the case #128 was ever about.
+        // It applies to `.recording` only, where UIKit geometry must agree with
+        // the voice-only SwiftUI surface.
         guard mode != .recording || KeyboardState.shared.activeControllerID == controllerID else {
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
@@ -791,12 +798,15 @@ class KeyboardViewController: UIInputViewController {
     private func applyLayout(for mode: KeyboardAreaMode) {
         let oldHosting = hostingHeightConstraint?.constant ?? -1
         let status = KeyboardState.shared.dictationStatus.rawValue
+        setVoiceActionControlsHidden(!mode.usesVoiceActionControls)
 
         switch mode {
         case .keys:
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
+            hostingController?.view.isHidden = false
+            numberKeyboardView?.isHidden = true
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
@@ -808,30 +818,39 @@ class KeyboardViewController: UIInputViewController {
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
+            hostingController?.view.isHidden = false
+            numberKeyboardView?.isHidden = true
+            setVoiceActionControlsHidden(true)
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
-                action: "hostingSet_emojiOpen",
-                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=\(mode.rawValue)"
+                action: "hostingSet_emoji",
+                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=emoji"
             ))
 
         case .panel:
-            // Same geometry as the emoji picker: the bar keeps its height and the panel
-            // fills the rest of the voice surface.
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
+            hostingController?.view.isHidden = false
+            setVoiceActionControlsHidden(true)
+            installNumberKeyboardView()
+            numberKeyboardView?.isHidden = false
+            numberKeyboardView?.page = .symbols1
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
-                action: "hostingSet_panelOpen",
-                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=\(mode.rawValue)"
+                action: "numberLayerShown",
+                details: "page=symbols1 status=\(status) mode=\(mode.rawValue)"
             ))
 
         case .recording:
             let fullHeight = computeKeyboardHeight()
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
+            hostingController?.view.isHidden = false
+            numberKeyboardView?.isHidden = true
+            setVoiceActionControlsHidden(false)
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
@@ -842,6 +861,303 @@ class KeyboardViewController: UIInputViewController {
 
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
+        layoutVoiceActionControls()
+    }
+
+    // MARK: - UIKit action controls
+
+    /// Transparent UIKit controls sit over the SwiftUI glyphs. UIKit owns the
+    /// action and pressed state; SwiftUI only renders the visual surface.
+    private func installVoiceActionControls(in inputView: UIView) {
+        let controls = PassthroughControlsView(frame: inputView.bounds)
+        controls.backgroundColor = .clear
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        inputView.addSubview(controls)
+        NSLayoutConstraint.activate([
+            controls.leadingAnchor.constraint(equalTo: inputView.leadingAnchor),
+            controls.trailingAnchor.constraint(equalTo: inputView.trailingAnchor),
+            controls.topAnchor.constraint(equalTo: inputView.topAnchor),
+            controls.bottomAnchor.constraint(equalTo: inputView.bottomAnchor)
+        ])
+        actionControlsView = controls
+
+        atButton = makeKeyboardActionButton(identifier: "at-key", label: "Insert at sign") { [weak self] in
+            self?.routeProxyCommand(.at)
+        }
+        emojiButton = makeKeyboardActionButton(identifier: "emoji-picker", label: "Open emoji picker") { [weak self] in
+            self?.presentArea(.emoji)
+        }
+        numberButton = makeKeyboardActionButton(identifier: "number-layer", label: "Toggle numbers") { [weak self] in
+            guard let self else { return }
+            if KeyboardState.shared.areaMode == .panel {
+                closeNumberPanel()
+            } else {
+                self.presentArea(.panel)
+            }
+        }
+        deleteButton = makeKeyboardActionButton(identifier: "delete-backward", label: "Delete backward") { [weak self] in
+            self?.routeProxyCommand(.delete)
+        }
+        returnButton = makeKeyboardActionButton(identifier: "return-key", label: "Insert return") { [weak self] in
+            self?.routeProxyCommand(.returnKey)
+        }
+        dismissButton = makeKeyboardActionButton(identifier: "dismiss-keyboard", label: "Dismiss keyboard") { [weak self] in
+            self?.handleDismissKeyboard()
+        }
+        nextInputModeButton = makeKeyboardActionButton(
+            identifier: "switch-keyboard",
+            label: "Switch keyboard",
+            installPrimaryAction: false
+        ) { }
+        nextInputModeButton?.addTarget(
+            self,
+            action: #selector(handleNextInputModeButton(_:forEvent:)),
+            for: .allTouchEvents
+        )
+        let nextKeyboardImage = UIImage(
+            systemName: "globe",
+            withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: CGFloat(VoiceOnlyKeyboardPolicy.nextKeyboardVisualSize),
+                weight: .medium
+            )
+        )
+        nextInputModeButton?.setImage(nextKeyboardImage, for: .normal)
+        nextInputModeButton?.imageView?.contentMode = .center
+        nextInputModeButton?.configuration?.imagePadding = 0
+
+        [atButton, emojiButton, numberButton, nextInputModeButton,
+         deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
+            controls.addSubview($0)
+        }
+        setVoiceActionControlsHidden(true)
+    }
+
+    func makeKeyboardActionButton(
+        identifier: String,
+        label: String,
+        minimumHeight: CGFloat = VoiceOnlyKeyboardPolicy.bottomActionHitHeight,
+        installPrimaryAction: Bool = true,
+        action: @escaping () -> Void
+    ) -> UIButton {
+        let button = UIButton(type: .system)
+        button.accessibilityIdentifier = identifier
+        button.accessibilityLabel = label
+        button.accessibilityTraits = [.button]
+        button.configuration = .plain()
+        button.configuration?.contentInsets = .zero
+        button.translatesAutoresizingMaskIntoConstraints = true
+        button.backgroundColor = .clear
+        button.layer.cornerRadius = VoiceOnlyKeyboardPolicy.controlSize / 2
+        button.configurationUpdateHandler = { control in
+            if control.isHighlighted {
+                control.backgroundColor = UIColor.label.withAlphaComponent(0.14)
+            } else if !control.isEnabled {
+                control.backgroundColor = UIColor.label.withAlphaComponent(0.06)
+            } else {
+                control.backgroundColor = .clear
+            }
+        }
+        if installPrimaryAction {
+            button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
+        }
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight).isActive = true
+        return button
+    }
+
+    private func setVoiceActionControlsHidden(_ hidden: Bool) {
+        guard let controls = actionControlsView else { return }
+        let layout = VoiceOnlyKeyboardPolicy.layout(
+            for: Double(controls.bounds.width),
+            surfaceHeight: Double(max(controls.bounds.height, 1))
+        )
+        let hasRightRail = layout.rightRailWidth > 0
+        controls.isHidden = hidden || !hasRightRail
+    }
+
+    private func handleDismissKeyboard() {
+        dismissKeyboard()
+    }
+
+    private func updateActionAvailability() {
+        let nextAvailable = needsInputModeSwitchKey
+        nextInputModeButton?.isEnabled = nextAvailable
+        nextInputModeButton?.isHidden = !nextAvailable
+        nextInputModeButton?.accessibilityValue = nextAvailable ? "Available" : "Unavailable"
+        dismissButton?.isEnabled = isAttached
+        dismissButton?.accessibilityValue = isAttached ? "Available" : "Unavailable"
+    }
+
+    private func layoutVoiceActionControls() {
+        guard let controls = actionControlsView, controls.bounds.width > 0 else { return }
+        let width = controls.bounds.width
+        let height = computeKeyboardHeight()
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))
+        atButton?.frame = layout.leftUtilityFrames.at
+        emojiButton?.frame = layout.leftUtilityFrames.emoji
+        numberButton?.frame = layout.leftUtilityFrames.number
+        nextInputModeButton?.frame = layout.leftUtilityFrames.next
+        deleteButton?.frame = layout.deleteFrame
+        returnButton?.frame = layout.returnFrame
+        dismissButton?.frame = layout.dismissFrame
+        if let numberKeyboardView {
+            numberKeyboardView.frame = CGRect(
+                x: 0,
+                y: 0,
+                width: CGFloat(layout.surfaceWidth),
+                height: CGFloat(layout.surfaceHeight)
+            )
+        }
+    }
+
+    private func installNumberKeyboardView() {
+        guard numberKeyboardView == nil, let inputView else { return }
+        inputView.layoutIfNeeded()
+        let keyboard = GiellaKeyboardView(
+            definition: KeyboardLayouts.current(needsGlobe: needsInputModeSwitchKey),
+            theme: Theme.current(for: traitCollection)
+        )
+        keyboard.delegate = self
+        keyboard.page = .symbols1
+        keyboard.translatesAutoresizingMaskIntoConstraints = true
+        keyboard.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        inputView.addSubview(keyboard)
+        keyboard.frame = inputView.bounds
+        numberKeyboardView = keyboard
+    }
+
+    private func closeNumberPanel() {
+        numberKeyboardView?.page = .normal
+        KeyboardState.shared.closeArea()
+        inputView?.setNeedsLayout()
+        inputView?.layoutIfNeeded()
+        layoutVoiceActionControls()
+    }
+
+    @objc private func handleNextInputModeButton(_ sender: UIButton, forEvent event: UIEvent) {
+        guard sender.isEnabled else { return }
+        handleInputModeList(from: sender, with: event)
+    }
+
+    private func presentArea(_ mode: KeyboardAreaMode) {
+        KeyboardState.shared.presentArea(mode)
+    }
+
+    func routeProxyCommand(_ command: KeyboardCommand) {
+        let ownerAvailable = isAttached && isOnScreen
+            && KeyboardState.shared.activeControllerID == controllerID
+            && KeyboardState.shared.controller === self
+        guard ownerAvailable else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "proxyCommandRejected",
+                details: "command=\(String(describing: command)) ownerAvailable=false"
+            ))
+            return
+        }
+        Self.routeProxyCommand(
+            command,
+            enabled: ownerAvailable,
+            deleteBackward: { [weak self] in self?.textDocumentProxy.deleteBackward() },
+            insertText: { [weak self] text in self?.textDocumentProxy.insertText(text) }
+        )
+    }
+
+    func routeProxyText(_ text: String) {
+        let ownerAvailable = isAttached && isOnScreen
+            && KeyboardState.shared.activeControllerID == controllerID
+            && KeyboardState.shared.controller === self
+        guard ownerAvailable else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "proxyTextRejected",
+                details: "textLength=\(text.count) ownerAvailable=false"
+            ))
+            return
+        }
+        textDocumentProxy.insertText(text)
+    }
+
+    static func routeProxyCommand(
+        _ command: KeyboardCommand,
+        enabled: Bool,
+        deleteBackward: @escaping () -> Void,
+        insertText: @escaping (String) -> Void
+    ) {
+        command.perform(
+            ifEnabled: enabled,
+            deleteBackward: deleteBackward,
+            insertText: insertText
+        )
+    }
+
+    // MARK: - Vendored keyboard owner
+
+    func didTriggerKey(_ key: KeyDefinition) {
+        switch key.type {
+        case .input(let value, _):
+            if value == KeyboardLayouts.emojiKeyGlyph {
+                presentArea(.emoji)
+            } else {
+                routeProxyText(value)
+            }
+        case .backspace:
+            routeProxyCommand(.delete)
+        case .returnkey:
+            routeProxyCommand(.returnKey)
+        case .spacebar:
+            routeProxyText(" ")
+        case .symbols:
+            closeNumberPanel()
+        case .shiftSymbols:
+            if numberKeyboardView?.page == .symbols1 {
+                numberKeyboardView?.page = .symbols2
+            } else {
+                closeNumberPanel()
+            }
+        case .keyboard:
+            break
+        case .shift, .spacer, .caps, .keyboardMode, .splitKeyboard,
+             .normalKeyboard, .sideKeyboardLeft, .sideKeyboardRight,
+             .comma, .fullStop, .tab:
+            break
+        }
+    }
+
+    func didSwipeKey(_ key: KeyDefinition) {
+        didTriggerKey(key)
+    }
+
+    func didTriggerDoubleTap(forKey key: KeyDefinition) { }
+
+    func didTriggerHoldKey(_ key: KeyDefinition) {
+        if case .backspace = key.type {
+            routeProxyCommand(.delete)
+        }
+    }
+
+    func didMoveCursor(_ movement: Int) {
+        let ownerAvailable = isAttached && isOnScreen
+            && KeyboardState.shared.activeControllerID == controllerID
+            && KeyboardState.shared.controller === self
+        guard ownerAvailable else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "cursorRejected",
+                details: "movement=\(movement) ownerAvailable=false"
+            ))
+            return
+        }
+        textDocumentProxy.adjustTextPosition(byCharacterOffset: movement)
+    }
+
+    @objc func didTriggerKeyboardButton(sender: UIView, forEvent event: UIEvent) {
+        handleInputModeList(from: sender, with: event)
     }
 
     // MARK: - Text Change
@@ -894,24 +1210,4 @@ class KeyboardViewController: UIInputViewController {
         disabledGestureHashes.removeAll()
     }
 
-    // MARK: - Emoji Picker
-
-    /// Toggle emoji picker visibility for the shared keyboard state.
-    ///
-    /// It only moves the shared mode: the layout follows from the $areaMode
-    /// subscription and SwiftUI re-renders off the same value. Before #271 this
-    /// method mutated a controller-local Bool, drove the layout by hand, and then
-    /// posted a NotificationCenter message so KeyboardRootView's own Bool could
-    /// catch up — three ways for the two layers to disagree.
-    func toggleEmojiPicker() {
-        KeyboardState.shared.toggleEmojiPresentation()
-    }
-}
-
-// MARK: - Notification names for keyboard internal communication
-
-extension Notification.Name {
-    /// Posted by KeyboardViewController when text changes externally (paste, cursor move).
-    /// KeyboardView listens for this to recheck autocapitalisation.
-    static let dictusTextDidChange = Notification.Name("dictusTextDidChange")
 }

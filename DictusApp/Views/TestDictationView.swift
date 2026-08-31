@@ -12,5 +12,7 @@ import DictusCore
 struct TestDictationView: View {
     var body: some View {
         RecordingView(mode: .standalone)
+            .navigationTitle("Test dictation")
+            .navigationBarTitleDisplayMode(.inline)
     }
 }

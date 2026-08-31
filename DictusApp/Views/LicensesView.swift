@@ -10,25 +10,18 @@ import DictusCore
 /// Placing them in Settings > Legal & Help > Licenses follows the standard iOS
 /// convention (e.g., Settings > General > Legal & Regulatory).
 ///
-/// All 5 dependencies are listed alphabetically: DeviceKit, the original project,
-/// giellakbd-ios, WhisperKit. FluidAudio uses Apache 2.0; all others use MIT.
+/// Lists the third-party code currently shipped by the app. Vendored Giella
+/// keyboard code is included alongside the Swift package dependencies.
 struct LicensesView: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        List {
+            Section("Third-party software") {
 
                 licenseBlock(
                     name: "DeviceKit",
                     author: "Dennis Weissmann",
                     url: "https://github.com/devicekit/DeviceKit",
                     license: mitLicense(copyright: "Copyright (c) 2015 Dennis Weissmann")
-                )
-
-                licenseBlock(
-                    name: "Original project",
-                    author: "PIVI Solutions",
-                    url: "https://github.com/getdictus/dictus-ios",
-                    license: mitLicense(copyright: "Copyright (c) 2026 PIVI Solutions")
                 )
 
                 licenseBlock(
@@ -52,9 +45,7 @@ struct LicensesView: View {
                     license: mitLicense(copyright: "Copyright (c) 2024 Argmax, Inc.")
                 )
 
-                Spacer(minLength: 32)
             }
-            .padding()
         }
         .navigationTitle("Licenses")
     }
@@ -76,13 +67,14 @@ struct LicensesView: View {
             }
 
             Text(license)
-                .font(.system(.caption2, design: .monospaced))
+                .font(.body)
                 .foregroundColor(.secondary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.tertiarySystemBackground))
-                .cornerRadius(8)
+                .textSelection(.enabled)
         }
+        .padding(.vertical, 4)
+        .listRowSeparator(.hidden)
     }
 
     /// Standard MIT license text with customizable copyright line.

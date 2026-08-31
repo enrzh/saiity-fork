@@ -200,7 +200,7 @@ struct DictusLiveActivity: Widget {
                     Image(systemName: "power")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                         .background(Color.white.opacity(0.15))
                         .clipShape(Circle())
                 }
@@ -209,14 +209,15 @@ struct DictusLiveActivity: Widget {
                 // Record button
                 // Force unwrap is safe: compile-time constant deep link, always well-formed.
                 // swiftlint:disable:next force_unwrapping
-                Link(destination: URL(string: "saiity://dictate")!) {
-                    Image(systemName: "mic.fill")
+                Button(intent: StopStandbyIntent(toggleDetection: true)) {
+                    Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color(hex: 0x3D7EFF))
+                        .frame(width: 44, height: 44)
+                        .background(context.state.detectionMuted ? Color.secondary : Color(hex: 0x3D7EFF))
                         .clipShape(Circle())
                 }
+                .buttonStyle(.plain)
             case .recording:
                 // Stop button (left side)
                 // Force unwrap is safe: compile-time constant deep link, always well-formed.
@@ -285,13 +286,13 @@ struct DictusLiveActivity: Widget {
             VStack(alignment: .leading, spacing: 2) {
                 Text("sAiity")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
 
                 switch context.state.phase {
                 case .standby:
                     Text("On")
                         .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.secondary)
                 case .recording:
                     if let startDate = context.state.recordingStartDate {
                         HStack(spacing: 4) {
@@ -300,7 +301,7 @@ struct DictusLiveActivity: Widget {
                                 .frame(width: 6, height: 6)
                             Text(startDate, style: .timer)
                                 .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(.secondary)
                                 .monospacedDigit()
                         }
                     }
@@ -333,22 +334,23 @@ struct DictusLiveActivity: Widget {
                     Button(intent: StopStandbyIntent()) {
                         Image(systemName: "power")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.7))
-                            .frame(width: 36, height: 36)
+                            .foregroundColor(.secondary)
+                            .frame(width: 48, height: 48)
                             .background(Color.white.opacity(0.1))
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     // Force unwrap is safe: compile-time constant deep link, always well-formed.
                     // swiftlint:disable:next force_unwrapping
-                    Link(destination: URL(string: "saiity://dictate")!) {
-                        Image(systemName: "mic.fill")
+                    Button(intent: StopStandbyIntent(toggleDetection: true)) {
+                        Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color(hex: 0x3D7EFF))
+                            .foregroundColor(.primary)
+                            .frame(width: 48, height: 48)
+                            .background(context.state.detectionMuted ? Color.secondary : Color(hex: 0x3D7EFF))
                             .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
                 }
             case .recording:
                 // Force unwrap is safe: compile-time constant deep link, always well-formed.
@@ -356,8 +358,8 @@ struct DictusLiveActivity: Widget {
                 Link(destination: URL(string: "saiity://stop")!) {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
+                        .foregroundColor(.primary)
+                        .frame(width: 48, height: 48)
                         .background(Color(hex: 0xEF4444))
                         .clipShape(Circle())
                 }
@@ -366,7 +368,7 @@ struct DictusLiveActivity: Widget {
             }
         }
         .padding(16)
-        .background(Color(hex: 0x0A1628))
+        .background(Color(uiColor: .systemBackground))
     }
 
     // MARK: - Helpers

@@ -49,6 +49,11 @@ struct SoundSettingsView: View {
                         .font(.footnote)
                     Slider(value: $soundVolume, in: 0.05...1.0, step: 0.05)
                         .tint(.accentColor)
+                        .accessibilityValue(soundVolumeLabel)
+                    Text(soundVolumeLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 38, alignment: .trailing)
                     Image(systemName: "speaker.wave.3.fill")
                         .foregroundStyle(.secondary)
                         .font(.footnote)
@@ -76,11 +81,13 @@ struct SoundSettingsView: View {
                 )
             } header: {
                 Text("Sounds by event")
+            } footer: {
+                if !soundFeedbackEnabled {
+                    Text("Enable sounds to configure volume and event sounds.")
+                }
             }
             .disabled(!soundFeedbackEnabled)
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.dictusBackground.ignoresSafeArea())
         .navigationTitle("Sounds")
     }
 
@@ -104,6 +111,10 @@ struct SoundSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var soundVolumeLabel: String {
+        "\(Int(soundVolume * 100))%"
     }
 }
 
@@ -139,8 +150,6 @@ private struct SoundPickerListView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.dictusBackground.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }

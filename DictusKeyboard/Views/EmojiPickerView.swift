@@ -17,8 +17,8 @@ struct CategoryInfo: Identifiable {
 /// - Category bar at bottom as bookmarks into the grid
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
+    let onClose: () -> Void
     let onDelete: () -> Void
-    let onDismiss: () -> Void
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
     /// SwiftUI content the full screen width due to safe area or layout margins.
@@ -50,7 +50,7 @@ struct EmojiPickerView: View {
     }
 
     /// Height per emoji row, computed to fill available space evenly.
-    private var rowHeight: CGFloat { 42 }
+    private var rowHeight: CGFloat { 44 }
 
     private var gridRows: [GridItem] {
         Array(repeating: GridItem(.fixed(rowHeight), spacing: rowSpacing), count: rowCount)
@@ -167,9 +167,9 @@ struct EmojiPickerView: View {
             onSelectCategory: { id in
                 selectedCategoryID = id
             },
-            onSearch: { isSearchActive = true },
-            onDelete: onDelete,
-            onDismiss: onDismiss
+            onSearch: { isSearchActive = true }
+            , onClose: onClose,
+            onDelete: onDelete
         )
     }
 
@@ -201,13 +201,13 @@ struct EmojiPickerView: View {
                         } label: {
                             Text(emoji)
                                 .font(.system(size: 30))
-                                .frame(width: emojiCellWidth, height: 38)
+                                .frame(width: emojiCellWidth, height: 44)
                         }
                     }
                 }
                 .padding(.horizontal, 4)
             }
-            .frame(height: 38)
+            .frame(height: 44)
         }
 
         Spacer(minLength: 0)
@@ -366,7 +366,7 @@ private struct MiniSearchKeyboard: View, Equatable {
         true // Layout never changes, only closures differ
     }
 
-    private let keyHeight: CGFloat = 34
+    private let keyHeight: CGFloat = 44
 
     private var rows: [[String]] {
         switch LayoutType.active {

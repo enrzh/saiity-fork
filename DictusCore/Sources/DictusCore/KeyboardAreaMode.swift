@@ -23,21 +23,24 @@ import Foundation
 public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
     /// The idle voice surface with the toolbar visible.
     case keys
-    /// The emoji picker fills the area; the toolbar stays visible above it.
     case emoji
-    /// Reserved for the hamburger panel (#241). No view is attached yet — the
-    /// layout contract exists so #241 adds a view rather than reopening #271.
     case panel
     /// The recording overlay fills the whole area, toolbar included.
     case recording
 
+    public var usesVoiceActionControls: Bool {
+        self == .keys || self == .recording
+    }
+
+    /// Toggles the symbols surface from the keyboard's ABC/123 action.
+    public static func toggledPanel(from current: KeyboardAreaMode) -> KeyboardAreaMode {
+        current == .panel ? .keys : .panel
+    }
+
     /// The mode after a dictation status change.
     ///
-    /// A dictation owns the entire keyboard area while it is in flight, so
-    /// entering an owning status is the explicit transition that dismisses the
-    /// emoji picker (or, later, the #241 panel). Leaving it returns to the idle
-    /// voice surface: a picker the user had open before dictating is not restored, which
-    /// is what the pre-#271 code did by clearing its emoji flag on overlay show.
+    /// A dictation owns the entire keyboard area while it is in flight. Leaving
+    /// it returns to the idle voice surface.
     public static func resolving(
         status: DictationStatus,
         current: KeyboardAreaMode

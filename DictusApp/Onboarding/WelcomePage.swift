@@ -12,6 +12,7 @@ import DictusCore
 struct WelcomePage: View {
     let onNext: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showContent = false
 
     var body: some View {
@@ -19,14 +20,17 @@ struct WelcomePage: View {
             Spacer()
 
             // Smooth sinusoidal waveform — same as the transcription processing animation
-            BrandWaveform(maxHeight: 100, animation: .sweep)
+            BrandWaveform(
+                maxHeight: 100,
+                animation: reduceMotion ? .still : .sweep,
+                isActive: !reduceMotion
+            )
                 .opacity(0.5)
                 .padding(.bottom, 24)
 
             // "Dictus" wordmark
             Text("sAiity")
-                .font(.system(size: 42, weight: .ultraLight, design: .rounded))
-                .kerning(-0.5)
+                .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(.primary)
                 .padding(.bottom, 12)
 
@@ -40,21 +44,22 @@ struct WelcomePage: View {
             // "Commencer" button
             Button(action: onNext) {
                 Text("Get started")
-                    .font(.dictusSubheading)
-                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.dictusAccent)
-                    )
             }
+            .font(.headline)
+            .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
+            .controlSize(.large)
             .padding(.horizontal, 32)
             .padding(.bottom, 48)
             .opacity(showContent ? 1 : 0)
         }
         .onAppear {
-            withAnimation(.easeIn(duration: 0.6).delay(0.5)) {
+            if AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion) {
+                withAnimation(.easeIn(duration: 0.6).delay(0.5)) {
+                    showContent = true
+                }
+            } else {
                 showContent = true
             }
         }

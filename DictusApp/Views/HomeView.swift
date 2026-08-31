@@ -12,6 +12,7 @@ struct HomeView: View {
 
     @State private var showCopiedFeedback = false
     @State private var microphonePermission = MicrophonePermissionState.undetermined
+    @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
     @Environment(\.scenePhase) private var scenePhase
 
     init(modelManager: ModelManager, onModelsRequested: (() -> Void)? = nil) {
@@ -21,20 +22,10 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                header
+            VStack(alignment: .leading, spacing: 28) {
                 greeting
-                modelStatusSurface
-
-                if modelManager.isModelReady {
-                    newDictationButton
-                } else if let onModelsRequested {
-                    Button(action: onModelsRequested) {
-                        Label("Open Models", systemImage: "arrow.down.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                Section("Readiness") {
+                    readinessSection
                 }
 
                 if let result = coordinator.lastResult, !result.isEmpty {
@@ -46,12 +37,31 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("sAiity")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Toggle(isOn: $serviceEnabled) {
+                    Label("Dictation service", systemImage: serviceEnabled ? "waveform" : "waveform.slash")
+                }
+                .labelsHidden()
+                .tint(.accentColor)
+                .accessibilityLabel("Dictation service")
+                .accessibilityValue(serviceEnabled ? "On" : "Off")
+            }
+        }
+        .onChange(of: serviceEnabled) { _, enabled in
+            guard !enabled else { return }
+            LiveActivityManager.shared.stopStandbyActivity()
+            NotificationCenter.default.post(
+                name: Notification.Name("DictusStopStandbyRequested"),
+                object: nil
+            )
+        }
         .onAppear {
             modelManager.loadState()
             refreshMicrophonePermission()
@@ -67,96 +77,75 @@ struct HomeView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("sAiity")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(.primary)
-                if proStatus.isProActive {
-                    Text("Pro")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.dictusAccent)
-                }
-            }
-            Spacer()
-            DictusLogo(height: 34)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 4)
-    }
-
     private var greeting: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(greetingTitle)
-                .font(.system(.title3, design: .rounded, weight: .semibold))
-            Text(readinessSubtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if microphonePermission.isRecoverable {
-                Button {
-                    openSystemSettings()
-                } label: {
-                    Label("Open Settings", systemImage: "arrow.up.right")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .padding(.top, 2)
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: serviceEnabled ? "waveform" : "waveform.slash")
+                .font(.title2.weight(.medium))
+                .foregroundStyle(serviceEnabled ? Color.accentColor : .secondary)
+                .frame(width: 34, height: 34)
+                .background(.thinMaterial, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(greetingTitle)
+                    .font(.title2.weight(.semibold))
+                Text(serviceEnabled ? "Ready for private, on-device dictation" : "Dictation service is turned off")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var modelStatusSurface: some View {
-        Group {
-            if let modelIdentifier = modelManager.activeModel,
-               modelManager.isModelReady {
-                let info = ModelInfo.forIdentifier(modelIdentifier)
-                HStack(spacing: 14) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Active model")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text(info?.displayName ?? modelIdentifier)
-                            .font(.system(.title3, design: .rounded, weight: .semibold))
-                        if let size = info?.sizeLabel {
-                            Text(size)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 12)
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(Color.dictusSuccess)
-                        .accessibilityLabel("Ready")
+    private var readinessSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: readinessSymbol)
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(readinessTitle)
+                        .font(.body.weight(.semibold))
+                    Text(readinessSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                HStack(spacing: 14) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.title2)
-                        .foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("No model selected")
-                            .font(.system(.body, design: .rounded, weight: .semibold))
-                        Text("Download a model to start dictating.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+            }
+            .accessibilityElement(children: .combine)
+
+            if !serviceEnabled {
+                Text("Turn on the service from the top right to use dictation.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if microphonePermission.isRecoverable {
+                Button { openSystemSettings() } label: {
+                    Label("Open Settings", systemImage: "arrow.up.right")
                 }
+                .buttonStyle(.bordered)
+            } else if !microphonePermission.isAuthorized {
+                Button { requestMicrophoneAccess() } label: {
+                    Label("Allow microphone", systemImage: "mic.badge.plus")
+                }
+                .buttonStyle(.bordered)
+            } else if !modelManager.isModelReady, let onModelsRequested {
+                Button(action: onModelsRequested) {
+                    Label("Open Models", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if microphonePermission.isAuthorized && modelManager.isModelReady {
+                newDictationButton
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .dictusGlass(in: RoundedRectangle(cornerRadius: 18))
-        .accessibilityElement(children: .combine)
     }
 
     private var newDictationButton: some View {
         Button {
             coordinator.startDictation()
         } label: {
-            Label("New dictation", systemImage: "waveform")
-                .font(.system(.body, design: .rounded, weight: .semibold))
+            Label("Start dictation", systemImage: "waveform")
+                .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.borderedProminent)
@@ -166,37 +155,51 @@ struct HomeView: View {
     }
 
     private func recentActivity(result: String) -> some View {
-        Button {
-            UIPasteboard.general.string = result
-            HapticFeedback.recordingStopped()
-            showCopiedFeedback = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                showCopiedFeedback = false
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Recent activity")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(showCopiedFeedback ? "Copied" : "Tap to copy")
-                        .font(.caption)
-                        .foregroundStyle(showCopiedFeedback ? Color.dictusSuccess : .secondary)
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(result)
-                    .font(.body)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .dictusGlass(in: RoundedRectangle(cornerRadius: 18))
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent dictation")
+                .font(.headline)
+            Text(result)
+                .font(.body)
+                .lineLimit(4)
+            Button("Copy") { copy(result) }
+                .buttonStyle(.bordered)
+            Text(showCopiedFeedback ? "Copied" : "")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(!showCopiedFeedback)
+                .frame(minHeight: 20, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.recentActivity")
+    }
+
+    private func copy(_ result: String) {
+        UIPasteboard.general.string = result
+        HapticFeedback.recordingStopped()
+        showCopiedFeedback = true
+        UIAccessibility.post(notification: .announcement, argument: "Copied")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showCopiedFeedback = false }
+    }
+
+    private var readinessSymbol: String {
+        if !microphonePermission.isAuthorized { return "mic.slash" }
+        if !modelManager.isModelReady { return "arrow.down.circle" }
+        return "checkmark.circle"
+    }
+
+    private var readinessTitle: String {
+        if microphonePermission.isRecoverable { return "Microphone access is off" }
+        if !microphonePermission.isAuthorized { return "Microphone access needed" }
+        if !modelManager.isModelReady { return "Choose a local model" }
+        if coordinator.status == .failed { return "Dictation needs another try" }
+        return "Ready to dictate"
+    }
+
+    private func requestMicrophoneAccess() {
+        AVCaptureDevice.requestAccess(for: .audio) { _ in
+            DispatchQueue.main.async { refreshMicrophonePermission() }
+        }
     }
 
     private var greetingTitle: String {

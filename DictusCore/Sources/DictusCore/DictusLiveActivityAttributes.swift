@@ -60,16 +60,36 @@ public struct DictusLiveActivityAttributes: ActivityAttributes {
         /// nil except in .ready phase.
         public var transcriptionPreview: String?
 
+        /// Whether standby detection is muted while the activity remains visible.
+        /// This lives in ActivityKit state so the widget refreshes immediately after
+        /// the user toggles the microphone control.
+        public var detectionMuted: Bool
+
         public init(
             phase: Phase,
             recordingStartDate: Date? = nil,
             waveformLevels: [Float] = [],
-            transcriptionPreview: String? = nil
+            transcriptionPreview: String? = nil,
+            detectionMuted: Bool = false
         ) {
             self.phase = phase
             self.recordingStartDate = recordingStartDate
             self.waveformLevels = waveformLevels
             self.transcriptionPreview = transcriptionPreview
+            self.detectionMuted = detectionMuted
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case phase, recordingStartDate, waveformLevels, transcriptionPreview, detectionMuted
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            phase = try container.decode(Phase.self, forKey: .phase)
+            recordingStartDate = try container.decodeIfPresent(Date.self, forKey: .recordingStartDate)
+            waveformLevels = try container.decodeIfPresent([Float].self, forKey: .waveformLevels) ?? []
+            transcriptionPreview = try container.decodeIfPresent(String.self, forKey: .transcriptionPreview)
+            detectionMuted = try container.decodeIfPresent(Bool.self, forKey: .detectionMuted) ?? false
         }
     }
 

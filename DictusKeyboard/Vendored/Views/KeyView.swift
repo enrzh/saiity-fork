@@ -368,7 +368,7 @@ final class KeyView: UIView {
         if case .symbols1 = page {
             text("#+=", page: page)
         } else if case .symbols2 = page {
-            text("123", page: page)
+            text("ABC", page: page)
         } else {
             sfSymbol(named: "shift", traits: traits)
         }

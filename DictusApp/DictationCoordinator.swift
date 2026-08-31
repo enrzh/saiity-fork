@@ -6,6 +6,9 @@ import AVFoundation
 import UIKit
 import DictusCore
 import WhisperKit
+#if canImport(Translation)
+import Translation
+#endif
 
 /// Manages the dictation lifecycle in the main app.
 /// Phase 3.1: Observes keyboard stop/cancel signals via Darwin notifications,
@@ -117,6 +120,41 @@ class DictationCoordinator: ObservableObject {
     /// swap (turbo load). Set synchronously on entry, cleared in the Task's defer.
     private var isTranscribingInFlight = false
 
+    /// Captured when the app accepts a dictation request.
+    private var currentLanguageRequest = DictationLanguageRequest(
+        mode: .followKeyboard,
+        translationTarget: nil
+    )
+    private var currentLanguagePolicy = TranscriptionLanguagePolicy(
+        mode: .followKeyboard,
+        keyboardLanguage: .french,
+        engine: .whisperKit,
+        modelIdentifier: ""
+    )
+
+#if canImport(Translation)
+    @Published private(set) var translationConfiguration: Any?
+
+    /// Each readiness refresh supersedes every earlier refresh, including one with
+    /// the same source language. The async availability calls can finish out of order.
+    private var translationReadinessGeneration = 0
+
+    private struct PendingTranslation {
+        let id: UUID
+        let sessionID: String
+        let generation: Int
+        let sourceText: String
+        let source: SupportedLanguage?
+        let target: SupportedLanguage
+        let clientIdentifier: String
+        let originalText: String
+        let continuation: CheckedContinuation<TranslationOutcome, Never>
+    }
+
+    private var pendingTranslation: PendingTranslation?
+    private var activeTranslationSession: Any?
+#endif
+
     /// Timestamp of last waveform write to App Group.
     /// Used to throttle writes to ~5Hz (every 200ms) to avoid overwhelming UserDefaults
     /// with high-frequency updates from the audio engine's energy callback.
@@ -159,6 +197,10 @@ class DictationCoordinator: ObservableObject {
 
         // Audit the shared dictation state before anything reads it (issue #261).
         reconcileOrphanedDictationState()
+
+        if #available(iOS 26.0, *) {
+            refreshTranslationReadiness()
+        }
 
         // Phase 37 instrumentation: snapshot device capabilities once per app launch
         // so the log stream has a stable anchor for per-device gating analysis.
@@ -365,6 +407,13 @@ class DictationCoordinator: ObservableObject {
     ///     `resolvePendingColdStartOnBackground()`, which is the last chance a parked
     ///     start gets (#311) — deferring a second time there would park it forever.
     func startDictation(fromURL: Bool = false, allowInactiveStart: Bool = false) {
+        guard defaults.object(forKey: SharedKeys.serviceEnabled) == nil
+                || defaults.bool(forKey: SharedKeys.serviceEnabled) else {
+            DictationErrorChannel.record("Dictation service is turned off.")
+            status = .failed
+            return
+        }
+
         // Clear previous recording state before starting new recording.
         // WHY here (not in stopDictation): DI tap and lockscreen paths call
         // startDictation directly without going through stopDictation first.
@@ -397,7 +446,30 @@ class DictationCoordinator: ObservableObject {
         // New session supersedes any pending delayed reset (issue #60) and any
         // outstanding work from the previous one (#267).
         sessionGeneration.beginSession()
-
+#if canImport(Translation)
+        if #available(iOS 26.0, *) {
+            cancelPendingTranslation()
+        }
+#endif
+        let loadedLanguageRequest = DictationLanguageRequest.load(from: defaults)
+        let requestMode = loadedLanguageRequest.mode
+        let modelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
+        let activeModel = ModelInfo.forIdentifier(modelIdentifier)
+        let capability = ASRCapability.forModelIdentifier(
+            modelIdentifier,
+            mode: requestMode,
+            keyboardLanguage: SupportedLanguage.active
+        )
+        currentLanguageRequest = loadedLanguageRequest.withResolvedSourceLanguage(capability.sourceLanguage)
+        currentLanguagePolicy = TranscriptionLanguagePolicy(
+            mode: requestMode,
+            keyboardLanguage: SupportedLanguage.active,
+            engine: activeModel?.engine ?? .whisperKit,
+            modelIdentifier: modelIdentifier
+        )
+        if #available(iOS 26.0, *) {
+            refreshTranslationReadiness(for: currentLanguageRequest)
+        }
         // WHY this early return (only for Darwin notification path, NOT URL scheme):
         // iOS forbids starting an audio engine from background. If the engine isn't
         // running and we're in background (Darwin notification from keyboard), attempting
@@ -420,7 +492,7 @@ class DictationCoordinator: ObservableObject {
             PersistentLog.log(.dictationFailed(error: "No model downloaded"))
             // Localised since #249 — this sibling of the model-availability failure
             // reached the keyboard banner in English regardless of device language.
-            handleError(String(localized: "No model downloaded. Open Dictus to download a model."))
+            handleError(String(localized: "No model downloaded. Open Dictus to download a model."), disposition: .requiresApp)
             return
         }
 
@@ -467,7 +539,7 @@ class DictationCoordinator: ObservableObject {
                     let hasPermission = try await audioEngine.ensureMicrophonePermission()
                     guard hasPermission else {
                         guard mayReport(session, "permission denial") else { return }
-                        handleError("Microphone permission denied")
+                        handleError("Microphone permission denied", disposition: .requiresApp)
                         return
                     }
                     // Before `startRecording`, not merely before the status write:
@@ -517,7 +589,7 @@ class DictationCoordinator: ObservableObject {
                     let hasPermission = try await audioEngine.ensureMicrophonePermission()
                     guard hasPermission else {
                         guard mayReport(session, "permission denial") else { return }
-                        handleError("Microphone permission denied")
+                        handleError("Microphone permission denied", disposition: .requiresApp)
                         return
                     }
                     guard mayReport(session, "cold start") else { return }
@@ -622,6 +694,7 @@ class DictationCoordinator: ObservableObject {
         // The session this run belongs to. Every write it makes below is gated on
         // still being that session (#267) -- see `mayReport`.
         let session = sessionGeneration.current
+        let capturedLanguageRequest = currentLanguageRequest
 
         dictationTask = Task {
             defer { self.isTranscribingInFlight = false }
@@ -665,7 +738,7 @@ class DictationCoordinator: ObservableObject {
                 // another. The policy is also engine-aware: with Parakeet
                 // active the setting is Whisper-only-effective, so every mode
                 // resolves to the historical follow behavior.
-                let languagePolicy = TranscriptionLanguagePolicy.snapshot()
+                let languagePolicy = currentLanguagePolicy
 
                 let rawText = try await transcriptionService.transcribe(
                     audioSamples: samples,
@@ -696,27 +769,46 @@ class DictationCoordinator: ObservableObject {
                     }
                 )
 
+                let translatedOrOriginal = await processAuthoritativeFinalTranscript(
+                    text,
+                    request: capturedLanguageRequest,
+                    generation: session
+                )
+
                 // Append trailing separator so chained dictations don't stick together.
                 // Whisper Auto-detect mode (#226) inserts the transcription as-is: the
                 // output language is unknown, and coercing Western punctuation/spacing
                 // onto e.g. Chinese ("你好。" + ". ") would corrupt the text. Follow and
                 // explicit modes — and Parakeet in every mode — keep the historical
                 // separator behavior unchanged.
-                let finalText: String
+                let formattedText: String
                 if languagePolicy.insertsTranscriptionAsIs {
-                    finalText = text
-                } else if let last = text.last, ".!?…".contains(last) {
-                    finalText = text + " "
+                    formattedText = translatedOrOriginal
+                } else if let last = translatedOrOriginal.last, ".!?…".contains(last) {
+                    formattedText = translatedOrOriginal + " "
                 } else {
-                    finalText = text + ". "
+                    formattedText = translatedOrOriginal + ". "
                 }
+
+                let decision = DictationFinalizationDecision.make(
+                    transcript: text,
+                    outcome: translatedOrOriginal == text
+                        ? .fallback(formattedText, reason: .unavailable)
+                        : .translated(formattedText),
+                    request: capturedLanguageRequest,
+                    currentSessionID: currentLanguageRequest.sessionID,
+                    currentGeneration: sessionGeneration.current,
+                    currentClientIdentifier: currentLanguageRequest.clientIdentifier
+                )
 
                 // The gate that matters most. Everything below is irreversible from
                 // the user's point of view: it writes the transcription to the App
                 // Group and posts `transcriptionReady`, which is what makes the
                 // keyboard type it into their document. A dictation the user
                 // cancelled must not insert text a few seconds later (#267).
-                guard mayReport(session, "transcription result") else { return }
+                guard mayReport(session, "transcription result"),
+                      decision.shouldPublish,
+                      let finalText = decision.finalText else { return }
 
                 // Write result to App Group
                 lastResult = finalText
@@ -749,6 +841,356 @@ class DictationCoordinator: ObservableObject {
         }
     }
 
+    func processAuthoritativeFinalTranscript(
+        _ transcript: String,
+        request: DictationLanguageRequest,
+        generation: Int? = nil
+    ) async -> String {
+        guard let target = request.translationTarget, !transcript.isEmpty else { return transcript }
+        let currentGeneration = sessionGeneration.current
+        guard let currentSessionID = currentLanguageRequest.sessionID,
+              let currentClientIdentifier = currentLanguageRequest.clientIdentifier,
+              request.matches(
+                  sessionID: currentSessionID,
+                  generation: generation ?? currentGeneration,
+                  clientIdentifier: currentClientIdentifier
+              ) else {
+            return transcript
+        }
+
+#if canImport(Translation)
+        if #available(iOS 26.0, *) {
+            let outcome = await translationOutcome(
+                transcript,
+                target: target,
+                request: request,
+                generation: generation ?? sessionGeneration.current
+            )
+            return outcome.resolvedText
+        }
+#endif
+        return TranslationOutcome.fallback(transcript, reason: .unavailable).resolvedText
+    }
+
+#if canImport(Translation)
+    @available(iOS 26.0, *)
+    private func refreshTranslationReadiness(for request: DictationLanguageRequest? = nil) {
+        let request = request ?? DictationLanguageRequest(
+            mode: TranscriptionLanguageMode.active,
+            translationTarget: nil
+        )
+        translationReadinessGeneration += 1
+        let refreshGeneration = translationReadinessGeneration
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let capability = ASRCapability.forModelIdentifier(
+                self.defaults.string(forKey: SharedKeys.activeModel),
+                mode: request.mode,
+                keyboardLanguage: SupportedLanguage.active
+            )
+            let sources = capability.sourceLanguage.map { [$0] } ?? SupportedLanguage.allCases
+            let availability = LanguageAvailability()
+            var installedTargets = Set<String>()
+            var supportedTargets = Set<String>()
+
+            for source in sources {
+                let sourceLocale = Locale.Language(identifier: source.rawValue)
+                for target in SupportedLanguage.allCases where target != source {
+                    let status = await availability.status(
+                        from: sourceLocale,
+                        to: Locale.Language(identifier: target.rawValue)
+                    )
+                    switch status {
+                    case .installed:
+                        installedTargets.insert(target.rawValue)
+                        supportedTargets.insert(target.rawValue)
+                    case .supported:
+                        supportedTargets.insert(target.rawValue)
+                    case .unsupported:
+                        break
+                    }
+                }
+            }
+
+            // A later refresh may have observed a different request or model while
+            // this one was awaiting LanguageAvailability. Never publish this result.
+            guard refreshGeneration == self.translationReadinessGeneration else { return }
+
+            TranslationTargetReadiness(
+                source: capability.sourceLanguage?.rawValue ?? "auto",
+                installedTargets: installedTargets,
+                supportedTargets: supportedTargets
+            ).persist(to: self.defaults)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func translationOutcome(
+        _ transcript: String,
+        target: SupportedLanguage,
+        request: DictationLanguageRequest,
+        generation: Int
+    ) async -> TranslationOutcome {
+        guard let currentSessionID = currentLanguageRequest.sessionID,
+              let currentClientIdentifier = currentLanguageRequest.clientIdentifier,
+              request.matches(
+                  sessionID: currentSessionID,
+                  generation: generation,
+                  clientIdentifier: currentClientIdentifier
+              ) else {
+            return .fallback(transcript, reason: .cancelled)
+        }
+
+        let source = translationSource(for: request)
+        let targetLocale = Locale.Language(identifier: target.rawValue)
+        let availability = LanguageAvailability()
+        let status: LanguageAvailability.Status
+
+        do {
+            if let source {
+                status = await availability.status(
+                    from: Locale.Language(identifier: source.rawValue),
+                    to: targetLocale
+                )
+            } else {
+                status = try await availability.status(for: transcript, to: targetLocale)
+            }
+        } catch {
+            return .fallback(transcript, reason: .unavailable)
+        }
+
+        guard status != .unsupported else {
+            return .fallback(transcript, reason: .unavailable)
+        }
+
+        guard let currentSessionID = currentLanguageRequest.sessionID,
+              let currentClientIdentifier = currentLanguageRequest.clientIdentifier,
+              request.matches(
+                  sessionID: currentSessionID,
+                  generation: sessionGeneration.current,
+                  clientIdentifier: currentClientIdentifier
+              ) else {
+            return .fallback(transcript, reason: .cancelled)
+        }
+
+        if let source, status == .installed {
+            return await translateWithInstalledSource(
+                transcript,
+                source: source,
+                target: target,
+                request: request,
+                generation: generation
+            )
+        }
+
+        return await translateWithHost(
+            transcript,
+            source: source,
+            target: target,
+            request: request,
+            generation: generation
+        )
+    }
+
+    @available(iOS 26.0, *)
+    private func translationSource(for request: DictationLanguageRequest) -> SupportedLanguage? {
+        switch request.mode {
+        case .autoDetect:
+            return nil
+        case .explicit(let language):
+            return language
+        case .followKeyboard:
+            return request.resolvedSourceLanguage
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func translateWithInstalledSource(
+        _ transcript: String,
+        source: SupportedLanguage,
+        target: SupportedLanguage,
+        request: DictationLanguageRequest,
+        generation: Int
+    ) async -> TranslationOutcome {
+        guard let currentSessionID = currentLanguageRequest.sessionID,
+              let currentClientIdentifier = currentLanguageRequest.clientIdentifier,
+              request.matches(
+                  sessionID: currentSessionID,
+                  generation: generation,
+                  clientIdentifier: currentClientIdentifier
+              ) else {
+            return .fallback(transcript, reason: .cancelled)
+        }
+        let clientIdentifier = request.clientIdentifier ?? UUID().uuidString
+        let session = TranslationSession(
+            installedSource: Locale.Language(identifier: source.rawValue),
+            target: Locale.Language(identifier: target.rawValue)
+        )
+        do {
+            let responses = try await session.translations(from: [
+                TranslationSession.Request(
+                    sourceText: transcript,
+                    clientIdentifier: clientIdentifier
+                )
+            ])
+            let response = responses.first
+            return TranslationOutcome.resolved(
+                original: transcript,
+                translated: response?.targetText,
+                clientIdentifierMatches: response?.clientIdentifier == clientIdentifier
+            )
+        } catch {
+            return .fallback(transcript, reason: .unavailable)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func translateWithHost(
+        _ transcript: String,
+        source: SupportedLanguage?,
+        target: SupportedLanguage,
+        request: DictationLanguageRequest,
+        generation: Int
+    ) async -> TranslationOutcome {
+        guard !Task.isCancelled else {
+            return .fallback(transcript, reason: .cancelled)
+        }
+
+        let clientIdentifier = request.clientIdentifier ?? UUID().uuidString
+        let id = UUID()
+        return await withTaskCancellationHandler(operation: {
+            await withCheckedContinuation { (continuation: CheckedContinuation<TranslationOutcome, Never>) in
+                cancelPendingTranslation()
+                var configuration = TranslationSession.Configuration(
+                    source: source.map { Locale.Language(identifier: $0.rawValue) },
+                    target: Locale.Language(identifier: target.rawValue)
+                )
+                pendingTranslation = PendingTranslation(
+                    id: id,
+                    sessionID: currentLanguageRequest.sessionID ?? "",
+                    generation: generation,
+                    sourceText: transcript,
+                    source: source,
+                    target: target,
+                    clientIdentifier: clientIdentifier,
+                    originalText: transcript,
+                    continuation: continuation
+                )
+                configuration.invalidate()
+                translationConfiguration = configuration
+            }
+        }, onCancel: { [weak self] in
+            Task { @MainActor in
+                self?.cancelPendingTranslation()
+            }
+        })
+    }
+
+    @available(iOS 26.0, *)
+    func consumeTranslationSession(_ session: TranslationSession) async {
+        guard let pending = pendingTranslation else { return }
+        let id = pending.id
+        activeTranslationSession = session
+
+        guard pending.generation == sessionGeneration.current else {
+            finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
+            return
+        }
+
+        do {
+            let availability = LanguageAvailability()
+            let status: LanguageAvailability.Status
+            if let source = pending.source {
+                status = await availability.status(
+                    from: Locale.Language(identifier: source.rawValue),
+                    to: Locale.Language(identifier: pending.target.rawValue)
+                )
+            } else {
+                status = try await availability.status(
+                    for: pending.sourceText,
+                    to: Locale.Language(identifier: pending.target.rawValue)
+                )
+            }
+            guard status == .supported || status == .installed else {
+                finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .unavailable))
+                return
+            }
+            guard pendingTranslation?.id == id,
+                  currentLanguageRequest.matches(
+                      sessionID: pending.sessionID,
+                      generation: sessionGeneration.current,
+                      clientIdentifier: pending.clientIdentifier
+                  ) else {
+                finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
+                return
+            }
+            try await session.prepareTranslation()
+            guard pendingTranslation?.id == id,
+                  currentLanguageRequest.matches(
+                      sessionID: pending.sessionID,
+                      generation: pending.generation,
+                      clientIdentifier: pending.clientIdentifier
+                  ),
+                  pending.generation == sessionGeneration.current else {
+                finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
+                return
+            }
+            let responses = try await session.translations(from: [
+                TranslationSession.Request(
+                    sourceText: pending.sourceText,
+                    clientIdentifier: pending.clientIdentifier
+                )
+            ])
+            guard pendingTranslation?.id == id,
+                  currentLanguageRequest.matches(
+                      sessionID: pending.sessionID,
+                      generation: pending.generation,
+                      clientIdentifier: pending.clientIdentifier
+                  ),
+                  pending.generation == sessionGeneration.current else {
+                finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
+                return
+            }
+            let response = responses.first
+            let matches = response?.clientIdentifier == pending.clientIdentifier
+            finishTranslation(
+                id: id,
+                outcome: TranslationOutcome.resolved(
+                    original: pending.originalText,
+                    translated: response?.targetText,
+                    clientIdentifierMatches: matches
+                )
+            )
+        } catch {
+            finishTranslation(
+                id: id,
+                outcome: .fallback(pending.originalText, reason: .unavailable)
+            )
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func finishTranslation(id: UUID, outcome: TranslationOutcome) {
+        guard let pending = pendingTranslation, pending.id == id else { return }
+        pendingTranslation = nil
+        activeTranslationSession = nil
+        translationConfiguration = nil
+        pending.continuation.resume(returning: outcome)
+    }
+
+    @available(iOS 26.0, *)
+    private func cancelPendingTranslation() {
+        guard let pending = pendingTranslation else { return }
+        (activeTranslationSession as? TranslationSession)?.cancel()
+        activeTranslationSession = nil
+        pendingTranslation = nil
+        translationConfiguration = nil
+        pending.continuation.resume(
+            returning: .fallback(pending.originalText, reason: .cancelled)
+        )
+    }
+#endif
+
     /// Cancel the current dictation without transcribing.
     /// Called when the keyboard sends a cancel signal via Darwin notification.
     func cancelDictation() {
@@ -758,6 +1200,11 @@ class DictationCoordinator: ObservableObject {
         // promises to return promptly -- so the task can still finish seconds from
         // now, and this is what makes its outcome land nowhere.
         sessionGeneration.abandonSession()
+#if canImport(Translation)
+        if #available(iOS 26.0, *) {
+            cancelPendingTranslation()
+        }
+#endif
         dictationTask?.cancel()
         dictationTask = nil
         // Reset the transcribe re-entry flag so the next stop/cancel cycle can proceed.
@@ -831,6 +1278,11 @@ class DictationCoordinator: ObservableObject {
         // the task must not report into it afterwards (#267). The `.failed` written
         // below is this handler speaking, not the task, and is not gated.
         sessionGeneration.abandonSession()
+#if canImport(Translation)
+        if #available(iOS 26.0, *) {
+            cancelPendingTranslation()
+        }
+#endif
         dictationTask?.cancel()
         dictationTask = nil
         isTranscribingInFlight = false
@@ -976,6 +1428,7 @@ class DictationCoordinator: ObservableObject {
         defaults.set(false, forKey: SharedKeys.cancelRequested)
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)
+        DictationLanguageRequest.load(from: defaults).unbound().persist(to: defaults)
         defaults.synchronize()
     }
 
@@ -1142,7 +1595,7 @@ class DictationCoordinator: ObservableObject {
         do {
             try audioEngine.startRecording()
         } catch {
-            handleError("Micro indisponible. Relancez l'application.")
+            handleError("Micro indisponible. Relancez l'application.", disposition: .requiresApp)
             return
         }
 
@@ -1154,7 +1607,7 @@ class DictationCoordinator: ObservableObject {
         guard status == .recording else { return }
 
         if audioEngine.currentSampleCount == 0 {
-            handleError("Micro indisponible. Relancez l'application.")
+            handleError("Micro indisponible. Relancez l'application.", disposition: .requiresApp)
         } else {
             PersistentLog.log(.engineWarmUpSuccess(context: "zombie-recovery"))
         }
@@ -1166,8 +1619,8 @@ class DictationCoordinator: ObservableObject {
     /// and the app's own failure screen read (#320). Neither consumes it: it stays put
     /// until the next dictation starts, so a user who reads it on one surface and then
     /// opens the other is told the same thing twice rather than something else.
-    private func handleError(_ message: String) {
-        DictationErrorChannel.record(message)
+    private func handleError(_ message: String, disposition: DictationFailureDisposition = .recoverableRetry) {
+        DictationErrorChannel.record(message, disposition: disposition)
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)
         defaults.synchronize()

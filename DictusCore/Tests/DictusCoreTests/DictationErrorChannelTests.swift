@@ -17,11 +17,11 @@ final class DictationErrorChannelTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        defaults?.removeObject(forKey: SharedKeys.lastError)
+        DictationErrorChannel.clear()
     }
 
     override func tearDown() {
-        defaults?.removeObject(forKey: SharedKeys.lastError)
+        DictationErrorChannel.clear()
         super.tearDown()
     }
 
@@ -107,5 +107,69 @@ final class DictationErrorChannelTests: XCTestCase {
 
         XCTAssertNil(DictationErrorChannel.current,
                      "A `.failed` with no reason recorded must not show the previous attempt's")
+    }
+
+    func testDispositionRoundTripsIndependentlyOfLocalizedMessage() {
+        DictationErrorChannel.record("Microphone access is off.", disposition: .requiresApp)
+
+        XCTAssertEqual(DictationErrorChannel.currentDisposition, .requiresApp)
+        XCTAssertEqual(DictationErrorChannel.current, "Microphone access is off.")
+    }
+
+    func testClearRemovesDispositionWithTheReason() {
+        DictationErrorChannel.record("Recording too short", disposition: .recoverableRetry)
+
+        DictationErrorChannel.clear()
+
+        XCTAssertNil(DictationErrorChannel.currentDisposition)
+    }
+
+    func testDispositionMapsToUserAction() {
+        XCTAssertEqual(DictationFailureAction.forDisposition(.recoverableRetry), .retry)
+        XCTAssertEqual(DictationFailureAction.forDisposition(.requiresApp), .openApp)
+        XCTAssertEqual(DictationFailureAction.forDisposition(nil), .retry)
+    }
+
+    func testFallbackRequiresExactSessionGenerationAndRequestedStatus() {
+        XCTAssertTrue(DictationFailureAction.fallbackMayOpen(expectedSessionID: "a", currentSessionID: "a", expectedGeneration: 4, currentGeneration: 4, status: .requested))
+        XCTAssertFalse(DictationFailureAction.fallbackMayOpen(expectedSessionID: "a", currentSessionID: "b", expectedGeneration: 4, currentGeneration: 4, status: .requested))
+        XCTAssertFalse(DictationFailureAction.fallbackMayOpen(expectedSessionID: "a", currentSessionID: "a", expectedGeneration: 4, currentGeneration: 5, status: .requested))
+        XCTAssertFalse(DictationFailureAction.fallbackMayOpen(expectedSessionID: "a", currentSessionID: "a", expectedGeneration: 4, currentGeneration: 4, status: .failed))
+    }
+
+    func testStrandedColdStartUsesRetryDisposition() {
+        DictationErrorChannel.record("Tap the microphone again.")
+        XCTAssertEqual(DictationErrorChannel.currentDisposition, .recoverableRetry)
+        XCTAssertEqual(DictationFailureAction.forDisposition(DictationErrorChannel.currentDisposition), .retry)
+    }
+
+    func testRecoverableFailureResetsBeforeRetry() {
+        XCTAssertEqual(
+            DictationFailureAction.recoveryTransition(for: .recoverableRetry, urlOpened: true),
+            .resetAndRetry
+        )
+    }
+
+    func testRequiresAppOpensWithoutStartingOrStoppingRecording() {
+        XCTAssertEqual(
+            DictationFailureAction.recoveryTransition(for: .requiresApp, urlOpened: true),
+            .openApp
+        )
+    }
+
+    func testFailedURLOpenRetainsFailedActionableState() {
+        XCTAssertEqual(
+            DictationFailureAction.recoveryTransition(for: .requiresApp, urlOpened: false),
+            .retainFailed
+        )
+    }
+
+    func testFallbackCallbackCannotAffectChangedSessionOrGeneration() {
+        XCTAssertFalse(DictationFailureAction.fallbackMayOpen(expectedSessionID: "old", currentSessionID: "new", expectedGeneration: 1, currentGeneration: 1, status: .requested))
+        XCTAssertFalse(DictationFailureAction.fallbackMayOpen(expectedSessionID: "old", currentSessionID: "old", expectedGeneration: 1, currentGeneration: 2, status: .requested))
+    }
+
+    func testFallbackCallbackRequiresExactSessionGenerationAndRequestedStatus() {
+        XCTAssertTrue(DictationFailureAction.fallbackMayOpen(expectedSessionID: "same", currentSessionID: "same", expectedGeneration: 2, currentGeneration: 2, status: .requested))
     }
 }

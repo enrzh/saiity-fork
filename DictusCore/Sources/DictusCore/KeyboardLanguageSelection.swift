@@ -1,0 +1,41 @@
+import Foundation
+
+public enum KeyboardLanguageSelection: Equatable, Codable, Sendable {
+    case automatic
+    case explicit(SupportedLanguage)
+
+    private static let version = 1
+
+    public func persist(to defaults: UserDefaults) {
+        switch self {
+        case .automatic:
+            defaults.set("automatic", forKey: SharedKeys.keyboardLanguageSelection)
+        case .explicit(let language):
+            defaults.set(language.rawValue, forKey: SharedKeys.keyboardLanguageSelection)
+        }
+    }
+
+    public static func load(from defaults: UserDefaults) -> Self {
+        guard let value = defaults.string(forKey: SharedKeys.keyboardLanguageSelection) else {
+            return .automatic
+        }
+        if value == "automatic" { return .automatic }
+        return SupportedLanguage(rawValue: value).map(Self.explicit) ?? .automatic
+    }
+
+    public static func resolve(locale: Locale, defaults: UserDefaults) -> SupportedLanguage {
+        switch load(from: defaults) {
+        case .automatic: return SupportedLanguage.fromSystem(locale: locale)
+        case .explicit(let language): return language
+        }
+    }
+
+    public static func migrateLegacyFrenchIfNeeded(in defaults: UserDefaults) {
+        guard defaults.integer(forKey: SharedKeys.keyboardLanguageMigrationVersion) < version else { return }
+        if defaults.object(forKey: SharedKeys.keyboardLanguageSelection) == nil,
+           defaults.string(forKey: SharedKeys.language) == SupportedLanguage.french.rawValue {
+            automatic.persist(to: defaults)
+        }
+        defaults.set(version, forKey: SharedKeys.keyboardLanguageMigrationVersion)
+    }
+}

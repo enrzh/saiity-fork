@@ -1,6 +1,7 @@
 // DictusApp/Onboarding/MicPermissionPage.swift
 // Step 2 of onboarding: request microphone permission.
 import SwiftUI
+import UIKit
 import AVFoundation
 import DictusCore
 
@@ -12,6 +13,7 @@ import DictusCore
 /// a model — they just won't be able to record until they grant mic access later.
 struct MicPermissionPage: View {
     let onNext: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
 
     /// nil = not yet requested, true = granted, false = denied
     @State private var permissionGranted: Bool?
@@ -23,7 +25,7 @@ struct MicPermissionPage: View {
 
             // Mic icon
             Image(systemName: "mic.circle.fill")
-                .font(.system(size: 72))
+                .font(.system(.largeTitle, weight: .semibold))
                 .foregroundColor(.dictusAccent)
                 .padding(.bottom, 24)
 
@@ -68,34 +70,55 @@ struct MicPermissionPage: View {
                 // to the OS prompt — iOS owns the actual allow/deny choice.
                 Button(action: requestPermission) {
                     Text("Continue")
-                        .font(.dictusSubheading)
-                        .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.dictusAccent)
-                        )
                 }
+                .font(.headline)
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .controlSize(.large)
                 .disabled(isRequesting)
                 .padding(.horizontal, 32)
                 .padding(.bottom, 48)
-            } else {
-                // Next button (visible after permission response)
+            } else if permissionGranted == true {
                 Button(action: onNext) {
-                    Text("Continue")
-                        .font(.dictusSubheading)
-                        .foregroundColor(.white)
+                    Text("Continue after authorization")
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.dictusAccent)
-                        )
                 }
+                .font(.headline)
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .controlSize(.large)
                 .padding(.horizontal, 32)
                 .padding(.bottom, 48)
+            } else {
+                VStack(spacing: 12) {
+                    Button(action: openSettings) {
+                        Label("Open Settings", systemImage: "arrow.up.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .font(.headline)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding(.horizontal, 32)
+
+                    Text("Microphone access is required for dictation")
+                        .font(.dictusCaption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .padding(.bottom, 48)
             }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            switch AVAudioSession.sharedInstance().recordPermission {
+            case .granted: permissionGranted = true
+            case .denied: permissionGranted = false
+            case .undetermined: permissionGranted = nil
+            @unknown default: permissionGranted = false
+            }
+            UIAccessibility.post(notification: .announcement, argument: permissionGranted == true ? "Microphone authorized" : "Microphone permission still required")
         }
     }
 
@@ -141,5 +164,10 @@ struct MicPermissionPage: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             onNext()
         }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 }

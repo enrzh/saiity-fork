@@ -121,9 +121,6 @@ struct KeyboardHeightProvider {
     }
 
     private static func heightForScreenSize(_ screenSize: ScreenSize) -> KeyboardHeight {
-        // Heights tuned to match Apple's native iOS keyboard row height (~42-44pt per row).
-        // Original giellakbd-ios values were 262-272pt (Sami keyboards with larger keys).
-        // Apple keyboard is ~216pt on 6.1" devices, ~226pt on 6.7" devices.
         switch screenSize {
         case .size4_7:
             return (portrait: 216, landscape: 175)
@@ -136,9 +133,6 @@ struct KeyboardHeightProvider {
         case .size6_1, .size6_3, .size6_5:
             return (portrait: 216, landscape: 175)
         case .size6_7, .size6_9:
-            // Empirical measurement vs Apple system keyboard on iPhone 15 Pro Max
-            // (issue #117): Apple visible row height = 45pt. With keyVerticalMargin
-            // 5.5pt × 2 = 11pt cell padding, target cell = 56pt → grid = 224pt.
             return (portrait: 224, landscape: 175)
         case .size7_9, .size8_3, .size9_7, .size10_2, .size10_5, .size11_0:
             return (portrait: 318, landscape: 404)

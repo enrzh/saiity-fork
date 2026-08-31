@@ -30,6 +30,8 @@ final class KeyboardLayoutPreferenceTests: XCTestCase {
         defaults?.removeObject(forKey: SharedKeys.keyboardLayoutsByLanguage)
         defaults?.removeObject(forKey: SharedKeys.keyboardLayout)
         defaults?.removeObject(forKey: SharedKeys.language)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageSelection)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageMigrationVersion)
         defaults?.removeObject(forKey: SharedKeys.hasCompletedOnboarding)
     }
 

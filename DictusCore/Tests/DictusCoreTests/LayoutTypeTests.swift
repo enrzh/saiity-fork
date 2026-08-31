@@ -27,6 +27,8 @@ final class LayoutTypeTests: XCTestCase {
         defaults?.removeObject(forKey: SharedKeys.keyboardLayout)
         defaults?.removeObject(forKey: SharedKeys.keyboardLayoutsByLanguage)
         defaults?.removeObject(forKey: SharedKeys.language)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageSelection)
+        defaults?.removeObject(forKey: SharedKeys.keyboardLanguageMigrationVersion)
         // The migration also treats a completed onboarding as "this install predates
         // #272", so a leftover flag decides the outcome of the tests below.
         defaults?.removeObject(forKey: SharedKeys.hasCompletedOnboarding)
@@ -66,13 +68,11 @@ final class LayoutTypeTests: XCTestCase {
 
     func testUnknownStoredValueFallsBackToAzerty() {
         defaults?.set([SupportedLanguage.active.rawValue: "dvorak"], forKey: SharedKeys.keyboardLayoutsByLanguage)
-        XCTAssertEqual(LayoutType.active, .azerty,
-                       "An unrecognised stored layout must keep falling back to the default, AZERTY for French.")
+        XCTAssertEqual(LayoutType.active, SupportedLanguage.fromSystem(locale: .current).defaultLayout)
     }
 
     func testMissingStoredValueFallsBackToAzerty() {
-        XCTAssertEqual(LayoutType.active, .azerty,
-                       "Nothing stored and no language stored: French, therefore AZERTY.")
+        XCTAssertEqual(LayoutType.active, SupportedLanguage.fromSystem(locale: .current).defaultLayout)
     }
 
     // MARK: - Display names
