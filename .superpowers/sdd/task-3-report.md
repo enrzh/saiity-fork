@@ -43,7 +43,7 @@
 
 `git diff --check`：通过。
 
-Commit：历史真实提交 `1702c1c230dc6c09ee647825339f2e4685e4c0c3`；上一轮真实提交 `6ce9f5062d3a8253b4022c757a93e15023747752`。
+Commit：实现提交为 `1702c1c230dc6c09ee647825339f2e4685e4c0c3` 和 `6ce9f5062d3a8253b4022c757a93e15023747752`。报告本身不记录自引用 hash；当前提交以 `git log -- .superpowers/sdd/task-3-report.md` 为准。
 
 ## 未验证风险
 
@@ -61,4 +61,3 @@ Commit：历史真实提交 `1702c1c230dc6c09ee647825339f2e4685e4c0c3`；上一�
 - `git diff --check`：通过。
 - 本轮聚焦修复前 RED 集合：`VoiceOnlyKeyboardContractTests.testUIKitOverlayIsHiddenWhenPolicyHasNoRightRail`、`VoiceOnlyKeyboardPolicyTests.testActionCentersAndRectanglesFitWithoutOverlapAtTargetWidths`、`VoiceOnlyKeyboardPolicyTests.testNormalPhoneWidthsKeepFourUtilityTargetsOutsideCenterSurface`、`VoiceOnlyKeyboardPolicyTests.testRightRailUsesThreeCommandsAndOneSeparateDismissAction`、`VoiceOnlyKeyboardPolicyTests.testVoiceSurfaceExposesStableCenterAreaAndRailGeometry`。
 - 本轮 GREEN：聚焦测试 65 tests，0 failures；完整 Core 复跑 1155 tests、10 skipped、0 failures。
-- 本轮提交 hash：`bd4a0dd`（报告 amend 后的最终完整 hash 以 `git rev-parse HEAD` 为准）。
