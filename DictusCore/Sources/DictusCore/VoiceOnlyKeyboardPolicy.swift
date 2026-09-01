@@ -19,8 +19,9 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The primary voice action is larger than utility controls so it remains
     /// easy to press without turning the keyboard into a key grid.
     public static let primaryControlSize: Double = 54
-    public static let railSpacing: Double = 0
-    public static let horizontalPadding: Double = 10
+    public static let railSpacing: Double = 4
+    public static let horizontalPadding: Double = 8
+    public static let controlEdgeInset: Double = 12
     /// The right rail spans the voice surface with the same breathing room as
     /// Apple's compact keyboard controls.
     public static let verticalPadding: Double = 8
@@ -51,8 +52,7 @@ public enum VoiceOnlyKeyboardPolicy {
         guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
             return (.zero, .zero)
         }
-        let inset = horizontalInset(for: Double(width))
-        let x = max(0, width - CGFloat(inset) - actionHitSize.width)
+        let x = max(0, width - CGFloat(controlEdgeInset) - actionHitSize.width)
         return (
             CGRect(x: x, y: CGFloat(topInset), width: actionHitSize.width, height: actionHitSize.height),
             CGRect(x: x, y: CGFloat(topInset) + actionHitSize.height, width: actionHitSize.width, height: actionHitSize.height)
@@ -74,9 +74,8 @@ public enum VoiceOnlyKeyboardPolicy {
         guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
             return .zero
         }
-        let inset = horizontalInset(for: Double(width))
-        let x = max(0, width - CGFloat(inset) - actionHitSize.width)
-        return CGRect(x: x, y: surfaceHeight - bottomActionHitHeight,
+        let x = max(0, width - CGFloat(controlEdgeInset) - actionHitSize.width)
+        return CGRect(x: x, y: surfaceHeight - verticalPadding - bottomActionHitHeight,
                       width: actionHitSize.width, height: bottomActionHitHeight)
     }
 
@@ -109,7 +108,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var rightCommandFrame: CGRect {
-            CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: rightRailTop,
+            CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: rightRailTop,
                    width: rightRailWidth, height: rightRailHeight)
         }
 
@@ -121,12 +120,12 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
             guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
-            let x = horizontalInset
+            let x = controlEdgeInset
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             return (
-                CGRect(x: x, y: surfaceHeight - size.height * 2, width: size.width, height: size.height),
-                CGRect(x: x, y: surfaceHeight - size.height, width: size.width, height: size.height),
-                CGRect(x: x + size.width, y: surfaceHeight - size.height, width: size.width, height: size.height)
+                CGRect(x: x, y: surfaceFrame.maxY - size.height * 2, width: size.width, height: size.height),
+                CGRect(x: x, y: surfaceFrame.maxY - size.height, width: size.width, height: size.height),
+                CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - size.height, width: size.width, height: size.height)
             )
         }
 
@@ -135,13 +134,13 @@ public enum VoiceOnlyKeyboardPolicy {
         public var returnFrame: CGRect { rightRailFrames.returnKey }
 
         public var rightRailFrames: (delete: CGRect, returnKey: CGRect) {
-            (delete: CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: topInset, width: rightRailWidth, height: controlSize),
-             returnKey: CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: topInset + controlSize, width: rightRailWidth, height: controlSize))
+            (delete: CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: topInset, width: rightRailWidth, height: controlSize),
+             returnKey: CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: topInset + controlSize, width: rightRailWidth, height: controlSize))
         }
 
         public var dismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
-            return CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: surfaceHeight - bottomActionHitHeight, width: rightRailWidth, height: bottomActionHitHeight)
+            return CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: surfaceFrame.maxY - bottomActionHitHeight, width: rightRailWidth, height: bottomActionHitHeight)
         }
 
         public var micCenterArea: CGRect {
@@ -186,7 +185,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 : []
             let commandRects: [CGRect]
             if rightRailWidth > 0 {
-                let x = surfaceWidth - horizontalInset - rightRailWidth + (rightRailWidth - controlSize) / 2
+                let x = surfaceWidth - controlEdgeInset - rightRailWidth + (rightRailWidth - controlSize) / 2
                 commandRects = (0..<rightRailControlCount).map { index in
                     CGRect(x: x, y: rightRailTop + Double(index) * controlSize,
                            width: controlSize, height: controlSize)
@@ -203,7 +202,7 @@ public enum VoiceOnlyKeyboardPolicy {
         surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
-        let leftWidth = CGFloat(controlSize * Double(leftRailControlCount))
+        let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
         let rightWidth = actionHitSize.width
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
             && resolvedSurfaceHeight >= topInset + rightRailHeight + bottomActionHitHeight
@@ -233,8 +232,8 @@ public enum VoiceOnlyKeyboardPolicy {
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
             centerX: horizontalInset + (availableWidth - horizontalInset * 2) / 2,
-            leftBottomCenterX: horizontalInset,
-            rightBottomCenterX: availableWidth - horizontalInset - (railWidth > 0 ? railWidth / 2 : controlSize / 2),
+            leftBottomCenterX: controlEdgeInset + controlSize / 2,
+            rightBottomCenterX: availableWidth - controlEdgeInset - (railWidth > 0 ? railWidth / 2 : controlSize / 2),
             leftBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
             rightBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
             showsLanguageIndicator: hasRails

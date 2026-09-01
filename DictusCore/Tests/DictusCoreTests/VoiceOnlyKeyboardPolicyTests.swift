@@ -2,12 +2,32 @@ import XCTest
 @testable import DictusCore
 
 final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
+    func testTaskOneUsesInsetSurfaceAndSpacedInBoundsActionGeometry() {
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 8)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
+        XCTAssertGreaterThan(VoiceOnlyKeyboardPolicy.railSpacing, 0)
+
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let bounds = CGRect(x: 0, y: 0, width: width, height: layout.surfaceHeight)
+            let rectangles = layout.actionRectangles
+
+            XCTAssertTrue(rectangles.allSatisfy { layout.surfaceFrame.contains($0) }, "width=\(width)")
+            XCTAssertTrue(rectangles.allSatisfy { bounds.contains($0) }, "width=\(width)")
+            for (index, rectangle) in rectangles.enumerated() {
+                for other in rectangles[(index + 1)...] {
+                    XCTAssertFalse(rectangle.intersects(other), "width=\(width)")
+                }
+            }
+        }
+    }
+
     func testEmbeddedSurfaceDefinesStableBoundsAndGlobalMicCenter() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
-        let expectedSurface = CGRect(x: 10, y: 8, width: 370, height: 200)
+        let expectedSurface = CGRect(x: 8, y: 8, width: 374, height: 200)
 
         XCTAssertEqual(layout.surfaceFrame, expectedSurface)
-        XCTAssertEqual(layout.surfaceInset, 10)
+        XCTAssertEqual(layout.surfaceInset, 8)
         XCTAssertEqual(layout.centerX, layout.surfaceFrame.midX)
         XCTAssertEqual(layout.alternateContentFrame, layout.surfaceFrame)
         XCTAssertEqual(layout.surfaceFrame.height, VoiceOnlyKeyboardPolicy.surfaceHeight - 16)
@@ -38,7 +58,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 430)
 
         XCTAssertEqual(layout.surfaceWidth, 430)
-        XCTAssertEqual(layout.leftRailWidth, 132)
+        XCTAssertEqual(layout.leftRailWidth, 140)
         XCTAssertEqual(layout.rightRailWidth, 88)
         XCTAssertEqual(layout.centerX, 215)
     }
@@ -121,13 +141,13 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         for width in [320.0, 375, 390, 430] {
             let frames = VoiceOnlyKeyboardPolicy.leftUtilityFrames(for: width)
             let bottomY = VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize
-            XCTAssertEqual(frames.emoji.minY, bottomY, "width=\(width)")
-            XCTAssertEqual(frames.number.minY, bottomY, "width=\(width)")
-            XCTAssertEqual(frames.at.minY, bottomY - VoiceOnlyKeyboardPolicy.controlSize, "width=\(width)")
-            XCTAssertEqual(frames.at.maxY, bottomY, "width=\(width)")
-            XCTAssertEqual(frames.at.minX, VoiceOnlyKeyboardPolicy.layout(for: width).horizontalInset, "width=\(width)")
+            XCTAssertEqual(frames.emoji.minY, bottomY - VoiceOnlyKeyboardPolicy.verticalPadding, "width=\(width)")
+            XCTAssertEqual(frames.number.minY, bottomY - VoiceOnlyKeyboardPolicy.verticalPadding, "width=\(width)")
+            XCTAssertEqual(frames.at.minY, bottomY - VoiceOnlyKeyboardPolicy.controlSize - VoiceOnlyKeyboardPolicy.verticalPadding, "width=\(width)")
+            XCTAssertEqual(frames.at.maxY, bottomY - VoiceOnlyKeyboardPolicy.verticalPadding, "width=\(width)")
+            XCTAssertEqual(frames.at.minX, VoiceOnlyKeyboardPolicy.controlEdgeInset, "width=\(width)")
             XCTAssertEqual(frames.emoji.minX, frames.at.minX, "width=\(width)")
-            XCTAssertEqual(frames.number.minX, frames.emoji.maxX, "width=\(width)")
+            XCTAssertEqual(frames.number.minX, frames.emoji.maxX + VoiceOnlyKeyboardPolicy.railSpacing, "width=\(width)")
             XCTAssertEqual(Set([frames.at, frames.emoji, frames.number]).count, 3)
         }
     }
@@ -157,11 +177,12 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     }
 
     func testVoiceOnlySurfaceUsesReferenceHorizontalInsetAndControlGeometry() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 10)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 8)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlSize, 44)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.utilityVisualSize, 36)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.primaryControlSize, 54)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.railSpacing, 0)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.railSpacing, 4)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
         XCTAssertLessThanOrEqual(
             VoiceOnlyKeyboardPolicy.layout(for: 390).rightRailBottom,
@@ -193,7 +214,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
 
-            XCTAssertEqual(layout.leftRailWidth, 132, "width=\(width)")
+            XCTAssertEqual(layout.leftRailWidth, 140, "width=\(width)")
             XCTAssertEqual(layout.rightRailWidth, 88, "width=\(width)")
             XCTAssertGreaterThanOrEqual(layout.centerAreaWidth, 44, "width=\(width)")
             XCTAssertTrue(layout.showsLanguageIndicator, "width=\(width)")
@@ -224,9 +245,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     func testVoiceSurfaceExposesStableCenterAreaAndRailGeometry() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
 
-            XCTAssertEqual(layout.leftRailWidth, 132)
+        XCTAssertEqual(layout.leftRailWidth, 140)
         XCTAssertEqual(layout.rightRailWidth, 88)
-        XCTAssertEqual(layout.centerAreaWidth, 150)
+        XCTAssertEqual(layout.centerAreaWidth, 146)
         XCTAssertEqual(layout.centerX, 195)
         XCTAssertEqual(layout.rightRailHeight, 88)
     }
@@ -235,7 +256,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         for width in [375.0, 390, 420] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
 
-            XCTAssertEqual(layout.leftRailWidth, 132, "width=\(width)")
+            XCTAssertEqual(layout.leftRailWidth, 140, "width=\(width)")
             XCTAssertEqual(layout.rightRailWidth, 88, "width=\(width)")
             XCTAssertEqual(layout.micCenterArea.midX, layout.surfaceFrame.midX, "width=\(width)")
             XCTAssertFalse(layout.micCenterArea.intersects(layout.leftUtilityFrames.number), "width=\(width)")
@@ -262,9 +283,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
 
         XCTAssertEqual(layout.contentHeight, 216)
-        XCTAssertEqual(layout.leftUtilityFrames.at.minY, 128)
-        XCTAssertEqual(layout.leftUtilityFrames.number.minY, 172)
-        XCTAssertEqual(layout.dismissFrame, CGRect(x: 292, y: 172, width: 88, height: 44))
+        XCTAssertEqual(layout.leftUtilityFrames.at.minY, 120)
+        XCTAssertEqual(layout.leftUtilityFrames.number.minY, 164)
+        XCTAssertEqual(layout.dismissFrame, CGRect(x: 290, y: 164, width: 88, height: 44))
         XCTAssertLessThanOrEqual(layout.rightRailBottom, layout.dismissFrame.minY)
         XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.maxY <= 216 })
     }
@@ -279,8 +300,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             availableWidth: 320,
             centerAreaWidth: narrow.centerAreaWidth
         )
-        XCTAssertLessThanOrEqual(160 + capsule / 2, 320 - 10 - 44)
-        XCTAssertGreaterThanOrEqual(160 - capsule / 2, 10 + 44 - 132)
+        XCTAssertLessThanOrEqual(160 + capsule / 2, 320 - 12 - 44)
+        XCTAssertGreaterThanOrEqual(160 - capsule / 2, 12 + 44 + 4 - 140)
     }
 
     func testCommandClusterCellsKeep44PointTargetsAndFitVerticalBounds() {
@@ -312,10 +333,10 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     func testVoiceSurfaceShrinksRailsWhenWidthCannotFitFullControls() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 80)
 
-        XCTAssertEqual(layout.centerAreaWidth, 60)
+        XCTAssertEqual(layout.centerAreaWidth, 64)
         XCTAssertEqual(layout.leftRailWidth, 0)
         XCTAssertEqual(layout.rightRailWidth, 0)
-        XCTAssertEqual(layout.horizontalInset, 10)
+        XCTAssertEqual(layout.horizontalInset, 8)
         XCTAssertEqual(layout.centerX, 40)
         XCTAssertLessThanOrEqual(
             layout.leftRailWidth + layout.rightRailWidth
@@ -393,8 +414,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
                 }
             }
             XCTAssertFalse(layout.micCenterArea.intersects(layout.rightCommandFrame))
-            XCTAssertEqual(layout.leftBottomCenterX, layout.horizontalInset)
-            XCTAssertEqual(layout.rightBottomCenterX, width - layout.horizontalInset - 44)
+            XCTAssertEqual(layout.leftBottomCenterX, VoiceOnlyKeyboardPolicy.controlEdgeInset + 22)
+            XCTAssertEqual(layout.rightBottomCenterX, width - VoiceOnlyKeyboardPolicy.controlEdgeInset - 44)
         }
     }
 
@@ -459,10 +480,10 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(layout.deleteFrame.size, CGSize(width: 88, height: 44))
         XCTAssertEqual(layout.returnFrame.size, CGSize(width: 88, height: 44))
         XCTAssertEqual(layout.deleteFrame.minY, 8)
-        XCTAssertEqual(layout.dismissFrame.maxY, VoiceOnlyKeyboardPolicy.surfaceHeight)
-        XCTAssertEqual(layout.dismissFrame.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize)
-        XCTAssertEqual(layout.leftUtilityFrames.at.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize * 2)
-        XCTAssertEqual(layout.leftUtilityFrames.number.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize)
+        XCTAssertEqual(layout.dismissFrame.maxY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding)
+        XCTAssertEqual(layout.dismissFrame.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding - VoiceOnlyKeyboardPolicy.controlSize)
+        XCTAssertEqual(layout.leftUtilityFrames.at.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding - VoiceOnlyKeyboardPolicy.controlSize * 2)
+        XCTAssertEqual(layout.leftUtilityFrames.number.minY, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding - VoiceOnlyKeyboardPolicy.controlSize)
     }
 
     func testActionVisualsUseThirtySixPointVisualsInsideEightyEightByFortyFourContainers() {
