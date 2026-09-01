@@ -40,6 +40,13 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         )
     }
 
+    func testRailsHideWhenShortSurfaceWouldOverlapDismissAction() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 140)
+
+        XCTAssertEqual(layout.rightRailWidth, 0)
+        XCTAssertTrue(layout.dismissFrame.isEmpty)
+    }
+
     func testRightRailUsesDeleteAndReturnWithSeparateDismissAndDictateActions() {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.rightRailControlCount, 2)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandClusterSize, 44)
@@ -444,8 +451,10 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
                 }
             }
             XCTAssertFalse(layout.micCenterArea.intersects(layout.rightCommandFrame))
-            XCTAssertEqual(layout.leftBottomCenterX, VoiceOnlyKeyboardPolicy.controlEdgeInset + 22)
-            XCTAssertEqual(layout.rightBottomCenterX, width - VoiceOnlyKeyboardPolicy.controlEdgeInset - 44)
+            XCTAssertEqual(layout.leftBottomCenterX, layout.leftUtilityFrames.emoji.midX)
+            XCTAssertEqual(layout.rightBottomCenterX, layout.dismissFrame.midX)
+            XCTAssertEqual(layout.leftBottomCenterY, layout.leftUtilityFrames.number.midY)
+            XCTAssertEqual(layout.rightBottomCenterY, layout.dismissFrame.midY)
         }
     }
 
@@ -487,7 +496,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             let left = VoiceOnlyKeyboardPolicy.leftUtilityFrames(for: width)
             let right = VoiceOnlyKeyboardPolicy.rightRailFrames(for: width)
 
-            XCTAssertEqual(layout.languageFrame.minX, layout.horizontalInset, "width=\(width)")
+            XCTAssertEqual(layout.languageFrame.minX, layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap, "width=\(width)")
             XCTAssertEqual(layout.languageFrame.minY, VoiceOnlyKeyboardPolicy.verticalPadding + VoiceOnlyKeyboardPolicy.topInset, "width=\(width)")
             XCTAssertEqual(layout.leftUtilityFrames.at, left.at, "width=\(width)")
             XCTAssertEqual(layout.leftUtilityFrames.emoji, left.emoji, "width=\(width)")

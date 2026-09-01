@@ -108,7 +108,8 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var languageFrame: CGRect {
-            CGRect(x: horizontalInset, y: surfaceFrame.minY + VoiceOnlyKeyboardPolicy.topInset,
+            CGRect(x: surfaceFrame.minX + visibleControlGap,
+                   y: surfaceFrame.minY + VoiceOnlyKeyboardPolicy.topInset,
                    width: VoiceOnlyKeyboardPolicy.languageVisualWidth,
                    height: VoiceOnlyKeyboardPolicy.controlSize)
         }
@@ -202,8 +203,9 @@ public enum VoiceOnlyKeyboardPolicy {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
         let rightWidth = actionHitSize.width
+        let minimumRailHeight = verticalPadding * 2 + visibleControlGap * 2 + rightRailHeight + bottomActionHitHeight
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
-            && resolvedSurfaceHeight >= topInset + rightRailHeight + bottomActionHitHeight
+            && resolvedSurfaceHeight >= minimumRailHeight
         // Keep the same outer inset on both the visual center region and the UIKit
         // action rail. At the narrowest supported width, dropping the inset keeps
         // the center region at the 44pt minimum instead of compressing it below a
@@ -230,10 +232,19 @@ public enum VoiceOnlyKeyboardPolicy {
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
             centerX: horizontalInset + (availableWidth - horizontalInset * 2) / 2,
-            leftBottomCenterX: controlEdgeInset + controlSize / 2,
-            rightBottomCenterX: availableWidth - controlEdgeInset - (railWidth > 0 ? railWidth / 2 : controlSize / 2),
-            leftBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
-            rightBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
+            leftBottomCenterX: resolvedLeftRailWidth > 0
+                ? horizontalInset + visibleControlGap + controlSize / 2
+                : 0,
+            rightBottomCenterX: railWidth > 0
+                ? horizontalInset + (availableWidth - horizontalInset * 2)
+                    - visibleControlGap - railWidth / 2
+                : 0,
+            leftBottomCenterY: hasRails
+                ? resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight / 2
+                : 0,
+            rightBottomCenterY: hasRails
+                ? resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight / 2
+                : 0,
             showsLanguageIndicator: hasRails
         )
     }

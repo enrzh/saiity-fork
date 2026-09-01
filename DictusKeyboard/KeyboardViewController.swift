@@ -1050,6 +1050,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
 
     @objc private func handleMicTouchDown() {
         let state = KeyboardState.shared
+        guard state.dictationStatus == .idle || state.dictationStatus == .ready || state.dictationStatus == .failed else { return }
         if state.dictationStatus == .failed, state.failedRequiresApp {
             state.openDictusForRecovery()
         } else {

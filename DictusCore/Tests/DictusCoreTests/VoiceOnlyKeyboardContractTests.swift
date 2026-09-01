@@ -16,6 +16,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("state.requestStop()"))
     }
 
+    func testMicrophoneTouchDownGuardsBusyStatuses() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+
+        XCTAssertTrue(controller.contains("guard state.dictationStatus == .idle || state.dictationStatus == .ready || state.dictationStatus == .failed else { return }"))
+    }
+
     func testMicrophoneVisualRemainsSwiftUIOnlyAndDoesNotInstallGestureStartStop() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
