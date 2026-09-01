@@ -29,7 +29,7 @@ final class CustomModelTests: XCTestCase {
             source: .huggingFace
         )
 
-        XCTAssertNotNil(nonASR.validationError)
+        XCTAssertNil(nonASR.validationError)
         XCTAssertNil(speechModel.validationError)
         XCTAssertNotNil(speechModel.runtimeSupportError)
     }
@@ -110,11 +110,29 @@ final class CustomModelTests: XCTestCase {
     func testProviderURLsRequireRepositoryPaths() {
         let hfCollection = CustomModel(name: "Speech", repositoryURL: "https://huggingface.co/models/whisper", role: .asr, source: .huggingFace)
         let nvidiaDeveloperPage = CustomModel(name: "Speech", repositoryURL: "https://developer.nvidia.com/", role: .asr, source: .nvidia)
-        let nvidiaModel = CustomModel(name: "Nemotron ASR", repositoryURL: "https://developer.nvidia.com/nvidia-riva/nvidia-riva-asr", role: .asr, source: .nvidia)
+        let nvidiaModel = CustomModel(name: "Nemotron ASR", repositoryURL: "https://developer.nvidia.com/nemo/automatic-speech-recognition/nemotron", role: .asr, source: .nvidia)
+        let nvidiaWrongPath = CustomModel(name: "Developer page", repositoryURL: "https://developer.nvidia.com/foo/whisper", role: .asr, source: .nvidia)
 
         XCTAssertNotNil(hfCollection.validationError)
         XCTAssertNotNil(nvidiaDeveloperPage.validationError)
         XCTAssertNil(nvidiaModel.validationError)
+        XCTAssertNotNil(nvidiaWrongPath.validationError)
+    }
+
+    func testRuntimeSupportStatusContract() {
+        let runnable = CustomModel(name: "Tiny", repositoryURL: "https://huggingface.co/argmaxinc/whisperkit-coreml", role: .asr, source: .huggingFace, modelName: "openai_whisper-tiny")
+        let hfUnsupported = CustomModel(name: "Whisper", repositoryURL: "https://huggingface.co/openai/whisper-tiny", role: .asr, source: .huggingFace, modelName: "whisper")
+        let nvidiaUnsupported = CustomModel(name: "Nemotron", repositoryURL: "https://developer.nvidia.com/nemo/automatic-speech-recognition/nemotron", role: .asr, source: .nvidia, modelName: "nemotron")
+        let malformed = CustomModel(name: "Broken", repositoryURL: "not a url", role: .asr, source: .huggingFace)
+
+        XCTAssertNil(runnable.validationError)
+        XCTAssertNil(runnable.runtimeSupportError)
+        XCTAssertNil(hfUnsupported.validationError)
+        XCTAssertNotNil(hfUnsupported.runtimeSupportError)
+        XCTAssertNil(nvidiaUnsupported.validationError)
+        XCTAssertNotNil(nvidiaUnsupported.runtimeSupportError)
+        XCTAssertNotNil(malformed.validationError)
+        XCTAssertNotNil(malformed.runtimeSupportError)
     }
 
     func testSaveDeduplicatesByIdentityAndKeepsLastRegistration() {

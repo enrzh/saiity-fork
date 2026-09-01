@@ -83,18 +83,12 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
             guard isRepositoryPath(url.path, componentCount: 2) else {
                 return "Use a Hugging Face repository URL."
             }
-            guard role != .asr || containsASRMarker(in: url.path) else {
-                return "Choose a Hugging Face speech-recognition model."
-            }
         case (.nvidia, .asr):
             guard scheme == "https", host == "developer.nvidia.com" else {
                 return "Use an NVIDIA model URL."
             }
-            guard isRepositoryPath(url.path, componentCount: 2) else {
+            guard isNVIDIAASRRepositoryPath(url.path) else {
                 return "Use an NVIDIA model repository URL."
-            }
-            guard containsASRMarker(in: url.path) else {
-                return "Choose an NVIDIA speech-recognition model."
             }
         case (.nvidia, .cleanup): return "NVIDIA sources are only supported for speech recognition."
         }
@@ -141,6 +135,15 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
         let components = path.split(separator: "/")
         guard components.count == componentCount, components.allSatisfy({ !$0.isEmpty }) else { return false }
         return components.first?.lowercased() != "models"
+    }
+
+    private func isNVIDIAASRRepositoryPath(_ path: String) -> Bool {
+        let components = path.split(separator: "/").map { $0.lowercased() }
+        guard components.count >= 3,
+              ["nemo", "riva", "nvidia-riva", "nvidia-nemo"].contains(components[0]) else {
+            return false
+        }
+        return components.dropFirst().contains { containsASRMarker(in: $0) }
     }
 
     /// Checks the public Hugging Face model metadata for an ASR pipeline.
