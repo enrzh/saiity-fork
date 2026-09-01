@@ -92,19 +92,19 @@ struct DefaultLayerPicker: View {
         .frame(height: 22)
     }
 
-    // MARK: - Letters Preview (AZERTY)
+    // MARK: - Letters Preview
 
-    /// Four rows with actual AZERTY letters to be immediately recognizable.
+    /// Four rows with a neutral QWERTY-style layout used for the product preview.
     private var lettersModePreview: some View {
         VStack(spacing: 3) {
             toolbarPreview
 
-            // AZERTY rows with actual letters
+            // English/German-compatible letter rows
             let rows = [
-                ["A", "Z", "E", "R", "T", "Y", "U", "I", "O", "P"],
-                ["Q", "S", "D", "F", "G", "H", "J", "K", "L", "M"],
-                ["W", "X", "C", "V", "B", "N"],
-                ["123", "espace"]
+                ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+                ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+                ["Z", "X", "C", "V", "B", "N", "M"],
+                ["123", "space"]
             ]
 
             ForEach(0..<rows.count, id: \.self) { rowIndex in
@@ -112,7 +112,7 @@ struct DefaultLayerPicker: View {
                     if rowIndex == 3 {
                         // Bottom row: 123 key + space bar
                         miniKey("123", width: 32, isSpecial: true)
-                        miniKey("espace", isSpace: true)
+                        miniKey("space", isSpace: true)
                     } else {
                         ForEach(rows[rowIndex], id: \.self) { letter in
                             miniKey(letter)
@@ -155,7 +155,7 @@ struct DefaultLayerPicker: View {
             // Bottom row: ABC key + space bar
             HStack(spacing: 2) {
                 miniKey("ABC", width: 32, isSpecial: true)
-                miniKey("espace", isSpace: true)
+                miniKey("space", isSpace: true)
             }
         }
         .padding(10)
