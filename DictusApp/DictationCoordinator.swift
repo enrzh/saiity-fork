@@ -127,7 +127,7 @@ class DictationCoordinator: ObservableObject {
     )
     private var currentLanguagePolicy = TranscriptionLanguagePolicy(
         mode: .followKeyboard,
-        keyboardLanguage: .french,
+        keyboardLanguage: .english,
         engine: .whisperKit,
         modelIdentifier: ""
     )

@@ -62,7 +62,8 @@ public enum SharedKeys {
     public static let defaultKeyboardLayer = "dictus.defaultKeyboardLayer"
 
     // User preferences (added for Plan 4.1 onboarding + settings)
-    /// Keyboard language code ("fr"/"en"/"es"/"de"), default "fr".
+    /// Legacy keyboard language code. New installs resolve to the system language,
+    /// limited to English or German, and otherwise fall back to English.
     /// Drives the keyboard layout, key labels, and autocorrect/prediction.
     /// Since issue #226 this is NO longer the STT language by itself — see
     /// `transcriptionLanguage` below. STT only follows this key when the
@@ -77,7 +78,8 @@ public enum SharedKeys {
     /// Transcription (STT) language mode, decoupled from the keyboard language.
     /// Values: "follow" (default — STT follows `language` above, today's behavior),
     /// "auto" (Whisper language auto-detection, unlocks the long tail incl. zh),
-    /// or an explicit code "fr"/"en"/"es"/"de".
+    /// or an explicit legacy/product code. The product exposes English and German;
+    /// older French/Spanish values are migrated without being shown again.
     /// A missing or unrecognized value behaves as "follow" so fresh and upgraded
     /// installs keep the exact pre-#226 behavior without any migration.
     /// Written ONLY by the app's Settings — the keyboard toolbar language

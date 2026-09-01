@@ -271,7 +271,7 @@ public enum PersistentLog {
         codeRevision: String = PersistentLog.codeRevision,
         retainedWindow: String = "unknown"
     ) -> String {
-        "Dictus Debug Log\n"
+        "sAiity Diagnostic Log\n"
             + "iOS \(iosVersion) | App \(appVersion) (\(buildNumber)) | rev \(codeRevision) | \(deviceModel) | Model: \(activeModel)\n"
             + "Window: \(retainedWindow)\n"
             + "---\n"

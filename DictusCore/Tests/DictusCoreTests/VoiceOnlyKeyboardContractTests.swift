@@ -212,6 +212,18 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "language indicator must not be rendered for emoji or panel modes")
     }
 
+    func testKeyboardRuntimeLanguageDefaultsUseTheResolvedProductLanguage() throws {
+        let prediction = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
+        let emoji = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+
+        XCTAssertTrue(prediction.contains(
+            "private var language: String = SupportedLanguage.active.rawValue"
+        ))
+        XCTAssertFalse(prediction.contains("private var language: String = \"fr\""))
+        XCTAssertTrue(emoji.contains("let language = SupportedLanguage.active.rawValue"))
+        XCTAssertFalse(emoji.contains("SharedKeys.language) ?? \"fr\""))
+    }
+
     func testDarkKeyboardUsesSemanticBackgroundOrMaterial() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -27,7 +27,7 @@ class TextPredictionEngine {
     private let textChecker = UITextChecker()
     private var frequencyDict = FrequencyDictionary()
     private let aospTrieEngine = AOSPTrieEngine()
-    private var language: String = "fr"
+    private var language: String = SupportedLanguage.active.rawValue
 
     /// The active language's data profile, or nil if `language` is not a registered
     /// `SupportedLanguage`. Used to gate language-specific pipeline stages by
