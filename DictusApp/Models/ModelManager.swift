@@ -68,6 +68,7 @@ class ModelManager: ObservableObject {
     /// Mirrors `DictationCoordinator.modelLoadState` via App Group + NotificationCenter
     /// so SwiftUI can drive the loading overlay reactively.
     @Published var modelLoadState: ModelLoadState = .idle
+    @Published var customModels: [CustomModel] = []
 
     // MARK: - Private
 
@@ -152,6 +153,7 @@ class ModelManager: ObservableObject {
             downloadedModels = models
         }
         activeModel = defaults.string(forKey: SharedKeys.activeModel)
+        customModels = CustomModel.load(from: defaults)
 
         // Resync modelStates with loaded downloadedModels so models downloaded
         // by onboarding's separate ModelManager instance show as .ready here.
@@ -161,6 +163,22 @@ class ModelManager: ObservableObject {
                 modelStates[model.identifier] = .ready
             }
         }
+    }
+
+    func addCustomModel(_ model: CustomModel) {
+        if let index = customModels.firstIndex(where: {
+            $0.id == model.id || $0.identityKey == model.identityKey
+        }) {
+            customModels[index] = model
+        } else {
+            customModels.append(model)
+        }
+        CustomModel.save(customModels, to: defaults)
+    }
+
+    func deleteCustomModel(_ model: CustomModel) {
+        customModels.removeAll { $0.id == model.id }
+        CustomModel.save(customModels, to: defaults)
     }
 
     /// Downloads a model variant, prewarms it, and updates state.

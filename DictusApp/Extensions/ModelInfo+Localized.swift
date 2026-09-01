@@ -4,6 +4,10 @@ import DictusCore
 import SwiftUI
 
 extension ModelInfo {
+    /// The first-run model chosen by the app. Kept here so every app surface
+    /// agrees even when the shared catalog's historical default changes.
+    static let sAiityDefaultIdentifier = "openai_whisper-tiny"
+
     /// Localized description for display in model cards.
     /// Source strings are in English; French provided via String Catalog.
     var localizedDescription: String {

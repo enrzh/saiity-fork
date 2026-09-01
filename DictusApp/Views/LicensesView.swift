@@ -45,6 +45,13 @@ struct LicensesView: View {
                     license: mitLicense(copyright: "Copyright (c) 2024 Argmax, Inc.")
                 )
 
+                licenseBlock(
+                    name: "Dictus",
+                    author: "PIVI Solutions",
+                    url: "https://github.com/getdictus/dictus-ios",
+                    license: mitLicense(copyright: "Copyright (c) PIVI Solutions")
+                )
+
             }
         }
         .navigationTitle("Licenses")

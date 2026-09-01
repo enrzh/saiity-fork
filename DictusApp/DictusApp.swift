@@ -51,19 +51,19 @@ struct DictusApp: App {
     @StateObject private var proStatus: ProStatusManager
     @StateObject private var subscriptionManager: SubscriptionManager
 
-    /// Onboarding completion flag stored in App Group for cross-process access.
-    ///
-    /// WHY AppStorage with suiteName instead of plain @State:
-    /// AppStorage with the App Group suite persists the value across app launches AND
-    /// makes it accessible to the keyboard extension if needed. The `store:` parameter
-    /// points to the shared UserDefaults container.
-    ///
-    /// Default is `false` — first-time users see the onboarding flow.
-    /// Set to `true` when user completes the 5-step onboarding.
-    @AppStorage(SharedKeys.hasCompletedOnboarding, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var hasCompletedOnboarding = false
+    /// Onboarding completion state shared through the App Group.
+    /// It is read once into local `@State` during app initialization, then persisted
+    /// back to the shared UserDefaults by the `onChange` handler below.
+    /// A missing value is treated as `false`, so first-time users see onboarding.
+    @State private var hasCompletedOnboarding: Bool
 
     init() {
+        // Read the shared value after the app group is available to the process.
+        // This avoids seeding SwiftUI's storage from a stale pre-entitlement value
+        // on a fresh install or after the keyboard extension changed the suite.
+        _hasCompletedOnboarding = State(
+            initialValue: AppGroup.defaults.bool(forKey: SharedKeys.hasCompletedOnboarding)
+        )
         PersistentLog.source = "APP"
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PersistentLog.log(.appLaunched(version: version))
@@ -108,6 +108,11 @@ struct DictusApp: App {
         }
         if defaults?.object(forKey: SharedKeys.serviceEnabled) == nil {
             defaults?.set(true, forKey: SharedKeys.serviceEnabled)
+        }
+        // Cleanup is the product default. Preserve an explicit off choice from
+        // an earlier install by migrating only when the preference is absent.
+        if defaults?.object(forKey: SharedKeys.polishEnabled) == nil {
+            defaults?.set(true, forKey: SharedKeys.polishEnabled)
         }
 
         // Initialize Pro subscription management.
@@ -203,7 +208,9 @@ struct DictusApp: App {
                         break
                     }
                 }
-                .onChange(of: hasCompletedOnboarding) { completed in
+                .onChange(of: hasCompletedOnboarding) { _, completed in
+                    AppGroup.defaults.set(completed, forKey: SharedKeys.hasCompletedOnboarding)
+                    AppGroup.defaults.synchronize()
                     // WHY this notification:
                     // MainTabView's HomeView mounts BEHIND the fullScreenCover before
                     // onboarding completes. Its onAppear fires early with stale state.
@@ -216,7 +223,10 @@ struct DictusApp: App {
                         )
                     }
                 }
-                .fullScreenCover(isPresented: .constant(!hasCompletedOnboarding)) {
+                .fullScreenCover(isPresented: Binding(
+                    get: { !hasCompletedOnboarding },
+                    set: { _ in }
+                )) {
                     OnboardingView(isComplete: $hasCompletedOnboarding)
                         .environmentObject(coordinator)
                         .environmentObject(proStatus)

@@ -56,7 +56,7 @@ struct MainTabView: View {
     /// Static so `init` can read it before `modelManager` exists — `ModelManager.init`
     /// loads `activeModel` from the same key, so both paths agree.
     private static var persistedActiveModelIdentifier: String {
-        AppGroup.defaults.string(forKey: SharedKeys.activeModel) ?? "openai_whisper-small"
+        AppGroup.defaults.string(forKey: SharedKeys.activeModel) ?? ModelInfo.sAiityDefaultIdentifier
     }
 
     private var activeModelIdentifier: String {

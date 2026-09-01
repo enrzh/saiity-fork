@@ -1,5 +1,5 @@
 // DictusWidgets/DictusWidgetBundle.swift
-// Entry point for the Dictus Widget Extension (Live Activity only for now).
+// Entry point for the sAiity Widget Extension (Live Activity only for now).
 import SwiftUI
 import WidgetKit
 

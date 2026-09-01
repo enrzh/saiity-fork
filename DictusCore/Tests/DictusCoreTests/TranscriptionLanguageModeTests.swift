@@ -53,10 +53,13 @@ final class TranscriptionLanguageModeTests: XCTestCase {
     }
 
     func testExplicitCodesParseAsExplicit() {
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.french))
         XCTAssertEqual(TranscriptionLanguageMode(storedValue: "en"), .explicit(.english))
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.spanish))
         XCTAssertEqual(TranscriptionLanguageMode(storedValue: "de"), .explicit(.german))
+    }
+
+    func testLegacyFrenchAndSpanishCodesFallbackToEnglish() {
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.english))
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.english))
     }
 
     func testUnknownValueDegradesToFollow() {
@@ -73,7 +76,7 @@ final class TranscriptionLanguageModeTests: XCTestCase {
     func testStoredValueRoundTrip() {
         let modes: [TranscriptionLanguageMode] = [
             .followKeyboard, .autoDetect,
-            .explicit(.french), .explicit(.english), .explicit(.spanish), .explicit(.german)
+            .explicit(.english), .explicit(.german)
         ]
         for mode in modes {
             XCTAssertEqual(TranscriptionLanguageMode(storedValue: mode.storedValue), mode)

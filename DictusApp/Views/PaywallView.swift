@@ -559,7 +559,7 @@ struct PaywallView: View {
     // auto-renewable subscriptions (guideline 3.1.2). Force unwrap is safe:
     // compile-time constant URLs that cannot be malformed.
     // swiftlint:disable:next force_unwrapping
-    private static let termsURL = URL(string: "https://getdictus.com/terms")!
+    private static let termsURL = URL(string: "https://aiity.de/terms")!
     // swiftlint:disable:next force_unwrapping
     private static let privacyURL = URL(string: "https://aiity.de/privacy")!
 

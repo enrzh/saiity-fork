@@ -202,4 +202,104 @@ final class PolishPostpassTests: XCTestCase {
         XCTAssertFalse(engineInput.contains("\n"))
         XCTAssertTrue(engineInput.contains(PolishPostpass.newlineMarker))
     }
+
+    func testCleanupFloorRemovesSafeFillersAndStuttersWithoutInventingSentenceMarks() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("uh i i think we should ship it"),
+            "I think we should ship it"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("um we should ship it"),
+            "We should ship it"
+        )
+    }
+
+    func testCleanupFloorPreservesMeaningfulWordsAcrossLanguages() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("euh je je sais que que c'est important"),
+            "Je sais que c'est important"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("啊我觉得这个方案很好"),
+            "啊我觉得这个方案很好"
+        )
+    }
+
+    func testCleanupFloorPreservesCJKAndMeaningfulWordsAcrossLanguages() {
+        let input = "我觉得这个方案很好 er este very very"
+        XCTAssertEqual(PolishPostpass.cleanupFloor(input), input)
+    }
+
+    func testCleanupFloorResolvesExplicitFalseStartsAndSelfCorrections() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("send it Tuesday, actually Wednesday"),
+            "Send it Wednesday"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("envoie-le mardi, enfin mercredi"),
+            "Envoie-le mercredi"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("schick es am Dienstag, eigentlich Mittwoch"),
+            "Schick es am Mittwoch"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("envíalo martes, mejor miércoles"),
+            "Envíalo miércoles"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("envíalo el martes, en realidad el miércoles"),
+            "Envíalo el miércoles"
+        )
+    }
+
+    func testCleanupFloorPreservesBoundaryNewlinesWhileCleaningOuterSpaces() {
+        let input = "\n  very very important , actually this is the reason  \n"
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor(input),
+            "\nVery very important, actually this is the reason\n"
+        )
+    }
+
+    func testCleanupFloorNormalizesRealSpokenPunctuationAndCapitalization() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("uh send the report , tomorrow !"),
+            "Send the report, tomorrow!"
+        )
+    }
+
+    func testCleanupFloorKeepsMeaningfulRepetitionsAndCorrectionWords() {
+        let input = "very very important, actually this is the reason"
+        XCTAssertEqual(PolishPostpass.cleanupFloor(input), "Very very important, actually this is the reason")
+    }
+
+    func testCleanupFloorLanguageNeutralPreservesLanguageSpecificLexicalPatterns() {
+        let inputs = [
+            "el el texto",
+            "de de tekst",
+            "la la phrase",
+            "y y seguimos",
+            "allora ho parlato con Marco",
+            "portanto vamos a continuar"
+        ]
+
+        for input in inputs {
+            XCTAssertEqual(
+                PolishPostpass.cleanupFloor(input, language: nil),
+                input.prefix(1).uppercased() + input.dropFirst(),
+                "language-neutral cleanup changed: \(input)"
+            )
+        }
+    }
+
+    func testCleanupFloorKnownLanguageStillRemovesLexicalStutters() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("el el texto", language: .spanish),
+            "El texto"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("de de tekst", language: .german),
+            "De tekst"
+        )
+    }
 }

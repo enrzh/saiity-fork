@@ -15,6 +15,10 @@ public enum SupportedLanguage: String, CaseIterable, Codable, Sendable {
     case spanish = "es"
     case german = "de"
 
+    /// Languages currently exposed by the product. Legacy cases remain
+    /// parseable so existing App Group values and migrations stay safe.
+    public static var allCases: [SupportedLanguage] { [.english, .german] }
+
     /// Localized display name for settings UI.
     public var displayName: String {
         switch self {
@@ -72,8 +76,6 @@ public enum SupportedLanguage: String, CaseIterable, Codable, Sendable {
 
     public static func fromSystem(locale: Locale) -> SupportedLanguage {
         switch locale.language.languageCode?.identifier {
-        case "fr": return .french
-        case "es": return .spanish
         case "de": return .german
         default: return .english
         }
@@ -91,6 +93,7 @@ public enum SupportedLanguage: String, CaseIterable, Codable, Sendable {
     /// selection ends up living. In DictusCore it is also testable — the keyboard
     /// extension target has no test bundle.
     public static func activate(_ language: SupportedLanguage) {
+        guard allCases.contains(language) else { return }
         // Before the language moves: the #272 migration freezes the stored layout under
         // whichever language is active *at that moment*, and that has to be the one the
         // user has been typing on, not the one they are switching to.

@@ -28,7 +28,7 @@ struct WelcomePage: View {
                 .opacity(0.5)
                 .padding(.bottom, 24)
 
-            // "Dictus" wordmark
+            // sAiity wordmark
             Text("sAiity")
                 .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(.primary)

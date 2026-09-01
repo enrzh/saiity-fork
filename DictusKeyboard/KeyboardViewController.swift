@@ -17,6 +17,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     private var deleteButton: UIButton?
     private var returnButton: UIButton?
     private var dismissButton: UIButton?
+    private var deleteRepeatTimer: Timer?
+    private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
 
     private final class PassthroughControlsView: UIView {
@@ -492,6 +494,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        deleteRepeatTimer?.invalidate()
+        deleteRepeatTimer = nil
 
         // We are off screen from here on, whether or not we keep ownership below
         // (#260): a detached controller must not adopt an ownerless dictation.
@@ -606,6 +610,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     }
 
     deinit {
+        deleteRepeatTimer?.invalidate()
         // Issue #142 safety net, corrected by #260: viewDidDisappear skips
         // unregistration during an active dictation session to avoid a SwiftUI
         // race that produces a centred-toolbar artefact during cold-start
@@ -885,7 +890,9 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         }
         numberButton = makeKeyboardActionButton(identifier: "number-layer", label: "Toggle numbers") { [weak self] in
             guard let self else { return }
-            if KeyboardState.shared.areaMode == .panel {
+            if KeyboardState.shared.areaMode == .emoji {
+                KeyboardState.shared.closeArea()
+            } else if KeyboardState.shared.areaMode == .panel {
                 closeNumberPanel()
             } else {
                 self.presentArea(.panel)
@@ -894,6 +901,11 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         deleteButton = makeKeyboardActionButton(identifier: "delete-backward", label: "Delete backward") { [weak self] in
             self?.routeProxyCommand(.delete)
         }
+        let deleteHold = UILongPressGestureRecognizer(target: self, action: #selector(handleDeleteHold(_:)))
+        deleteHold.minimumPressDuration = 0.35
+        deleteHold.cancelsTouchesInView = false
+        deleteButton?.addGestureRecognizer(deleteHold)
+        deleteHoldRecognizer = deleteHold
         returnButton = makeKeyboardActionButton(identifier: "return-key", label: "Insert return") { [weak self] in
             self?.routeProxyCommand(.returnKey)
         }
@@ -981,8 +993,14 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     private func layoutVoiceActionControls() {
         guard let controls = actionControlsView, controls.bounds.width > 0 else { return }
         let width = controls.bounds.width
-        let height = computeKeyboardHeight()
+        // UIKit's live bounds are authoritative during keyboard transitions.
+        let height = max(1, controls.bounds.height)
         let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))
+        let leftRailVisible = layout.leftRailWidth > 0
+        let rightRailVisible = layout.rightRailWidth > 0
+        setAuxiliaryUtilityVisuals(for: KeyboardState.shared.areaMode)
+        [atButton, emojiButton, numberButton, nextInputModeButton].compactMap { $0 }.forEach { $0.isHidden = !leftRailVisible }
+        [deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach { $0.isHidden = !rightRailVisible }
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         numberButton?.frame = layout.leftUtilityFrames.number
@@ -991,12 +1009,48 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         returnButton?.frame = layout.returnFrame
         dismissButton?.frame = layout.dismissFrame
         if let numberKeyboardView {
-            numberKeyboardView.frame = CGRect(
-                x: CGFloat(layout.horizontalInset + layout.leftRailWidth),
-                y: 0,
-                width: max(0, CGFloat(layout.centerAreaWidth)),
-                height: max(0, CGFloat(layout.surfaceHeight - VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
-            )
+            numberKeyboardView.frame = layout.alternateContentFrame
+            numberKeyboardView.clipsToBounds = true
+        }
+    }
+
+    private func setAuxiliaryUtilityVisuals(for mode: KeyboardAreaMode) {
+        let isAuxiliary = mode == .panel || mode == .emoji
+        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        let atImage = isAuxiliary ? UIImage(systemName: "at", withConfiguration: symbolConfiguration) : nil
+        let emojiImage = isAuxiliary ? UIImage(systemName: "face.smiling", withConfiguration: symbolConfiguration) : nil
+        let numberTitle = isAuxiliary ? mode.modeControlTitle : nil
+
+        atButton?.setImage(atImage, for: .normal)
+        atButton?.configuration?.image = atImage
+        atButton?.setTitle(nil, for: .normal)
+        atButton?.configuration?.title = nil
+
+        emojiButton?.setImage(emojiImage, for: .normal)
+        emojiButton?.configuration?.image = emojiImage
+        emojiButton?.setTitle(nil, for: .normal)
+        emojiButton?.configuration?.title = nil
+
+        numberButton?.setTitle(numberTitle, for: .normal)
+        numberButton?.configuration?.title = numberTitle
+        numberButton?.setImage(nil, for: .normal)
+        numberButton?.configuration?.image = nil
+    }
+
+    @objc private func handleDeleteHold(_ recognizer: UILongPressGestureRecognizer) {
+        switch recognizer.state {
+        case .began:
+            deleteRepeatTimer?.invalidate()
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                self?.routeProxyCommand(.delete)
+            }
+            deleteRepeatTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        case .ended, .cancelled, .failed:
+            deleteRepeatTimer?.invalidate()
+            deleteRepeatTimer = nil
+        default:
+            break
         }
     }
 
@@ -1011,8 +1065,11 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         keyboard.page = .symbols1
         keyboard.translatesAutoresizingMaskIntoConstraints = true
         keyboard.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        keyboard.clipsToBounds = true
         inputView.addSubview(keyboard)
-        keyboard.frame = inputView.bounds
+        let height = max(1, actionControlsView?.bounds.height ?? inputView.bounds.height)
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(inputView.bounds.width), surfaceHeight: Double(height))
+        keyboard.frame = layout.alternateContentFrame
         numberKeyboardView = keyboard
         if let controls = actionControlsView {
             inputView.bringSubviewToFront(controls)

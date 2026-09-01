@@ -44,6 +44,16 @@ public final class PolishCoordinator {
     /// observer, a retry — would be theatre against the measurements on #315.
     private var availabilityGate = PolishAvailabilityGate()
 
+    /// A valid custom Ollama cleanup registration takes precedence over Apple FM.
+    /// ASR registrations are deliberately ignored here and remain configuration-only.
+    @available(iOS 26.0, *)
+    private var customOllamaEngine: OllamaPolishEngine? {
+        guard let model = CustomModel.load(from: defaults).first(where: {
+            $0.role == .cleanup && $0.source == .ollama && $0.validationError == nil
+        }) else { return nil }
+        return OllamaPolishEngine(model: model)
+    }
+
     private init() {
         self.defaults = AppGroup.defaults
         #if canImport(FoundationModels)
@@ -67,6 +77,7 @@ public final class PolishCoordinator {
     /// late availability flip (model finishes downloading, user toggles Apple
     /// Intelligence on) takes effect without an app relaunch.
     private var activeEngine: PolishEngineProtocol {
+        if #available(iOS 26.0, *), let customOllamaEngine { return customOllamaEngine }
         if let appleFMEngine, PolishAvailability.isAppleFMAvailable {
             return appleFMEngine
         }
@@ -135,9 +146,9 @@ public final class PolishCoordinator {
         await metricsRing.clear()
     }
 
-    /// Polish raw STT output. Returns `raw` unchanged when the toggle is off, when
-    /// language detection skips, when the engine throws/cancels, or when the
-    /// guardrail rejects the output.
+    /// Polish raw STT output. When the toggle is on, the accepted engine output
+    /// is returned; if a call is skipped or rejected, the deterministic cleanup
+    /// floor is returned. When the toggle is off, `raw` passes through unchanged.
     ///
     /// `languagePolicy` is the per-dictation snapshot captured by
     /// DictationCoordinator at transcription start (#226). It carries the STT
@@ -269,7 +280,9 @@ public final class PolishCoordinator {
             let postStart = Date()
             // No engine ran → no newline markers to decode; this only applies
             // the language typography (French NBSP).
-            let finalShort = PolishPostpass.decodeFromEngine(preprocessed, language: target)
+            let finalShort = PolishPostpass.cleanupFloor(
+                PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
+            )
             let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
             let m = PolishMetrics(
                 engine: activeEngine.identifier,
@@ -303,7 +316,9 @@ public final class PolishCoordinator {
             // skipped. Same value the < engineMinDuration gate returns. (#185)
             let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
             let postStart = Date()
-            let fallback = PolishPostpass.decodeFromEngine(preprocessed, language: target)
+            let fallback = PolishPostpass.cleanupFloor(
+                PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
+            )
             let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
             let m = PolishMetrics(
                 engine: activeEngine.identifier,
@@ -439,7 +454,7 @@ public final class PolishCoordinator {
                 timings: PolishTimings(preprocessMs: detectMs, engineMs: 0, postprocessMs: 0)
             )
             await emit(m, raw: raw, polished: nil)
-            return preprocessed
+            return PolishPostpass.cleanupFloor(preprocessed, language: nil)
         }
 
         // Gibberish gate — same skip-on-gibberish rule as the per-language
@@ -455,7 +470,7 @@ public final class PolishCoordinator {
                 timings: PolishTimings(preprocessMs: detectMs, engineMs: 0, postprocessMs: 0)
             )
             await emit(m, raw: raw, polished: nil)
-            return raw
+            return PolishPostpass.cleanupFloor(raw, language: nil)
         }
 
         let currentEngine = activeEngine
@@ -596,4 +611,57 @@ public final class PolishCoordinator {
     /// On flash dictations the user wants instant text and the model rarely adds
     /// value for ~3-6s of latency. Deterministic passes still run. Tunable.
     private static let engineMinDuration: TimeInterval = 2.0
+}
+
+/// App-target cleanup backend for a registered Ollama model.
+/// The pipeline still owns prompt framing, guardrails, and fallback behavior.
+@available(iOS 26.0, *)
+private struct OllamaPolishEngine: PolishEngineProtocol {
+    let identifier: String
+    private let endpoint: URL
+    private let model: String
+    private let session: URLSession
+
+    init?(model: CustomModel) {
+        guard let modelName = model.modelName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !modelName.isEmpty,
+              let endpoint = OllamaHTTPContract.endpoint(baseURL: model.repositoryURL) else { return nil }
+        self.identifier = "ollama:\(modelName)"
+        self.endpoint = endpoint
+        self.model = modelName
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 300
+        configuration.timeoutIntervalForResource = 300
+        self.session = URLSession(configuration: configuration)
+    }
+
+    func polish(raw: String,
+                targetLanguage: SupportedLanguage,
+                mode: PolishMode) async throws -> String {
+        let body: [String: Any] = [
+            "model": model,
+            "temperature": 0.0,
+            "stream": false,
+            "messages": [
+                ["role": "system", "content": AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)],
+                ["role": "user", "content": "Polish this text. Output only the polished version, nothing else.\n\nInput:\n\(raw)\n\nPolished output:\n"]
+            ],
+            "reasoning_effort": "none",
+            "chat_template_kwargs": ["enable_thinking": false]
+        ]
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await session.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let content = try OllamaHTTPContract.responseText(data: data, statusCode: statusCode)
+        return Self.stripReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stripReasoning(_ text: String) -> String {
+        guard let close = text.range(of: "</think>") else { return text }
+        return String(text[close.upperBound...])
+    }
 }

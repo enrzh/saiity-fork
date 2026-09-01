@@ -5,7 +5,7 @@ import SwiftUI
 import WidgetKit
 import DictusCore
 
-/// Live Activity configuration for Dictus.
+/// Live Activity configuration for sAiity.
 ///
 /// WHY all views in one file:
 /// Widget extensions should minimize file count. The compact/expanded/lock screen
@@ -68,11 +68,11 @@ struct DictusLiveActivity: Widget {
                 .frame(width: 20, height: 14)
         case .ready:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color(hex: 0x22C55E))
+                .foregroundStyle(Color.sAiitySuccess)
                 .font(.system(size: 14))
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(Color(hex: 0xEF4444))
+                .foregroundStyle(Color.sAiityRecording)
                 .font(.system(size: 14))
         }
     }
@@ -82,13 +82,13 @@ struct DictusLiveActivity: Widget {
     private func compactTrailing(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
         switch context.state.phase {
         case .standby:
-            Text("On")
+            Text("Ready")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white)
         case .recording:
             Text("Rec")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color(hex: 0xEF4444))
+                .foregroundStyle(Color.sAiityRecording)
         case .transcribing:
             // Small spinner-like indicator via SF Symbol
             Image(systemName: "ellipsis")
@@ -100,15 +100,15 @@ struct DictusLiveActivity: Widget {
             // distinction on its own (#267). Purple is the brand's Smart-mode
             // colour, which is where this stage is heading (#79).
             Image(systemName: "sparkles")
-                .foregroundColor(Color(hex: 0x8B5CF6))
+                .foregroundStyle(Color.sAiityProcessing)
                 .font(.system(size: 14))
         case .ready:
             Text("Done")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color(hex: 0x22C55E))
+                .foregroundStyle(Color.sAiitySuccess)
         case .failed:
             Image(systemName: "xmark")
-                .foregroundColor(Color(hex: 0xEF4444))
+                .foregroundStyle(Color.sAiityRecording)
                 .font(.system(size: 14))
         }
     }
@@ -128,7 +128,7 @@ struct DictusLiveActivity: Widget {
                 .frame(width: 14, height: 12)
         case .ready:
             Image(systemName: "checkmark")
-                .foregroundColor(Color(hex: 0x22C55E))
+                .foregroundStyle(Color.sAiitySuccess)
                 .font(.system(size: 12, weight: .bold))
         default:
             Image(systemName: "waveform")
@@ -160,7 +160,7 @@ struct DictusLiveActivity: Widget {
 
                 switch context.state.phase {
                 case .standby:
-                    Text("On")
+                    Text("Ready")
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.6))
                 case .recording:
@@ -170,19 +170,19 @@ struct DictusLiveActivity: Widget {
                 case .transcribing:
                     Text("Transcribing...")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: 0x3D7EFF))
+                .foregroundStyle(Color.sAiityAccent)
                 case .processing:
                     Text("Processing...")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: 0x8B5CF6))
+                .foregroundStyle(Color.sAiityProcessing)
                 case .ready:
                     Text("Transcription ready")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: 0x22C55E))
+                .foregroundStyle(Color.sAiitySuccess)
                 case .failed:
                     Text("Error")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: 0xEF4444))
+                .foregroundStyle(Color.sAiityRecording)
                 }
             }
         }
@@ -214,7 +214,7 @@ struct DictusLiveActivity: Widget {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 44, height: 44)
-                        .background(context.state.detectionMuted ? Color.secondary : Color(hex: 0x3D7EFF))
+                        .background(context.state.detectionMuted ? Color.secondary : Color.sAiityAccent)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -227,7 +227,7 @@ struct DictusLiveActivity: Widget {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 32, height: 32)
-                        .background(Color(hex: 0xEF4444))
+                        .background(Color.sAiityRecording)
                         .clipShape(Circle())
                 }
 
@@ -290,14 +290,14 @@ struct DictusLiveActivity: Widget {
 
                 switch context.state.phase {
                 case .standby:
-                    Text("On")
+                    Text("Ready")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 case .recording:
                     if let startDate = context.state.recordingStartDate {
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(Color(hex: 0xEF4444))
+                            .fill(Color.sAiityRecording)
                                 .frame(width: 6, height: 6)
                             Text(startDate, style: .timer)
                                 .font(.system(size: 13, design: .monospaced))
@@ -308,20 +308,20 @@ struct DictusLiveActivity: Widget {
                 case .transcribing:
                     Text("Transcribing...")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: 0x3D7EFF))
+                        .foregroundStyle(Color.sAiityAccent)
                 case .processing:
                     Text("Processing...")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: 0x8B5CF6))
+                        .foregroundStyle(Color.sAiityProcessing)
                 case .ready:
                     Text(context.state.transcriptionPreview ?? "Transcription ready")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: 0x22C55E))
+                        .foregroundStyle(Color.sAiitySuccess)
                         .lineLimit(1)
                 case .failed:
                     Text("Error")
                         .font(.system(size: 13))
-                        .foregroundColor(Color(hex: 0xEF4444))
+                        .foregroundStyle(Color.sAiityRecording)
                 }
             }
 
@@ -347,7 +347,7 @@ struct DictusLiveActivity: Widget {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.primary)
                             .frame(width: 48, height: 48)
-                            .background(context.state.detectionMuted ? Color.secondary : Color(hex: 0x3D7EFF))
+                            .background(context.state.detectionMuted ? Color.secondary : Color.sAiityAccent)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -360,7 +360,7 @@ struct DictusLiveActivity: Widget {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.primary)
                         .frame(width: 48, height: 48)
-                        .background(Color(hex: 0xEF4444))
+                        .background(Color.sAiityRecording)
                         .clipShape(Circle())
                 }
             default:
@@ -493,6 +493,11 @@ struct WaveformBars: View {
 /// is linked, keeping this tiny extension local avoids any import ordering
 /// issues with SwiftUI in widget builds.
 private extension Color {
+    static let sAiityAccent = Color.accentColor
+    static let sAiityRecording = Color.red
+    static let sAiitySuccess = Color.green
+    static let sAiityProcessing = Color.indigo
+
     init(hex: UInt, opacity: Double = 1.0) {
         self.init(
             red: Double((hex >> 16) & 0xFF) / 255.0,

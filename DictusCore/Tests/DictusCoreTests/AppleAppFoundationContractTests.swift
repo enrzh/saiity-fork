@@ -125,13 +125,52 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(onboarding.contains("ModelLoadingOverlay"))
     }
 
+    func testCleanupDefaultsToEnabledForNewUsers() throws {
+        let app = try source("DictusApp/DictusApp.swift")
+        let onboarding = try source("DictusApp/Onboarding/OnboardingView.swift")
+        let polishPage = try source("DictusApp/Onboarding/PolishTogglePage.swift")
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+
+        XCTAssertTrue(app.contains("defaults?.set(true, forKey: SharedKeys.polishEnabled)"))
+        XCTAssertTrue(onboarding.contains("private var polishEnabled = true"))
+        XCTAssertTrue(polishPage.contains("private var polishEnabled = true"))
+        XCTAssertTrue(settings.contains("private var polishEnabled = true"))
+    }
+
+    func testCleanupMigrationEnablesUpgradeUsersWithoutOverwritingExplicitChoice() throws {
+        let app = try source("DictusApp/DictusApp.swift")
+
+        XCTAssertTrue(app.contains("defaults?.object(forKey: SharedKeys.polishEnabled) == nil"))
+        XCTAssertTrue(app.contains("defaults?.set(true, forKey: SharedKeys.polishEnabled)"))
+    }
+
+    func testCleanupPromptsHandleSpokenSelfCorrections() throws {
+        for path in [
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishAutoPrompt.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishNaturalPromptEN.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishNaturalPromptFR.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishNaturalPromptDE.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishNaturalPromptES.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishRepairPromptEN.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishRepairPromptFR.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishRepairPromptDE.swift",
+            "DictusCore/Sources/DictusCore/Polish/Prompts/PolishRepairPromptES.swift"
+        ] {
+            let prompt = try source(path)
+            XCTAssertTrue(prompt.contains("self-correction"), "Missing self-correction rule in \(path)")
+            XCTAssertTrue(prompt.contains("abandoned fragment"), "Missing abandoned-fragment guard in \(path)")
+        }
+    }
+
     func testOnboardingAllowsTrialBeforeHandshakeAndOffersFullAccessRecovery() throws {
         let onboarding = try source("DictusApp/Onboarding/OnboardingView.swift")
         let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
 
         XCTAssertTrue(onboarding.contains("keyboardInstalled && modelReady"))
-        XCTAssertTrue(onboarding.contains("Check keyboard status"))
-        XCTAssertTrue(onboarding.contains("recent keyboard handshake"))
+        XCTAssertFalse(onboarding.contains("keyboardInstalled && fullAccessVerified && modelReady"))
+        XCTAssertTrue(onboarding.contains("switch to the sAiity keyboard and complete Full Access verification"))
+        XCTAssertTrue(onboarding.contains("Open Keyboard Settings"))
+        XCTAssertTrue(onboarding.contains("Full Access is verified only by the keyboard extension."))
         XCTAssertTrue(tutorial.contains("Return to setup"))
         XCTAssertTrue(tutorial.contains("Full Access required"))
         XCTAssertTrue(tutorial.contains("Open Settings"))
@@ -164,7 +203,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let sections = ["Dictation", "Keyboard", "Translation & Cleanup", "Feedback", "Privacy", "Support"]
         XCTAssertEqual(sections.filter { settings.contains("Section(\"\($0)\")") }, sections)
         XCTAssertTrue(settings.contains("NavigationLink { ModelManagerView"))
-        XCTAssertTrue(settings.contains("NavigationLink { SoundSettingsView()"))
+        XCTAssertFalse(settings.contains("NavigationLink { SoundSettingsView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DebugLogView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DiagnosticDetailView"))
         XCTAssertTrue(settings.contains("Toggle("))
@@ -214,6 +253,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let manager = try source("DictusApp/Views/ModelManagerView.swift")
         let card = try source("DictusApp/Views/ModelCardView.swift")
 
+        XCTAssertFalse(manager.contains(".safeAreaInset"))
+        XCTAssertTrue(manager.contains(".contentMargins(.bottom, 88, for: .scrollContent)"))
         XCTAssertFalse(manager.contains(".swipeActions"))
         XCTAssertFalse(manager.contains(".listRowSeparator(.visible)"))
         XCTAssertTrue(manager.contains(".listRowSeparator(.hidden)"))
@@ -241,6 +282,13 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(card.contains("downloadProgressLabel"))
         XCTAssertTrue(card.contains("downloadByteInfo"))
         XCTAssertTrue(card.contains("accessibilityValue"))
+    }
+
+    func testSettingsListKeepsLastSectionAboveFloatingTabBar() throws {
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+
+        XCTAssertFalse(settings.contains(".safeAreaInset"))
+        XCTAssertTrue(settings.contains(".contentMargins(.bottom, 88, for: .scrollContent)"))
     }
 
     func testModelDeletionIsOnlyExposedThroughConfirmedMenu() throws {

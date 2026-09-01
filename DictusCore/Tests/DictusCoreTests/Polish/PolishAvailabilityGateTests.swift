@@ -210,7 +210,7 @@ final class PolishAvailabilityGateTests: XCTestCase {
         let out = PolishPipeline.resolvedOutput(
             result, preprocessed: preprocessed, target: .french, mode: .auto
         )
-        XCTAssertEqual(out, preprocessed)
+        XCTAssertEqual(out, "Ça va?")
     }
 
     /// A default-constructed gate is what the harness and every pre-existing
@@ -221,7 +221,7 @@ final class PolishAvailabilityGateTests: XCTestCase {
             preprocessed: input, engine: PassthroughPolishEngine(), target: .english, mode: .natural
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, PolishPostpass.cleanupFloor(input))
     }
 
     // MARK: - The record of it

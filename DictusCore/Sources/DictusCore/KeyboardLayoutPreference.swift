@@ -100,9 +100,12 @@ public enum KeyboardLayoutPreference {
             // During this migration the legacy language key is the only historical
             // identity available; the new automatic selection may resolve differently
             // on the current system locale.
-            let legacyLanguage = defaults.string(forKey: SharedKeys.language)
-                .flatMap(SupportedLanguage.init(rawValue:)) ?? .french
-            frozen[legacyLanguage.rawValue] = effective.rawValue
+            // Missing legacy language means there is no evidence of French (or any
+            // other fixed language). Keep the new installation automatic.
+            if let legacyLanguage = defaults.string(forKey: SharedKeys.language)
+                .flatMap(SupportedLanguage.init(rawValue:)) {
+                frozen[legacyLanguage.rawValue] = effective.rawValue
+            }
         }
         defaults.set(frozen, forKey: SharedKeys.keyboardLayoutsByLanguage)
     }

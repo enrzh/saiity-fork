@@ -51,7 +51,11 @@ public enum VoiceOnlyKeyboardPolicy {
         for width: CGFloat,
         surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
     ) -> (delete: CGRect, returnKey: CGRect) {
-        let x = max(0, width - CGFloat(horizontalPadding) - actionHitSize.width)
+        guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
+            return (.zero, .zero)
+        }
+        let inset = horizontalInset(for: Double(width))
+        let x = max(0, width - CGFloat(inset) - actionHitSize.width)
         return (
             CGRect(x: x, y: CGFloat(topInset), width: actionHitSize.width, height: actionHitSize.height),
             CGRect(x: x, y: CGFloat(topInset) + actionHitSize.height, width: actionHitSize.width, height: actionHitSize.height)
@@ -70,7 +74,11 @@ public enum VoiceOnlyKeyboardPolicy {
         for width: CGFloat,
         surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
     ) -> CGRect {
-        let x = max(0, width - CGFloat(horizontalPadding) - actionHitSize.width)
+        guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
+            return .zero
+        }
+        let inset = horizontalInset(for: Double(width))
+        let x = max(0, width - CGFloat(inset) - actionHitSize.width)
         return CGRect(x: x, y: surfaceHeight - bottomActionHitHeight,
                       width: actionHitSize.width, height: bottomActionHitHeight)
     }
@@ -107,6 +115,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect, next: CGRect) {
+            guard leftRailWidth > 0 else { return (.zero, .zero, .zero, .zero) }
             let x = horizontalInset
             let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
@@ -130,7 +139,8 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var dismissFrame: CGRect {
-            VoiceOnlyKeyboardPolicy.dismissFrame(
+            guard rightRailWidth > 0 else { return .zero }
+            return VoiceOnlyKeyboardPolicy.dismissFrame(
                 for: surfaceWidth,
                 surfaceHeight: CGFloat(surfaceHeight)
             )
@@ -140,6 +150,15 @@ public enum VoiceOnlyKeyboardPolicy {
             CGRect(x: centerX - centerAreaWidth / 2,
                    y: (surfaceHeight - contentHeight) / 2,
                    width: centerAreaWidth, height: contentHeight)
+        }
+
+        /// The full-height content region for alternate pages. Rails remain
+        /// outside its right edge; the bottom blank symbols row leaves the
+        /// left utility rail available for controls.
+        public var alternateContentFrame: CGRect {
+            let x = horizontalInset
+            let right = surfaceWidth - horizontalInset - rightRailWidth
+            return CGRect(x: x, y: 0, width: max(0, right - x), height: surfaceHeight)
         }
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
@@ -171,7 +190,7 @@ public enum VoiceOnlyKeyboardPolicy {
             } else {
                 commandRects = []
             }
-            return utilities + commandRects + [dismissFrame, dictateFrame]
+            return utilities + commandRects + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame]
         }
     }
 
@@ -180,11 +199,14 @@ public enum VoiceOnlyKeyboardPolicy {
         surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
-        let horizontalInset = availableWidth >= Double(leftRailControlCount) * controlSize
-            + actionHitSize.width + controlSize ? 0 : min(horizontalPadding, availableWidth / 2)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount))
         let rightWidth = actionHitSize.width
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + controlSize
+        // Keep the same outer inset on both the visual center region and the UIKit
+        // action rail. At the narrowest supported width, dropping the inset keeps
+        // the center region at the 44pt minimum instead of compressing it below a
+        // usable touch target.
+        let horizontalInset = horizontalInset(for: availableWidth)
         let railWidth = hasRails ? rightWidth : 0
         let resolvedLeftRailWidth = hasRails ? Double(leftWidth) : 0
         let centerAreaWidth = max(0, availableWidth
@@ -212,5 +234,15 @@ public enum VoiceOnlyKeyboardPolicy {
             rightBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
             showsLanguageIndicator: hasRails
         )
+    }
+
+    private static func horizontalInset(for availableWidth: Double) -> Double {
+        let railsFit = availableWidth >= Double(leftRailControlCount) * controlSize
+            + actionHitSize.width + controlSize
+        guard railsFit else { return min(horizontalPadding, availableWidth / 2) }
+
+        let centerMinimumFitsWithInset = availableWidth >= Double(leftRailControlCount) * controlSize
+            + actionHitSize.width + controlSize + horizontalPadding * 2
+        return centerMinimumFitsWithInset ? horizontalPadding : 0
     }
 }

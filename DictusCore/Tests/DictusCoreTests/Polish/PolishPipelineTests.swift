@@ -9,7 +9,7 @@ final class PolishPipelineTests: XCTestCase {
 
     // MARK: - transform()
 
-    func testTransformPassthroughSucceedsAndReturnsInput() async {
+    func testTransformPassthroughSucceedsAndReturnsCleanedInput() async {
         let input = "this is a perfectly normal english sentence about testing things"
         let result = await PolishPipeline.transform(
             preprocessed: input,
@@ -18,7 +18,7 @@ final class PolishPipelineTests: XCTestCase {
             mode: .natural
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, "This is a perfectly normal english sentence about testing things")
     }
 
     func testTransformPreservesNewlinesThroughMarkerRoundTrip() async {
@@ -32,19 +32,28 @@ final class PolishPipelineTests: XCTestCase {
             mode: .natural
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, "First line here\nsecond line here\nthird line here")
         XCTAssertTrue(result.engineOutput?.contains("\n") == true)
     }
 
     // MARK: - resolvedOutput()  (#185)
 
-    /// On success the user gets the engine output verbatim.
-    func testResolvedOutputReturnsEngineOutputOnSuccess() {
-        let result = PolishPipeline.Result(
-            engineOutput: "Ok, petit test.", outcome: .success, engineMs: 5, postprocessMs: 0
+    /// On success the engine output has already passed decode/typography before
+    /// guardrails, so resolution returns the same accepted output without a
+    /// second cleanup pass.
+    func testResolvedOutputCleansSuccessfulPassthroughWithoutRemovingMeaningfulRepetition() async {
+        let transformed = await PolishPipeline.transform(
+            preprocessed: "uh i i think very very important , right ?",
+            engine: PassthroughPolishEngine(), target: .english, mode: .natural
         )
-        let out = PolishPipeline.resolvedOutput(result, preprocessed: "ignored", target: .french, mode: .natural)
-        XCTAssertEqual(out, "Ok, petit test.")
+        XCTAssertEqual(transformed.outcome, .success)
+        XCTAssertEqual(transformed.engineOutput, "I think very very important, right?")
+        let result = PolishPipeline.Result(
+            engineOutput: transformed.engineOutput, outcome: transformed.outcome, engineMs: 5, postprocessMs: 0
+        )
+        let out = PolishPipeline.resolvedOutput(result, preprocessed: "ignored", target: .english, mode: .natural)
+        XCTAssertEqual(out, transformed.engineOutput)
+        XCTAssertEqual(out, "I think very very important, right?")
     }
 
     /// On a non-success outcome the user gets the deterministic floor (decoded
@@ -78,7 +87,24 @@ final class PolishPipelineTests: XCTestCase {
             engineOutput: nil, outcome: .cancelled, engineMs: 0, postprocessMs: 0
         )
         let out = PolishPipeline.resolvedOutput(result, preprocessed: "ça va ?", target: .french, mode: .natural)
-        XCTAssertEqual(out, "ça va\u{00A0}?")
+        XCTAssertEqual(out, "Ça va\u{00A0}?")
+    }
+
+    func testPassthroughSuccessKeepsCleanedEngineOutputForGuardrailDiagnostics() async {
+        let result = await PolishPipeline.transform(
+            preprocessed: "uh i i think we should ship it",
+            engine: PassthroughPolishEngine(), target: .english, mode: .natural
+        )
+        XCTAssertEqual(result.outcome, .success)
+        XCTAssertEqual(result.engineOutput, "I think we should ship it")
+    }
+
+    func testEngineFailureFallbackPreservesPipelineFloor() {
+        let result = PolishPipeline.Result(engineOutput: nil, outcome: .engineFailed, engineMs: 1, postprocessMs: 0)
+        XCTAssertEqual(
+            PolishPipeline.resolvedOutput(result, preprocessed: "euh je je sais que que c'est important", target: .french, mode: .natural),
+            "Je sais que c'est important"
+        )
     }
 
     // MARK: - detectLanguage()
@@ -170,8 +196,8 @@ final class PolishPipelineTests: XCTestCase {
     }
 
     /// In auto mode the target-language typography must NOT run: a French
-    /// input with `target: .french` as engine placeholder keeps its ASCII
-    /// space before `?` (no NBSP) — the prompt owns typography in auto mode.
+    /// input with `target: .french` as engine placeholder gets no French NBSP;
+    /// language-neutral cleanup still normalizes the punctuation spacing.
     func testTransformAutoSkipsLanguageTypography() async {
         let input = "bonjour comment ça va aujourd'hui, j'espère que tu vas bien ?"
         let result = await PolishPipeline.transform(
@@ -181,7 +207,7 @@ final class PolishPipelineTests: XCTestCase {
             mode: .auto
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, "Bonjour comment ça va aujourd'hui, j'espère que tu vas bien?")
         XCTAssertFalse(result.engineOutput?.contains("\u{00A0}") == true)
     }
 
@@ -211,7 +237,7 @@ final class PolishPipelineTests: XCTestCase {
             mode: .auto
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, "First line of the message here\nsecond line of the message here")
     }
 
     // MARK: - autoPreprocess() (#239 device-test fix: spoken commands in auto mode)
@@ -258,13 +284,13 @@ final class PolishPipelineTests: XCTestCase {
     /// Auto-mode fallback is the pre-pass floor (worst case output == input
     /// for languages without rules): the placeholder target must not leak
     /// typography into the floor.
-    func testResolvedOutputAutoFallbackReturnsInputUnchanged() {
+    func testResolvedOutputAutoFallbackAppliesCleanupFloorWithoutTargetTypography() {
         let input = "ça va ?"
         let result = PolishPipeline.Result(
             engineOutput: nil, outcome: .engineFailed, engineMs: 100, postprocessMs: 0
         )
         let out = PolishPipeline.resolvedOutput(result, preprocessed: input, target: .french, mode: .auto)
-        XCTAssertEqual(out, input, "no NBSP, no typography — raw input is the auto floor")
+        XCTAssertEqual(out, "Ça va?", "auto fallback applies language-neutral cleanup without French NBSP")
     }
 
     func testResolvedOutputAutoSuccessReturnsEngineOutput() {

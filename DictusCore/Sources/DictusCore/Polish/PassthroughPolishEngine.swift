@@ -2,9 +2,9 @@
 import Foundation
 
 /// Validates the wiring of `PolishCoordinator` end-to-end without depending on any
-/// real backend. Sleeps 100 ms and returns the input unchanged. Used at round 1
-/// before `AppleFoundationModelsPolishEngine` is wired (step 5) and as a permanent
-/// fallback on devices where Apple FM is unavailable.
+/// real backend. Sleeps 100 ms and returns the input unchanged. The coordinator
+/// applies its deterministic cleanup floor around this fallback when Apple FM
+/// is unavailable.
 public final class PassthroughPolishEngine: PolishEngineProtocol {
     public let identifier = "passthrough"
 

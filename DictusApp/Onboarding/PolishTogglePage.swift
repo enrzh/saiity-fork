@@ -1,16 +1,15 @@
 // DictusApp/Onboarding/PolishTogglePage.swift
-// Onboarding step: opt-in toggle for the local transcription polish layer.
+// Onboarding step: toggle for automatic local transcription cleanup.
 import SwiftUI
 import DictusCore
 
-/// Onboarding page introducing the local transcription polish capability (#141)
-/// and letting the user opt in before their first dictation.
+/// Onboarding page introducing automatic dictation cleanup (#141).
 ///
 /// WHY this replaces the old layer-choice step (ModeSelectionPage, issue #213):
 /// Product focus is keyboard-only dictation for now. Asking new users to pick a
 /// default keyboard layer (ABC / 123) exposed internal complexity they didn't
 /// need yet — the layer picker stays available in Settings with its default
-/// value. Introducing the polish opt-in here instead surfaces a real quality
+/// value. Introducing the cleanup choice here instead surfaces a real quality
 /// choice early, with a clear quality/latency tradeoff.
 ///
 /// WHY @AppStorage on the App Group suite:
@@ -27,9 +26,9 @@ import DictusCore
 struct PolishTogglePage: View {
     let onNext: () -> Void
 
-    /// Same preference as the Settings polish toggle — off by default (opt-in).
+    /// Same preference as the Settings cleanup toggle — enabled by default.
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
-    private var polishEnabled = false
+    private var polishEnabled = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +41,7 @@ struct PolishTogglePage: View {
                 .padding(.bottom, 24)
 
             // Title
-            Text("Polish transcription with a local model")
+            Text("Automatically clean up dictation")
                 .font(.dictusHeading)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
@@ -51,7 +50,7 @@ struct PolishTogglePage: View {
 
             // Explanation — what polish does, faithful to the issue copy:
             // local model, light corrections, possible added processing time.
-            Text("sAiity can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections.")
+            Text("After speech recognition, sAiity automatically cleans up punctuation, casing, accents and small corrections with Apple's local Foundation Model.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -68,9 +67,13 @@ struct PolishTogglePage: View {
 
             // Opt-in toggle card
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("Enable transcription polish", isOn: $polishEnabled)
+                Toggle("Automatic dictation cleanup", isOn: $polishEnabled)
                     .font(.dictusBody)
                     .tint(.dictusAccent)
+
+                Text(polishEnabled ? "Cleanup runs after dictation. Turn it off to pass through the raw transcription." : "Cleanup is off, so dictation passes through as transcribed.")
+                    .font(.dictusCaption)
+                    .foregroundStyle(.secondary)
 
                 if let note = availabilityNote {
                     Text(note)

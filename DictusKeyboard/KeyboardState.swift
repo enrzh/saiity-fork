@@ -1389,7 +1389,7 @@ class KeyboardState: ObservableObject {
     }
 
     /// Defer recording without leaving a requested state behind in the keyboard.
-    private func deferRecordingForModelPreparation(reason: String = "keyboard opened Dictus for model preparation") {
+    private func deferRecordingForModelPreparation(reason: String = "keyboard opened sAiity for model preparation") {
         PersistentLog.log(.dictationDeferred(reason: reason))
         openModelPreparation()
     }

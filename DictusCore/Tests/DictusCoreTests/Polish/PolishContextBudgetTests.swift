@@ -188,7 +188,7 @@ final class PolishContextBudgetTests: XCTestCase {
         )
         XCTAssertEqual(result.outcome, .success)
         XCTAssertEqual(engine.polishCallCount, 1)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, PolishPostpass.cleanupFloor(input))
     }
 
     /// An overflow must be tellable apart from a backend failure by a caller
@@ -242,7 +242,7 @@ final class PolishContextBudgetTests: XCTestCase {
             preprocessed: input, engine: PassthroughPolishEngine(), target: .french, mode: .natural
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertEqual(result.engineOutput, PolishPostpass.cleanupFloor(input))
     }
 
     // MARK: - The real shipping prompts

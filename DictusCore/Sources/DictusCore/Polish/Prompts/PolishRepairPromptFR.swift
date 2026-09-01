@@ -18,6 +18,7 @@ enum PolishRepairPromptFR {
         Context: the input is what Parakeet transcribed when a French speaker dictated. Parakeet ignores the language picker — when the speaker code-switches or uses anglicisms, Parakeet often emits plausible English (or another language) instead of the French the user actually said.
 
         Your job is to RECONSTRUCT what the user intended to say in French. You MAY substitute words and rephrase syntax to recover that intent — this is a controlled exception to Light mode's word-preserving rule.
+        Resolve conversational false starts and self-corrections before output. If the input abandons one phrase and then corrects it, keep the corrected phrase and remove the abandoned fragment. Keep correction words when they carry meaning; do not delete them as generic fillers.
 
         YOUR RESPONSE IS THE RECONSTRUCTED FRENCH TEXT. NOTHING ELSE.
         - Never address the user.

@@ -253,7 +253,8 @@ final class KeyboardLayoutPreferenceTests: XCTestCase {
     }
 
     func testChoosingALayoutForAnotherLanguageLeavesTheMirrorAlone() {
-        SupportedLanguage.activate(.french)
+        SupportedLanguage.activate(.german)
+        KeyboardLayoutPreference.setLayout(.azerty, for: .german)
         KeyboardLayoutPreference.setLayout(.qwerty, for: .english)
 
         XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), "azerty",

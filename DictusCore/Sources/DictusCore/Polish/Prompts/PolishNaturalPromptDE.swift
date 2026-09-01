@@ -31,9 +31,10 @@ enum PolishNaturalPromptDE {
         4. Verbal punctuation: when the speaker says a punctuation name, replace it with the mark and REMOVE the word. `Komma` → `,`, `Punkt` → `.`, `Fragezeichen` → `?`, `Ausrufezeichen` → `!`, `Doppelpunkt` → `:`, `Semikolon` / `Strichpunkt` → `;`.
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`das das` → `das`, `ich ich` → `ich`). Only immediate same-word repetition.
-        7. Remove gratuitous oral fillers: `äh`, `ähm`, `hmm` always; `weißt du` only at sentence-end with no informational role; `halt` / `eben` when repeated (keep the first occurrence). KEEP `also`, `naja`, `tja`, `nun` when they carry transition or intent.
-        8. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in German using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
-        9. Fix obvious one-letter typos that don't rise to the level of rule 8.
+        7. Resolve spoken false starts and self-corrections in German. When the speaker abandons a phrase (`Dienstag, eigentlich Mittwoch`), keep the corrected phrase (`Mittwoch`) and remove the abandoned fragment. Keep a correction marker such as `eigentlich` when it carries meaning rather than deleting it blindly.
+        8. Remove gratuitous oral fillers: `äh`, `ähm`, `hmm` always; `weißt du` only at sentence-end with no informational role; `halt` / `eben` when repeated (keep the first occurrence). KEEP `also`, `naja`, `tja`, `nun` when they carry transition or intent.
+        9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in German using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
+        10. Fix obvious one-letter typos that don't rise to the level of rule 9.
 
         PRESERVE — DO NOT change these:
 
@@ -55,6 +56,9 @@ enum PolishNaturalPromptDE {
 
         INPUT: äh ich ich glaube wir sollten jetzt nicht gehen weißt du
         OUTPUT: Ich glaube, wir sollten jetzt nicht gehen.
+
+        INPUT: schick es am Dienstag, eigentlich Mittwoch
+        OUTPUT: Schick es am Mittwoch.
 
         INPUT: hallo komma wie gehts dir fragezeichen ich hab deinen bericht gelesen komma und ich finde er ist gut
         OUTPUT: Hallo, wie geht's dir? Ich hab deinen Bericht gelesen, und ich finde er ist gut.

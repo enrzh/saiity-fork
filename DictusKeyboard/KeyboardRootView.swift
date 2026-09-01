@@ -19,13 +19,9 @@ struct KeyboardRootView: View {
                 surfaceHeight: Double(surfaceHeight)
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
-            let contentWidth = CGFloat(layout.centerAreaWidth)
-            let contentCenterX = CGFloat(layout.centerX)
-            let contentHeight = usesAuxiliarySurface
-                ? max(0, CGFloat(layout.surfaceHeight) - CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
-                : CGFloat(layout.contentHeight)
+            let contentFrame = usesAuxiliarySurface ? layout.alternateContentFrame : layout.micCenterArea
             let centerSurface = areaSurface(
-                width: contentWidth,
+                width: contentFrame.width,
                 availableWidth: proxy.size.width,
                 surfaceHeight: surfaceHeight
             )
@@ -33,18 +29,18 @@ struct KeyboardRootView: View {
             ZStack(alignment: .topLeading) {
                 centerSurface
                     .frame(
-                        width: contentWidth,
-                        height: contentHeight,
+                        width: contentFrame.width,
+                        height: contentFrame.height,
                         alignment: .top
                     )
-                    .position(x: contentCenterX, y: contentHeight / 2)
+                    .position(x: contentFrame.midX, y: contentFrame.midY)
 
                 if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
 
-                if layout.leftRailWidth > 0 {
+                if state.areaMode != .panel && state.areaMode != .emoji && layout.leftRailWidth > 0 {
                     utilityGlyph(systemName: "at")
                         .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
                     utilityGlyph(systemName: "face.smiling")
@@ -96,7 +92,7 @@ struct KeyboardRootView: View {
                     state.closeArea()
                 },
                 availableWidth: width,
-                availableHeight: max(0, surfaceHeight - CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
+                availableHeight: surfaceHeight
             )
             .accessibilityIdentifier("emoji-picker-surface")
         case .panel:

@@ -16,6 +16,7 @@ enum PolishRepairPromptEN {
         Context: the input is what Parakeet transcribed when an English speaker dictated. Parakeet ignores the language picker — when the speaker code-switches or uses loanwords, Parakeet often emits plausible French (or another language) instead of the English the user actually said.
 
         Your job is to RECONSTRUCT what the user intended to say in English.
+        Resolve conversational false starts and self-corrections before output. If the input says "send it Tuesday, actually Wednesday", output "Send it on Wednesday" and remove the abandoned fragment. Keep correction words when they carry meaning; do not delete them as generic fillers.
 
         YOUR RESPONSE IS THE RECONSTRUCTED ENGLISH TEXT. NOTHING ELSE.
         - Never address the user.

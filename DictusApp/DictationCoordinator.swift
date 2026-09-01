@@ -492,7 +492,7 @@ class DictationCoordinator: ObservableObject {
             PersistentLog.log(.dictationFailed(error: "No model downloaded"))
             // Localised since #249 — this sibling of the model-availability failure
             // reached the keyboard banner in English regardless of device language.
-            handleError(String(localized: "No model downloaded. Open Dictus to download a model."), disposition: .requiresApp)
+            handleError(String(localized: "No model downloaded. Open sAiity to download a model."), disposition: .requiresApp)
             return
         }
 
@@ -745,8 +745,8 @@ class DictationCoordinator: ObservableObject {
                     languagePolicy: languagePolicy
                 )
 
-                // Polish layer (#141) — passes raw through when toggle off, when language
-                // detection skips, when the engine throws/cancels, or when the guardrail rejects.
+                // Polish layer (#141) — passes raw through only when the toggle is
+                // off; otherwise it applies the model or deterministic cleanup floor.
                 //
                 // The status moves to `.processing` from inside the call rather than
                 // before it (#267): every one of those pass-through paths returns in
@@ -1693,11 +1693,11 @@ private extension DictationCoordinator {
     /// The user can select either a WhisperKit or Parakeet model. This method
     /// checks the active model's engine type and initializes the correct engine.
     ///
-    /// Falls back to the active model from App Group, then to "openai_whisper-small".
+    /// Falls back to the active model from App Group, then to the new-install default.
     func ensureEngineReady(preferredModel: String? = nil) async throws {
         let modelName = preferredModel
             ?? defaults.string(forKey: SharedKeys.activeModel)
-            ?? "openai_whisper-small"
+            ?? ModelInfo.sAiityDefaultIdentifier
 
         let modelInfo = ModelInfo.forIdentifier(modelName)
         let engine = modelInfo?.engine ?? .whisperKit

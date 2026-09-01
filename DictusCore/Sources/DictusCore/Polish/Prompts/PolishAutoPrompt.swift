@@ -56,9 +56,10 @@ enum PolishAutoPrompt {
            - German: `Komma` → `,`, `Fragezeichen` → `?`, `Ausrufezeichen` → `!`, `Doppelpunkt` → `:`, `Semikolon` / `Strichpunkt` → `;`, `neue Zeile` → line break.
            Apply mid-clause too, and the equivalent commands in other languages. Only when the words are clearly a spoken command — not when the speaker talks ABOUT punctuation.
         5. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`I I think` → `I think`). Only immediate same-word repetition.
-        6. Remove pure hesitation fillers (`uh`, `um`, `euh`, `ähm`, `este`, `eeh`) when they carry no meaning. KEEP transition words that carry intent.
-        7. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker where the language uses capitalization. Do NOT alter, paraphrase, surround with spaces, or add new markers.
-        8. Fix obvious one-letter typos.
+        6. Resolve spoken false starts and self-corrections in the input's own language. When the speaker abandons a phrase (`send it Tuesday, actually Wednesday`), keep the corrected phrase and remove the abandoned fragment. Treat a correction marker such as `actually` according to its context; never delete it when it carries meaning.
+        7. Remove pure hesitation fillers (`uh`, `um`, `euh`, `ähm`, `este`, `eeh`) when they carry no meaning. KEEP transition words that carry intent.
+        8. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker where the language uses capitalization. Do NOT alter, paraphrase, surround with spaces, or add new markers.
+        9. Fix obvious one-letter typos.
 
         PRESERVE — DO NOT change these:
 
@@ -79,6 +80,9 @@ enum PolishAutoPrompt {
 
         INPUT: uh i i think we should ship it
         OUTPUT: I think we should ship it.
+
+        INPUT: send it on Tuesday, actually Wednesday
+        OUTPUT: Send it on Wednesday.
 
         INPUT: euh je sais pas trop si on doit y aller maintenant
         OUTPUT: Je sais pas trop si on doit y aller maintenant.

@@ -19,7 +19,8 @@ The Natural contract:
 6. **Remove same-word back-to-back duplicates** that are clearly involuntary stutters (`comme comme` → `comme`).
 7. **Remove gratuitous oral fillers** (`euh`, `hum`; sentence-end `tu vois`; repeated `en fait`) while keeping transition words (`voilà`, `bon`, `donc`).
 8. **Repair ASR hallucinations** when a segment is clearly incoherent (pseudo-words, off-language fragment that does not fit) by reconstructing the speaker's intent in the target language using surrounding context.
-9. Fix one-letter typos that do not rise to rule 8.
+9. Resolve spoken false starts and explicit self-corrections in context, keeping the corrected phrase and removing the abandoned fragment.
+10. Fix one-letter typos that do not rise to rule 8 or 9.
 
 **Preserve (the model MUST NOT change these):**
 - Familiar register (`t'es`, `dispo`, `19h`, contractions, abbreviations).

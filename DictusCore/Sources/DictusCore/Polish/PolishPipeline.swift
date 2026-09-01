@@ -100,9 +100,10 @@ public enum PolishPipeline {
             // Restore newlines (+ target typography outside auto mode) BEFORE
             // the guardrail so the char-ratio compares apples to apples (both
             // sides use `\n`).
-            let polished = mode == .auto
+            let decoded = mode == .auto
                 ? PolishPostpass.decodeNewlines(polishedRaw)
                 : PolishPostpass.decodeFromEngine(polishedRaw, language: target)
+            let polished = PolishPostpass.cleanupFloor(decoded, language: mode == .auto ? nil : target)
             if Task.isCancelled {
                 let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
                 return Result(engineOutput: polished, outcome: .cancelled, engineMs: engineMs, postprocessMs: postMs)
@@ -158,8 +159,8 @@ public enum PolishPipeline {
     /// output; on EVERY other outcome (gibberish-skip, engine failure, guardrail
     /// rejection, cancellation, context overflow, polish unavailable) it's the
     /// deterministic floor —
-    /// the pre-pass text with newline markers decoded and target-language
-    /// typography applied.
+    /// the pre-pass text with newline markers decoded, target-language
+    /// typography applied, and the deterministic cleanup floor applied.
     ///
     /// Crucially it is NEVER the literal `raw`: a non-success must not throw away
     /// the free, deterministic verbal-punctuation work (otherwise the user sees
@@ -170,18 +171,25 @@ public enum PolishPipeline {
     /// Auto mode (#239): the floor is `preprocessed` — the `autoPreprocess`
     /// output, i.e. the input with verbal-punctuation commands already
     /// converted when the detected language has rules, or the input unchanged
-    /// otherwise. No target typography is applied: `target` is the engine
-    /// placeholder and must not leak French NBSP (or any per-language rule)
-    /// onto a language chosen by detection.
+    /// otherwise, followed by the language-neutral cleanup floor. No target
+    /// typography is applied: `target` is the engine placeholder and must not
+    /// leak French NBSP (or any per-language rule) onto a language chosen by
+    /// detection.
     public static func resolvedOutput(_ result: Result,
                                       preprocessed: String,
                                       target: SupportedLanguage,
                                       mode: PolishMode) -> String {
         if result.outcome == .success, let output = result.engineOutput {
+            // `engineOutput` is already decoded, typography-normalized, and
+            // cleanup-normalized before guardrails.
             return output
         }
-        guard mode != .auto else { return preprocessed }
-        return PolishPostpass.decodeFromEngine(preprocessed, language: target)
+        guard mode != .auto else {
+            return PolishPostpass.cleanupFloor(PolishPostpass.decodeNewlines(preprocessed), language: nil)
+        }
+        return PolishPostpass.cleanupFloor(
+            PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
+        )
     }
 
     /// Deterministic pre-pass for the auto path (#239 device-test fix).

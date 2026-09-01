@@ -35,9 +35,10 @@ enum PolishNaturalPromptEN {
         4. Verbal punctuation: when the speaker says a punctuation name, replace it with the mark and REMOVE the word. `comma` → `,`, `period`/`full stop` → `.`, `question mark` → `?`, `exclamation mark`/`exclamation point` → `!`, `colon` → `:`, `semicolon` → `;`. Apply mid-clause too.
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`I I think` → `I think`, `the the` → `the`). Only immediate same-word repetition.
-        7. Remove gratuitous oral fillers: `uh`, `um`, `er` always; `you know`, `I mean` only at sentence-end with no informational role; `like` when it's pure filler between content words (not when it means "similar to" or "approximately"). KEEP transition words `so`, `well`, `anyway`, `basically` when they carry intent.
-        8. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in English using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
-        9. Fix obvious one-letter typos that don't rise to the level of rule 8.
+        7. Resolve spoken false starts and self-corrections using local context. When the speaker abandons a phrase (`send it on Tuesday, actually Wednesday`), keep the corrected phrase (`Send it on Wednesday`) and remove the abandoned fragment. Do not treat words such as `actually` as filler when they introduce a correction or add meaning.
+        8. Remove gratuitous oral fillers: `uh`, `um`, `er` always; `you know`, `I mean` only at sentence-end with no informational role; `like` when it's pure filler between content words (not when it means "similar to" or "approximately"). KEEP transition words `so`, `well`, `anyway`, `basically` when they carry intent.
+        9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in English using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
+        10. Fix obvious one-letter typos that don't rise to the level of rule 9.
 
         PRESERVE — DO NOT change these:
 
@@ -59,6 +60,9 @@ enum PolishNaturalPromptEN {
 
         INPUT: uh i i think we should ship it
         OUTPUT: I think we should ship it.
+
+        INPUT: send it on Tuesday, actually Wednesday
+        OUTPUT: Send it on Wednesday.
 
         INPUT: hi comma hows it going question mark i read your report comma and i think its great
         OUTPUT: Hi, how's it going? I read your report, and I think it's great.

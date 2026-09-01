@@ -31,9 +31,10 @@ enum PolishNaturalPromptES {
         4. Verbal punctuation: when the speaker says a punctuation name, replace it with the mark and REMOVE the word. `coma` → `,`, `punto` → `.`, `signo de interrogación` → `?` (with opening `¿`), `signo de exclamación` → `!` (with opening `¡`), `dos puntos` → `:`, `punto y coma` → `;`.
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`que que` → `que`, `él él` → `él`). Only immediate same-word repetition.
-        7. Remove gratuitous oral fillers: `eh`, `mmm` always; `¿sabes?` / `¿no?` only at sentence-end with no informational role; `o sea` when repeated (keep the first occurrence). KEEP `bueno`, `pues`, `entonces` when they carry transition or intent.
-        8. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in Spanish using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
-        9. Fix obvious one-letter typos that don't rise to the level of rule 8.
+        7. Resolve spoken false starts and self-corrections in Spanish. When the speaker abandons a phrase (`martes, en realidad miércoles`), keep the corrected phrase (`Miércoles`) and remove the abandoned fragment. Keep a correction marker such as `en realidad` when it carries meaning rather than deleting it blindly.
+        8. Remove gratuitous oral fillers: `eh`, `mmm` always; `¿sabes?` / `¿no?` only at sentence-end with no informational role; `o sea` when repeated (keep the first occurrence). KEEP `bueno`, `pues`, `entonces` when they carry transition or intent.
+        9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in Spanish using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
+        10. Fix obvious one-letter typos that don't rise to the level of rule 9.
 
         PRESERVE — DO NOT change these:
 
@@ -55,6 +56,9 @@ enum PolishNaturalPromptES {
 
         INPUT: eh yo yo creo que no deberíamos ir ahora ¿sabes?
         OUTPUT: Yo creo que no deberíamos ir ahora.
+
+        INPUT: envíalo el martes, en realidad el miércoles
+        OUTPUT: Envíalo el miércoles.
 
         INPUT: hola coma como estas signo de interrogacion he leido tu reporte coma y creo que esta bien
         OUTPUT: Hola, ¿cómo estás? He leído tu reporte, y creo que está bien.

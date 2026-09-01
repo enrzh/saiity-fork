@@ -9,8 +9,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         )
     }
 
-    func testRightRailUsesThreeCommandsAndOneSeparateDismissAction() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.rightRailControlCount, 3)
+    func testRightRailUsesDeleteAndReturnWithSeparateDismissAndDictateActions() {
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.rightRailControlCount, 2)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandClusterSize, 44)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.rightRailHeight, 88)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlSize, 44)
@@ -46,6 +46,39 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(VoiceOnlyKeyboardPolicy.contentHeight / 4, 44)
     }
 
+    func testAlternateContentUsesFullUsableWidthAndHeightWithoutCoveringRightActions() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let frame = layout.alternateContentFrame
+
+            XCTAssertEqual(frame.minX, layout.horizontalInset, "width=\(width)")
+            XCTAssertEqual(frame.maxX, width - layout.horizontalInset - layout.rightRailWidth, "width=\(width)")
+            XCTAssertEqual(frame.minY, 0, "width=\(width)")
+            XCTAssertEqual(frame.maxY, layout.surfaceHeight, "width=\(width)")
+            XCTAssertGreaterThan(frame.width, layout.centerAreaWidth, "width=\(width)")
+            XCTAssertFalse(frame.intersects(layout.rightCommandFrame), "width=\(width)")
+        }
+    }
+
+    func testExpandedAlternateSurfaceKeepsLeftUtilitiesVisibleAboveItsContent() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let controller = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"),
+            encoding: .utf8
+        )
+        let rootView = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(controller.contains("setAuxiliaryUtilityVisuals"))
+        XCTAssertTrue(rootView.contains("state.areaMode != .panel && state.areaMode != .emoji"))
+    }
+
     func testBottomUtilitiesShareOneHorizontalRail() {
         for width in [320.0, 375, 390, 430] {
             let frames = VoiceOnlyKeyboardPolicy.leftUtilityFrames(for: width)
@@ -54,10 +87,10 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             XCTAssertEqual(frames.emoji.minY, bottomY, "width=\(width)")
             XCTAssertEqual(frames.number.minY, bottomY, "width=\(width)")
             XCTAssertEqual(frames.next.minY, bottomY, "width=\(width)")
-            XCTAssertEqual(frames.at.minX, 10, "width=\(width)")
-            XCTAssertEqual(frames.emoji.minX, 54, "width=\(width)")
-            XCTAssertEqual(frames.number.minX, 98, "width=\(width)")
-            XCTAssertEqual(frames.next.minX, 142, "width=\(width)")
+            XCTAssertEqual(frames.at.minX, VoiceOnlyKeyboardPolicy.layout(for: width).horizontalInset, "width=\(width)")
+            XCTAssertEqual(frames.emoji.minX, frames.at.maxX, "width=\(width)")
+            XCTAssertEqual(frames.number.minX, frames.emoji.maxX, "width=\(width)")
+            XCTAssertEqual(frames.next.minX, frames.number.maxX, "width=\(width)")
             XCTAssertEqual(Set([frames.at, frames.emoji, frames.number, frames.next]).count, 4)
         }
     }
@@ -112,11 +145,10 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
 
-            XCTAssertEqual(layout.horizontalInset, 10, "width=\(width)")
-            let hasRails = width >= 360
-            XCTAssertEqual(layout.leftRailWidth, hasRails ? 176 : 0, "width=\(width)")
-            XCTAssertEqual(layout.rightRailWidth, hasRails ? 88 : 0, "width=\(width)")
-            XCTAssertEqual(layout.centerX, hasRails ? width / 2 + 44 : width / 2, "width=\(width)")
+            XCTAssertEqual(layout.leftRailWidth, 176, "width=\(width)")
+            XCTAssertEqual(layout.rightRailWidth, 88, "width=\(width)")
+            XCTAssertGreaterThanOrEqual(layout.centerAreaWidth, 44, "width=\(width)")
+            XCTAssertTrue(layout.showsLanguageIndicator, "width=\(width)")
             XCTAssertLessThanOrEqual(
                 layout.horizontalInset * 2 + layout.leftRailWidth
                     + layout.centerAreaWidth + layout.rightRailWidth,
@@ -157,9 +189,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
             XCTAssertEqual(layout.leftRailWidth, 176, "width=\(width)")
             XCTAssertEqual(layout.rightRailWidth, 88, "width=\(width)")
-            XCTAssertEqual(layout.leftUtilityFrames.next.maxX, 186, "width=\(width)")
-            XCTAssertEqual(layout.micCenterArea.minX, 186, "width=\(width)")
-            XCTAssertEqual(layout.micCenterArea.maxX, width - 98, "width=\(width)")
+            XCTAssertEqual(layout.leftUtilityFrames.next.maxX, layout.horizontalInset + 176, "width=\(width)")
+            XCTAssertEqual(layout.micCenterArea.minX, layout.horizontalInset + 176, "width=\(width)")
+            XCTAssertEqual(layout.micCenterArea.maxX, width - VoiceOnlyKeyboardPolicy.horizontalPadding - 88, "width=\(width)")
             XCTAssertFalse(layout.micCenterArea.intersects(layout.leftUtilityFrames.next), "width=\(width)")
             XCTAssertFalse(layout.micCenterArea.intersects(layout.rightCommandFrame), "width=\(width)")
         }
@@ -233,7 +265,20 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     func testVoiceSurfaceHidesLanguageIndicatorWhenLeftRailCannotFitIt() {
         XCTAssertFalse(VoiceOnlyKeyboardPolicy.layout(for: 80).showsLanguageIndicator)
         XCTAssertFalse(VoiceOnlyKeyboardPolicy.layout(for: 12).showsLanguageIndicator)
-        XCTAssertFalse(VoiceOnlyKeyboardPolicy.layout(for: 320).showsLanguageIndicator)
+        XCTAssertTrue(VoiceOnlyKeyboardPolicy.layout(for: 320).showsLanguageIndicator)
+    }
+
+    func testHiddenRailsHaveNoActionFramesInTheNarrowCenterSurface() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 300)
+
+        XCTAssertEqual(layout.leftRailWidth, 0)
+        XCTAssertEqual(layout.rightRailWidth, 0)
+        XCTAssertTrue(layout.leftUtilityFrames.at.isEmpty)
+        XCTAssertTrue(layout.leftUtilityFrames.next.isEmpty)
+        XCTAssertTrue(layout.deleteFrame.isEmpty)
+        XCTAssertTrue(layout.returnFrame.isEmpty)
+        XCTAssertTrue(layout.dismissFrame.isEmpty)
+        XCTAssertEqual(layout.actionRectangles, [layout.dictateFrame])
     }
 
     func testVoiceOnlyActionMappingUsesExistingCommands() {
@@ -273,18 +318,22 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
             let rectangles = layout.actionRectangles
 
-            XCTAssertEqual(rectangles.count, width >= 360 ? 8 : 1, "width=\(width)")
+            XCTAssertEqual(rectangles.count, 8, "width=\(width)")
             XCTAssertTrue(rectangles.allSatisfy { $0.minX >= 0 && $0.maxX <= width && $0.minY >= 0 && $0.maxY <= VoiceOnlyKeyboardPolicy.surfaceHeight }, "width=\(width)")
             for (index, rectangle) in rectangles.enumerated() {
-                XCTAssertEqual(rectangle.width, 44, accuracy: 0.001, "index=\(index), width=\(width)")
-                XCTAssertEqual(rectangle.height, 44, accuracy: 0.001, "index=\(index), width=\(width)")
+                XCTAssertGreaterThanOrEqual(rectangle.width, 44, "index=\(index), width=\(width)")
+                if rectangle == layout.dictateFrame {
+                    XCTAssertEqual(rectangle.height, VoiceOnlyKeyboardPolicy.primaryControlSize, accuracy: 0.001, "index=\(index), width=\(width)")
+                } else {
+                XCTAssertTrue(rectangle.height >= 44, "index=\(index), width=\(width)")
+                }
                 for other in rectangles[(index + 1)...] {
                     XCTAssertFalse(rectangle.intersects(other), "index=\(index), width=\(width)")
                 }
             }
             XCTAssertFalse(layout.micCenterArea.intersects(layout.rightCommandFrame))
-            XCTAssertEqual(layout.leftBottomCenterX, 10)
-            XCTAssertEqual(layout.rightBottomCenterX, width >= 360 ? width - 54 : width - 32)
+            XCTAssertEqual(layout.leftBottomCenterX, layout.horizontalInset)
+            XCTAssertEqual(layout.rightBottomCenterX, width - layout.horizontalInset - 44)
         }
     }
 

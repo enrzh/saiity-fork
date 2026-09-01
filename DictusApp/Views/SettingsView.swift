@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
     @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionLanguage = TranscriptionLanguageMode.autoDetect.storedValue
-    @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = false
+    @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
     @StateObject private var modelManager = ModelManager()
     @State private var diagnosticResult = AppGroupDiagnostic.run()
@@ -20,15 +20,18 @@ struct SettingsView: View {
                         Text(mode.settingsDisplayName).tag(mode.storedValue)
                     }
                 }
-                if PolishAvailability.isToggleVisible { Toggle("Polish transcription", isOn: $polishEnabled) }
+                if PolishAvailability.isToggleVisible {
+                    Toggle("Automatic dictation cleanup", isOn: $polishEnabled)
+                        .accessibilityHint("Cleans up dictation after speech recognition. Turn off to pass through the raw transcription.")
+                    Text(polishEnabled ? "Cleanup runs after dictation." : "Cleanup is off; dictation passes through as transcribed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 polishStateFooter
             }
             Section("Keyboard") {
                 NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
                     Label("Models", systemImage: "square.stack.3d.up.fill")
-                }
-                NavigationLink { SoundSettingsView() } label: {
-                    Label("Sounds", systemImage: "speaker.wave.2.fill")
                 }
             }
             Section("Translation & Cleanup") {
@@ -68,11 +71,12 @@ struct SettingsView: View {
                 NavigationLink { LicensesView() } label: {
                     Label("Licenses", systemImage: "doc.text.fill")
                 }
-                Link(destination: URL(string: "mailto:support@saiity.de")!) {
-                    Label("Contact Support", systemImage: "questionmark.circle.fill")
+                Link(destination: URL(string: "https://github.com/enrzh")!) {
+                    Label("Get Support", systemImage: "questionmark.circle.fill")
                 }
             }
         }
+        .contentMargins(.bottom, 88, for: .scrollContent)
         .navigationTitle("Settings")
         .onAppear {
             microphonePermission = AVAudioSession.sharedInstance().recordPermission

@@ -123,13 +123,9 @@ enum KeyboardLayout {
             KeyDefinition("'", output: "'"),
             KeyDefinition("delete", type: .delete, width: 1.5)
         ],
-        // Row 4: back to letters + space + return (no mic — letters only)
-        // Emoji replaces globe for consistency across all layers.
+        // The shared UIKit action rail owns ABC, emoji, space, return and delete.
         [
-            KeyDefinition("ABC", type: .layerSwitch, width: 1.2),
-            KeyDefinition("emoji", type: .emoji, width: 1.2),
-            KeyDefinition("space", output: " ", type: .space, width: 4.7),
-            KeyDefinition("return", type: .returnKey, width: 1.8)
+            KeyDefinition("ABC", type: .layerSwitch, width: 1.2)
         ]
     ]
 
@@ -154,12 +150,9 @@ enum KeyboardLayout {
             KeyDefinition("'", output: "'"),
             KeyDefinition("delete", type: .delete, width: 1.5)
         ],
-        // Row 4: same as numbers — emoji replaces globe
+        // The shared UIKit action rail owns the common actions.
         [
-            KeyDefinition("ABC", type: .layerSwitch, width: 1.2),
-            KeyDefinition("emoji", type: .emoji, width: 1.2),
-            KeyDefinition("space", output: " ", type: .space, width: 4.7),
-            KeyDefinition("return", type: .returnKey, width: 1.8)
+            KeyDefinition("ABC", type: .layerSwitch, width: 1.2)
         ]
     ]
 }

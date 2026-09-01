@@ -20,7 +20,9 @@ import Foundation
 /// reliable than coaxing the model. The pre-engine `encodeForEngine` step
 /// hides newlines behind a multi-char ASCII marker that survives the
 /// round-trip; the post-engine `decodeFromEngine` step restores the
-/// newlines and applies the French typographic spacing.
+/// newlines and applies the French typographic spacing. `cleanupFloor` adds a
+/// conservative language-neutral fallback when the model is unavailable or
+/// rejected.
 public enum PolishPostpass {
 
     /// String the engine sees in place of `\n`. Apple FM treats this as
@@ -93,4 +95,50 @@ public enum PolishPostpass {
         }
         return out
     }
+
+    /// `language` enables the legacy known-language lexical rules. Pass `nil`
+    /// when the input language is unknown; only language-neutral cleanup runs.
+    public static func cleanupFloor(_ text: String,
+                                    language: SupportedLanguage? = .english) -> String {
+        let leadingNewlines = String(text.prefix { $0 == "\n" })
+        let trailingNewlines = String(text.reversed().prefix { $0 == "\n" }.reversed())
+        var out = text
+            .dropFirst(leadingNewlines.count)
+            .dropLast(trailingNewlines.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !out.isEmpty else { return leadingNewlines + trailingNewlines }
+        if language != nil {
+            // Only remove unambiguous hesitation sounds. Words such as "er",
+            // "este", and "bah" are meaningful in some supported languages.
+            out = out.replacingOccurrences(
+                of: #"(?i)(^|[ \t,(])(?:uh+|um+|euh+|äh+|ähm+|hmm+|hum+|eeh|eh+|mmm+)(?=($|[ \t,!?;:.]))"#,
+                with: "$1", options: [.regularExpression]
+            )
+            out = out.replacingOccurrences(
+                of: #"(^|[ \t,(])呃(?=($|[ \t,!?;:.\p{Han}]))"#,
+                with: "$1", options: [.regularExpression]
+            )
+            for _ in 0..<2 {
+                out = out.replacingOccurrences(
+                    of: #"(?i)\b(i|a|an|the|to|of|and|or|but|that|this|je|le|la|de|que|ich|der|die|das|und|zu|el|un|una|y)\b[ \t]+\1\b"#,
+                    with: "$1", options: [.regularExpression]
+                )
+            }
+            // Resolve only the unambiguous date-style correction examples used by
+            // the polish contract.
+            out = out.replacingOccurrences(
+                of: #"(?i)^(.+?)[ \t]+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)),[ \t]*(?:actually|rather|i mean|enfin|plutôt|je veux dire|eigentlich|besser gesagt|ich meine|mejor|más bien|quiero decir|en realidad)[ \t]+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo))$"#,
+                with: "$1 $2", options: [.regularExpression]
+            )
+        }
+        out = out.replacingOccurrences(
+            of: #"[ \t]+([,.;:!?，。；：！？])"#, with: "$1", options: [.regularExpression]
+        )
+        out = out.trimmingCharacters(in: .whitespaces)
+        if let first = out.first, first.isLetter, first.isLowercase {
+            out.replaceSubrange(out.startIndex...out.startIndex, with: String(first).uppercased())
+        }
+        return leadingNewlines + out + trailingNewlines
+    }
+
 }

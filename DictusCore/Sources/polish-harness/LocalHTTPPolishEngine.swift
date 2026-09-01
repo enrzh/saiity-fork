@@ -53,8 +53,7 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
         self.temperature = temperature
         self.disableThinking = disableThinking
         self.identifier = "local:\(model)"
-        guard let url = URL(string: baseURL.hasSuffix("/") ? baseURL + "v1/chat/completions"
-                                                           : baseURL + "/v1/chat/completions") else {
+        guard let url = OllamaHTTPContract.endpoint(baseURL: baseURL) else {
             fatalError("LocalHTTPPolishEngine: malformed base URL \(baseURL)")
         }
         self.endpoint = url

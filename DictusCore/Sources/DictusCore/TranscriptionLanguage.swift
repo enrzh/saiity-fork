@@ -59,10 +59,12 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
         case Self.autoStoredValue:
             self = .autoDetect
         case .some(let raw):
-            if let language = SupportedLanguage(rawValue: raw) {
+            if let language = SupportedLanguage(rawValue: raw), SupportedLanguage.allCases.contains(language) {
                 self = .explicit(language)
+            } else if raw == SupportedLanguage.french.rawValue || raw == SupportedLanguage.spanish.rawValue {
+                self = .explicit(.english)
             } else {
-                // Covers "follow" and any unknown/corrupted value.
+                // Unknown or corrupted values retain the historical behavior.
                 self = .followKeyboard
             }
         case .none:

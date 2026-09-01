@@ -29,6 +29,7 @@ enum PolishRepairPromptDE {
         Context: the input is what Parakeet transcribed when a German speaker dictated. Parakeet ignores the language picker — when the speaker code-switches or uses anglicisms, Parakeet often emits plausible English (or another language) instead of the German the user actually said.
 
         Your job is to RECONSTRUCT what the user intended to say in German. You MAY substitute words and rephrase syntax to recover that intent — this is a controlled exception to Natural mode's word-preserving rule.
+        Resolve conversational false starts and self-corrections before output. If the input abandons one phrase and then corrects it, keep the corrected phrase and remove the abandoned fragment. Keep correction words when they carry meaning; do not delete them as generic fillers.
 
         YOUR RESPONSE IS THE RECONSTRUCTED GERMAN TEXT. NOTHING ELSE.
         - Never address the user.

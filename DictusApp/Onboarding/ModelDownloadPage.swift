@@ -1,16 +1,12 @@
 // DictusApp/Onboarding/ModelDownloadPage.swift
-// Step 4 of onboarding: download the recommended model (RAM-based).
+// Step 4 of onboarding: download the initial voice model.
 import SwiftUI
 import DictusCore
 
 /// Downloads the recommended model with visible progress.
 ///
-/// WHY dynamic recommendation:
-/// ModelInfo.recommendedIdentifier() picks the best compatible model for the device:
-/// - A12/A13 iPhones → Whisper Base (Argmax-supported fallback)
-/// - >=6 GB RAM → Parakeet v3 (fast, accurate, NVIDIA)
-/// - Other <6 GB iPhones → Whisper Small (compact, good accuracy)
-/// The model card displays name, size, and description from the ModelInfo catalog.
+/// A new installation starts with Whisper Tiny so the first download is small and
+/// predictable. An existing selection is retained for upgrades and resumed setup.
 ///
 /// WHY @StateObject for ModelManager:
 /// Each page in the TabView needs its own lifecycle. @StateObject ensures
@@ -20,11 +16,9 @@ struct ModelDownloadPage: View {
 
     @StateObject private var modelManager = ModelManager()
 
-    /// The recommended model to download during onboarding.
-    /// WHY computed property: Uses ModelInfo.recommendedIdentifier() to pick
-    /// the best model for this device's RAM, instead of hardcoding "whisper-small".
+    /// The model to download during onboarding, preserving any existing choice.
     private var recommendedModel: String {
-        ModelInfo.recommendedIdentifier()
+        ModelInfo.initialModelIdentifier(existingSelection: modelManager.activeModel)
     }
 
     @State private var isDownloading = false
@@ -196,8 +190,6 @@ struct ModelDownloadPage: View {
     // MARK: - Model Card
 
     /// Model card that displays name, size, and description from the ModelInfo catalog.
-    /// WHY data-driven: On a 6GB+ device this shows "Parakeet v3 / ~800 MB / Rapide et precis (NVIDIA)"
-    /// instead of the old hardcoded "Whisper Small / ~500 Mo / Bonne precision".
     private var modelCard: some View {
         let info = ModelInfo.forIdentifier(recommendedModel)
         return VStack(alignment: .leading, spacing: 12) {
@@ -210,12 +202,12 @@ struct ModelDownloadPage: View {
                     .font(.dictusCaption)
                     .foregroundStyle(.secondary)
 
-                Label(info?.description ?? "Accurate and balanced", systemImage: "waveform")
+                Label(info?.localizedDescription ?? "Fast but inaccurate", systemImage: "waveform")
                     .font(.dictusCaption)
                     .foregroundStyle(.secondary)
             }
 
-            Text("Recommended for your iPhone")
+            Text(modelManager.activeModel == nil ? "Default for a new installation" : "Your selected model")
                 .font(.dictusCaption)
                 .foregroundColor(.accentColor)
         }

@@ -22,7 +22,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("numberKeyboardView?.page = .normal"))
         XCTAssertTrue(keyboardView.contains("keyRepeatTimer?.invalidate()"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height"))
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = CGRect("))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+        XCTAssertTrue(controller.contains("let height = max(1, controls.bounds.height)"))
+        XCTAssertTrue(controller.contains("handleDeleteHold"))
+        XCTAssertTrue(controller.contains("RunLoop.main.add(timer, forMode: .common)"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.clipsToBounds = true"))
         XCTAssertTrue(layouts.contains("KeyDefinition(type: .shiftSymbols"))
         XCTAssertTrue(layouts.contains("blankRow()"))
         XCTAssertFalse(layouts.contains("bottomRow("))
@@ -33,9 +37,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(controller.contains("let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))"))
-        XCTAssertTrue(controller.contains("x: CGFloat(layout.horizontalInset + layout.leftRailWidth)"))
-        XCTAssertTrue(controller.contains("width: max(0, CGFloat(layout.centerAreaWidth))"))
-        XCTAssertTrue(controller.contains("height: max(0, CGFloat(layout.surfaceHeight - VoiceOnlyKeyboardPolicy.bottomActionHitHeight))"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
         XCTAssertTrue(root.contains("VoiceOnlyKeyboardPolicy.layout("))
         XCTAssertTrue(root.contains("surfaceHeight: Double(surfaceHeight)"))
     }
@@ -192,10 +194,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
-        XCTAssertEqual(layout.centerAreaWidth, 126)
+        XCTAssertEqual(layout.centerAreaWidth, 106)
         XCTAssertTrue(root.contains("availableWidth: width"))
-        XCTAssertTrue(controller.contains("x: CGFloat(layout.horizontalInset + layout.leftRailWidth)"))
-        XCTAssertTrue(controller.contains("width: max(0, CGFloat(layout.centerAreaWidth))"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
     }
 
     func testLanguageIndicatorIsRestrictedToKeysAndRecordingModes() throws {
@@ -244,8 +245,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertTrue(controller.contains("case .symbols:"),
                       "the symbols presentation must be covered by the height contract")
-        XCTAssertTrue(controller.contains("keyboard.frame = inputView.bounds"),
-                      "symbols mode must use the complete runtime native surface bounds")
+        XCTAssertTrue(controller.contains("keyboard.frame = layout.alternateContentFrame"),
+                      "symbols mode must use the live native surface bounds above the bottom actions")
         XCTAssertTrue(controller.contains("keyboard.autoresizingMask = [.flexibleWidth, .flexibleHeight]"),
                       "symbols mode must follow native surface size changes")
         XCTAssertTrue(root.contains("let surfaceHeight = max(proxy.size.height, 1)"),

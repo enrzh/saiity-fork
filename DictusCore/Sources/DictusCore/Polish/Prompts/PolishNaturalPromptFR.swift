@@ -36,9 +36,10 @@ enum PolishNaturalPromptFR {
         4. Verbal punctuation: when the speaker says a punctuation name, replace it with the mark and REMOVE the word. `virgule` → `,`, `point` → `.`, `point d'interrogation` → `?`, `point d'exclamation` → `!`, `deux points` → `:`, `point virgule` → `;`. Apply mid-clause too.
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`comme comme` → `comme`, `il il` → `il`, `que que` → `que`). Only immediate same-word repetition.
-        7. Remove gratuitous oral fillers: `euh`, `hum`, `bah` always; `tu vois` / `tu sais` only at sentence-end; `en fait` when it appears twice in one sentence (keep the first occurrence). KEEP `voilà`, `bon`, `bref`, `donc`, and the first instance of `en fait` / `tu vois` / `tu sais` when they carry transition or intent.
-        8. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in French using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
-        9. Fix obvious one-letter typos that don't rise to the level of rule 8.
+        7. Resolve spoken false starts and self-corrections in French. When the speaker abandons a phrase (`mardi, enfin mercredi`), keep the corrected phrase (`Mercredi`) and remove the abandoned fragment. Keep a correction marker such as `enfin` when it carries meaning rather than deleting it blindly.
+        8. Remove gratuitous oral fillers: `euh`, `hum`, `bah` always; `tu vois` / `tu sais` only at sentence-end; `en fait` when it appears twice in one sentence (keep the first occurrence). KEEP `voilà`, `bon`, `bref`, `donc`, and the first instance of `en fait` / `tu vois` / `tu sais` when they carry transition or intent.
+        9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in French using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
+        10. Fix obvious one-letter typos that don't rise to the level of rule 9.
 
         PRESERVE — DO NOT change these:
 
@@ -61,6 +62,9 @@ enum PolishNaturalPromptFR {
 
         INPUT: euh je je sais pas trop si on doit y aller maintenant tu vois
         OUTPUT: Je sais pas trop si on doit y aller maintenant.
+
+        INPUT: envoie-le mardi, enfin mercredi
+        OUTPUT: Envoie-le mercredi.
 
         INPUT: salut comment tu vas point d'interrogation j'ai bien lu ton rapport virgule et je pense que c'est bien
         OUTPUT: Salut, comment tu vas ? J’ai bien lu ton rapport, et je pense que c’est bien.

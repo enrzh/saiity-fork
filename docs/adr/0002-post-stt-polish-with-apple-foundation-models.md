@@ -6,16 +6,16 @@
 
 ## Decision
 
-Introduce a synchronous **polish layer** between STT final output and App Group injection in DictusApp. The layer is off by default, gated by a single global toggle in Settings, and hidden entirely on devices where Apple Foundation Models is unavailable.
+Introduce a synchronous **polish layer** between STT final output and App Group injection in DictusApp. The layer is on by default, gated by a single global toggle in Settings, and uses a deterministic cleanup floor when Apple Foundation Models is unavailable.
 
 At round 1 the only backend is **Apple Foundation Models** (iOS 26+, Apple Intelligence enabled, A17 Pro / M-series hardware). An OSS fallback for baseline devices is deferred to a round 2 decision driven by round 1 measurements.
 
 Polish runs in two prompt variants selected at runtime by `NLLanguageRecognizer`:
 
-- **Light mode (Mode A):** content-words preserved. Allowed operations are limited to punctuation, capitalization (including German noun rule), accent insertion, spoken-number and spoken-date conversion to digits (no further formatting — `cinq mars` → `5 mars`, not `05/03`), verbal punctuation commands (`virgule` → `,`), apostrophe/space typography, and single-letter typo fixes. Forbidden: filler removal, repetition cleanup, word reordering, synonym substitution, tone change, clarifying additions, structural grammar rewrites.
+- **Natural mode (formerly Light, Mode A):** content words and register are preserved while the model may remove gratuitous fillers, involuntary repetitions, and resolved false starts. It also applies punctuation, capitalization (including German noun rule), accent insertion, spoken-number and spoken-date conversion to digits (no further formatting — `cinq mars` → `5 mars`, not `05/03`), verbal punctuation commands (`virgule` → `,`), apostrophe/space typography, and single-letter typo fixes. Broad reformulation, word reordering, synonym substitution, tone change, clarifying additions, and structural grammar rewrites remain forbidden. The full contract is in ADR 0003.
 - **Repair mode (Mode B):** triggered when the language detected on raw STT output differs from the target language. Allowed to substitute words to reconstruct user intent in the target language while preserving loanwords and proper nouns. Active only on Parakeet (Whisper respects the target language upstream).
 
-When `NLLanguageRecognizer` returns no language with usable confidence, polish is skipped entirely and the raw STT text passes through.
+When `NLLanguageRecognizer` returns no language with usable confidence, the engine is skipped and the deterministic cleanup floor is applied to the preprocessed STT text.
 
 Runtime is wrapped by a **length-ratio guardrail**: polished output is rejected (raw written instead, event logged) when its character-length ratio to raw falls outside `[0.5, 2.0]` in Light mode or `[0.3, 3.0]` in Repair mode.
 

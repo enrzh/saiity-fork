@@ -1,6 +1,17 @@
 // DictusCore/Sources/DictusCore/ModelInfo.swift
 import Foundation
 
+public struct KeyboardSetupStatus: Equatable, Sendable {
+    public let keyboardInstalled: Bool
+    public let fullAccessHandshake: Bool
+    public init(keyboardInstalled: Bool, fullAccessHandshake: Bool) {
+        self.keyboardInstalled = keyboardInstalled
+        self.fullAccessHandshake = fullAccessHandshake
+    }
+    public var fullAccessVerified: Bool { keyboardInstalled && fullAccessHandshake }
+    public var canContinue: Bool { fullAccessVerified }
+}
+
 /// Visibility state of a model in the download catalog.
 ///
 /// Visibility distinguishes models that are currently selectable from models kept
@@ -65,6 +76,23 @@ public struct ModelInfo: Identifiable {
     }
 
     // MARK: - Catalog
+
+    /// The model used for a new installation before the user makes a choice.
+    /// Existing device-specific recommendations remain available to the model
+    /// catalog, but onboarding starts with the smallest Whisper model so the
+    /// first download is predictable and lightweight.
+    public static let defaultIdentifier = "openai_whisper-tiny"
+
+    /// Resolves the initial selection without overwriting an existing choice.
+    /// Empty values represent a new installation; non-empty values are kept so
+    /// legacy and deprecated model selections continue to resolve normally.
+    public static func initialModelIdentifier(existingSelection: String?) -> String {
+        guard let selection = existingSelection,
+              !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return defaultIdentifier
+        }
+        return selection
+    }
 
     /// Models available for new downloads. Includes every integrated runtime.
     /// On iOS 17+, includes Parakeet models. On iOS 16, Parakeet is filtered out.
@@ -182,30 +210,10 @@ public struct ModelInfo: Identifiable {
         )
     ]
 
-    /// All known models, including any retained for backward compatibility.
+    /// All known models, using one authoritative metadata row per identifier.
+    /// Older downloads remain resolvable because their identifiers stay in the
+    /// current catalog; duplicate legacy rows could otherwise shadow current data.
     public static let allIncludingDeprecated: [ModelInfo] = [
-        ModelInfo(
-            identifier: "openai_whisper-tiny",
-            displayName: "Tiny",
-            sizeLabel: "~40 MB",
-            sizeBytes: 40_000_000,
-            engine: .whisperKit,
-            accuracyScore: 0.3,
-            speedScore: 1.0,
-            description: "Fast but inaccurate",
-            visibility: .deprecated
-        ),
-        ModelInfo(
-            identifier: "openai_whisper-base",
-            displayName: "Base",
-            sizeLabel: "~75 MB",
-            sizeBytes: 75_000_000,
-            engine: .whisperKit,
-            accuracyScore: 0.4,
-            speedScore: 0.9,
-            description: "Fast but inaccurate",
-            visibility: .deprecated
-        ),
         redesignCatalog[0], redesignCatalog[1], redesignCatalog[2],
         redesignCatalog[3], redesignCatalog[4], redesignCatalog[5], redesignCatalog[6]
     ]

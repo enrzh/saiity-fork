@@ -44,10 +44,10 @@ A speech-to-text backend conforming to `SpeechModelProtocol`. Two exist today: `
 ## Post-transcription polish
 
 ### Polish
-The post-STT enhancement layer (issue #141). Runs synchronously in DictusApp after the STT engine emits final text and before the text is written to the App Group for keyboard injection. Off by default, toggled by the user in DictusApp Settings. **Distinct from Smart Mode (#79)**, which is user-triggered and reformulates clean text for tone/structure. Polish is automatic and corrective only.
+The post-STT enhancement layer (issue #141). Runs synchronously in DictusApp after the STT engine emits final text and before the text is written to the App Group for keyboard injection. On by default, with a user toggle in DictusApp Settings. **Distinct from Smart Mode (#79)**, which is user-triggered and reformulates clean text for tone/structure. Polish is automatic and corrective only.
 
 ### Faithful contract
-The defining boundary between polish and Smart Mode (#79). Polish must preserve the user's **intent**, not necessarily their exact STT-output words. In Light mode the words are preserved; in Repair mode words may be substituted to recover intent when STT failed. Polish is forbidden from reformulating, reordering, changing tone, removing fillers/hesitations, or adding clarifying content. The contract enumerates ~20 operations as allowed or forbidden; see ADR 0002.
+The defining boundary between polish and Smart Mode (#79). Polish must preserve the user's **intent**, not necessarily their exact STT-output words. In Natural mode it applies light written-message cleanup, including gratuitous filler and involuntary repetition removal; in Repair mode words may be substituted to recover intent when STT failed. Polish is forbidden from broad reformulation, reordering, changing tone, or adding clarifying content. The contract enumerates the allowed and forbidden operations; see ADR 0003.
 
 ### Light mode
 The polish prompt variant applied when the language detected on raw STT output matches the target language. Conservative: adds punctuation, capitalization (including German common-noun rule), accents, digit conversion for spoken numbers and dates, verbal-punctuation commands, and obvious typo fixes. Content words preserved. Active for Whisper always; active for Parakeet when `NLLanguageRecognizer` confirms the target language. Also called **Mode A**.

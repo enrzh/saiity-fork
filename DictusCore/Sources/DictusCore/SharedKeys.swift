@@ -14,6 +14,8 @@ public enum SharedKeys {
     public static let activeModel = "dictus.activeModel"
     public static let modelReady = "dictus.modelReady"
     public static let downloadedModels = "dictus.downloadedModels"
+    /// JSON-encoded custom model registrations, kept separate from built-in models.
+    public static let customModels = "dictus.customModels"
     /// Tri-state model lifecycle: "idle" / "loading" / "ready".
     /// "idle" = no active load in flight, but `modelReady` may still be true.
     /// "loading" = WhisperKit/Parakeet is being loaded into RAM (or compiling/downloading).
@@ -118,8 +120,8 @@ public enum SharedKeys {
     public static let detectionMuted = "dictus.detectionMuted"
 
     // Post-STT polish (issue #141)
-    /// Whether the polish layer runs between STT final output and App Group write, default false.
-    /// Off by default — round 1 is opt-in measurement. See ADR 0002.
+    /// Whether the cleanup layer runs between STT final output and App Group write.
+    /// Defaults to true; an explicit user choice is preserved by app migration.
     public static let polishEnabled = "dictus.polishEnabled"
     /// Bool: whether polish has stopped calling its engine for the rest of this app
     /// process (#315). Written only by DictusApp, read by whichever surface has to

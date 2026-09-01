@@ -20,7 +20,13 @@ public enum KeyboardLanguageSelection: Equatable, Codable, Sendable {
             return .automatic
         }
         if value == "automatic" { return .automatic }
-        return SupportedLanguage(rawValue: value).map(Self.explicit) ?? .automatic
+        guard let language = SupportedLanguage(rawValue: value),
+              SupportedLanguage.allCases.contains(language) else {
+            // A previously selected French/Spanish value is still readable,
+            // but it must never reappear as an active product language.
+            return .explicit(.english)
+        }
+        return .explicit(language)
     }
 
     public static func resolve(locale: Locale, defaults: UserDefaults) -> SupportedLanguage {

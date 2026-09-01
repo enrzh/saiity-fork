@@ -13,6 +13,8 @@ struct ModelManagerView: View {
     @State private var showPartialDeleteAlert = false
     @State private var downloadError: String?
     @State private var showErrorAlert = false
+    @State private var showAddModel = false
+    @State private var customModelToDelete: CustomModel?
 
     /// Only prewarming and RAM loading use the blocking preparation cover.
     /// Downloads stay in the list so their real cancel action remains reachable.
@@ -82,9 +84,31 @@ struct ModelManagerView: View {
                 modelEngineFooter(for: availableModels)
             }
             .listSectionSeparator(.hidden)
+
+            customModelsSection(.asr, title: "Custom speech recognition")
+            customModelsSection(.cleanup, title: "Custom cleanup")
         }
         .listStyle(.insetGrouped)
+        .contentMargins(.bottom, 88, for: .scrollContent)
         .navigationTitle("Models")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showAddModel = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Add custom model")
+            }
+        }
+        .sheet(isPresented: $showAddModel) {
+            NavigationStack { AddCustomModelView(modelManager: modelManager) }
+        }
+        .alert("Delete custom model?", isPresented: Binding(get: { customModelToDelete != nil }, set: { if !$0 { customModelToDelete = nil } })) {
+            Button("Cancel", role: .cancel) { customModelToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let model = customModelToDelete { modelManager.deleteCustomModel(model) }
+                customModelToDelete = nil
+            }
+        } message: {
+            Text("This removes the saved model configuration from sAiity.")
+        }
         .onAppear {
             modelManager.loadState()
         }
@@ -121,7 +145,7 @@ struct ModelManagerView: View {
             }
         }
         .onAppear {
-            if preparingModelID == nil, let liveActivePrepModel {
+            if preparingModelID == nil {
                 preparingModelID = liveActivePrepModel
             }
         }
@@ -172,6 +196,33 @@ struct ModelManagerView: View {
         showDeleteAlert = true
     }
 
+    @ViewBuilder
+    private func customModelsSection(_ role: CustomModelRole, title: String) -> some View {
+        let models = modelManager.customModels.filter { $0.role == role }
+        if !models.isEmpty {
+            Section(title) {
+                ForEach(models) { model in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.name)
+                            Text(customModelStatus(model)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(role: .destructive) { customModelToDelete = model } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    private func customModelStatus(_ model: CustomModel) -> String {
+        if model.role == .cleanup && model.source == .ollama && model.validationError == nil {
+            return "Available for dictation cleanup · \(model.source.displayName)"
+        }
+        return "Configuration only · \(model.source.displayName)"
+    }
+
     private func presentError(_ error: String) {
         downloadError = error
         showErrorAlert = true
@@ -188,6 +239,94 @@ struct ModelManagerView: View {
             }
         }
         .font(.caption)
+    }
+}
+
+private struct AddCustomModelView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var modelManager: ModelManager
+    @State private var name = ""
+    @State private var url = ""
+    @State private var role: CustomModelRole = .asr
+    @State private var source: CustomModelSource = .huggingFace
+    @State private var modelName = ""
+    @State private var isVerifying = false
+    @State private var verificationError: String?
+    @State private var verifiedIdentityKey: String?
+
+    private var model: CustomModel {
+        CustomModel(name: name, repositoryURL: url, role: role, source: source,
+                    modelName: modelName.isEmpty ? nil : modelName)
+    }
+
+    var body: some View {
+        Form {
+            Section("Model") {
+                Picker("Use for", selection: $role) {
+                    Text(CustomModelRole.asr.displayName).tag(CustomModelRole.asr)
+                    Text(CustomModelRole.cleanup.displayName).tag(CustomModelRole.cleanup)
+                }
+                Picker("Source", selection: $source) {
+                    Text(CustomModelSource.huggingFace.displayName).tag(CustomModelSource.huggingFace)
+                    if role == .asr { Text(CustomModelSource.nvidia.displayName).tag(CustomModelSource.nvidia) }
+                    if role == .cleanup { Text(CustomModelSource.ollama.displayName).tag(CustomModelSource.ollama) }
+                }
+                TextField("Display name", text: $name)
+                TextField("Repository URL", text: $url)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                if source == .ollama {
+                    TextField("Ollama model name", text: $modelName)
+                        .textInputAutocapitalization(.never)
+                }
+                if let error = model.validationError { Text(error).font(.caption).foregroundStyle(.red) }
+                if role == .asr && source == .huggingFace && model.validationError == nil {
+                    Button(isVerifying ? "Checking model..." : "Check model") {
+                        verifyModel()
+                    }
+                    .disabled(isVerifying)
+                    if let verificationError {
+                        Text(verificationError).font(.caption).foregroundStyle(.red)
+                    } else if verifiedIdentityKey == model.identityKey {
+                        Label("ASR model verified", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+            Section { Text("Ollama cleanup models are used for dictation cleanup. Custom speech-recognition sources are saved for future runtime support and are not loaded yet.")
+                .font(.footnote).foregroundStyle(.secondary) }
+        }
+        .navigationTitle("Add Model")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") { modelManager.addCustomModel(model); dismiss() }
+                    .disabled(model.validationError != nil ||
+                              (role == .asr && source == .huggingFace && verifiedIdentityKey != model.identityKey))
+            }
+        }
+        .onChange(of: role) { _, newRole in
+            if newRole == .asr && source == .ollama { source = .huggingFace }
+            if newRole == .cleanup && source == .nvidia { source = .ollama }
+        }
+        .onChange(of: model.identityKey) { _, _ in
+            verifiedIdentityKey = nil
+            verificationError = nil
+        }
+    }
+
+    private func verifyModel() {
+        let candidate = model
+        isVerifying = true
+        verificationError = nil
+        Task {
+            let error = await candidate.remoteValidationError()
+            await MainActor.run {
+                verificationError = error
+                verifiedIdentityKey = error == nil ? candidate.identityKey : nil
+                isVerifying = false
+            }
+        }
     }
 }
 

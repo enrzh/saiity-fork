@@ -129,6 +129,9 @@ struct EmojiPickerView: View {
             Text(selectedCategoryName)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .layoutPriority(1)
             Spacer()
         }
         .padding(.horizontal, 8)
