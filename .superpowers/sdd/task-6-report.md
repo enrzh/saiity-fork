@@ -38,4 +38,4 @@ Implemented and verified in the current `saiity-fork` checkout. Built-in model d
 
 ## Commit
 
-Implementation commit hash is recorded below after commit. A follow-up report commit makes this hash exact.
+Implementation commit: `31aafdfc1e01bcea8fefe2eb5ddb12340fef983a`.
