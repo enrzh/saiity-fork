@@ -13,3 +13,7 @@ if [ -z "${CI_DERIVED_DATA_PATH:-}" ]; then
 fi
 
 "$script_dir/../scripts/patch-fluidaudio-swift5.sh" "$CI_DERIVED_DATA_PATH"
+
+# Xcode Cloud can apply its workflow sequence to CFBundleVersion during an
+# archive. Keep this release aligned with the version committed to the repo.
+xcrun agvtool new-version -all 30
