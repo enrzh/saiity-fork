@@ -16,6 +16,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
     private var deleteButton: UIButton?
     private var returnButton: UIButton?
     private var dismissButton: UIButton?
+    private var micButton: UIButton?
     private var deleteRepeatTimer: Timer?
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
@@ -920,7 +921,10 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         dismissButton = makeKeyboardActionButton(identifier: "dismiss-keyboard", label: "Dismiss keyboard") { [weak self] in
             self?.handleDismissKeyboard()
         }
-        [atButton, emojiButton, numberButton,
+        micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
+        micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
+        micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        [atButton, emojiButton, numberButton, micButton,
          deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
             controls.addSubview($0)
         }
@@ -1001,6 +1005,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // The mode control always owns one compact utility cell. The symbols
         // blank row remains content geometry, not a button hit target.
         numberButton?.frame = layout.leftUtilityFrames.number
+        micButton?.frame = layout.dictateFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
         dismissButton?.frame = layout.dismissFrame
@@ -1039,6 +1044,21 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         numberButton?.configuration?.baseForegroundColor = .label
         numberButton?.setImage(nil, for: .normal)
         numberButton?.configuration?.image = nil
+    }
+
+    @objc private func handleMicTouchDown() {
+        let state = KeyboardState.shared
+        if state.dictationStatus == .failed, state.failedRequiresApp {
+            state.openDictusForRecovery()
+        } else if state.dictationStatus == .idle || state.dictationStatus == .ready {
+            state.startRecording()
+        }
+    }
+
+    @objc private func handleMicTouchUp() {
+        let state = KeyboardState.shared
+        guard state.dictationStatus == .requested || state.dictationStatus == .recording else { return }
+        state.requestStop()
     }
 
     @objc private func handleDeleteHold(_ recognizer: UILongPressGestureRecognizer) {

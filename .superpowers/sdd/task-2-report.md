@@ -224,3 +224,17 @@ xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/pla
 本轮修改文件为 `DictusCore/Sources/DictusCore/ModelInfo.swift`、`DictusApp/Views/ModelManagerView.swift`、`DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift` 和本报告；提交 SHA：`30bc1f5`。其他 dirty 文件未暂存、未重置。
 
 顾虑：验证使用 Simulator/build 和 macOS DictusCore suite，未进行 physical iPhone 验证。测试与 build 保留既有 unhandled README、Swift 6 Sendable/NSLock warning，以及测试中的坏 JSON 诊断输出；均不影响退出码且与本次无关。
+
+## Task 2 追加记录
+
+状态：DONE_WITH_CONCERNS。
+
+RED：`swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests`。新增 mic UIKit hit target、触摸生命周期和 SwiftUI 去重契约按预期失败；同次运行还包含工作区既有几何/旧桥接断言失败。
+
+GREEN：`swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardContractTests/testMicrophone'`，2 项通过；`git diff --check` 通过。
+
+构建：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/saiity-dictus-task2-derivedData CODE_SIGNING_ALLOWED=NO build`，`BUILD SUCCEEDED`。未创建或启动 simulator，未使用实体手机。
+
+本 Task 改动：`DictusKeyboard/KeyboardRootView.swift`、`DictusKeyboard/KeyboardViewController.swift`、`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`。UIKit mic 使用 `layout.dictateFrame`，touch down 启动，touch up inside/outside/cancel 停止；SwiftUI 仅渲染白色 capsule 和 `mic.fill`。
+
+Task 2 提交 SHA：`78000171cbbe277400c605f232b742a6b8700aec`。

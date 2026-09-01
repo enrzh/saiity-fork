@@ -6,7 +6,6 @@ import DictusCore
 struct KeyboardRootView: View {
     let controllerID: String
     @ObservedObject private var state = KeyboardState.shared
-    @State private var pressStarted = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
@@ -191,25 +190,6 @@ struct KeyboardRootView: View {
         .background(Capsule().fill(Color.white))
         .clipShape(Capsule())
         .contentShape(Capsule())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !pressStarted else { return }
-                    pressStarted = true
-                    if state.dictationStatus == .failed, state.failedRequiresApp {
-                        state.openDictusForRecovery()
-                    } else {
-                        state.startRecording()
-                    }
-                }
-                .onEnded { _ in
-                    defer { pressStarted = false }
-                    guard state.dictationStatus == .requested
-                            || state.dictationStatus == .recording
-                    else { return }
-                    state.requestStop()
-                }
-        )
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel("Hold to dictate")
         .accessibilityValue(dictationTitle)

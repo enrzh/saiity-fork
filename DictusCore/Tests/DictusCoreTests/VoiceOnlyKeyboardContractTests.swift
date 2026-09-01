@@ -3,6 +3,29 @@ import XCTest
 
 final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
+    func testMicrophoneUIKitHitTargetUsesPolicyFrameAndOwnsTouchLifecycle() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+
+        XCTAssertTrue(controller.contains("micButton = makeKeyboardActionButton"))
+        XCTAssertTrue(controller.contains("micButton?.frame = layout.dictateFrame"))
+        XCTAssertTrue(controller.contains(".touchDown"))
+        XCTAssertTrue(controller.contains(".touchUpInside"))
+        XCTAssertTrue(controller.contains(".touchUpOutside"))
+        XCTAssertTrue(controller.contains(".touchCancel"))
+        XCTAssertTrue(controller.contains("state.startRecording()"))
+        XCTAssertTrue(controller.contains("state.requestStop()"))
+    }
+
+    func testMicrophoneVisualRemainsSwiftUIOnlyAndDoesNotInstallGestureStartStop() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains(".background(Capsule().fill(Color.white))"))
+        XCTAssertTrue(root.contains("case .idle, .ready: return \"mic.fill\""))
+        XCTAssertFalse(root.contains("DragGesture(minimumDistance: 0)"))
+        XCTAssertFalse(root.contains("state.startRecording()"))
+        XCTAssertFalse(root.contains("state.requestStop()"))
+    }
+
     private func source(_ path: String) throws -> String {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
