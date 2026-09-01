@@ -34,198 +34,84 @@
     },
     "Close menu" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fermer le menu"
-          }
-        }
       }
     },
     "Enable Full Access in Settings > Keyboards > sAiity to use dictation." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activez l’Accès complet dans Réglages > Claviers > sAiity pour utiliser la dictée."
-          }
-        }
       }
     },
     "Full access required" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Accès complet requis"
-          }
-        }
       }
     },
     "Keyboard language" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Langue du clavier"
-          }
-        }
       }
     },
     "Keyboard menu" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu du clavier"
-          }
-        }
       }
     },
     "Layout" : {
       "comment" : "Column header in the keyboard panel, above the per-language layout pills (issue #272).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disposition"
-          }
-        }
       }
     },
     "Listening..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En écoute..."
-          }
-        }
       }
     },
     "No results" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aucun résultat"
-          }
-        }
       }
     },
     "Open sAiity" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ouvrir sAiity"
-          }
-        }
       }
     },
     "Open Settings" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ouvrir Réglages"
-          }
-        }
       }
     },
     "Polish is temporarily unavailable." : {
       "comment" : "Toolbar state shown when polish has stopped calling its engine for the rest of the app process (issue #315).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le polissage est temporairement indisponible."
-          }
-        }
       }
     },
     "Processing..." : {
       "comment" : "Recording overlay caption while the LLM stage runs on the transcript (issue #267).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Traitement..."
-          }
-        }
       }
     },
     "Recording interrupted. Please try again." : {
       "comment" : "Toolbar message shown when the keyboard clears a recording whose app was terminated (issue #261).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enregistrement interrompu. Réessayez."
-          }
-        }
       }
     },
     "Search Emoji" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rechercher des Emoji"
-          }
-        }
       }
     },
     "space" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "espace"
-          }
-        }
       }
     },
     "Starting..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Démarrage..."
-          }
-        }
       }
     },
     "Transcribing..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transcription..."
-          }
-        }
       }
     },
     "Undo" : {
       "comment" : "Toolbar control that removes the dictation text just inserted.",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Annuler"
-          }
-        }
       }
     },
     "Undo dictation insertion" : {
       "comment" : "Accessibility label for the toolbar control that removes the dictation text just inserted.",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Annuler l'insertion de la dictée"
-          }
-        }
       }
     }
   },

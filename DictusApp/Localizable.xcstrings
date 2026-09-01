@@ -26,22 +26,10 @@
     },
     "%@/month" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@/mois"
-          }
-        }
       }
     },
     "%@/year" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@/an"
-          }
-        }
       }
     },
     "%lld" : {
@@ -54,23 +42,11 @@
     },
     "%lld days free, then %@" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld jours gratuits, puis %@"
-          }
-        }
       }
     },
     "%lld MB of %lld MB" : {
       "comment" : "Byte counter shown under the download percentage (issue #207). Arguments are downloaded and total megabytes.",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Mo sur %lld Mo"
-          }
-        }
       }
     },
     "%lld total events persisted (last 7 days). Export ships the full window." : {
@@ -103,12 +79,6 @@
     "25 European languages" : {
       "comment" : "Language detail sheet: coverage summary for Parakeet v3 (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "25 langues européennes"
-          }
-        }
       }
     },
     "123" : {
@@ -118,23 +88,11 @@
     "A few more seconds…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quelques secondes encore…"
-          }
-        }
       }
     },
     "A model file could not be downloaded (error %lld)." : {
       "comment" : "Model download error for an unexpected HTTP status (issue #207). The argument is the HTTP status code.",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Un fichier du modèle n'a pas pu être téléchargé (erreur %lld)."
-          }
-        }
       }
     },
     "ABC" : {
@@ -143,149 +101,65 @@
     },
     "About" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "À propos"
-          }
-        }
       }
     },
     "About 99 languages (multilingual)" : {
       "comment" : "Language detail sheet: coverage summary for multilingual Whisper models (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Environ 99 langues (multilingue)"
-          }
-        }
       }
     },
     "Accuracy" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Précision"
-          }
-        }
       }
     },
     "Accurate and balanced" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Précis et équilibré"
-          }
-        }
       }
     },
     "Active model" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modèle actif"
-          }
-        }
       }
     },
     "Adapting the model to your iPhone…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Adaptation du modèle à votre iPhone…"
-          }
-        }
       }
     },
     "Add keyboard" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajouter le clavier"
-          }
-        }
       }
     },
     "AI reformulation, history & more" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reformulation IA, historique et plus"
-          }
-        }
       }
     },
     "Aligning model weights to memory…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alignement des poids en mémoire…"
-          }
-        }
       }
     },
     "All Pro features are now unlocked. Thank you for your support." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Toutes les fonctionnalités Pro sont débloquées. Merci pour votre soutien."
-          }
-        }
       }
     },
     "Allow full access" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autoriser l'accès complet"
-          }
-        }
       }
     },
     "Almost ready…" : {
       "comment" : "Cycling phrase shown during model RAM load (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bientôt prêt…"
-          }
-        }
       }
     },
     "Almost there…" : {
       "comment" : "Cycling phrase shown during model download (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Presque arrivé…"
-          }
-        }
       }
     },
     "Also supported" : {
       "comment" : "Language detail sheet: section header for Parakeet's remaining documented languages (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Également prises en charge"
-          }
-        }
       }
     },
     "App Group: %@" : {
@@ -295,54 +169,24 @@
     "At least one model must stay on your device" : {
       "comment" : "Disabled overflow-menu row explaining why the last downloaded model cannot be deleted (issue #193).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Au moins un modèle doit rester sur votre appareil"
-          }
-        }
       }
     },
     "Auto-detect" : {
       "comment" : "Transcription language picker option: Whisper detects the spoken language (issue #226).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Détection automatique"
-          }
-        }
       }
     },
     "Auto-detect lets you dictate in any language Whisper supports. Polish adapts to the language you speak." : {
       "comment" : "Transcription section footer shown when Auto-detect is selected (issue #226; polish behavior since #239).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La détection automatique vous permet de dicter dans toutes les langues prises en charge par Whisper. L'amélioration du texte s'adapte à la langue parlée."
-          }
-        }
       }
     },
     "Autocorrect" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Correction automatique"
-          }
-        }
       }
     },
     "Available" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disponibles"
-          }
-        }
       }
     },
     "AZERTY" : {
@@ -351,182 +195,80 @@
     },
     "Best accuracy" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Meilleure précision"
-          }
-        }
       }
     },
     "Building the inference graph…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Construction du graphe d'inférence…"
-          }
-        }
       }
     },
     "Buy for %@" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Acheter pour %@"
-          }
-        }
       }
     },
     "Caching transformer layers…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mise en cache des couches transformer…"
-          }
-        }
       }
     },
     "Calibrating audio layers…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Calibration des couches audio…"
-          }
-        }
       }
     },
     "Calibrating layers…" : {
       "comment" : "Deprecated by 'Calibrating audio layers…' — kept temporarily during transition.",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Calibration des couches…"
-          }
-        }
       }
     },
     "Cancel" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Annuler"
-          }
-        }
       }
     },
     "Cancel anytime" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Annulable à tout moment"
-          }
-        }
       }
     },
     "Checking the model…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vérification du modèle…"
-          }
-        }
       }
     },
     "Clear" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Effacer"
-          }
-        }
       }
     },
     "Close" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fermer"
-          }
-        }
       }
     },
     "Compact and fast" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compact et rapide"
-          }
-        }
       }
     },
     "Compiling for the Neural Engine…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compilation pour le Neural Engine…"
-          }
-        }
       }
     },
     "Configuring voice transcription…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Configuration de la transcription vocale…"
-          }
-        }
       }
     },
     "Continue" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuer"
-          }
-        }
       }
     },
     "Copied!" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copié !"
-          }
-        }
       }
     },
     "Copy" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copier"
-          }
-        }
       }
     },
     "Debug Logs" : {
@@ -535,86 +277,38 @@
     },
     "Default page" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Page par défaut"
-          }
-        }
       }
     },
     "Delete" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer"
-          }
-        }
       }
     },
     "Delete %@? The model will be removed from your device." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer %@ ? Le modèle sera supprimé de votre appareil."
-          }
-        }
       }
     },
     "Delete Model" : {
       "comment" : "Destructive action in a downloaded model card's overflow menu (issue #193).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer le modèle"
-          }
-        }
       }
     },
     "Delete model?" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer le modèle ?"
-          }
-        }
       }
     },
     "Delete partial download" : {
       "comment" : "Destructive action in a failed model card's overflow menu (issue #235).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer le téléchargement partiel"
-          }
-        }
       }
     },
     "Delete partial download?" : {
       "comment" : "Title of the confirmation alert before wiping a failed download's kept files (issue #235).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer le téléchargement partiel ?"
-          }
-        }
       }
     },
     "Delete the partially downloaded files for %@? The next download will start from the beginning." : {
       "comment" : "Message of the confirmation alert before wiping a failed download's kept files (issue #235).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supprimer les fichiers partiellement téléchargés de %@ ? Le prochain téléchargement repartira de zéro."
-          }
-        }
       }
     },
     "det=%@" : {
@@ -628,105 +322,45 @@
     "Dictation could not start. Tap the microphone again." : {
       "comment" : "Keyboard banner shown when a cold-start dictation could not run because the app left the foreground before it could start (issue #311).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La dictée n'a pas pu démarrer. Touchez à nouveau le micro."
-          }
-        }
       }
     },
     "Dictation in progress" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dictée en cours"
-          }
-        }
       }
     },
     "sAiity" : {
       "comment" : "A toggle label for enabling the sAiity keyboard.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity"
-          }
-        }
       }
     },
     "sAiity can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections." : {
       "comment" : "Onboarding polish opt-in page explanation (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity peut utiliser le modèle local d'Apple pour améliorer légèrement votre transcription après la reconnaissance vocale : ponctuation, majuscules, accents et petites corrections."
-          }
-        }
       }
     },
     "sAiity is set up and ready to use" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity est configuré et prêt à l'emploi"
-          }
-        }
       }
     },
     "sAiity may restart automatically — this is normal" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity peut se relancer automatiquement — c'est normal"
-          }
-        }
       }
     },
     "sAiity needs the microphone to transcribe your voice. Your recordings stay on your device." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity a besoin du microphone pour transcrire votre voix. Vos enregistrements restent sur votre appareil."
-          }
-        }
       }
     },
     "sAiity prepares your transcription model for offline dictation." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity prépare votre modèle de transcription pour la dictée hors ligne."
-          }
-        }
       }
     },
     "sAiity Pro" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity Pro"
-          }
-        }
       }
     },
     "sAiity Pro Active" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sAiity Pro actif"
-          }
-        }
       }
     },
     "Done" : {
@@ -735,44 +369,20 @@
     },
     "Download a model to get started" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Télécharger un modèle pour commencer"
-          }
-        }
       }
     },
     "Downloaded" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Téléchargés"
-          }
-        }
       }
     },
     "Downloading" : {
       "comment" : "Phase label on the model loading overlay (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Téléchargement"
-          }
-        }
       }
     },
     "Downloading the model…" : {
       "comment" : "Cycling phrase shown during model download (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Téléchargement du modèle…"
-          }
-        }
       }
     },
     "Dynamic Island and Lock Screen notification are disabled." : {
@@ -781,12 +391,6 @@
     "Emoji" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Emoji"
-          }
-        }
       }
     },
     "EN" : {
@@ -795,55 +399,25 @@
     },
     "Enable sounds" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activer les sons"
-          }
-        }
       }
     },
     "Enable transcription polish" : {
       "comment" : "Onboarding polish opt-in toggle label (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activer le polish de transcription"
-          }
-        }
       }
     },
     "End" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fin"
-          }
-        }
       }
     },
     "English (US)" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anglais (US)"
-          }
-        }
       }
     },
     "Error" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erreur"
-          }
-        }
       }
     },
     "Export failed" : {
@@ -856,77 +430,35 @@
     },
     "Export logs" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exporter les logs"
-          }
-        }
       }
     },
     "Fair quality" : {
       "comment" : "Language detail sheet: tier header for Whisper languages with published large-v3 FLEURS WER between about 10 and 25 percent (issue #240 design round).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Qualité correcte"
-          }
-        }
       }
     },
     "Fast and accurate (NVIDIA)" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rapide et précis (NVIDIA)"
-          }
-        }
       }
     },
     "Fast but inaccurate" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rapide mais imprécis"
-          }
-        }
       }
     },
     "Finishing the download…" : {
       "comment" : "Cycling phrase shown during model download (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finalisation du téléchargement…"
-          }
-        }
       }
     },
     "Finishing the preparation…" : {
       "comment" : "Text for the last step of the model preparation process.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fin de la préparation…"
-          }
-        }
       }
     },
     "Follow keyboard language" : {
       "comment" : "Transcription language picker option: STT tracks the keyboard language, the default (issue #226).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suivre la langue du clavier"
-          }
-        }
       }
     },
     "Forget %lld learned words" : {
@@ -934,12 +466,6 @@
     },
     "Founder offer until %@." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Offre fondateur jusqu'au %@."
-          }
-        }
       }
     },
     "FR" : {
@@ -949,52 +475,22 @@
     "French (FR)" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Français (FR)"
-          }
-        }
       }
     },
     "Get started" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Commencer"
-          }
-        }
       }
     },
     "Getting sAiity ready…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation de sAiity…"
-          }
-        }
       }
     },
     "Getting everything ready…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mise en place des derniers éléments…"
-          }
-        }
       }
     },
     "Getting transcription ready…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation de la transcription…"
-          }
-        }
       }
     },
     "GitHub" : {
@@ -1003,66 +499,30 @@
     },
     "Go to the Models tab to download your first transcription model." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allez dans l'onglet Modèles pour télécharger votre premier modèle de transcription."
-          }
-        }
       }
     },
     "Good quality" : {
       "comment" : "Language detail sheet: tier header for Whisper languages with published large-v3 FLEURS WER at or below about 10 percent (issue #240 design round).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bonne qualité"
-          }
-        }
       }
     },
     "Good quality on this model." : {
       "comment" : "Language detail sheet: Chinese quality note on medium/turbo Whisper models (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bonne qualité sur ce modèle."
-          }
-        }
       }
     },
     "Haptic feedback" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Retour haptique"
-          }
-        }
       }
     },
     "History" : {
       "extractionState" : "manual",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Historique"
-          }
-        }
       }
     },
     "Hold \\(Image(systemName: \"globe\")) and select sAiity" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Maintenez \\(Image(systemName: \"globe\")) et sélectionnez sAiity"
-          }
-        }
       }
     },
     "Hold %@ and select sAiity" : {
@@ -1071,146 +531,62 @@
     },
     "Home" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Accueil"
-          }
-        }
       }
     },
     "Install model" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installer le modèle"
-          }
-        }
       }
     },
     "Keyboard" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clavier"
-          }
-        }
       }
     },
     "Keyboard detected" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clavier détecté"
-          }
-        }
       }
     },
     "Keyboard language" : {
       "comment" : "Settings picker for the keyboard language (layout, labels, autocorrect) — decoupled from the transcription language (issue #226).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Langue du clavier"
-          }
-        }
       }
     },
     "Keyboard Settings..." : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réglages du clavier..."
-          }
-        }
       }
     },
     "Keyboards" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claviers"
-          }
-        }
       }
     },
     "Language support varies by model. Tap ⓘ on a model card in Models for details." : {
       "comment" : "Settings footer hint under Auto-detect pointing to the per-model language details (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les langues prises en charge varient selon le modèle. Touchez ⓘ sur une carte de modèle dans Modèles pour plus de détails."
-          }
-        }
       }
     },
     "Last transcription" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dernière transcription"
-          }
-        }
       }
     },
     "Layout" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disposition"
-          }
-        }
       }
     },
     "Licenses" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Licences"
-          }
-        }
       }
     },
     "Lifetime" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "À vie"
-          }
-        }
       }
     },
     "Limited quality" : {
       "comment" : "Language detail sheet: tier header for Whisper languages with high or unpublished error rates (issue #240 design round).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Qualité limitée"
-          }
-        }
       }
     },
     "Listening..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Écoute en cours..."
-          }
-        }
       }
     },
     "Live Activity" : {
@@ -1220,57 +596,27 @@
     "Loading" : {
       "comment" : "Phase label on the model loading overlay (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chargement"
-          }
-        }
       }
     },
     "Loading into memory…" : {
       "comment" : "Cycling phrase shown during model RAM load (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chargement en mémoire…"
-          }
-        }
       }
     },
     "Loading the model…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chargement du modèle…"
-          }
-        }
       }
     },
     "Main languages" : {
       "comment" : "Language detail sheet: section header for curated highlighted languages (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Langues principales"
-          }
-        }
       }
     },
     "Mapping the model into RAM…" : {
       "comment" : "Cycling phrase shown during model RAM load (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cartographie du modèle en RAM…"
-          }
-        }
       }
     },
     "Microphone" : {
@@ -1279,95 +625,41 @@
     },
     "Microphone authorized" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Microphone autorisé"
-          }
-        }
       }
     },
     "Model is loading. Please wait." : {
       "comment" : "Error shown when the user triggers dictation while a model is loading (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modèle en cours de chargement. Veuillez patienter."
-          }
-        }
       }
     },
     "Model options" : {
       "comment" : "Accessibility label for the ellipsis overflow button on a downloaded model card (issue #193).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Options du modèle"
-          }
-        }
       }
     },
     "Model ready" : {
       "comment" : "Brief confirmation when a model finishes loading into RAM (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modèle prêt"
-          }
-        }
       }
     },
     "Models" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modèles"
-          }
-        }
       }
     },
     "Monthly" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mensuel"
-          }
-        }
       }
     },
     "Most accurate but slowest" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le plus précis, mais le plus lent"
-          }
-        }
       }
     },
     "New dictation" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nouvelle dictée"
-          }
-        }
       }
     },
     "No logs available" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aucun log disponible"
-          }
-        }
       }
     },
     "No model downloaded. Open sAiity to download a model." : {
@@ -1377,12 +669,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No model downloaded. Open sAiity to download a model."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aucun modèle téléchargé. Ouvrez sAiity pour télécharger un modèle."
           }
         }
       }
@@ -1398,12 +684,6 @@
             "state" : "translated",
             "value" : "Not supported on this iPhone"
           }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Non compatible avec cet iPhone"
-          }
         }
       }
     },
@@ -1411,23 +691,11 @@
       "comment" : "A caption displayed underneath a row in the \"Keyboards\" section of",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Notifications"
-          }
-        }
       }
     },
     "Number row" : {
       "comment" : "Settings toggle for the persistent digit row above the letter rows (issue #331).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rangée de chiffres"
-          }
-        }
       }
     },
     "OK" : {
@@ -1436,22 +704,10 @@
     },
     "One last step…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dernière étape…"
-          }
-        }
       }
     },
     "One-time purchase" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Achat unique"
-          }
-        }
       }
     },
     "Open iPhone Settings" : {
@@ -1460,55 +716,25 @@
     },
     "Open Settings" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ouvrir les Réglages"
-          }
-        }
       }
     },
     "Optimizing" : {
       "comment" : "Phase label on the model loading overlay (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optimisation"
-          }
-        }
       }
     },
     "Optimizing for your iPhone…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optimisation pour votre iPhone…"
-          }
-        }
       }
     },
     "Optimizing..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optimisation en cours..."
-          }
-        }
       }
     },
     "Optional, runs fully on your device. You can change this anytime in Settings." : {
       "comment" : "Onboarding polish opt-in reassurance caption (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optionnel, tout se passe sur votre appareil. Modifiable à tout moment dans les Réglages."
-          }
-        }
       }
     },
     "Outcomes (%lld shown)" : {
@@ -1518,22 +744,10 @@
     "Parakeet — transcription engine developed by NVIDIA, optimized for speed. Parakeet TDT models." : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Parakeet — moteur de transcription développé par NVIDIA, optimisé pour la vitesse. Modèles Parakeet TDT."
-          }
-        }
       }
     },
     "Parakeet automatically detects the spoken language. This setting only applies to Whisper models." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Parakeet détecte automatiquement la langue parlée. Ce réglage s'applique uniquement aux modèles Whisper."
-          }
-        }
       }
     },
     "Persisted in App Group for 7 days. Export ships the full window." : {
@@ -1542,22 +756,10 @@
     "Please stay on this page — do not leave the app." : {
       "comment" : "Subtitle on the model loading overlay reminding the user to wait (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restez sur cette page, ne quittez pas l'application."
-          }
-        }
       }
     },
     "Please wait for preparation to finish." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Attendez la fin de la préparation."
-          }
-        }
       }
     },
     "Polish debug" : {
@@ -1571,193 +773,85 @@
     "Polish isn't available on this device." : {
       "comment" : "Onboarding polish availability note fallback (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le polish n'est pas disponible sur cet appareil."
-          }
-        }
       }
     },
     "Polish transcription" : {
       "comment" : "Settings toggle that enables the post-STT polish layer (issue #141).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Polir la transcription"
-          }
-        }
       }
     },
     "Polish transcription with a local model" : {
       "comment" : "Onboarding polish opt-in page title (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Polir la transcription avec un modèle local"
-          }
-        }
       }
     },
     "Polishing the final pass…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finition du dernier passage…"
-          }
-        }
       }
     },
     "Preparing dictation…" : {
       "comment" : "Cycling phrase shown during model RAM load (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation de la dictée…"
-          }
-        }
       }
     },
     "Preparing the files…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation des fichiers…"
-          }
-        }
       }
     },
     "Preparing the final steps…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation des dernières étapes…"
-          }
-        }
       }
     },
     "Preparing the model…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préparation du modèle…"
-          }
-        }
       }
     },
     "Priming the audio pipeline…" : {
       "comment" : "Cycling phrase shown during model RAM load (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Amorçage du pipeline audio…"
-          }
-        }
       }
     },
     "Privacy Policy" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Politique de confidentialité"
-          }
-        }
       }
     },
     "PRO" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PRO"
-          }
-        }
       }
     },
     "Pro active" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pro actif"
-          }
-        }
       }
     },
     "Pro feature" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fonction Pro"
-          }
-        }
       }
     },
     "Pro Features" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fonctions Pro"
-          }
-        }
       }
     },
     "Processing..." : {
       "comment" : "Recording screen caption while the LLM stage runs on the transcript (issue #267).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Traitement en cours..."
-          }
-        }
       }
     },
     "Purchase Error" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erreur d'achat"
-          }
-        }
       }
     },
     "Quality measured on the large Whisper models. Smaller models are less accurate." : {
       "comment" : "Language detail sheet: caveat under the quality tiers (issue #240 design round).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Qualité mesurée sur les grands modèles Whisper. Les modèles plus petits sont moins précis."
-          }
-        }
       }
     },
     "Quantizing for on-device speed…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quantification pour la vitesse on-device…"
-          }
-        }
       }
     },
     "QWERTY" : {
@@ -1771,24 +865,12 @@
     "Ready" : {
       "comment" : "Phase label on the model loading overlay (issue #144).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prêt"
-          }
-        }
       }
     },
     "Receiving neural weights…" : {
       "comment" : "Cycling phrase shown during model download (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réception des poids neuronaux…"
-          }
-        }
       }
     },
     "Recent events" : {
@@ -1797,33 +879,15 @@
     },
     "Recommended" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recommandé"
-          }
-        }
       }
     },
     "Recommended for your iPhone" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recommandé pour votre iPhone"
-          }
-        }
       }
     },
     "Reformulate your text with on-device AI" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reformulez vos textes avec une IA embarquée"
-          }
-        }
       }
     },
     "Requires %lld GB of memory or more" : {
@@ -1834,24 +898,12 @@
             "state" : "translated",
             "value" : "Requires %lld GB of memory or more"
           }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nécessite %lld Go de mémoire ou plus"
-          }
         }
       }
     },
     "Requires Apple Intelligence. You can turn it on later in iPhone Settings." : {
       "comment" : "Onboarding polish availability note when Apple Intelligence is off (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nécessite Apple Intelligence. Vous pourrez l'activer plus tard dans les Réglages de l'iPhone."
-          }
-        }
       }
     },
     "Reset learned words" : {
@@ -1862,242 +914,104 @@
     },
     "Restore previous purchases" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restaurer les achats précédents"
-          }
-        }
       }
     },
     "Restore purchases" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restaurer les achats"
-          }
-        }
       }
     },
     "Retry" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réessayer"
-          }
-        }
       }
     },
     "Return to your app and tap the microphone again." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Retournez dans votre application et appuyez à nouveau sur le micro."
-          }
-        }
       }
     },
     "Say anything, tap the mic, and\nsee it appear like magic" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dites quelque chose, touchez le micro,\net regardez la magie opérer"
-          }
-        }
       }
     },
     "Say something!" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dites quelque chose !"
-          }
-        }
       }
     },
     "Search and export all your transcriptions" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recherchez et exportez toutes vos transcriptions"
-          }
-        }
       }
     },
     "Select another model to delete this one" : {
       "comment" : "Disabled overflow-menu row explaining why the active model cannot be deleted (issue #193).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sélectionnez un autre modèle pour supprimer celui-ci"
-          }
-        }
       }
     },
     "Setting up offline transcription…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mise en place de la transcription hors ligne…"
-          }
-        }
       }
     },
     "Setting up the transcription engine…" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mise en place de la transcription…"
-          }
-        }
       }
     },
     "Settings" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réglages"
-          }
-        }
       }
     },
     "Settings > sAiity" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réglages > sAiity"
-          }
-        }
       }
     },
     "Settings > sAiity > Keyboards" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réglages > sAiity > Claviers"
-          }
-        }
       }
     },
     "Siri & Search" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Siri et recherche"
-          }
-        }
       }
     },
     "Skip" : {
       "comment" : "A button label that lets users skip the",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Passer"
-          }
-        }
       }
     },
     "Smart Mode" : {
       "extractionState" : "manual",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mode intelligent"
-          }
-        }
       }
     },
     "Sounds" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sons"
-          }
-        }
       }
     },
     "Sounds by event" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sons par événement"
-          }
-        }
       }
     },
     "Sounds follow the iPhone silent switch." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les sons respectent le bouton silencieux de l'iPhone."
-          }
-        }
       }
     },
     "Specializing kernels for your chip…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Spécialisation des noyaux pour votre puce…"
-          }
-        }
       }
     },
     "Speed" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vitesse"
-          }
-        }
       }
     },
     "Start" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Début"
-          }
-        }
       }
     },
     "Stop recording" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Arrêter l'enregistrement"
-          }
-        }
       }
     },
     "Stop Standby" : {
@@ -2108,12 +1022,6 @@
       "comment" : "Cycling phrase shown during model download (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réception des fichiers du modèle…"
-          }
-        }
       }
     },
     "stt=%@" : {
@@ -2122,33 +1030,15 @@
     },
     "Subscribe for %@" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "S'abonner pour %@"
-          }
-        }
       }
     },
     "Supported languages" : {
       "comment" : "Accessibility label of the info button on model cards opening the language detail sheet (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Langues prises en charge"
-          }
-        }
       }
     },
     "Swipe right at the bottom of your screen\nto return to your app" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Glissez vers la droite en bas de votre écran\npour retourner sur votre application"
-          }
-        }
       }
     },
     "swipeback_empathy_text" : {
@@ -2158,12 +1048,6 @@
             "state" : "translated",
             "value" : "We’d love to skip this step, but iOS requires opening sAiity to activate the microphone."
           }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "On aimerait éviter cette étape, mais iOS exige d’ouvrir sAiity pour activer le micro."
-          }
         }
       }
     },
@@ -2172,43 +1056,19 @@
       "extractionState" : "stale",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "passez au clavier sAiity"
-          }
-        }
       }
     },
     "Tap and hold \\(Image(systemName: \"globe\")), then" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Maintenez \\(Image(systemName: \"globe\")), puis"
-          }
-        }
       }
     },
     "Tap text to copy" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Touchez le texte pour copier"
-          }
-        }
       }
     },
     "Tap the mic and start dictating" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Touchez le micro et dictez"
-          }
-        }
       }
     },
     "Tap the mic to start speaking" : {
@@ -2216,202 +1076,88 @@
       "extractionState" : "stale",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Touchez le micro pour dicter"
-          }
-        }
       }
     },
     "Teach sAiity your technical terms" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apprenez à sAiity vos termes techniques"
-          }
-        }
       }
     },
     "Terms of Service" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conditions d'utilisation"
-          }
-        }
       }
     },
     "That's %@ per month" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Soit %@ par mois"
-          }
-        }
       }
     },
     "The Apple Intelligence model is still downloading on your device. Polish will start working once it's ready." : {
       "comment" : "Onboarding polish availability note while the Apple Intelligence model downloads (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le modèle Apple Intelligence est en cours de téléchargement sur votre appareil. Le polish fonctionnera dès qu'il sera prêt."
-          }
-        }
       }
     },
     "The dictation failed." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La dictée a échoué."
-          }
-        }
       }
     },
     "The download stalled. Check your internet connection and try again." : {
       "comment" : "Model download error when no bytes arrive for the stall window (issue #207).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le téléchargement s'est interrompu. Vérifiez votre connexion Internet et réessayez."
-          }
-        }
       }
     },
     "The keyboard will be detected automatically" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le clavier sera détecté automatiquement"
-          }
-        }
       }
     },
     "The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on sAiity infrastructure is a separate offering." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "L'achat à vie couvre toutes les fonctionnalités Pro, actuelles et futures, qui s'exécutent sur votre appareil ou sur un serveur que vous fournissez. Toute fonctionnalité reposant sur l'infrastructure sAiity relève d'une offre distincte."
-          }
-        }
       }
     },
     "The model download is incomplete. Please try again." : {
       "comment" : "Model download error when a required file is missing after download (issue #207).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le téléchargement du modèle est incomplet. Veuillez réessayer."
-          }
-        }
       }
     },
     "The model server is busy. Please try again in a few minutes." : {
       "comment" : "Model download error when HuggingFace rate-limits (HTTP 429/503, issue #207).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le serveur de modèles est occupé. Veuillez réessayer dans quelques minutes."
-          }
-        }
       }
     },
     "The model server returned an invalid response." : {
       "comment" : "Model download error for a malformed server response (issue #207).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le serveur de modèles a renvoyé une réponse invalide."
-          }
-        }
       }
     },
     "The number row is shown on iPhone in portrait only." : {
       "comment" : "Settings footer explaining where the digit row is drawn: dropped in landscape (issue #331) and on iPad (issue #336).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La rangée de chiffres s'affiche uniquement sur iPhone, en mode portrait."
-          }
-        }
       }
     },
     "The transcription model could not be loaded. Open sAiity and try again." : {
       "comment" : "Error shown when the local Whisper model files are present but fail to load (issue #249).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le modèle de transcription n'a pas pu être chargé. Ouvrez sAiity et réessayez."
-          }
-        }
       }
     },
     "This can improve transcription quality, but may add a little processing time." : {
       "comment" : "Onboarding polish opt-in tradeoff line (issue #213).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cela peut améliorer la qualité du texte, mais peut ajouter un peu de temps de traitement."
-          }
-        }
       }
     },
     "This model is not installed. Open sAiity and download it in the Models tab." : {
       "comment" : "Error shown when dictation is triggered while the selected Whisper model is missing from the local model repository (issue #249).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ce modèle n'est pas installé. Ouvrez sAiity et téléchargez-le dans l'onglet Modèles."
-          }
-        }
       }
     },
     "This preparation may take a moment and is usually not needed for every dictation." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cette préparation peut prendre un peu de temps et n'est généralement pas nécessaire à chaque dictée."
-          }
-        }
       }
     },
     "To transcribe your voice, sAiity needs a voice model. The download may take a few minutes." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pour transcrire votre voix, sAiity a besoin d'un modèle vocal. Le téléchargement peut prendre quelques minutes."
-          }
-        }
       }
     },
     "Transcribing..." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transcription en cours..."
-          }
-        }
       }
     },
     "Transcription" : {
@@ -2420,24 +1166,12 @@
     },
     "Transcription language" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Langue de transcription"
-          }
-        }
       }
     },
     "Tuning attention heads…" : {
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajustement des têtes d'attention…"
-          }
-        }
       }
     },
     "Turn off sAiity standby mode" : {
@@ -2446,12 +1180,6 @@
     },
     "Unlock sAiity Pro" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Débloquez sAiity Pro"
-          }
-        }
       }
     },
     "Version" : {
@@ -2461,12 +1189,6 @@
     "Vocabulary" : {
       "extractionState" : "manual",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vocabulaire"
-          }
-        }
       }
     },
     "Voice dictation, 100% offline" : {
@@ -2476,22 +1198,10 @@
     "Voice dictation, 100%% offline" : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dictation vocale, 100%% offline"
-          }
-        }
       }
     },
     "Voice model" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modèle vocal"
-          }
-        }
       }
     },
     "Volume" : {
@@ -2502,33 +1212,15 @@
       "comment" : "Cycling phrase shown during model compilation (issue #144).",
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Préchauffage des multiplicateurs matriciels…"
-          }
-        }
       }
     },
     "Welcome to sAiity Pro" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bienvenue dans sAiity Pro"
-          }
-        }
       }
     },
     "WhisperKit — transcription engine developed by Argmax, optimized for Apple chips. Models trained on OpenAI Whisper." : {
       "extractionState" : "stale",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WhisperKit — moteur de transcription développé par Argmax, optimisé pour les puces Apple. Modèles entraînés sur OpenAI Whisper."
-          }
-        }
       }
     },
     "Words the keyboard learned from your typing will be forgotten and autocorrect will apply to them again." : {
@@ -2537,12 +1229,6 @@
     "Works but imprecise. Medium or Turbo recommended." : {
       "comment" : "Language detail sheet: Chinese quality note on small-class Whisper models (issue #240).",
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fonctionne mais imprécis. Medium ou Turbo recommandé."
-          }
-        }
       }
     },
     "Write: %@" : {
@@ -2551,52 +1237,22 @@
     },
     "Yearly" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Annuel"
-          }
-        }
       }
     },
     "You can enable the microphone later in Settings" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vous pouvez activer le micro plus tard dans Réglages"
-          }
-        }
       }
     },
     "You're all set!" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "C'est prêt !"
-          }
-        }
       }
     },
     "Your model needs to be prepared before this dictation. This is usually an exceptional step." : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Votre modèle doit être préparé avant cette dictée. Cette étape est généralement exceptionnelle."
-          }
-        }
       }
     },
     "Your voice, unlimited" : {
       "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Votre voix, sans limites"
-          }
-        }
       }
     }
   },

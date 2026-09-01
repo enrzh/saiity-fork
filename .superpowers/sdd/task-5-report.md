@@ -8,13 +8,16 @@ Status: DONE_WITH_CONCERNS
 - Removed the Settings.bundle file reference, group entry, and app resources build entry from `Dictus.xcodeproj/project.pbxproj`.
 - Verified the existing product language implementation exposes only English and German through `SupportedLanguage.allCases` and `TranscriptionLanguageMode.settingsOptions`.
 - Verified existing compatibility behavior: persisted French and Spanish transcription values resolve to English; unsupported keyboard language values resolve to English; implicit legacy French keyboard state migrates to automatic mode without changing the separate transcription preference.
-- No user-facing Dictus wording or French/Spanish choices were found on the current SettingsView/onboarding surfaces that required in-scope changes. Existing Dictus identifiers and non-user-facing compatibility comments were left untouched.
+- Removed app-facing French localization entries from the app and keyboard string catalogs. Legacy French/Spanish raw values, internal types, and compatibility tests remain intact; only English and German remain product-selectable.
+- Kept the sAiity brand in onboarding and current setup copy; no broad internal Swift type rename was made. License/model wording and keyboard behavior implementation were left untouched.
 - Model-management, license, and keyboard files were not modified.
 
 ## Changed Paths
 
 - `Dictus.xcodeproj/project.pbxproj`
 - `DictusApp/Settings.bundle/Root.plist` (deleted)
+- `DictusApp/Localizable.xcstrings`
+- `DictusKeyboard/Localizable.xcstrings`
 - `.superpowers/sdd/task-5-report.md`
 
 The pre-existing untracked `.superpowers/brainstorm/` directory was preserved and not staged.
@@ -23,14 +26,17 @@ The pre-existing untracked `.superpowers/brainstorm/` directory was preserved an
 
 ### Diff and contract checks
 
-Command:
+Commands:
 
 ```text
 git diff --check
-rg -n 'Settings\\.bundle|AA1000C1|AA0000C1' Dictus.xcodeproj/project.pbxproj DictusApp
+test ! -e DictusApp/Settings.bundle
+! git grep -n -E 'Settings\\.bundle|AA1000C1|AA0000C1' -- Dictus.xcodeproj/project.pbxproj DictusApp
+jq -e 'all(.strings[]?; ((.localizations // {}) | has("fr") | not))' DictusApp/Localizable.xcstrings
+jq -e 'all(.strings[]?; ((.localizations // {}) | has("fr") | not))' DictusKeyboard/Localizable.xcstrings
 ```
 
-Outcome: passed. No Settings.bundle references remain; `git diff --check` reported no errors.
+Outcome: passed. The resource is absent, project references are absent, both catalogs contain no `fr` localization entries, and `git diff --check` reported no errors. This is a focused content/project contract and does not depend on a hard-coded test fixture path.
 
 ### Focused core tests
 
@@ -49,7 +55,7 @@ Warnings: existing unhandled polish-harness README warning and existing Swift 6 
 Command:
 
 ```text
-xcodebuild -project Dictus.xcodeproj -scheme DictusApp -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/saiity-dictus-task5-derivedData CODE_SIGNING_ALLOWED=NO build
+DEVELOPER_DIR=/Applications/Xcode-beta.app xcodebuild -project Dictus.xcodeproj -scheme DictusApp -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/saiity-dictus-task5-review-derivedData CODE_SIGNING_ALLOWED=NO build
 ```
 
 Outcome: passed. `** BUILD SUCCEEDED **`.
@@ -58,7 +64,7 @@ Warnings: existing API deprecation warnings, including `AVAudioSession.recordPer
 
 ## Commit
 
-`978a9a97e3436a83d36fb1d83347108ada809f15` (`chore: clean up settings integration`)
+`d4b0c4ccf5f7d286daf6019d686b1382b570450e` (`fix: clean app-facing language localization`)
 
 ## Concerns
 
