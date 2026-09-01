@@ -19,32 +19,29 @@ struct KeyboardRootView: View {
                 surfaceHeight: Double(surfaceHeight)
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
+            let surfaceFrame = layout.surfaceFrame
             let contentFrame = usesAuxiliarySurface ? layout.alternateContentFrame : layout.micCenterArea
-            let centerSurface = areaSurface(
-                width: contentFrame.width,
-                availableWidth: proxy.size.width,
-                surfaceHeight: surfaceHeight
+            let centerSurface = embeddedSurface(
+                areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
+                frame: surfaceFrame
             )
 
             ZStack(alignment: .topLeading) {
                 centerSurface
-                    .frame(
-                        width: contentFrame.width,
-                        height: contentFrame.height,
-                        alignment: .top
-                    )
-                    .position(x: contentFrame.midX, y: contentFrame.midY)
+                    .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
 
                 if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
 
-                if state.areaMode != .panel && state.areaMode != .emoji && layout.leftRailWidth > 0 {
-                    utilityGlyph(systemName: "at")
-                        .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
-                    utilityGlyph(systemName: "face.smiling")
-                        .position(x: CGFloat(layout.leftUtilityFrames.emoji.midX), y: CGFloat(layout.leftUtilityFrames.emoji.midY))
+                if layout.leftRailWidth > 0 {
+                    if state.areaMode != .panel && state.areaMode != .emoji {
+                        utilityGlyph(systemName: "at")
+                            .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
+                        utilityGlyph(systemName: "face.smiling")
+                            .position(x: CGFloat(layout.leftUtilityFrames.emoji.midX), y: CGFloat(layout.leftUtilityFrames.emoji.midY))
+                    }
                     utilityGlyph(text: state.areaMode.modeControlTitle)
                         .position(x: CGFloat(layout.leftUtilityFrames.number.midX), y: CGFloat(layout.leftUtilityFrames.number.midY))
                 }
@@ -77,10 +74,11 @@ struct KeyboardRootView: View {
     }
 
     @ViewBuilder
-    private func areaSurface(width: Double, availableWidth: Double, surfaceHeight: CGFloat) -> some View {
+    private func areaSurface(layout: VoiceOnlyKeyboardPolicy.Layout, contentFrame: CGRect, surfaceHeight: CGFloat) -> some View {
+        let availableWidth = contentFrame.width
         switch state.areaMode {
         case .keys, .recording:
-            centerSurface(width: width, availableWidth: availableWidth, surfaceHeight: surfaceHeight)
+            centerSurface(layout: layout)
         case .emoji:
             EmojiPickerView(
                 onEmojiInsert: { emoji in
@@ -91,12 +89,12 @@ struct KeyboardRootView: View {
                     controller.routeProxyText(emoji)
                     state.closeArea()
                 },
-                availableWidth: width,
-                availableHeight: surfaceHeight
+                availableWidth: availableWidth,
+                availableHeight: contentFrame.height
             )
             .accessibilityIdentifier("emoji-picker-surface")
         case .panel:
-            Color.clear.accessibilityIdentifier("number-layer-surface")
+            Color(uiColor: .systemBackground).accessibilityIdentifier("number-layer-surface")
         }
     }
 
@@ -131,6 +129,7 @@ struct KeyboardRootView: View {
                 in: Capsule()
             )
         }
+        .tint(.primary)
         .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
         .accessibilityLabel("Translation language")
         .accessibilityValue(languageIndicatorTitle)
@@ -143,59 +142,55 @@ struct KeyboardRootView: View {
         let code = state.asrCapability.displaySourceCode
         switch code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
         case "", "--", "UNKNOWN", "N/A", "NA", "NONE", "NULL", "UNAVAILABLE", "UNSUPPORTED", "AUTO":
-            return "Auto"
+            return "AUTO"
         default:
             return code
         }
     }
 
     @ViewBuilder
-    private func centerSurface(width: Double, availableWidth: Double, surfaceHeight: CGFloat) -> some View {
-        if width > 0 {
-            let dictateFrame = VoiceOnlyKeyboardPolicy.layout(
-                for: availableWidth,
-                surfaceHeight: Double(surfaceHeight)
-            ).dictateFrame
+    private func centerSurface(layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
+        if !layout.dictateFrame.isEmpty {
+            let dictateFrame = layout.dictateFrame
+            let surfaceCenterX = layout.surfaceFrame.midX
             dictateButton(frame: dictateFrame)
                 .frame(
                     width: dictateFrame.width,
                     height: dictateFrame.height
                 )
-                .frame(maxWidth: .infinity, minHeight: surfaceHeight, maxHeight: surfaceHeight)
+                .position(x: CGFloat(surfaceCenterX - layout.surfaceFrame.minX),
+                          y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
+                .frame(maxWidth: .infinity, minHeight: CGFloat(layout.surfaceFrame.height), maxHeight: CGFloat(layout.surfaceFrame.height))
         } else {
             Color.clear
         }
     }
 
     private func dictateButton(frame: CGRect) -> some View {
-            appleControlSurface(
-                VStack(spacing: 1) {
-                    Image(systemName: dictationSymbol)
-                        .font(.system(size: 20, weight: .semibold))
-                        .symbolEffect(
-                            .pulse,
-                            isActive: state.dictationStatus == .recording && !reduceMotion
-                        )
-                    Text(dictationTitle)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    if let statusMessage = state.statusMessage, !statusMessage.isEmpty {
-                        Text(statusMessage)
-                            .font(.caption2)
-                            .foregroundStyle(state.dictationStatus == .failed ? .red : .secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                }
-                .foregroundStyle(dictationColor)
-                .frame(
-                    width: frame.width,
-                    height: frame.height
-                ),
-            in: Capsule()
-        )
-            .contentShape(Capsule())
+        VStack(spacing: 1) {
+            Image(systemName: dictationSymbol)
+                .font(.system(size: 20, weight: .semibold))
+                .symbolEffect(
+                    .pulse,
+                    isActive: state.dictationStatus == .recording && !reduceMotion
+                )
+            Text(dictationTitle)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            if let statusMessage = state.statusMessage, !statusMessage.isEmpty {
+                Text(statusMessage)
+                    .font(.caption2)
+                    .foregroundStyle(state.dictationStatus == .failed ? .red : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .foregroundStyle(.primary)
+        .frame(width: frame.width, height: frame.height)
+        .background(Capsule().fill(Color.white))
+        .clipShape(Capsule())
+        .contentShape(Capsule())
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -240,12 +235,15 @@ struct KeyboardRootView: View {
         }
     }
 
-    private var dictationColor: Color {
-        switch state.dictationStatus {
-        case .recording: return .blue
-        case .failed: return .orange
-        default: return .primary
-        }
+    private let surfaceCornerRadius: CGFloat = 24
+
+    private func embeddedSurface<Content: View>(_ content: Content, frame: CGRect) -> some View {
+        appleControlSurface(
+            content.frame(width: frame.width, height: frame.height, alignment: .topLeading),
+            in: RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous))
+        .frame(width: frame.width, height: frame.height)
     }
 
     @ViewBuilder

@@ -19,7 +19,19 @@ class KeyboardState: ObservableObject {
     private static func loadLanguageRequest(
         from defaults: UserDefaults = AppGroup.defaults
     ) -> DictationLanguageRequest {
-        DictationLanguageRequest.load(from: defaults)
+        let request = DictationLanguageRequest.load(from: defaults)
+        return DictationLanguageRequest(
+            mode: request.modeForNextDictation(
+                defaultingTo: TranscriptionLanguageMode(
+                    storedValue: defaults.string(forKey: SharedKeys.transcriptionLanguage)
+                )
+            ),
+            translationTarget: request.translationTarget,
+            sessionID: request.sessionID,
+            generation: request.generation,
+            clientIdentifier: request.clientIdentifier,
+            resolvedSourceLanguage: request.resolvedSourceLanguage
+        )
     }
 
     /// The dictation this keyboard process currently owns, if any.
@@ -1302,17 +1314,22 @@ class KeyboardState: ObservableObject {
         guard let requestSessionID = activeSessionID else { return }
         let requestGeneration = sessionGeneration
         let existingRequest = DictationLanguageRequest.load(from: defaults)
-        let requestMode = existingRequest.mode
+        let requestMode = existingRequest.modeForNextDictation(
+            defaultingTo: TranscriptionLanguageMode.active
+        )
         let resolvedSourceLanguage = ASRCapability.forModelIdentifier(
             defaults.string(forKey: SharedKeys.activeModel),
             mode: requestMode,
             keyboardLanguage: SupportedLanguage.active
         ).sourceLanguage
-        let request = existingRequest.bound(
+        let request = DictationLanguageRequest(
+            mode: requestMode,
+            translationTarget: existingRequest.translationTarget,
             sessionID: requestSessionID,
             generation: requestGeneration,
-            clientIdentifier: UUID().uuidString
-        ).withResolvedSourceLanguage(resolvedSourceLanguage)
+            clientIdentifier: UUID().uuidString,
+            resolvedSourceLanguage: resolvedSourceLanguage
+        )
         request.persist(to: defaults)
         languageRequest = Self.loadLanguageRequest(from: defaults)
         logProbe("startRecording", details: sessionDetails())

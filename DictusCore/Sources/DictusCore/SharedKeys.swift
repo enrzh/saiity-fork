@@ -67,24 +67,18 @@ public enum SharedKeys {
     /// Drives the keyboard layout, key labels, and autocorrect/prediction.
     /// Since issue #226 this is NO longer the STT language by itself — see
     /// `transcriptionLanguage` below. STT only follows this key when the
-    /// transcription language mode is "follow" (the default).
+    /// transcription language mode is "follow".
     public static let language = "dictus.language"
     /// Codable keyboard language selection: automatic system language or explicit code.
     public static let keyboardLanguageSelection = "dictus.keyboardLanguageSelection"
     /// One-time marker for migration of the implicit legacy French default.
     public static let keyboardLanguageMigrationVersion = "dictus.keyboardLanguageMigrationVersion"
 
-    // Transcription language decoupling (issue #226)
-    /// Transcription (STT) language mode, decoupled from the keyboard language.
-    /// Values: "follow" (default — STT follows `language` above, today's behavior),
-    /// "auto" (Whisper language auto-detection, unlocks the long tail incl. zh),
-    /// or an explicit legacy/product code. The product exposes English and German;
-    /// older French/Spanish values are migrated without being shown again.
-    /// A missing or unrecognized value behaves as "follow" so fresh and upgraded
-    /// installs keep the exact pre-#226 behavior without any migration.
-    /// Written ONLY by the app's Settings — the keyboard toolbar language
-    /// switcher keeps writing `language`/`keyboardLayout` and can therefore
-    /// never override an explicit or auto transcription choice.
+    // Transcription language compatibility (issue #226)
+    /// Historical STT language mode storage. New product behavior is always
+    /// Auto-detect; old values remain readable for migration and diagnostics.
+    /// The keyboard toolbar writes only `language`/`keyboardLayout` and cannot
+    /// change the product's automatic transcription behavior.
     public static let transcriptionLanguage = "dictus.transcriptionLanguage"
     /// JSON-free request contract written by the keyboard and consumed by the app.
     public static let dictationLanguageRequest = "dictus.dictationLanguageRequest"

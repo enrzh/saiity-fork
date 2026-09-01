@@ -36,7 +36,7 @@ enum KeyboardLayout {
             KeyDefinition("delete", type: .delete, width: 1.5)
         ],
         // Row 4: bottom function row.
-        // Emoji replaces globe (emoji icon instead of globe icon, same advanceToNextInputMode behavior).
+        // Emoji is an explicit utility action; keyboard switching is not part of this surface.
         // Mic removed from layout — it lives in the toolbar (Plan 03-02).
         // Mic's width redistributed to space bar for a wider touch target.
         [
@@ -74,7 +74,7 @@ enum KeyboardLayout {
             KeyDefinition("delete", type: .delete, width: 1.5)
         ],
         // Row 4: bottom function row (no mic -- mic is in toolbar per Plan 03-02)
-        // Emoji replaces globe — same as AZERTY. No adaptive accent key on QWERTY (Apple convention).
+        // Emoji is an explicit utility action. No adaptive accent key on QWERTY (Apple convention).
         [
             KeyDefinition("123", type: .layerSwitch, width: 1.2),
             KeyDefinition("emoji", type: .emoji, width: 1.2),

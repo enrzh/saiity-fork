@@ -6,7 +6,6 @@ import DictusCore
 struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
-    @AppStorage(SharedKeys.transcriptionLanguage, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionLanguage = TranscriptionLanguageMode.autoDetect.storedValue
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
     @StateObject private var modelManager = ModelManager()
@@ -15,11 +14,6 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section("Dictation") {
-                Picker("Language", selection: $transcriptionLanguage) {
-                    ForEach(TranscriptionLanguageMode.settingsOptions, id: \.storedValue) { mode in
-                        Text(mode.settingsDisplayName).tag(mode.storedValue)
-                    }
-                }
                 if PolishAvailability.isToggleVisible {
                     Toggle("Automatic dictation cleanup", isOn: $polishEnabled)
                         .accessibilityHint("Cleans up dictation after speech recognition. Turn off to pass through the raw transcription.")

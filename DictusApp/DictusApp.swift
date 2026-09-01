@@ -88,10 +88,10 @@ struct DictusApp: App {
         if let defaults {
             KeyboardLanguageSelection.migrateLegacyFrenchIfNeeded(in: defaults)
         }
-        // Persist the product default before transcription starts. Do not overwrite
-        // an explicit choice made in Settings.
-        if defaults?.string(forKey: SharedKeys.transcriptionLanguage) == nil {
-            defaults?.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
+        // Transcription is always language-agnostic Auto-detect. Persist the
+        // canonical value so older installs do not leave a stale mode behind.
+        if let defaults {
+            defaults.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
         }
         // Freeze the layout an updating install is already typing on, before anything can
         // change the active language (#272). The migration is idempotent and also runs from

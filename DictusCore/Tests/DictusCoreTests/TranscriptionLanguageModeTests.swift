@@ -19,8 +19,8 @@ final class TranscriptionLanguageModeTests: XCTestCase {
 
     // MARK: - Parsing (App Group stored value -> mode)
 
-    func testMissingValuePreservesLegacyFollowKeyboardBehavior() {
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: nil), .followKeyboard)
+    func testMissingValueDefaultsToAutomaticDetection() {
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: nil), .autoDetect)
     }
 
     func testSettingsOptionsIncludeAutoFollowAndEverySupportedLanguage() {

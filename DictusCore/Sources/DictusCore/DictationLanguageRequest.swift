@@ -303,6 +303,14 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
         hasValidRequestShape && sessionID != nil && generation != nil && clientIdentifier != nil
     }
 
+    /// Return the mode to use when starting a new dictation.
+    ///
+    /// Transcription is always Auto-detect. The argument remains in the API so
+    /// callers from the previous setting-based design stay source-compatible.
+    public func modeForNextDictation(defaultingTo _: TranscriptionLanguageMode) -> TranscriptionLanguageMode {
+        .autoDetect
+    }
+
     public func unbound() -> Self {
         Self(mode: mode, translationTarget: translationTarget)
     }
@@ -358,7 +366,14 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
         let clientKey = appGroupKey + ".clientIdentifier"
         let sourceKey = appGroupKey + ".source"
         let anyLegacyValue = legacyKeys.contains { defaults.object(forKey: $0) != nil }
-        guard anyLegacyValue else { return Self(mode: .followKeyboard, translationTarget: nil) }
+        guard anyLegacyValue else {
+            return Self(
+                mode: TranscriptionLanguageMode(
+                    storedValue: defaults.string(forKey: SharedKeys.transcriptionLanguage)
+                ),
+                translationTarget: nil
+            )
+        }
         guard defaults.object(forKey: modeKey) != nil,
               let modeValue = defaults.string(forKey: modeKey) else {
             return Self(mode: .followKeyboard, translationTarget: nil)

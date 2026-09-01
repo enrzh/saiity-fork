@@ -2,8 +2,10 @@
 // Transcription (STT) language mode, decoupled from the keyboard language (issue #226).
 import Foundation
 
-/// The user's transcription language choice, stored in
-/// `SharedKeys.transcriptionLanguage`.
+/// The transcription language policy used by the pipeline.
+///
+/// The product always uses `.autoDetect`; the other cases remain for decoding
+/// older App Group data and for compatibility with the shared request format.
 ///
 /// WHY a separate type instead of new `SupportedLanguage` cases:
 /// `SupportedLanguage` couples a language to keyboard concerns (layout,
@@ -19,10 +21,10 @@ import Foundation
 /// The stored value mixes two namespaces — mode markers ("follow"/"auto") and
 /// language codes ("fr"/"en"/…). Custom parsing keeps the App Group encoding
 /// explicit and lets unknown values degrade safely to `.followKeyboard`,
-/// which is the exact pre-#226 behavior (zero-migration upgrades).
+/// while an absent value uses the current product default, `.autoDetect`.
 public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// STT uses the current keyboard language (`SharedKeys.language`).
-    /// Default — preserves the historical coupled behavior exactly.
+    /// This remains available as an explicit compatibility choice.
     case followKeyboard
     /// Whisper language auto-detection (no language token forced).
     /// Unlocks the Whisper long tail (zh, it, pt, …) without any keyboard work.
@@ -33,7 +35,7 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// untested languages are reachable through `.autoDetect` only.
     case explicit(SupportedLanguage)
 
-    /// Options shown by the app settings picker, in product order.
+    /// Legacy compatibility options. The product no longer exposes these in UI.
     public static let settingsOptions: [TranscriptionLanguageMode] =
         [.autoDetect, .followKeyboard] + SupportedLanguage.allCases.map { .explicit($0) }
 
@@ -52,8 +54,8 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
     /// Stored marker for `.autoDetect`.
     public static let autoStoredValue = "auto"
 
-    /// Parse the App Group stored value. Missing values preserve the legacy behavior;
-    /// DictusApp writes the new product default once when the key is absent.
+    /// Parse the App Group stored value. Missing values use Auto-detect;
+    /// unknown values retain the legacy follow-keyboard behavior for compatibility.
     public init(storedValue: String?) {
         switch storedValue {
         case Self.autoStoredValue:
@@ -68,7 +70,7 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
                 self = .followKeyboard
             }
         case .none:
-            self = .followKeyboard
+            self = .autoDetect
         }
     }
 
@@ -95,11 +97,13 @@ public enum TranscriptionLanguageMode: Equatable, Sendable {
 
     // MARK: - Resolution
 
-    /// Reads the active mode from the App Group. Missing key = `.followKeyboard`.
+    /// Returns the product's only user-facing transcription mode.
+    ///
+    /// Older builds persisted follow-keyboard or explicit language values, but
+    /// those values are intentionally ignored so a model can detect the spoken
+    /// language instead of inheriting the keyboard language.
     public static var active: TranscriptionLanguageMode {
-        TranscriptionLanguageMode(
-            storedValue: AppGroup.defaults.string(forKey: SharedKeys.transcriptionLanguage)
-        )
+        .autoDetect
     }
 
     /// Resolve the language code to hand to the STT engine.

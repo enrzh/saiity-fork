@@ -881,6 +881,19 @@ final internal class GiellaKeyboardView: UIView,
     // MARK: - CollectionView
 
     private var rowNumberOfUnits: [CGFloat]!
+    private var lastLaidOutBounds: CGRect = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        guard bounds != lastLaidOutBounds else { return }
+        lastLaidOutBounds = bounds
+        // UICollectionViewFlowLayout caches item frames. The auxiliary keyboard is
+        // installed while the extension is still resolving its native height, so the
+        // cache must be invalidated when that frame settles or symbol rows can retain
+        // the first pass's oversized heights.
+        collectionView.collectionViewLayout.invalidateLayout()
+    }
 
     private func calculateRows() {
         var mutableWidths = [CGFloat]()
@@ -947,13 +960,7 @@ final internal class GiellaKeyboardView: UIView,
         let key = currentPage[indexPath.section][indexPath.row]
 
         let width = key.size.width * ((bounds.size.width - 1) / rowNumberOfUnits[indexPath.section])
-        let rowCount: Int
-        switch page {
-        case .symbols1, .symbols2:
-            rowCount = KeyboardLayouts.symbolsRowCount
-        default:
-            rowCount = currentPage.count
-        }
+        let rowCount = max(currentPage.count, 1)
         let height = bounds.size.height / CGFloat(max(rowCount, 1))
         return CGSize(width: width, height: height)
     }

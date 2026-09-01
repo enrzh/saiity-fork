@@ -112,6 +112,9 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // The extension owns dictation through its centered press-and-hold control.
+        // Prevent iOS from adding a second system microphone key below our surface.
+        hasDictationKey = true
         publishFullAccessHandshake()
         PersistentLog.source = "KBD"
         let memEntry = MemoryFootprint.residentMB()
@@ -893,7 +896,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         emojiButton = makeKeyboardActionButton(identifier: "emoji-picker", label: "Open emoji picker") { [weak self] in
             self?.presentArea(.emoji)
         }
-        numberButton = makeKeyboardActionButton(identifier: "number-layer", label: "Toggle numbers") { [weak self] in
+        numberButton = makeKeyboardActionButton(identifier: "number-layer", label: "Open symbols keyboard") { [weak self] in
             guard let self else { return }
             if KeyboardState.shared.areaMode == .emoji {
                 KeyboardState.shared.closeArea()
@@ -937,8 +940,11 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         button.accessibilityTraits = [.button]
         button.configuration = .plain()
         button.configuration?.contentInsets = .zero
+        button.configuration?.baseForegroundColor = .label
         button.translatesAutoresizingMaskIntoConstraints = true
         button.backgroundColor = .clear
+        button.tintColor = .label
+        button.setTitleColor(.label, for: .normal)
         button.layer.cornerRadius = VoiceOnlyKeyboardPolicy.controlSize / 2
         button.configurationUpdateHandler = { control in
             if control.isHighlighted {
@@ -979,10 +985,21 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
         setAuxiliaryUtilityVisuals(for: KeyboardState.shared.areaMode)
-        [atButton, emojiButton, numberButton].compactMap { $0 }.forEach { $0.isHidden = !leftRailVisible }
+        // The vendored symbols and native emoji pages own their bottom controls.
+        // Keeping @ and emoji visible there would place them over the symbols grid;
+        // symbols still need the number button's ABC action in the reserved cell.
+        let mode = KeyboardState.shared.areaMode
+        let showsNormalLeftRail = leftRailVisible && mode != .panel && mode != .emoji
+        atButton?.isHidden = !showsNormalLeftRail
+        emojiButton?.isHidden = !showsNormalLeftRail
+        // Keep the mode control reachable on both auxiliary pages so it can
+        // return to the normal voice page.
+        numberButton?.isHidden = !leftRailVisible
         [deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach { $0.isHidden = !rightRailVisible }
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
+        // The mode control always owns one compact utility cell. The symbols
+        // blank row remains content geometry, not a button hit target.
         numberButton?.frame = layout.leftUtilityFrames.number
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
@@ -990,7 +1007,9 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         if let numberKeyboardView {
             numberKeyboardView.frame = layout.alternateContentFrame
             numberKeyboardView.clipsToBounds = true
+            numberKeyboardView.setNeedsLayout()
         }
+        controls.superview?.bringSubviewToFront(controls)
     }
 
     private func setAuxiliaryUtilityVisuals(for mode: KeyboardAreaMode) {
@@ -998,20 +1017,26 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
         let atImage = isAuxiliary ? UIImage(systemName: "at", withConfiguration: symbolConfiguration) : nil
         let emojiImage = isAuxiliary ? UIImage(systemName: "face.smiling", withConfiguration: symbolConfiguration) : nil
-        let numberTitle = isAuxiliary ? mode.modeControlTitle : nil
+        numberButton?.accessibilityLabel = isAuxiliary ? "Return to voice keyboard" : "Open symbols keyboard"
+        numberButton?.accessibilityHint = isAuxiliary ? "Returns to voice keyboard" : "Opens symbols keyboard"
 
         atButton?.setImage(atImage, for: .normal)
         atButton?.configuration?.image = atImage
+        atButton?.configuration?.baseForegroundColor = .label
         atButton?.setTitle(nil, for: .normal)
         atButton?.configuration?.title = nil
 
         emojiButton?.setImage(emojiImage, for: .normal)
         emojiButton?.configuration?.image = emojiImage
+        emojiButton?.configuration?.baseForegroundColor = .label
         emojiButton?.setTitle(nil, for: .normal)
         emojiButton?.configuration?.title = nil
 
-        numberButton?.setTitle(numberTitle, for: .normal)
-        numberButton?.configuration?.title = numberTitle
+        // KeyboardRootView renders the shared ABC glyph. Keep this UIKit view
+        // transparent and use it only as the hit target and accessibility node.
+        numberButton?.setTitle(nil, for: .normal)
+        numberButton?.configuration?.title = nil
+        numberButton?.configuration?.baseForegroundColor = .label
         numberButton?.setImage(nil, for: .normal)
         numberButton?.configuration?.image = nil
     }
@@ -1049,6 +1074,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         let height = max(1, actionControlsView?.bounds.height ?? inputView.bounds.height)
         let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(inputView.bounds.width), surfaceHeight: Double(height))
         keyboard.frame = layout.alternateContentFrame
+        keyboard.setNeedsLayout()
+        keyboard.layoutIfNeeded()
         numberKeyboardView = keyboard
         if let controls = actionControlsView {
             inputView.bringSubviewToFront(controls)

@@ -452,7 +452,9 @@ class DictationCoordinator: ObservableObject {
         }
 #endif
         let loadedLanguageRequest = DictationLanguageRequest.load(from: defaults)
-        let requestMode = loadedLanguageRequest.mode
+        let requestMode = loadedLanguageRequest.modeForNextDictation(
+            defaultingTo: TranscriptionLanguageMode.active
+        )
         let modelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
         let activeModel = ModelInfo.forIdentifier(modelIdentifier)
         let capability = ASRCapability.forModelIdentifier(

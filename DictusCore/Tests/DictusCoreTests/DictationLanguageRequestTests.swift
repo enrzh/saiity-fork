@@ -2,6 +2,58 @@ import XCTest
 @testable import DictusCore
 
 final class DictationLanguageRequestTests: XCTestCase {
+
+    func testMissingRequestUsesAutomaticTranscriptionPreference() {
+        let suiteName = "dictus.plan.missing-request-auto-tests"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(
+            DictationLanguageRequest.load(from: defaults).mode,
+            .autoDetect,
+            "a direct app dictation must honor the Auto setting when no keyboard request exists"
+        )
+    }
+
+    func testMissingRequestDefaultsToAutomaticWhenPreferenceIsAbsent() {
+        let suiteName = "dictus.plan.missing-request-default-tests"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(
+            DictationLanguageRequest.load(from: defaults).mode,
+            .autoDetect,
+            "a fresh direct app dictation must not inherit the keyboard language"
+        )
+    }
+
+    func testUnboundRequestAlwaysUsesAutomaticTranscription() {
+        let request = DictationLanguageRequest(mode: .followKeyboard, translationTarget: nil)
+
+        XCTAssertEqual(
+            request.modeForNextDictation(defaultingTo: .autoDetect),
+            .autoDetect
+        )
+    }
+
+    func testBoundRequestAlsoUsesAutomaticTranscription() {
+        let request = DictationLanguageRequest(
+            mode: .followKeyboard,
+            translationTarget: nil,
+            sessionID: "session-1",
+            generation: 1,
+            clientIdentifier: "client-1"
+        )
+
+        XCTAssertEqual(
+            request.modeForNextDictation(defaultingTo: .autoDetect),
+            .autoDetect
+        )
+    }
+
     func testOnlyWhisperMultilingualAutoDetectDisplaysAUTO() {
         XCTAssertEqual(
             ASRCapability.forModelIdentifier(

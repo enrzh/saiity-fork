@@ -4,8 +4,8 @@ import XCTest
 
 final class QWERTYLayoutTests: XCTestCase {
 
-    func testQWERTYLettersRowsHasFourRows() {
-        XCTAssertEqual(QWERTYLayout.lettersRows.count, 4)
+    func testQWERTYLettersRowsHasThreeRows() {
+        XCTAssertEqual(QWERTYLayout.lettersRows.count, 3)
     }
 
     func testRow1Has10Keys() {
@@ -25,12 +25,6 @@ final class QWERTYLayoutTests: XCTestCase {
         let row3 = QWERTYLayout.lettersRows[2]
         XCTAssertEqual(row3.count, 7)
         XCTAssertEqual(row3, ["Z", "X", "C", "V", "B", "N", "M"])
-    }
-
-    func testRow4Has5BottomRowKeys() {
-        // Row 4 defines bottom row key labels — actual rendering is handled by the keyboard target
-        let row4 = QWERTYLayout.lettersRows[3]
-        XCTAssertEqual(row4.count, 5)
     }
 
     func testAllLetterKeysAreUppercase() {

@@ -225,7 +225,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("NavigationLink { DebugLogView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DiagnosticDetailView"))
         XCTAssertTrue(settings.contains("Toggle("))
-        XCTAssertTrue(settings.contains("Picker("))
+        XCTAssertFalse(settings.contains("Picker("))
+        XCTAssertFalse(settings.contains("transcriptionLanguage"))
         XCTAssertFalse(settings.contains("Keyboard layout"))
         XCTAssertFalse(settings.contains("RoundedRectangle"))
     }

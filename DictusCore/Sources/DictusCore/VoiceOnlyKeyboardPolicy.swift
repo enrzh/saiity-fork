@@ -100,13 +100,21 @@ public enum VoiceOnlyKeyboardPolicy {
         public let rightBottomCenterY: Double
         public let showsLanguageIndicator: Bool
 
+        public var surfaceInset: Double { horizontalInset }
+
+        public var surfaceFrame: CGRect {
+            CGRect(x: horizontalInset, y: verticalPadding,
+                   width: max(0, surfaceWidth - horizontalInset * 2),
+                   height: max(0, surfaceHeight - verticalPadding * 2))
+        }
+
         public var rightCommandFrame: CGRect {
             CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: rightRailTop,
                    width: rightRailWidth, height: rightRailHeight)
         }
 
         public var languageFrame: CGRect {
-            CGRect(x: horizontalInset, y: VoiceOnlyKeyboardPolicy.topInset,
+            CGRect(x: horizontalInset, y: surfaceFrame.minY + VoiceOnlyKeyboardPolicy.topInset,
                    width: VoiceOnlyKeyboardPolicy.languageVisualWidth,
                    height: VoiceOnlyKeyboardPolicy.controlSize)
         }
@@ -114,12 +122,11 @@ public enum VoiceOnlyKeyboardPolicy {
         public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
             guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
             let x = horizontalInset
-            let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             return (
-                CGRect(x: x, y: y, width: size.width, height: size.height),
-                CGRect(x: x + size.width, y: y, width: size.width, height: size.height),
-                CGRect(x: x + size.width * 2, y: y, width: size.width, height: size.height)
+                CGRect(x: x, y: surfaceHeight - size.height * 2, width: size.width, height: size.height),
+                CGRect(x: x, y: surfaceHeight - size.height, width: size.width, height: size.height),
+                CGRect(x: x + size.width, y: surfaceHeight - size.height, width: size.width, height: size.height)
             )
         }
 
@@ -128,33 +135,34 @@ public enum VoiceOnlyKeyboardPolicy {
         public var returnFrame: CGRect { rightRailFrames.returnKey }
 
         public var rightRailFrames: (delete: CGRect, returnKey: CGRect) {
-            VoiceOnlyKeyboardPolicy.rightRailFrames(
-                for: surfaceWidth,
-                surfaceHeight: CGFloat(surfaceHeight)
-            )
+            (delete: CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: topInset, width: rightRailWidth, height: controlSize),
+             returnKey: CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: topInset + controlSize, width: rightRailWidth, height: controlSize))
         }
 
         public var dismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
-            return VoiceOnlyKeyboardPolicy.dismissFrame(
-                for: surfaceWidth,
-                surfaceHeight: CGFloat(surfaceHeight)
-            )
+            return CGRect(x: surfaceWidth - horizontalInset - rightRailWidth, y: surfaceHeight - bottomActionHitHeight, width: rightRailWidth, height: bottomActionHitHeight)
         }
 
         public var micCenterArea: CGRect {
             CGRect(x: centerX - centerAreaWidth / 2,
-                   y: (surfaceHeight - contentHeight) / 2,
-                   width: centerAreaWidth, height: contentHeight)
+                   y: surfaceFrame.minY,
+                   width: centerAreaWidth, height: surfaceFrame.height)
         }
 
-        /// The full-height content region for alternate pages. Rails remain
-        /// outside its right edge; the bottom blank symbols row leaves the
-        /// left utility rail available for controls.
+        /// Alternate pages cover the complete embedded surface. The upper
+        /// action rails are drawn on top by the owning controls overlay.
         public var alternateContentFrame: CGRect {
-            let x = horizontalInset
-            let right = surfaceWidth - horizontalInset - rightRailWidth
-            return CGRect(x: x, y: 0, width: max(0, right - x), height: surfaceHeight)
+            surfaceFrame
+        }
+
+        /// The symbols pages reserve their bottom row for the UIKit-owned ABC control.
+        /// This row stays inside the inset surface so the control is not clipped.
+        public var symbolsReservedRowFrame: CGRect {
+            CGRect(x: surfaceFrame.minX,
+                   y: surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.controlSize,
+                   width: surfaceFrame.width,
+                   height: VoiceOnlyKeyboardPolicy.controlSize)
         }
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
@@ -166,7 +174,7 @@ public enum VoiceOnlyKeyboardPolicy {
             )
             return CGRect(
                 x: centerX - width / 2,
-                y: (surfaceHeight - VoiceOnlyKeyboardPolicy.primaryControlSize) / 2,
+                y: surfaceFrame.minY + (surfaceFrame.height - VoiceOnlyKeyboardPolicy.primaryControlSize) / 2,
                 width: width,
                 height: VoiceOnlyKeyboardPolicy.primaryControlSize
             )
@@ -224,7 +232,7 @@ public enum VoiceOnlyKeyboardPolicy {
             dismissBottom: resolvedSurfaceHeight,
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
-            centerX: horizontalInset + resolvedLeftRailWidth + centerAreaWidth / 2,
+            centerX: horizontalInset + (availableWidth - horizontalInset * 2) / 2,
             leftBottomCenterX: horizontalInset,
             rightBottomCenterX: availableWidth - horizontalInset - (railWidth > 0 ? railWidth / 2 : controlSize / 2),
             leftBottomCenterY: resolvedSurfaceHeight - controlSize / 2,
