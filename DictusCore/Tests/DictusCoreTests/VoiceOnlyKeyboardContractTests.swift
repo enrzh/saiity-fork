@@ -205,11 +205,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(state.contains("extensionContext.open(url, completionHandler: completion)"))
         XCTAssertTrue(state.contains("openDictusURL(url)"))
 
-        XCTAssertTrue(root.contains("state.startRecording()"))
+        XCTAssertFalse(root.contains("state.startRecording()"))
         XCTAssertFalse(root.contains("advanceToNextInputMode()"))
-        XCTAssertTrue(root.contains("DragGesture(minimumDistance: 0)"))
-        XCTAssertTrue(root.contains(".onEnded"))
-        XCTAssertTrue(root.contains("state.requestStop()"))
+        XCTAssertFalse(root.contains("DragGesture(minimumDistance: 0)"))
+        XCTAssertFalse(root.contains("state.requestStop()"))
         XCTAssertFalse(root.contains("Button(\"ABC\")"))
         XCTAssertFalse(root.contains("identifier: \"delete-backward\""))
         XCTAssertFalse(root.contains("identifier: \"return-key\""))
@@ -312,13 +311,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
             XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
             XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
-            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 128)
+            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 112)
             XCTAssertEqual(layout.leftUtilityFrames.at.maxY, layout.leftUtilityFrames.emoji.minY)
             XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.minX)
-            XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX)
+            XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX + 4)
             XCTAssertEqual(layout.leftUtilityFrames.number.minY, layout.leftUtilityFrames.emoji.minY)
             XCTAssertEqual(layout.dismissFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
-            XCTAssertEqual(layout.dismissFrame.maxY, 216, accuracy: 0.001)
+            XCTAssertEqual(layout.dismissFrame.maxY, layout.surfaceFrame.maxY - 8, accuracy: 0.001)
             XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
         }
     }
@@ -359,9 +358,31 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
-        XCTAssertEqual(layout.centerAreaWidth, 150)
+        XCTAssertEqual(layout.centerAreaWidth, 146)
         XCTAssertTrue(root.contains("availableWidth: availableWidth"))
         XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+    }
+
+    func testMicUIKitTargetIsHiddenOutsideKeysAndRecordingAndOwnsAccessibility() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording"))
+        XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)"))
+        XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
+        XCTAssertTrue(root.contains(".accessibilityHidden(true)"))
+    }
+
+    func testFailedMicUsesRecoveryOnlyWhenRequiredAndRetriesOtherwise() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(controller.contains("if state.dictationStatus == .failed, state.failedRequiresApp"))
+        XCTAssertTrue(controller.contains("else {"))
+        XCTAssertTrue(controller.contains("state.startRecording()"))
+    }
+
+    func testMicVisualUsesReadableSemanticForegroundAndIdleGlyph() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertTrue(root.contains(".foregroundStyle(.black)"))
+        XCTAssertTrue(root.contains("case .idle, .ready: return \"mic.fill\""))
     }
 
     func testLanguageIndicatorIsRestrictedToKeysAndRecordingModes() throws {

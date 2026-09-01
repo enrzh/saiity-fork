@@ -190,6 +190,8 @@ struct KeyboardRootView: View {
         .background(Capsule().fill(Color.white))
         .clipShape(Capsule())
         .contentShape(Capsule())
+        .foregroundStyle(.black)
+        .accessibilityHidden(true)
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel("Hold to dictate")
         .accessibilityValue(dictationTitle)

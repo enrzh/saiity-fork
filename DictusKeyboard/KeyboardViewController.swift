@@ -999,6 +999,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // Keep the mode control reachable on both auxiliary pages so it can
         // return to the normal voice page.
         numberButton?.isHidden = !leftRailVisible
+        micButton?.isHidden = mode != .keys && mode != .recording
+        micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)
         [deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach { $0.isHidden = !rightRailVisible }
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
@@ -1050,7 +1052,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         let state = KeyboardState.shared
         if state.dictationStatus == .failed, state.failedRequiresApp {
             state.openDictusForRecovery()
-        } else if state.dictationStatus == .idle || state.dictationStatus == .ready {
+        } else {
             state.startRecording()
         }
     }

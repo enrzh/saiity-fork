@@ -22,6 +22,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let railSpacing: Double = 4
     public static let horizontalPadding: Double = 8
     public static let controlEdgeInset: Double = 12
+    public static let visibleControlGap: Double = 8
     /// The right rail spans the voice surface with the same breathing room as
     /// Apple's compact keyboard controls.
     public static let verticalPadding: Double = 8
@@ -52,11 +53,7 @@ public enum VoiceOnlyKeyboardPolicy {
         guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
             return (.zero, .zero)
         }
-        let x = max(0, width - CGFloat(controlEdgeInset) - actionHitSize.width)
-        return (
-            CGRect(x: x, y: CGFloat(topInset), width: actionHitSize.width, height: actionHitSize.height),
-            CGRect(x: x, y: CGFloat(topInset) + actionHitSize.height, width: actionHitSize.width, height: actionHitSize.height)
-        )
+        return layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailFrames
     }
 
     public static func leftUtilityFrames(
@@ -74,9 +71,7 @@ public enum VoiceOnlyKeyboardPolicy {
         guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
             return .zero
         }
-        let x = max(0, width - CGFloat(controlEdgeInset) - actionHitSize.width)
-        return CGRect(x: x, y: surfaceHeight - verticalPadding - bottomActionHitHeight,
-                      width: actionHitSize.width, height: bottomActionHitHeight)
+        return layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).dismissFrame
     }
 
     public struct Layout: Equatable {
@@ -108,7 +103,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var rightCommandFrame: CGRect {
-            CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: rightRailTop,
+            CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth, y: rightRailTop,
                    width: rightRailWidth, height: rightRailHeight)
         }
 
@@ -120,12 +115,12 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
             guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
-            let x = controlEdgeInset
+            let x = surfaceFrame.minX + visibleControlGap
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             return (
-                CGRect(x: x, y: surfaceFrame.maxY - size.height * 2, width: size.width, height: size.height),
-                CGRect(x: x, y: surfaceFrame.maxY - size.height, width: size.width, height: size.height),
-                CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - size.height, width: size.width, height: size.height)
+                CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height * 2, width: size.width, height: size.height),
+                CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height),
+                CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
             )
         }
 
@@ -134,13 +129,16 @@ public enum VoiceOnlyKeyboardPolicy {
         public var returnFrame: CGRect { rightRailFrames.returnKey }
 
         public var rightRailFrames: (delete: CGRect, returnKey: CGRect) {
-            (delete: CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: topInset, width: rightRailWidth, height: controlSize),
-             returnKey: CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: topInset + controlSize, width: rightRailWidth, height: controlSize))
+            let x = surfaceFrame.maxX - visibleControlGap - rightRailWidth
+            return (delete: CGRect(x: x, y: surfaceFrame.minY + visibleControlGap, width: rightRailWidth, height: controlSize),
+                    returnKey: CGRect(x: x, y: surfaceFrame.minY + visibleControlGap + controlSize, width: rightRailWidth, height: controlSize))
         }
 
         public var dismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
-            return CGRect(x: surfaceWidth - controlEdgeInset - rightRailWidth, y: surfaceFrame.maxY - bottomActionHitHeight, width: rightRailWidth, height: bottomActionHitHeight)
+            return CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth,
+                          y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                          width: rightRailWidth, height: bottomActionHitHeight)
         }
 
         public var micCenterArea: CGRect {
@@ -166,7 +164,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
         public var dictateFrame: CGRect {
-            guard surfaceHeight >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
+            guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
                 availableWidth: surfaceWidth,
                 centerAreaWidth: centerAreaWidth
@@ -185,7 +183,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 : []
             let commandRects: [CGRect]
             if rightRailWidth > 0 {
-                let x = surfaceWidth - controlEdgeInset - rightRailWidth + (rightRailWidth - controlSize) / 2
+                let x = rightRailFrames.delete.minX + (rightRailWidth - controlSize) / 2
                 commandRects = (0..<rightRailControlCount).map { index in
                     CGRect(x: x, y: rightRailTop + Double(index) * controlSize,
                            width: controlSize, height: controlSize)
@@ -225,10 +223,10 @@ public enum VoiceOnlyKeyboardPolicy {
             rightRailWidth: Double(railWidth),
             centerAreaWidth: centerAreaWidth,
             rightRailHeight: rightRailHeight,
-            rightRailTop: topInset,
-            rightRailBottom: topInset + rightRailHeight,
-            dismissTop: resolvedSurfaceHeight - controlSize,
-            dismissBottom: resolvedSurfaceHeight,
+            rightRailTop: verticalPadding + visibleControlGap,
+            rightRailBottom: verticalPadding + visibleControlGap + rightRailHeight,
+            dismissTop: resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight,
+            dismissBottom: resolvedSurfaceHeight - verticalPadding - visibleControlGap,
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
             centerX: horizontalInset + (availableWidth - horizontalInset * 2) / 2,
