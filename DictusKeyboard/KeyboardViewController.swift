@@ -35,7 +35,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
     /// Explicit height constraint on inputView to prevent layout issues after app switch.
     /// WHY: Without this, iOS may not recalculate the keyboard height correctly when the
     /// extension is brought back to foreground after a URL scheme app switch. The system
-    /// keyboard row (globe, mic) bleeds through and the recording overlay gets compressed.
+    /// keyboard row bleeds through and the recording overlay gets compressed.
     private var heightConstraint: NSLayoutConstraint?
 
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
@@ -1143,8 +1143,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             } else {
                 closeNumberPanel()
             }
-        case .keyboard:
-            break
         case .shift, .spacer, .caps, .keyboardMode, .splitKeyboard,
              .normalKeyboard, .sideKeyboardLeft, .sideKeyboardRight,
              .comma, .fullStop, .tab:

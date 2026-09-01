@@ -12,7 +12,6 @@ import DictusCore
 /// normal, shifted, capslock (same visual as shifted), symbols1 (numbers), symbols2 (symbols).
 ///
 /// Bottom row on letter pages: [123] [emoji] [space] [return] -- emoji key added in Phase 20.
-/// Globe key is provided by iOS below third-party keyboards -- not part of our layout.
 ///
 /// Letter pages are four rows, or five when the number row is on (#331) -- see
 /// `drawsDigitRow`. The symbols pages are always four.

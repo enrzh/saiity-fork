@@ -8,11 +8,10 @@ enum KeyType {
     case delete      // Backspace
     case space       // Space bar
     case returnKey   // Return / Enter
-    case globe       // Switch keyboard
     case layerSwitch // 123 / ABC toggle
     case mic         // Dictation trigger
     case symbolToggle // #+= toggle on number layer
-    case emoji        // Emoji / next keyboard cycling button (replaces globe visually)
+    case emoji        // Emoji picker
     case accentAdaptive // Context-sensitive apostrophe/accent key (AZERTY row 3)
 }
 

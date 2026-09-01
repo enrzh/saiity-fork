@@ -156,16 +156,33 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("utilityGlyph(systemName: \"keyboard.chevron.compact.down\", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height"))
     }
 
-    func testLatestVoiceLayoutUsesThreeLeftTargetsAndBottomDismiss() {
-        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
+    func testKeyboardHasNoGlobeGenerationOrRenderingPath() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let systemKeys = try source("DictusKeyboard/Vendored/Models/SystemKeys.swift")
+        let keyView = try source("DictusKeyboard/Vendored/Views/KeyView.swift")
+        let soundPolicy = try source("DictusKeyboard/KeySoundPolicy.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertFalse(systemKeys.contains("type: .keyboard,"))
+        XCTAssertFalse(keyView.contains("globe"))
+        XCTAssertFalse(soundPolicy.contains(".keyboard,"))
+        XCTAssertFalse(controller.contains("case .keyboard"))
+        XCTAssertTrue(try String(contentsOf: repository.appending(path: "DictusKeyboard/InputView.swift"), encoding: .utf8).contains("inputViewStyle: .keyboard"))
+    }
 
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
-        XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
-        XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.maxX)
-        XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX)
-        XCTAssertEqual(layout.dismissFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
-        XCTAssertEqual(layout.dismissFrame.maxY, 216, accuracy: 0.001)
-        XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
+    func testLatestVoiceLayoutUsesThreeLeftTargetsAndBottomDismiss() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
+            XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
+            XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
+            XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.maxX)
+            XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX)
+            XCTAssertEqual(layout.leftUtilityFrames.number.minY, layout.leftUtilityFrames.emoji.minY)
+            XCTAssertEqual(layout.dismissFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
+            XCTAssertEqual(layout.dismissFrame.maxY, 216, accuracy: 0.001)
+            XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
+        }
     }
 
     func testDeleteAndReturnUseCenteredWideVisualCapsulesInsideActionFrames() throws {

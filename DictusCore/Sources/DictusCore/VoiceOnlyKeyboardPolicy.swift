@@ -24,7 +24,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The right rail spans the voice surface with the same breathing room as
     /// Apple's compact keyboard controls.
     public static let verticalPadding: Double = 8
-    /// The language indicator and next-keyboard control sit slightly closer to
+    /// The language indicator sits slightly closer to
     /// the lower edge, matching the asymmetric system keyboard balance.
     public static let leftRailVerticalPadding: Double = 8
     public static let rightRailHeight: Double = actionHitSize.height * 2
@@ -114,12 +114,12 @@ public enum VoiceOnlyKeyboardPolicy {
         public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
             guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
             let x = horizontalInset
-            let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize * 2
+            let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             return (
                 CGRect(x: x, y: y, width: size.width, height: size.height),
                 CGRect(x: x + size.width, y: y, width: size.width, height: size.height),
-                CGRect(x: x + size.width * 2, y: y + size.height, width: size.width, height: size.height)
+                CGRect(x: x + size.width * 2, y: y, width: size.width, height: size.height)
             )
         }
 
@@ -159,6 +159,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
         public var dictateFrame: CGRect {
+            guard surfaceHeight >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
                 availableWidth: surfaceWidth,
                 centerAreaWidth: centerAreaWidth
@@ -197,6 +198,7 @@ public enum VoiceOnlyKeyboardPolicy {
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount))
         let rightWidth = actionHitSize.width
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
+            && resolvedSurfaceHeight >= topInset + rightRailHeight + bottomActionHitHeight
         // Keep the same outer inset on both the visual center region and the UIKit
         // action rail. At the narrowest supported width, dropping the inset keeps
         // the center region at the 44pt minimum instead of compressing it below a

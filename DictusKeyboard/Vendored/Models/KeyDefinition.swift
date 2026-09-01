@@ -19,7 +19,6 @@ public enum KeyType: Codable, Hashable {
     case returnkey(name: String)
     case symbols
     case shiftSymbols
-    case keyboard
     case keyboardMode
     case splitKeyboard
     case normalKeyboard
@@ -57,8 +56,6 @@ public enum KeyType: Codable, Hashable {
             raw = RawKeyType(id: "_symbols", name: nil, alternate: nil)
         case .shiftSymbols:
             raw = RawKeyType(id: "_shiftSymbols", name: nil, alternate: nil)
-        case .keyboard:
-            raw = RawKeyType(id: "_keyboard", name: nil, alternate: nil)
         case .comma:
             raw = RawKeyType(id: "_comma", name: nil, alternate: nil)
         case .fullStop:
@@ -93,8 +90,6 @@ public enum KeyType: Codable, Hashable {
             self = .symbols
         case "_shiftSymbols":
             self = .shiftSymbols
-        case "_keyboard":
-            self = .keyboard
         case "_comma":
             self = .comma
         case "_fullstop":

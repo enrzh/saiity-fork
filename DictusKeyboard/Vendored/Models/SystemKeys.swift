@@ -16,13 +16,7 @@ final class SystemKeys {
 
         // Left side of space bar
         if !device.hasSensorHousing {
-            if shouldUseIPadLayout && device.isLargeIPad {
-                keys.append(KeyDefinition(type: .keyboard, size: CGSize(width: 1.25, height: 1.0)))
-                keys.append(KeyDefinition(type: .symbols, size: CGSize(width: 1.25, height: 1.0)))
-            } else {
-                keys.append(KeyDefinition(type: .symbols, size: CGSize(width: 1.25, height: 1.0)))
-                keys.append(KeyDefinition(type: .keyboard, size: CGSize(width: 1.25, height: 1.0)))
-            }
+            keys.append(KeyDefinition(type: .symbols, size: CGSize(width: 1.25, height: 1.0)))
         } else if !shouldUseIPadLayout {
             keys.append(KeyDefinition(type: .symbols, size: CGSize(width: 2.5, height: 1.0)))
         } else {

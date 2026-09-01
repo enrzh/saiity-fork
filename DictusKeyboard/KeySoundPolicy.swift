@@ -32,7 +32,7 @@ extension KeySound {
         case .backspace:
             return .delete
 
-        case .shift, .symbols, .shiftSymbols, .spacebar, .returnkey, .keyboard,
+        case .shift, .symbols, .shiftSymbols, .spacebar, .returnkey,
              .keyboardMode, .splitKeyboard, .normalKeyboard,
              .sideKeyboardLeft, .sideKeyboardRight:
             return .modifier

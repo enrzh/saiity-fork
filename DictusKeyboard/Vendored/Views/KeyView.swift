@@ -314,8 +314,6 @@ final class KeyView: UIView {
             sfSymbol(named: "keyboard.chevron.compact.down", traits: traits)
         case .backspace:
             sfSymbol(named: "delete.backward", traits: traits)
-        case .keyboard:
-            sfSymbol(named: "globe", traits: traits)
         case .shift:
             setupShift(page, traits, theme)
         case .shiftSymbols:
