@@ -64,7 +64,7 @@ Warnings: existing API deprecation warnings, including `AVAudioSession.recordPer
 
 ## Commit
 
-`d4b0c4ccf5f7d286daf6019d686b1382b570450e` (`fix: clean app-facing language localization`)
+`eaa3ec602fd322cd7d316cb1cce74aaa5b8a458e` (`fix: clean app-facing language localization`)
 
 ## Concerns
 
