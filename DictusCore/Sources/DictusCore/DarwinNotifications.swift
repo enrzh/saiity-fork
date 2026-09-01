@@ -5,6 +5,9 @@ import Foundation
 /// Darwin notifications carry no payload — they are ping-only.
 /// After receiving a notification, read the actual data from AppGroup.defaults.
 public enum DarwinNotificationName {
+    /// Posted by the keyboard extension after publishing its current Full Access handshake.
+    public static let keyboardFullAccessChanged = "de.aiity.saiity.keyboardFullAccessChanged" as CFString
+
     /// Posted by DictusApp when transcription result is written to App Group.
     public static let transcriptionReady = "de.aiity.saiity.transcriptionReady" as CFString
 

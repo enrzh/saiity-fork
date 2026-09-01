@@ -123,7 +123,18 @@ struct AvailabilityPage: View {
                     .accessibilityHint("Opens iOS Keyboard Settings. Full Access is verified only by the keyboard extension.")
             }
         }
-        .onAppear { refreshKeyboard(); refreshModel() }
+        .onAppear {
+            refreshKeyboard()
+            refreshModel()
+            DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
+                DispatchQueue.main.async {
+                    refreshKeyboard()
+                }
+            }
+        }
+        .onDisappear {
+            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
+        }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refreshKeyboard(); refreshModel() } }
         .fullScreenCover(item: Binding<PreparingItem?>(get: { preparingModelID.map(PreparingItem.init) }, set: { preparingModelID = $0?.id })) { item in
             ModelLoadingOverlay(modelManager: modelManager, modelIdentifier: item.id, context: .onboarding, isPresented: Binding(get: { preparingModelID != nil }, set: { if !$0 { preparingModelID = nil } }))
@@ -148,9 +159,12 @@ struct AvailabilityPage: View {
         let installed = UITextInputMode.activeInputModes.contains {
             ($0.value(forKey: "identifier") as? String)?.contains("de.aiity.saiity.ios") == true
         }
-        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let handshake = installed && AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
         keyboardInstalled = installed
         fullAccessVerified = handshake
+        if !installed {
+            AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)
+        }
 
         let status = KeyboardSetupStatus(keyboardInstalled: installed, fullAccessHandshake: handshake)
         let announcement: String

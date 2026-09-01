@@ -113,6 +113,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        publishFullAccessHandshake()
         PersistentLog.source = "KBD"
         let memEntry = MemoryFootprint.residentMB()
         // live= is the #281 headline probe: healthy cold starts peak at 2 live
@@ -272,10 +273,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // The app cannot inspect iOS' Full Access toggle. The extension can,
-        // so publish this real handshake whenever the keyboard appears.
-        AppGroup.defaults.set(hasFullAccess, forKey: SharedKeys.onboardingFullAccessVerified)
-        AppGroup.defaults.synchronize()
+        publishFullAccessHandshake()
 
         // CRITICAL: Disable touch delay on system gesture recognizers.
         // iOS attaches gesture recognizers to the keyboard's UIWindow that have
@@ -377,6 +375,14 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
             DictusLogger.keyboard.debug("viewWillAppear -- refreshing mode")
         }
         #endif
+    }
+
+    private func publishFullAccessHandshake() {
+        // The app cannot inspect iOS' Full Access toggle. The extension can,
+        // so publish this real handshake as early and repeatedly as iOS loads it.
+        AppGroup.defaults.set(hasFullAccess, forKey: SharedKeys.onboardingFullAccessVerified)
+        AppGroup.defaults.synchronize()
+        DarwinNotificationCenter.post(DarwinNotificationName.keyboardFullAccessChanged)
     }
 
     override func viewDidAppear(_ animated: Bool) {

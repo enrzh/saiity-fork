@@ -9,6 +9,23 @@ final class AppleAppFoundationContractTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
+    func testFullAccessHandshakeUsesADeclaredDarwinNotificationAndCrossProcessRefresh() throws {
+        let notifications = try source("DictusCore/Sources/DictusCore/DarwinNotifications.swift")
+        let keyboard = try source("DictusKeyboard/KeyboardViewController.swift")
+        let availability = try source("DictusApp/Onboarding/OnboardingView.swift")
+
+        XCTAssertTrue(notifications.contains("keyboardFullAccessChanged"))
+        XCTAssertTrue(keyboard.contains("publishFullAccessHandshake()"))
+        XCTAssertTrue(keyboard.contains("AppGroup.defaults.set(hasFullAccess"))
+        XCTAssertTrue(keyboard.contains("DarwinNotificationCenter.post(DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(availability.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(availability.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(availability.contains("refreshKeyboard()"))
+        XCTAssertTrue(availability.contains("let handshake = installed"))
+        XCTAssertTrue(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertTrue(availability.contains("fullAccessVerified = handshake"))
+    }
+
     func testColorsUseSemanticSystemSourcesWithoutFixedLowContrast() throws {
         let colors = try String(contentsOf: repository.appending(path: "DictusCore/Sources/DictusCore/Design/DictusColors.swift"), encoding: .utf8)
 
