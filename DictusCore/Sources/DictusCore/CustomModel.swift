@@ -26,6 +26,12 @@ public enum CustomModelSource: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum CustomModelRemoteValidationState: String, Codable, Sendable {
+    case notRequired
+    case verified
+    case needsVerification
+}
+
 public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var name: String
@@ -33,15 +39,38 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
     public var role: CustomModelRole
     public var source: CustomModelSource
     public var modelName: String?
+    public var remoteValidationState: CustomModelRemoteValidationState
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, repositoryURL, role, source, modelName, remoteValidationState
+    }
 
     public init(id: UUID = UUID(), name: String, repositoryURL: String,
-                role: CustomModelRole, source: CustomModelSource, modelName: String? = nil) {
+                role: CustomModelRole, source: CustomModelSource, modelName: String? = nil,
+                remoteValidationState: CustomModelRemoteValidationState? = nil) {
         self.id = id
         self.name = name
         self.repositoryURL = repositoryURL
         self.role = role
         self.source = source
         self.modelName = modelName
+        self.remoteValidationState = remoteValidationState ??
+            (role == .asr && source == .huggingFace ? .needsVerification : .notRequired)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let role = try values.decode(CustomModelRole.self, forKey: .role)
+        let source = try values.decode(CustomModelSource.self, forKey: .source)
+        self.init(
+            id: try values.decode(UUID.self, forKey: .id),
+            name: try values.decode(String.self, forKey: .name),
+            repositoryURL: try values.decode(String.self, forKey: .repositoryURL),
+            role: role,
+            source: source,
+            modelName: try values.decodeIfPresent(String.self, forKey: .modelName),
+            remoteValidationState: try values.decodeIfPresent(CustomModelRemoteValidationState.self, forKey: .remoteValidationState)
+        )
     }
 
     /// Stable identity used to replace an existing registration rather than
@@ -63,6 +92,9 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
               let scheme = url.scheme?.lowercased(),
               let host = url.host?.lowercased() else {
             return "Use a valid model URL."
+        }
+        guard url.user == nil, url.password == nil, url.port == nil else {
+            return "Model URLs must not contain credentials or a port."
         }
         switch (source, role) {
         case (.ollama, .asr): return "Ollama models can only be used for cleanup."
@@ -139,11 +171,12 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
 
     private func isNVIDIAASRRepositoryPath(_ path: String) -> Bool {
         let components = path.split(separator: "/").map { $0.lowercased() }
-        guard components.count >= 3,
+        guard components.count >= 2,
               ["nemo", "riva", "nvidia-riva", "nvidia-nemo"].contains(components[0]) else {
             return false
         }
-        return components.dropFirst().contains { containsASRMarker(in: $0) }
+        let knownModelFamilies = ["canary", "nemotron", "parakeet", "whisper", "wav2vec"]
+        return knownModelFamilies.contains { components[1].hasPrefix($0) }
     }
 
     /// Checks the public Hugging Face model metadata for an ASR pipeline.
@@ -163,9 +196,11 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
 
         do {
             let (data, response) = try await URLSession.shared.data(from: metadataURL)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else {
-                return "Hugging Face could not find this model."
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return "Could not verify the Hugging Face model right now. Try again later."
+            }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                return Self.remoteValidationMessage(forHTTPStatus: httpResponse.statusCode)
             }
             return Self.metadataIndicatesASR(data)
                 ? nil
@@ -173,6 +208,11 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
         } catch {
             return "Could not verify the model metadata. Check your connection and try again."
         }
+    }
+
+    public static func remoteValidationMessage(forHTTPStatus statusCode: Int) -> String {
+        if statusCode == 404 { return "Hugging Face repository was not found." }
+        return "Could not verify the Hugging Face model right now. Try again later."
     }
 
     public static func metadataIndicatesASR(_ data: Data) -> Bool {

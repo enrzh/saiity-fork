@@ -220,7 +220,15 @@ struct ModelManagerView: View {
 
     private func customModelStatus(_ model: CustomModel) -> String {
         if let error = model.validationError { return "Invalid: \(error)" }
-        if let error = model.runtimeSupportError { return error }
+        if model.role == .asr && model.source == .huggingFace && model.remoteValidationState == .needsVerification {
+            return "Needs remote verification before use · \(model.source.displayName)"
+        }
+        if let error = model.runtimeSupportError {
+            if model.role == .asr && model.source == .huggingFace && model.remoteValidationState == .verified {
+                return "Verified, but runtime unavailable: \(error)"
+            }
+            return error
+        }
         if model.role == .cleanup && model.source == .ollama && model.validationError == nil {
             return "Available for dictation cleanup · \(model.source.displayName)"
         }
@@ -259,8 +267,11 @@ private struct AddCustomModelView: View {
     @State private var verifiedIdentityKey: String?
 
     private var model: CustomModel {
-        CustomModel(name: name, repositoryURL: url, role: role, source: source,
-                    modelName: modelName.isEmpty ? nil : modelName)
+        let candidate = CustomModel(name: name, repositoryURL: url, role: role, source: source,
+                                    modelName: modelName.isEmpty ? nil : modelName)
+        return CustomModel(id: candidate.id, name: candidate.name, repositoryURL: candidate.repositoryURL,
+                           role: candidate.role, source: candidate.source, modelName: candidate.modelName,
+                           remoteValidationState: verifiedIdentityKey == candidate.identityKey ? .verified : candidate.remoteValidationState)
     }
 
     var body: some View {
@@ -306,7 +317,7 @@ private struct AddCustomModelView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { modelManager.addCustomModel(model); dismiss() }
                     .disabled(model.validationError != nil ||
-                              (role == .asr && source == .huggingFace && verifiedIdentityKey != model.identityKey))
+                              (role == .asr && source == .huggingFace && model.remoteValidationState != .verified))
             }
         }
         .onChange(of: role) { _, newRole in

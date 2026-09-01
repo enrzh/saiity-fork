@@ -110,7 +110,7 @@ final class CustomModelTests: XCTestCase {
     func testProviderURLsRequireRepositoryPaths() {
         let hfCollection = CustomModel(name: "Speech", repositoryURL: "https://huggingface.co/models/whisper", role: .asr, source: .huggingFace)
         let nvidiaDeveloperPage = CustomModel(name: "Speech", repositoryURL: "https://developer.nvidia.com/", role: .asr, source: .nvidia)
-        let nvidiaModel = CustomModel(name: "Nemotron ASR", repositoryURL: "https://developer.nvidia.com/nemo/automatic-speech-recognition/nemotron", role: .asr, source: .nvidia)
+        let nvidiaModel = CustomModel(name: "Nemotron ASR", repositoryURL: "https://developer.nvidia.com/nemo/nemotron-asr", role: .asr, source: .nvidia)
         let nvidiaWrongPath = CustomModel(name: "Developer page", repositoryURL: "https://developer.nvidia.com/foo/whisper", role: .asr, source: .nvidia)
 
         XCTAssertNotNil(hfCollection.validationError)
@@ -119,10 +119,57 @@ final class CustomModelTests: XCTestCase {
         XCTAssertNotNil(nvidiaWrongPath.validationError)
     }
 
+    func testNVIDIAValidationAcceptsKnownASRModelPathsOnly() {
+        let legalPaths = [
+            "https://developer.nvidia.com/nemo/nemotron-asr",
+            "https://developer.nvidia.com/riva/parakeet-tdt-0.6b-v3"
+        ]
+        let forgedPaths = [
+            "https://developer.nvidia.com/nemo/foo/whisper",
+            "https://developer.nvidia.com/riva/foo/parakeet"
+        ]
+
+        for path in legalPaths {
+            XCTAssertNil(CustomModel(name: "ASR", repositoryURL: path, role: .asr, source: .nvidia).validationError)
+        }
+        for path in forgedPaths {
+            XCTAssertNotNil(CustomModel(name: "ASR", repositoryURL: path, role: .asr, source: .nvidia).validationError)
+        }
+    }
+
+    func testProviderURLsRejectUserInfoAndNonDefaultPorts() {
+        let urls = [
+            "https://user:password@huggingface.co/openai/whisper-tiny",
+            "https://huggingface.co:443/openai/whisper-tiny",
+            "https://developer.nvidia.com:8443/nemo/nemotron-asr",
+            "http://user@127.0.0.1:11434"
+        ]
+
+        for url in urls {
+            let model = CustomModel(name: "Model", repositoryURL: url, role: .asr, source: .huggingFace)
+            XCTAssertNotNil(model.validationError, url)
+        }
+    }
+
+    func testRemoteValidationStatusIsPersistedAndVisible() throws {
+        let verified = CustomModel(name: "ASR", repositoryURL: "https://huggingface.co/openai/whisper-tiny", role: .asr, source: .huggingFace, remoteValidationState: .verified)
+        let data = try JSONEncoder().encode(verified)
+        let decoded = try JSONDecoder().decode(CustomModel.self, from: data)
+        XCTAssertEqual(decoded.remoteValidationState, .verified)
+
+        let legacy = CustomModel(name: "Legacy", repositoryURL: "https://huggingface.co/openai/whisper-tiny", role: .asr, source: .huggingFace)
+        XCTAssertEqual(legacy.remoteValidationState, .needsVerification)
+    }
+
+    func testRemoteValidationStatusClassifiesNotFoundSeparately() {
+        XCTAssertEqual(CustomModel.remoteValidationMessage(forHTTPStatus: 404), "Hugging Face repository was not found.")
+        XCTAssertEqual(CustomModel.remoteValidationMessage(forHTTPStatus: 503), "Could not verify the Hugging Face model right now. Try again later.")
+    }
+
     func testRuntimeSupportStatusContract() {
         let runnable = CustomModel(name: "Tiny", repositoryURL: "https://huggingface.co/argmaxinc/whisperkit-coreml", role: .asr, source: .huggingFace, modelName: "openai_whisper-tiny")
         let hfUnsupported = CustomModel(name: "Whisper", repositoryURL: "https://huggingface.co/openai/whisper-tiny", role: .asr, source: .huggingFace, modelName: "whisper")
-        let nvidiaUnsupported = CustomModel(name: "Nemotron", repositoryURL: "https://developer.nvidia.com/nemo/automatic-speech-recognition/nemotron", role: .asr, source: .nvidia, modelName: "nemotron")
+        let nvidiaUnsupported = CustomModel(name: "Nemotron", repositoryURL: "https://developer.nvidia.com/nemo/nemotron-asr", role: .asr, source: .nvidia, modelName: "nemotron")
         let malformed = CustomModel(name: "Broken", repositoryURL: "not a url", role: .asr, source: .huggingFace)
 
         XCTAssertNil(runnable.validationError)
