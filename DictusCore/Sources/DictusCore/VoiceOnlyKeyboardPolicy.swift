@@ -11,12 +11,9 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let actionHitSize = CGSize(width: 88, height: 44)
     public static let bottomActionHitHeight: CGFloat = 44
     public static let utilityVisualSize: Double = 36
-    public static let nextKeyboardVisualSize: Double = 18
     public static let languageVisualWidth: Double = 58
     public static let rightRailControlCount: Int = 2
-    public static let leftRailControlCount: Int = 4
-    /// The smallest center region that still gives the microphone a usable capsule
-    /// on a compact iPhone once the four utility targets and right rail are present.
+    public static let leftRailControlCount: Int = 3
     public static let minimumCenterAreaWidth: Double = 76
     public static let commandClusterSize: Double = controlSize
     /// The primary voice action is larger than utility controls so it remains
@@ -65,7 +62,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static func leftUtilityFrames(
         for width: CGFloat,
         surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
-    ) -> (at: CGRect, emoji: CGRect, number: CGRect, next: CGRect) {
+    ) -> (at: CGRect, emoji: CGRect, number: CGRect) {
         let layout = layout(for: Double(width), surfaceHeight: Double(surfaceHeight))
         return layout.leftUtilityFrames
     }
@@ -114,16 +111,15 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: VoiceOnlyKeyboardPolicy.controlSize)
         }
 
-        public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect, next: CGRect) {
-            guard leftRailWidth > 0 else { return (.zero, .zero, .zero, .zero) }
+        public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
+            guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
             let x = horizontalInset
-            let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize
+            let y = surfaceHeight - VoiceOnlyKeyboardPolicy.controlSize * 2
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             return (
                 CGRect(x: x, y: y, width: size.width, height: size.height),
                 CGRect(x: x + size.width, y: y, width: size.width, height: size.height),
-                CGRect(x: x + size.width * 2, y: y, width: size.width, height: size.height),
-                CGRect(x: x + size.width * 3, y: y, width: size.width, height: size.height)
+                CGRect(x: x + size.width * 2, y: y + size.height, width: size.width, height: size.height)
             )
         }
 
@@ -177,8 +173,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var actionRectangles: [CGRect] {
             let utilities = leftRailWidth > 0
-                ? [leftUtilityFrames.at, leftUtilityFrames.emoji,
-                   leftUtilityFrames.number, leftUtilityFrames.next]
+                ? [leftUtilityFrames.at, leftUtilityFrames.emoji, leftUtilityFrames.number]
                 : []
             let commandRects: [CGRect]
             if rightRailWidth > 0 {
@@ -201,7 +196,7 @@ public enum VoiceOnlyKeyboardPolicy {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount))
         let rightWidth = actionHitSize.width
-        let hasRails = availableWidth >= Double(leftWidth + rightWidth) + controlSize
+        let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
         // Keep the same outer inset on both the visual center region and the UIKit
         // action rail. At the narrowest supported width, dropping the inset keeps
         // the center region at the 44pt minimum instead of compressing it below a

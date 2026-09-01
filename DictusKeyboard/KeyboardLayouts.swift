@@ -104,7 +104,7 @@ enum KeyboardLayouts {
     // MARK: - Public API
 
     /// AZERTY layout (default for French).
-    static func azerty(lang: SupportedLanguage = .active, needsGlobe: Bool) -> KeyboardDefinition {
+    static func azerty(lang: SupportedLanguage = .active) -> KeyboardDefinition {
         return KeyboardDefinition(
             name: lang.displayName,
             locale: lang.rawValue,
@@ -112,16 +112,16 @@ enum KeyboardLayouts {
             returnName: lang.returnName,
             longPress: longPressData,
             layout: KeyboardDefinition.Layout(
-                normal: azertyNormal(lang: lang, needsGlobe: needsGlobe),
-                shifted: azertyShifted(lang: lang, needsGlobe: needsGlobe),
-                symbols1: numbersPage(lang: lang, needsGlobe: needsGlobe),
-                symbols2: symbolsPage(lang: lang, needsGlobe: needsGlobe)
+                normal: azertyNormal(lang: lang, ),
+                shifted: azertyShifted(lang: lang, ),
+                symbols1: numbersPage(lang: lang, ),
+                symbols2: symbolsPage(lang: lang, )
             )
         )
     }
 
     /// QWERTY layout (default for English and Spanish).
-    static func qwerty(lang: SupportedLanguage = .active, needsGlobe: Bool) -> KeyboardDefinition {
+    static func qwerty(lang: SupportedLanguage = .active) -> KeyboardDefinition {
         return KeyboardDefinition(
             name: lang.displayName + (lang == .french ? " (QWERTY)" : ""),
             locale: lang.rawValue,
@@ -129,10 +129,10 @@ enum KeyboardLayouts {
             returnName: lang.returnName,
             longPress: longPressData,
             layout: KeyboardDefinition.Layout(
-                normal: qwertyNormal(lang: lang, needsGlobe: needsGlobe),
-                shifted: qwertyShifted(lang: lang, needsGlobe: needsGlobe),
-                symbols1: numbersPage(lang: lang, needsGlobe: needsGlobe),
-                symbols2: symbolsPage(lang: lang, needsGlobe: needsGlobe)
+                normal: qwertyNormal(lang: lang, ),
+                shifted: qwertyShifted(lang: lang, ),
+                symbols1: numbersPage(lang: lang, ),
+                symbols2: symbolsPage(lang: lang, )
             )
         )
     }
@@ -144,7 +144,7 @@ enum KeyboardLayouts {
     /// keyboard and the one the AOSP-derived keyboards build. The row data itself lives in
     /// `DictusCore.QWERTZLayout` so it can be covered by tests — the keyboard target has no
     /// test bundle.
-    static func qwertz(lang: SupportedLanguage = .active, needsGlobe: Bool) -> KeyboardDefinition {
+    static func qwertz(lang: SupportedLanguage = .active) -> KeyboardDefinition {
         return KeyboardDefinition(
             name: lang.displayName + (lang == .german ? "" : " (QWERTZ)"),
             locale: lang.rawValue,
@@ -152,32 +152,28 @@ enum KeyboardLayouts {
             returnName: lang.returnName,
             longPress: longPressData,
             layout: KeyboardDefinition.Layout(
-                normal: qwertzNormal(lang: lang, needsGlobe: needsGlobe),
-                shifted: qwertzShifted(lang: lang, needsGlobe: needsGlobe),
-                symbols1: numbersPage(lang: lang, needsGlobe: needsGlobe),
-                symbols2: symbolsPage(lang: lang, needsGlobe: needsGlobe)
+                normal: qwertzNormal(lang: lang, ),
+                shifted: qwertzShifted(lang: lang, ),
+                symbols1: numbersPage(lang: lang, ),
+                symbols2: symbolsPage(lang: lang, )
             )
         )
     }
 
     /// Returns the layout matching the user's App Group preferences.
     ///
-    /// - Parameter needsGlobe: pass `UIInputViewController.needsInputModeSwitchKey`. When true
-    ///   (iPad, older iPhones) a next-keyboard globe is added; when false (recent iPhones where
-    ///   the system draws its own globe) the layout is unchanged. Required by App Store
-    ///   Guideline 4.4.1.
-    static func current(needsGlobe: Bool) -> KeyboardDefinition {
+    static func current() -> KeyboardDefinition {
         let lang = SupportedLanguage.active
         switch LayoutType.active {
-        case .azerty: return azerty(lang: lang, needsGlobe: needsGlobe)
-        case .qwerty: return qwerty(lang: lang, needsGlobe: needsGlobe)
-        case .qwertz: return qwertz(lang: lang, needsGlobe: needsGlobe)
+        case .azerty: return azerty(lang: lang, )
+        case .qwerty: return qwerty(lang: lang, )
+        case .qwertz: return qwertz(lang: lang, )
         }
     }
 
     // MARK: - AZERTY Letter Pages
 
-    private static func azertyNormal(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func azertyNormal(lang: SupportedLanguage) -> [[KeyDefinition]] {
         withDigitRow([
             // Row 1: 10 keys
             inputRow("a", "z", "e", "r", "t", "y", "u", "i", "o", "p"),
@@ -195,7 +191,7 @@ enum KeyboardLayouts {
         ])
     }
 
-    private static func azertyShifted(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func azertyShifted(lang: SupportedLanguage) -> [[KeyDefinition]] {
         withDigitRow([
             // Row 1: uppercase
             inputRow("A", "Z", "E", "R", "T", "Y", "U", "I", "O", "P"),
@@ -215,7 +211,7 @@ enum KeyboardLayouts {
 
     // MARK: - QWERTY Letter Pages
 
-    private static func qwertyNormal(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func qwertyNormal(lang: SupportedLanguage) -> [[KeyDefinition]] {
         withDigitRow([
             // Row 1: 10 keys = 10 units
             inputRow("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
@@ -236,7 +232,7 @@ enum KeyboardLayouts {
         ])
     }
 
-    private static func qwertyShifted(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func qwertyShifted(lang: SupportedLanguage) -> [[KeyDefinition]] {
         withDigitRow([
             inputRow("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
             [
@@ -255,12 +251,12 @@ enum KeyboardLayouts {
 
     // MARK: - QWERTZ Letter Pages
 
-    private static func qwertzNormal(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
-        qwertzPage(rows: QWERTZLayout.lowercasedLettersRows, lang: lang, needsGlobe: needsGlobe)
+    private static func qwertzNormal(lang: SupportedLanguage) -> [[KeyDefinition]] {
+        qwertzPage(rows: QWERTZLayout.lowercasedLettersRows, lang: lang, )
     }
 
-    private static func qwertzShifted(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
-        qwertzPage(rows: QWERTZLayout.lettersRows, lang: lang, needsGlobe: needsGlobe)
+    private static func qwertzShifted(lang: SupportedLanguage) -> [[KeyDefinition]] {
+        qwertzPage(rows: QWERTZLayout.lettersRows, lang: lang, )
     }
 
     /// Builds a QWERTZ letter page from the three letter rows of `QWERTZLayout`.
@@ -275,8 +271,7 @@ enum KeyboardLayouts {
     /// umlaut rows render slightly narrower keys — what iOS and Android both do. Do NOT
     /// pad them to 10 with spacers; that would push ü/ä off the edge of the row.
     private static func qwertzPage(rows: [[String]],
-                                   lang: SupportedLanguage,
-                                   needsGlobe: Bool) -> [[KeyDefinition]] {
+                                   lang: SupportedLanguage) -> [[KeyDefinition]] {
         let flankSize = CGSize(width: QWERTZLayout.flankKeyUnitWidth, height: 1)
         return withDigitRow([
             // Row 1: 11 keys = 11 units (…o p ü)
@@ -294,7 +289,7 @@ enum KeyboardLayouts {
 
     // MARK: - Numbers Page (symbols1)
 
-    private static func numbersPage(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func numbersPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
         [
             // Row 1: digits
             inputRow("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
@@ -318,7 +313,7 @@ enum KeyboardLayouts {
 
     // MARK: - Symbols Page (symbols2)
 
-    private static func symbolsPage(lang: SupportedLanguage, needsGlobe: Bool) -> [[KeyDefinition]] {
+    private static func symbolsPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
         [
             // Row 1: brackets and math
             inputRow("[", "]", "{", "}", "#", "%", "^", "*", "+", "="),

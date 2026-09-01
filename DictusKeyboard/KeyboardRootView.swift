@@ -102,12 +102,6 @@ struct KeyboardRootView: View {
 
     private var languageIndicator: some View {
         Menu {
-            Button {
-                state.selectTranscription()
-            } label: {
-                Label("Transcribe", systemImage: state.selectedTranslationTarget == nil ? "checkmark" : "waveform")
-            }
-
             Menu {
                 ForEach(state.translationTargets, id: \.self) { target in
                     let status = state.translationTargetStatus(target)
@@ -138,7 +132,7 @@ struct KeyboardRootView: View {
             )
         }
         .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: CGFloat(VoiceOnlyKeyboardPolicy.controlSize))
-        .accessibilityLabel("Transcription language")
+        .accessibilityLabel("Translation language")
         .accessibilityValue(languageIndicatorTitle)
     }
 

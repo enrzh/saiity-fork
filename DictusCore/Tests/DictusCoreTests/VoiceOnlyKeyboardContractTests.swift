@@ -114,10 +114,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("identifier: \"return-key\""))
         XCTAssertFalse(root.contains("identifier: \"dismiss-keyboard\""))
         XCTAssertTrue(controller.contains("makeKeyboardActionButton"))
-        XCTAssertTrue(controller.contains("handleInputModeList(from: sender, with: event)"))
-        XCTAssertTrue(controller.contains("nextKeyboardVisualSize"))
-        XCTAssertTrue(controller.contains("setImage(nextKeyboardImage, for: .normal)"))
-        XCTAssertTrue(controller.contains("for: .allTouchEvents"))
+        XCTAssertFalse(controller.contains("handleInputModeList(from: sender, with: event)"))
+        XCTAssertFalse(controller.contains("nextInputModeButton"))
         XCTAssertFalse(root.contains("utilityGlyph(systemName: \"globe\")"))
         XCTAssertTrue(root.contains("state.areaMode.modeControlTitle"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
@@ -132,7 +130,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("layout.leftUtilityFrames"))
         XCTAssertTrue(root.contains("layout.languageFrame"))
         XCTAssertTrue(controller.contains("dismissKeyboard()"))
-        XCTAssertTrue(controller.contains("KeyboardLayouts.current(needsGlobe:"))
+        XCTAssertTrue(controller.contains("KeyboardLayouts.current"))
         XCTAssertTrue(controller.contains("numberKeyboardView?.page = .symbols1"))
         XCTAssertTrue(controller.contains("case .symbols:"))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
@@ -156,6 +154,18 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("utilityGlyph(systemName: \"delete.backward\", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height"))
         XCTAssertTrue(root.contains("utilityGlyph(systemName: \"return\", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height"))
         XCTAssertTrue(root.contains("utilityGlyph(systemName: \"keyboard.chevron.compact.down\", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height"))
+    }
+
+    func testLatestVoiceLayoutUsesThreeLeftTargetsAndBottomDismiss() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
+
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
+        XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
+        XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.maxX)
+        XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX)
+        XCTAssertEqual(layout.dismissFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
+        XCTAssertEqual(layout.dismissFrame.maxY, 216, accuracy: 0.001)
+        XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
     }
 
     func testDeleteAndReturnUseCenteredWideVisualCapsulesInsideActionFrames() throws {
@@ -194,7 +204,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
-        XCTAssertEqual(layout.centerAreaWidth, 106)
+        XCTAssertEqual(layout.centerAreaWidth, 150)
         XCTAssertTrue(root.contains("availableWidth: width"))
         XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
     }

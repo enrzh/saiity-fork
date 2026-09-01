@@ -4,7 +4,7 @@ import SwiftUI
 import Combine
 import DictusCore
 
-class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate, GiellaKeyboardViewKeyboardKeyDelegate {
+class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate {
     let controllerID = String(UUID().uuidString.prefix(8))
 
     private var hostingController: UIHostingController<KeyboardRootView>?
@@ -13,7 +13,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     private var atButton: UIButton?
     private var emojiButton: UIButton?
     private var numberButton: UIButton?
-    private var nextInputModeButton: UIButton?
     private var deleteButton: UIButton?
     private var returnButton: UIButton?
     private var dismissButton: UIButton?
@@ -918,28 +917,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         dismissButton = makeKeyboardActionButton(identifier: "dismiss-keyboard", label: "Dismiss keyboard") { [weak self] in
             self?.handleDismissKeyboard()
         }
-        nextInputModeButton = makeKeyboardActionButton(
-            identifier: "switch-keyboard",
-            label: "Switch keyboard",
-            installPrimaryAction: false
-        ) { }
-        nextInputModeButton?.addTarget(
-            self,
-            action: #selector(handleNextInputModeButton(_:forEvent:)),
-            for: .allTouchEvents
-        )
-        let nextKeyboardImage = UIImage(
-            systemName: "globe",
-            withConfiguration: UIImage.SymbolConfiguration(
-                pointSize: CGFloat(VoiceOnlyKeyboardPolicy.nextKeyboardVisualSize),
-                weight: .medium
-            )
-        )
-        nextInputModeButton?.setImage(nextKeyboardImage, for: .normal)
-        nextInputModeButton?.imageView?.contentMode = .center
-        nextInputModeButton?.configuration?.imagePadding = 0
-
-        [atButton, emojiButton, numberButton, nextInputModeButton,
+        [atButton, emojiButton, numberButton,
          deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
             controls.addSubview($0)
         }
@@ -988,10 +966,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
     }
 
     private func updateActionAvailability() {
-        let nextAvailable = needsInputModeSwitchKey
-        nextInputModeButton?.isEnabled = nextAvailable
-        nextInputModeButton?.isHidden = !nextAvailable
-        nextInputModeButton?.accessibilityValue = nextAvailable ? "Available" : "Unavailable"
         dismissButton?.isEnabled = isAttached
         dismissButton?.accessibilityValue = isAttached ? "Available" : "Unavailable"
     }
@@ -1005,12 +979,11 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
         setAuxiliaryUtilityVisuals(for: KeyboardState.shared.areaMode)
-        [atButton, emojiButton, numberButton, nextInputModeButton].compactMap { $0 }.forEach { $0.isHidden = !leftRailVisible }
+        [atButton, emojiButton, numberButton].compactMap { $0 }.forEach { $0.isHidden = !leftRailVisible }
         [deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach { $0.isHidden = !rightRailVisible }
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         numberButton?.frame = layout.leftUtilityFrames.number
-        nextInputModeButton?.frame = layout.leftUtilityFrames.next
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
         dismissButton?.frame = layout.dismissFrame
@@ -1064,7 +1037,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         guard numberKeyboardView == nil, let inputView else { return }
         inputView.layoutIfNeeded()
         let keyboard = GiellaKeyboardView(
-            definition: KeyboardLayouts.current(needsGlobe: needsInputModeSwitchKey),
+            definition: KeyboardLayouts.current(),
             theme: Theme.current(for: traitCollection)
         )
         keyboard.delegate = self
@@ -1088,11 +1061,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
         layoutVoiceActionControls()
-    }
-
-    @objc private func handleNextInputModeButton(_ sender: UIButton, forEvent event: UIEvent) {
-        guard sender.isEnabled else { return }
-        handleInputModeList(from: sender, with: event)
     }
 
     private func presentArea(_ mode: KeyboardAreaMode) {
@@ -1211,10 +1179,6 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate,
             return
         }
         textDocumentProxy.adjustTextPosition(byCharacterOffset: movement)
-    }
-
-    @objc func didTriggerKeyboardButton(sender: UIView, forEvent event: UIEvent) {
-        handleInputModeList(from: sender, with: event)
     }
 
     // MARK: - Text Change
