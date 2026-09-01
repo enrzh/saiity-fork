@@ -40,3 +40,4 @@ Implemented the Task 6 second-review Important findings in the current `saiity-f
 ## Commit
 
 Implementation commit: `b0cc166`.
+Regression fix commit: `c23508f`.
