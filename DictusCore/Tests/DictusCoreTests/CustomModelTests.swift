@@ -61,6 +61,18 @@ final class CustomModelTests: XCTestCase {
         XCTAssertNil(localModel.validationError)
     }
 
+    func testOllamaLoopbackOnlyAllowsDefaultPort() {
+        let nonDefaultPort = CustomModel(
+            name: "Cleanup",
+            repositoryURL: "http://127.0.0.1:11435",
+            role: .cleanup,
+            source: .ollama,
+            modelName: "qwen2.5:3b"
+        )
+
+        XCTAssertNotNil(nonDefaultPort.validationError)
+    }
+
     func testCustomASRRejectsNonWhisperKitSourcesAndRepositories() {
         let nvidia = CustomModel(name: "Nemotron", repositoryURL: "https://huggingface.co/nvidia/model", role: .asr, source: .nvidia, modelName: "model")
         let arbitraryHF = CustomModel(name: "Checkpoint", repositoryURL: "https://huggingface.co/example/whisper", role: .asr, source: .huggingFace, modelName: "whisper")

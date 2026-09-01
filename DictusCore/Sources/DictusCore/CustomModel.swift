@@ -93,8 +93,13 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
               let host = url.host?.lowercased() else {
             return "Use a valid model URL."
         }
-        guard url.user == nil, url.password == nil, url.port == nil else {
+        guard url.user == nil, url.password == nil else {
             return "Model URLs must not contain credentials or a port."
+        }
+        let isOllamaLoopback = source == .ollama && role == .cleanup &&
+            ["localhost", "127.0.0.1", "::1"].contains(host)
+        guard url.port == nil || (isOllamaLoopback && url.port == 11434) else {
+            return "Model URLs must not contain credentials or a non-default port."
         }
         switch (source, role) {
         case (.ollama, .asr): return "Ollama models can only be used for cleanup."

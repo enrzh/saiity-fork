@@ -18,11 +18,12 @@ Implemented the Task 6 second-review Important findings in the current `saiity-f
   - Saved HF ASR entries now retain verification state; the list explicitly shows needs verification or verified-but-runtime-unavailable.
 - `DictusCore/Tests/DictusCoreTests/CustomModelTests.swift`
   - Added regression coverage for legal/forged NVIDIA paths, unsafe URLs, persisted validation state, and 404/non-2xx error classification, while retaining existing persistence/runtime tests.
+  - Added coverage that Ollama loopback port `11434` is allowed while `11435` is rejected.
 
 ## Verification
 
 - `swift test --package-path DictusCore --scratch-path /tmp/saiity-dictus-task6-final-custom --filter CustomModelTests`
-  - Started, but was stopped before completion because the Xcode beta toolchain spent extended time compiling the test product; no test result is claimed.
+  - Re-run after the regression fix; reached test-product linking but the Xcode beta command did not return a final summary within the execution window, so no pass count is claimed.
 - Full DictusCore suite
   - Not run, per user instruction to prioritize focused code/tests/report and not wait.
 - `git diff --check`
