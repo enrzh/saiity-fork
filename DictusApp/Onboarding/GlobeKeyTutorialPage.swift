@@ -137,7 +137,7 @@ struct GlobeKeyTutorialPage: View {
 
 // MARK: - KeyboardSwitchAnimation
 
-/// Animated 4-frame illustration showing the globe key → keyboard picker → Dictus flow.
+/// Animated 4-frame illustration showing the globe key → keyboard picker → sAiity flow.
 ///
 /// WHY real SwiftUI elements instead of simplified rectangles:
 /// The previous version used abstract rectangles for keys which didn't look like iOS.
@@ -146,10 +146,10 @@ struct GlobeKeyTutorialPage: View {
 /// real Toggle components made the fake Settings card convincing.
 ///
 /// The animation loops through 4 states:
-/// Frame 0: Normal AZERTY keyboard
-/// Frame 1: Picker appears, "Français" highlighted (current keyboard)
-/// Frame 2: Picker, "Dictus" highlighted (user's target)
-/// Frame 3: Dictus keyboard visible (with branding on spacebar)
+/// Frame 0: Normal English keyboard
+/// Frame 1: Picker appears with the current keyboard
+/// Frame 2: Picker with sAiity highlighted (user's target)
+/// Frame 3: sAiity keyboard visible (with branding on spacebar)
 private struct KeyboardSwitchAnimation: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animationFrame = 0
@@ -158,47 +158,15 @@ private struct KeyboardSwitchAnimation: View {
 
     private let frameDurations: [TimeInterval] = [1.5, 1.5, 1.5, 2.0]
 
-    /// Whether the iOS system language is French (drives AZERTY vs QWERTY layout).
-    /// WHY read from Locale.preferredLanguages, NOT SharedKeys.language:
-    /// SharedKeys.language is the Dictus *transcription* preference (which model
-    /// language to feed Whisper) — it's independent from the iOS keyboard layout
-    /// the user actually sees when they press the globe. The animation must match
-    /// what the user will observe in their real iOS picker, which follows the
-    /// system language set in iOS Settings → General → Language & Region.
-    /// Locale.preferredLanguages.first returns tags like "en-US" or "fr-FR".
-    private let isFrench: Bool
-
-    init() {
-        let preferred = Locale.preferredLanguages.first ?? "en"
-        self.isFrench = preferred.hasPrefix("fr")
-    }
-
-    // Keyboard layout rows — AZERTY for FR, QWERTY for others
-    private var row0: [String] {
-        isFrench
-            ? ["A", "Z", "E", "R", "T", "Y", "U", "I", "O", "P"]
-            : ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"]
-    }
-    private var row1: [String] {
-        isFrench
-            ? ["Q", "S", "D", "F", "G", "H", "J", "K", "L", "M"]
-            : ["A", "S", "D", "F", "G", "H", "J", "K", "L"]
-    }
-    private var row2: [String] {
-        isFrench
-            ? ["W", "X", "C", "V", "B", "N", "'"]
-            : ["Z", "X", "C", "V", "B", "N", "M"]
-    }
+    private let row0 = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"]
+    private let row1 = ["A", "S", "D", "F", "G", "H", "J", "K", "L"]
+    private let row2 = ["Z", "X", "C", "V", "B", "N", "M"]
 
     /// Display name for the system keyboard in the picker.
-    private var systemKeyboardName: String {
-        isFrench ? "Français" : "English (US)"
-    }
+    private let systemKeyboardName = "English (US)"
 
     /// Display name for the space bar in non-Dictus frames.
-    private var spaceLabel: String {
-        isFrench ? "espace" : "space"
-    }
+    private let spaceLabel = "space"
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -246,11 +214,11 @@ private struct KeyboardSwitchAnimation: View {
     /// Non-interactive (allowsHitTesting(false)).
     /// WHY isDictus branches the layout:
     /// - isDictus == false: native iOS keyboard with standard globe/mic at bottom
-    /// - isDictus == true: Dictus keyboard with toolbar (FR/EN label + blue mic pill)
-    ///   replicating the real Dictus keyboard design
+    /// - isDictus == true: sAiity keyboard with toolbar (EN label + blue mic pill)
+    ///   replicating the real sAiity keyboard design
     private func fakeKeyboard(isDictus: Bool) -> some View {
         VStack(spacing: 5) {
-            // Dictus keyboard has a toolbar at the top (FR label + blue mic pill)
+            // sAiity keyboard has a toolbar at the top (EN label + blue mic pill)
             if isDictus {
                 dictusToolbar
                     .padding(.bottom, 2)
@@ -354,8 +322,8 @@ private struct KeyboardSwitchAnimation: View {
     /// Matches the real Dictus keyboard design.
     private var dictusToolbar: some View {
         HStack {
-            // Language label (FR/EN)
-            Text(isFrench ? "FR" : "EN")
+            // Language label
+            Text("EN")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
