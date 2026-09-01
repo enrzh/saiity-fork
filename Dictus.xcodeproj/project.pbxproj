@@ -54,7 +54,6 @@
 		AA0000B3 /* EmojiCategoryBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B3 /* EmojiCategoryBar.swift */; };
 		AA0000B4 /* EmojiSearchFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B4 /* EmojiSearchFR.swift */; };
 		AA0000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C0 /* Assets.xcassets */; };
-		AA0000C1 /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C1 /* Settings.bundle */; };
 		AA0000D0 /* TextPredictionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D0 /* TextPredictionEngine.swift */; };
 		AA0000D1 /* SuggestionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D1 /* SuggestionState.swift */; };
 		AA0000D2 /* fr_frequency.json in Resources */ = {isa = PBXBuildFile; fileRef = AA1000D2 /* fr_frequency.json */; };
@@ -218,7 +217,6 @@
 		AA1000B3 /* EmojiCategoryBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiCategoryBar.swift; sourceTree = "<group>"; };
 		AA1000B4 /* EmojiSearchFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSearchFR.swift; sourceTree = "<group>"; };
 		AA1000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AA1000C1 /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = Settings.bundle; sourceTree = "<group>"; };
 		AA1000D0 /* TextPredictionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPredictionEngine.swift; sourceTree = "<group>"; };
 		AA1000D1 /* SuggestionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionState.swift; sourceTree = "<group>"; };
 		AA1000D2 /* fr_frequency.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fr_frequency.json; sourceTree = "<group>"; };
@@ -377,7 +375,6 @@
 				AA40000L /* Extensions */,
 				AA1000L1 /* Localizable.xcstrings */,
 				AA1000C0 /* Assets.xcassets */,
-				AA1000C1 /* Settings.bundle */,
 				AA1000F4 /* Sounds */,
 				AA100005 /* DictusApp.entitlements */,
 				AA100007 /* Info.plist */,
@@ -835,7 +832,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000C0 /* Assets.xcassets in Resources */,
-				AA0000C1 /* Settings.bundle in Resources */,
 				AA0000F4 /* Sounds in Resources */,
 				AA000P10 /* PrivacyInfo.xcprivacy in Resources */,
 				AA0000L1 /* Localizable.xcstrings in Resources */,
