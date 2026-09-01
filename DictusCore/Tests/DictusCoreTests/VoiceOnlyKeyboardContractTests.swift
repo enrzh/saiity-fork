@@ -2,6 +2,16 @@ import XCTest
 @testable import DictusCore
 
 final class VoiceOnlyKeyboardContractTests: XCTestCase {
+    func testPolicyExposesAlternatePageAccessoryAndContentGeometry() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 375, surfaceHeight: 180)
+
+        XCTAssertEqual(layout.alternateAccessoryRowFrame.minX, layout.surfaceFrame.minX)
+        XCTAssertEqual(layout.alternateAccessoryRowFrame.maxX, layout.surfaceFrame.maxX)
+        XCTAssertEqual(layout.alternateContentBelowAccessoryFrame.minY,
+                       layout.alternateAccessoryRowFrame.maxY)
+        XCTAssertTrue(layout.surfaceFrame.contains(layout.alternateContentBelowAccessoryFrame))
+    }
+
 
     func testMicrophoneUIKitHitTargetUsesPolicyFrameAndOwnsTouchLifecycle() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
@@ -317,7 +327,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
             XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
             XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
-            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 112)
+            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 116)
             XCTAssertEqual(layout.leftUtilityFrames.at.maxY, layout.leftUtilityFrames.emoji.minY)
             XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.minX)
             XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX + 4)
@@ -364,7 +374,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
-        XCTAssertEqual(layout.centerAreaWidth, 146)
+        XCTAssertEqual(layout.centerAreaWidth, 150)
         XCTAssertTrue(root.contains("availableWidth: availableWidth"))
         XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
     }

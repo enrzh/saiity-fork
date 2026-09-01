@@ -20,15 +20,15 @@ public enum VoiceOnlyKeyboardPolicy {
     /// easy to press without turning the keyboard into a key grid.
     public static let primaryControlSize: Double = 54
     public static let railSpacing: Double = 4
-    public static let horizontalPadding: Double = 8
+    public static let horizontalPadding: Double = 6
     public static let controlEdgeInset: Double = 12
     public static let visibleControlGap: Double = 8
     /// The right rail spans the voice surface with the same breathing room as
     /// Apple's compact keyboard controls.
-    public static let verticalPadding: Double = 8
+    public static let verticalPadding: Double = 4
     /// The language indicator sits slightly closer to
     /// the lower edge, matching the asymmetric system keyboard balance.
-    public static let leftRailVerticalPadding: Double = 8
+    public static let leftRailVerticalPadding: Double = 4
     public static let rightRailHeight: Double = actionHitSize.height * 2
     /// Alternate symbol pages use four rows of at least 44pt. The center region
     /// may occupy the full fixed surface because the outer rails own its sides.
@@ -154,6 +154,19 @@ public enum VoiceOnlyKeyboardPolicy {
             surfaceFrame
         }
 
+        public var alternateAccessoryRowFrame: CGRect {
+            CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
+                   width: surfaceFrame.width,
+                   height: min(VoiceOnlyKeyboardPolicy.controlSize, surfaceFrame.height))
+        }
+
+        public var alternateContentBelowAccessoryFrame: CGRect {
+            let row = alternateAccessoryRowFrame
+            return CGRect(x: surfaceFrame.minX, y: row.maxY,
+                          width: surfaceFrame.width,
+                          height: max(0, surfaceFrame.maxY - row.maxY))
+        }
+
         /// The symbols pages reserve their bottom row for the UIKit-owned ABC control.
         /// This row stays inside the inset surface so the control is not clipped.
         public var symbolsReservedRowFrame: CGRect {
@@ -165,7 +178,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
         public var dictateFrame: CGRect {
-            guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
+            guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize + visibleControlGap else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
                 availableWidth: surfaceWidth,
                 centerAreaWidth: centerAreaWidth
