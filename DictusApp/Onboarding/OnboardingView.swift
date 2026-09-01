@@ -156,15 +156,16 @@ struct AvailabilityPage: View {
         Button(action: action) { HStack(alignment: .top, spacing: 12) { Image(systemName: done ? "checkmark.circle.fill" : "circle").foregroundStyle(done ? .green : .secondary); VStack(alignment: .leading, spacing: 3) { Text(title).font(.body.weight(.medium)); Text(detail).font(.caption).foregroundStyle(.secondary) }; Spacer(); if !done { Image(systemName: "chevron.right").foregroundStyle(.tertiary) } }.contentShape(Rectangle()) }.buttonStyle(.plain).accessibilityValue(done ? "Complete" : detail)
     }
     private func refreshKeyboard() {
-        let installed = UITextInputMode.activeInputModes.contains {
+        let inputModeInstalled = UITextInputMode.activeInputModes.contains {
             ($0.value(forKey: "identifier") as? String)?.contains("de.aiity.saiity.ios") == true
         }
-        let handshake = installed && AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        // The extension is the only component that can read `hasFullAccess`.
+        // Keep that handshake authoritative when iOS has not refreshed its
+        // input-mode list yet after returning from Settings.
+        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let installed = inputModeInstalled || handshake
         keyboardInstalled = installed
         fullAccessVerified = handshake
-        if !installed {
-            AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)
-        }
 
         let status = KeyboardSetupStatus(keyboardInstalled: installed, fullAccessHandshake: handshake)
         let announcement: String

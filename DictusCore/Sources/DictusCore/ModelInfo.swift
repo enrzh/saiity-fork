@@ -8,7 +8,11 @@ public struct KeyboardSetupStatus: Equatable, Sendable {
         self.keyboardInstalled = keyboardInstalled
         self.fullAccessHandshake = fullAccessHandshake
     }
-    public var fullAccessVerified: Bool { keyboardInstalled && fullAccessHandshake }
+    /// A handshake can only be written by the sAiity keyboard extension itself.
+    /// Treat it as proof that the extension is installed even when iOS briefly
+    /// returns an incomplete `activeInputModes` list while returning from Settings.
+    public var keyboardDetected: Bool { keyboardInstalled || fullAccessHandshake }
+    public var fullAccessVerified: Bool { keyboardDetected && fullAccessHandshake }
     public var canContinue: Bool { fullAccessVerified }
 }
 

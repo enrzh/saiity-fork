@@ -17,10 +17,11 @@ final class KeyboardSetupStatusTests: XCTestCase {
         XCTAssertTrue(status.canContinue)
     }
 
-    func testStaleHandshakeIsIgnoredWhenKeyboardIsNotInstalled() {
+    func testExtensionHandshakeProvesKeyboardEvenIfInputModeListIsTemporarilyEmpty() {
         let status = KeyboardSetupStatus(keyboardInstalled: false, fullAccessHandshake: true)
 
-        XCTAssertFalse(status.fullAccessVerified)
-        XCTAssertFalse(status.canContinue)
+        XCTAssertTrue(status.keyboardDetected)
+        XCTAssertTrue(status.fullAccessVerified)
+        XCTAssertTrue(status.canContinue)
     }
 }

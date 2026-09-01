@@ -172,17 +172,15 @@ struct KeyboardSetupPage: View {
 
         let identifier = modes.compactMap { $0.value(forKey: "identifier") as? String }
             .first { $0.contains("de.aiity.saiity.ios") }
-        let installed = identifier != nil
-        // A handshake from a removed keyboard is stale and must never make the
-        // setup screen claim that Full Access is ready.
-        let handshake = installed
-            && AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let inputModeInstalled = identifier != nil
+        // The extension's handshake is the only real Full Access signal. iOS
+        // can temporarily omit a third-party keyboard from activeInputModes
+        // while it refreshes Settings, so do not erase a valid handshake here.
+        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let installed = inputModeInstalled || handshake
 
         keyboardDetected = installed
         fullAccessHandshake = handshake
-        if !installed {
-            AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)
-        }
 
         if let identifier {
             PersistentLog.log(.onboardingKeyboardDetected(identifier: identifier))

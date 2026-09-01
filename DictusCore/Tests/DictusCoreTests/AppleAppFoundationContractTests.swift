@@ -21,8 +21,9 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(availability.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("refreshKeyboard()"))
-        XCTAssertTrue(availability.contains("let handshake = installed"))
-        XCTAssertTrue(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertTrue(availability.contains("let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertTrue(availability.contains("let installed = inputModeInstalled || handshake"))
+        XCTAssertFalse(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
         XCTAssertTrue(availability.contains("fullAccessVerified = handshake"))
     }
 
