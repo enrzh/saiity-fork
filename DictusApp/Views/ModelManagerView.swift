@@ -205,6 +205,8 @@ struct ModelManagerView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(model.name)
+                            Text("\(model.source.displayName) · \(model.role.displayName)")
+                                .font(.caption).foregroundStyle(.secondary)
                             Text(customModelStatus(model)).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -217,6 +219,8 @@ struct ModelManagerView: View {
     }
 
     private func customModelStatus(_ model: CustomModel) -> String {
+        if let error = model.validationError { return "Invalid: \(error)" }
+        if let error = model.runtimeSupportError { return error }
         if model.role == .cleanup && model.source == .ollama && model.validationError == nil {
             return "Available for dictation cleanup · \(model.source.displayName)"
         }

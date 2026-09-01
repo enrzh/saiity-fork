@@ -106,4 +106,42 @@ final class CustomModelTests: XCTestCase {
         CustomModel.save([model], to: defaults)
         XCTAssertEqual(CustomModel.load(from: defaults), [model])
     }
+
+    func testProviderURLsRequireRepositoryPaths() {
+        let hfCollection = CustomModel(name: "Speech", repositoryURL: "https://huggingface.co/models/whisper", role: .asr, source: .huggingFace)
+        let nvidiaDeveloperPage = CustomModel(name: "Speech", repositoryURL: "https://developer.nvidia.com/", role: .asr, source: .nvidia)
+        let nvidiaModel = CustomModel(name: "Nemotron ASR", repositoryURL: "https://developer.nvidia.com/nvidia-riva/nvidia-riva-asr", role: .asr, source: .nvidia)
+
+        XCTAssertNotNil(hfCollection.validationError)
+        XCTAssertNotNil(nvidiaDeveloperPage.validationError)
+        XCTAssertNil(nvidiaModel.validationError)
+    }
+
+    func testSaveDeduplicatesByIdentityAndKeepsLastRegistration() {
+        let defaults = UserDefaults(suiteName: "saiity.custom-model-dedupe-tests")!
+        defaults.removePersistentDomain(forName: "saiity.custom-model-dedupe-tests")
+        defer { defaults.removePersistentDomain(forName: "saiity.custom-model-dedupe-tests") }
+        let first = CustomModel(name: "First", repositoryURL: "https://huggingface.co/openai/whisper-tiny", role: .asr, source: .huggingFace)
+        let last = CustomModel(name: "Last", repositoryURL: "https://huggingface.co/openai/whisper-tiny/", role: .asr, source: .huggingFace)
+
+        CustomModel.save([first, last], to: defaults)
+
+        XCTAssertEqual(CustomModel.load(from: defaults), [last])
+    }
+
+    func testLoadDropsMalformedRecordsWithoutDroppingValidRecords() throws {
+        let defaults = UserDefaults(suiteName: "saiity.custom-model-safe-load-tests")!
+        defaults.removePersistentDomain(forName: "saiity.custom-model-safe-load-tests")
+        defer { defaults.removePersistentDomain(forName: "saiity.custom-model-safe-load-tests") }
+        let valid = CustomModel(name: "Cleanup", repositoryURL: "http://127.0.0.1:11434", role: .cleanup, source: .ollama, modelName: "llama3")
+        let validJSON = try JSONEncoder().encode(valid)
+        let malformed = Data(#"{"id":"bad","name":12}"#.utf8)
+        let array = try JSONSerialization.data(withJSONObject: [
+            try JSONSerialization.jsonObject(with: validJSON),
+            try JSONSerialization.jsonObject(with: malformed)
+        ])
+        defaults.set(array, forKey: SharedKeys.customModels)
+
+        XCTAssertEqual(CustomModel.load(from: defaults), [valid])
+    }
 }

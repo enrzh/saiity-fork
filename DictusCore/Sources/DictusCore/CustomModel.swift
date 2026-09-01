@@ -80,18 +80,26 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
             guard scheme == "https", (host == "huggingface.co" || host == "www.huggingface.co") else {
                 return "Use a Hugging Face model URL."
             }
+            guard isRepositoryPath(url.path, componentCount: 2) else {
+                return "Use a Hugging Face repository URL."
+            }
             guard role != .asr || containsASRMarker(in: url.path) else {
                 return "Choose a Hugging Face speech-recognition model."
             }
         case (.nvidia, .asr):
-            guard scheme == "https",
-                  host == "developer.nvidia.com" || host == "huggingface.co" else {
+            guard scheme == "https", host == "developer.nvidia.com" else {
                 return "Use an NVIDIA model URL."
+            }
+            guard isRepositoryPath(url.path, componentCount: 2) else {
+                return "Use an NVIDIA model repository URL."
             }
             guard containsASRMarker(in: url.path) else {
                 return "Choose an NVIDIA speech-recognition model."
             }
         case (.nvidia, .cleanup): return "NVIDIA sources are only supported for speech recognition."
+        }
+        guard url.query == nil, url.fragment == nil else {
+            return "Model URLs must not contain a query or fragment."
         }
         return nil
     }
@@ -127,6 +135,12 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
             "parakeet", "nemotron", "moonshine", "sensevoice", "qwen3-asr",
             "omnilingual", "canary", "seamless", "zipformer", "vosk"
         ].contains { value.contains($0) }
+    }
+
+    private func isRepositoryPath(_ path: String, componentCount: Int) -> Bool {
+        let components = path.split(separator: "/")
+        guard components.count == componentCount, components.allSatisfy({ !$0.isEmpty }) else { return false }
+        return components.first?.lowercased() != "models"
     }
 
     /// Checks the public Hugging Face model metadata for an ASR pipeline.
@@ -173,11 +187,28 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
 
     public static func load(from defaults: UserDefaults) -> [CustomModel] {
         guard let data = defaults.data(forKey: SharedKeys.customModels),
-              let models = try? JSONDecoder().decode([CustomModel].self, from: data) else { return [] }
-        return models
+              let array = try? JSONSerialization.jsonObject(with: data) as? [Any] else { return [] }
+        let decoder = JSONDecoder()
+        return array.compactMap { value in
+            guard JSONSerialization.isValidJSONObject(value),
+                  let item = try? JSONSerialization.data(withJSONObject: value),
+                  let model = try? decoder.decode(CustomModel.self, from: item) else { return nil }
+            return model
+        }.deduplicatedByIdentity()
     }
 
     public static func save(_ models: [CustomModel], to defaults: UserDefaults) {
-        defaults.set(try? JSONEncoder().encode(models), forKey: SharedKeys.customModels)
+        defaults.set(try? JSONEncoder().encode(models.deduplicatedByIdentity()), forKey: SharedKeys.customModels)
+    }
+}
+
+private extension Array where Element == CustomModel {
+    func deduplicatedByIdentity() -> [CustomModel] {
+        var result: [CustomModel] = []
+        for model in self {
+            result.removeAll { $0.id == model.id || $0.identityKey == model.identityKey }
+            result.append(model)
+        }
+        return result
     }
 }
