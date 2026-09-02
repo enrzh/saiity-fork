@@ -167,6 +167,34 @@ public enum VoiceOnlyKeyboardPolicy {
                           height: max(0, surfaceFrame.maxY - row.maxY))
         }
 
+        public var accessoryRevertFrame: CGRect {
+            let row = alternateAccessoryRowFrame
+            return CGRect(x: row.minX, y: row.minY, width: controlSize, height: row.height)
+        }
+
+        public var accessoryMicFrame: CGRect {
+            let row = alternateAccessoryRowFrame
+            let width = primaryControlSize
+            return CGRect(x: row.midX - width / 2, y: row.minY,
+                          width: width, height: row.height)
+        }
+
+        public var accessoryDeleteFrame: CGRect {
+            let row = alternateAccessoryRowFrame
+            return CGRect(x: row.maxX - controlSize * 2, y: row.minY,
+                          width: controlSize, height: row.height)
+        }
+
+        public var accessoryReturnFrame: CGRect {
+            let row = alternateAccessoryRowFrame
+            return CGRect(x: row.maxX - controlSize, y: row.minY,
+                          width: controlSize, height: row.height)
+        }
+
+        public var alternateAccessoryFrames: [CGRect] {
+            [accessoryRevertFrame, accessoryMicFrame, accessoryDeleteFrame, accessoryReturnFrame]
+        }
+
         /// The symbols pages reserve their bottom row for the UIKit-owned ABC control.
         /// This row stays inside the inset surface so the control is not clipped.
         public var symbolsReservedRowFrame: CGRect {

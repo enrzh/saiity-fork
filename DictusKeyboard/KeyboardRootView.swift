@@ -34,7 +34,7 @@ struct KeyboardRootView: View {
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
 
-                if layout.leftRailWidth > 0 {
+                if !usesAuxiliarySurface && layout.leftRailWidth > 0 {
                     if state.areaMode != .panel && state.areaMode != .emoji {
                         utilityGlyph(systemName: "at")
                             .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
@@ -45,7 +45,7 @@ struct KeyboardRootView: View {
                         .position(x: CGFloat(layout.leftUtilityFrames.number.midX), y: CGFloat(layout.leftUtilityFrames.number.midY))
                 }
 
-                if layout.rightRailWidth > 0 {
+                if !usesAuxiliarySurface && layout.rightRailWidth > 0 {
                     utilityGlyph(systemName: "delete.backward", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
                         .position(x: CGFloat(layout.deleteFrame.midX), y: CGFloat(layout.deleteFrame.midY))
                     utilityGlyph(systemName: "return", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
@@ -92,7 +92,7 @@ struct KeyboardRootView: View {
         case .panel:
             VStack(spacing: 0) {
                 alternateAccessoryRow(layout: layout)
-                Color(uiColor: .systemBackground)
+                Color.clear
                     .accessibilityIdentifier("number-layer-surface")
                     .frame(height: contentFrame.height)
             }
@@ -101,13 +101,13 @@ struct KeyboardRootView: View {
     }
 
     private func alternateAccessoryRow(layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
-        HStack(spacing: 0) {
+        ZStack(alignment: .topLeading) {
             Image(systemName: "arrow.uturn.backward")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(layout.alternateAccessoryRowFrame.height))
-
-            Spacer()
+                .frame(width: CGFloat(layout.accessoryRevertFrame.width), height: CGFloat(layout.accessoryRevertFrame.height))
+                .position(x: CGFloat(layout.accessoryRevertFrame.midX - layout.alternateAccessoryRowFrame.minX),
+                          y: CGFloat(layout.accessoryRevertFrame.midY - layout.alternateAccessoryRowFrame.minY))
 
             Image(systemName: "mic.fill")
                 .font(.system(size: 16, weight: .semibold))
@@ -115,13 +115,16 @@ struct KeyboardRootView: View {
                 .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
                 .background(Capsule().fill(Color.white))
                 .clipShape(Capsule())
-
-            Spacer()
+                .frame(width: CGFloat(layout.accessoryMicFrame.width), height: CGFloat(layout.accessoryMicFrame.height))
+                .position(x: CGFloat(layout.accessoryMicFrame.midX - layout.alternateAccessoryRowFrame.minX),
+                          y: CGFloat(layout.accessoryMicFrame.midY - layout.alternateAccessoryRowFrame.minY))
 
             Image(systemName: "delete.backward")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(layout.alternateAccessoryRowFrame.height))
+                .frame(width: CGFloat(layout.accessoryDeleteFrame.width), height: CGFloat(layout.accessoryDeleteFrame.height))
+                .position(x: CGFloat(layout.accessoryDeleteFrame.midX - layout.alternateAccessoryRowFrame.minX),
+                          y: CGFloat(layout.accessoryDeleteFrame.midY - layout.alternateAccessoryRowFrame.minY))
 
             appleControlSurface(
                 Image(systemName: "return")
@@ -130,6 +133,9 @@ struct KeyboardRootView: View {
                     .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
                 in: Circle()
             )
+            .frame(width: CGFloat(layout.accessoryReturnFrame.width), height: CGFloat(layout.accessoryReturnFrame.height))
+            .position(x: CGFloat(layout.accessoryReturnFrame.midX - layout.alternateAccessoryRowFrame.minX),
+                      y: CGFloat(layout.accessoryReturnFrame.midY - layout.alternateAccessoryRowFrame.minY))
         }
         .frame(width: layout.alternateAccessoryRowFrame.width, height: layout.alternateAccessoryRowFrame.height)
         .allowsHitTesting(false)

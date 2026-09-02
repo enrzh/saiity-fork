@@ -993,26 +993,35 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // Keeping @ and emoji visible there would place them over the symbols grid;
         // symbols still need the number button's ABC action in the reserved cell.
         let mode = KeyboardState.shared.areaMode
-        let showsNormalLeftRail = leftRailVisible && mode != .panel && mode != .emoji
-        atButton?.isHidden = !showsNormalLeftRail
-        emojiButton?.isHidden = !showsNormalLeftRail
-        // Keep the mode control reachable on both auxiliary pages so it can
-        // return to the normal voice page.
+        let isAuxiliary = mode == .panel || mode == .emoji
+        atButton?.isHidden = isAuxiliary || !leftRailVisible
+        emojiButton?.isHidden = isAuxiliary || !leftRailVisible
         numberButton?.isHidden = !leftRailVisible
-        micButton?.isHidden = mode != .keys && mode != .recording
+        micButton?.isHidden = mode != .keys && mode != .recording && mode != .panel && mode != .emoji
         micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)
-        [deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach { $0.isHidden = !rightRailVisible }
+        deleteButton?.isHidden = !rightRailVisible
+        returnButton?.isHidden = !rightRailVisible
+        dismissButton?.isHidden = isAuxiliary || !rightRailVisible
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
-        // The mode control always owns one compact utility cell. The symbols
-        // blank row remains content geometry, not a button hit target.
-        numberButton?.frame = layout.leftUtilityFrames.number
-        micButton?.frame = layout.dictateFrame
-        deleteButton?.frame = layout.deleteFrame
-        returnButton?.frame = layout.returnFrame
+        if isAuxiliary {
+            numberButton?.frame = layout.accessoryRevertFrame
+            micButton?.frame = layout.accessoryMicFrame
+            deleteButton?.frame = layout.accessoryDeleteFrame
+            returnButton?.frame = layout.accessoryReturnFrame
+        } else {
+            numberButton?.frame = layout.leftUtilityFrames.number
+            micButton?.frame = layout.dictateFrame
+            deleteButton?.frame = layout.deleteFrame
+            returnButton?.frame = layout.returnFrame
+        }
         dismissButton?.frame = layout.dismissFrame
+        [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
+            .compactMap { $0 }
+            .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
+        micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
         if let numberKeyboardView {
-            numberKeyboardView.frame = layout.alternateContentFrame
+            numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame
             numberKeyboardView.clipsToBounds = true
             numberKeyboardView.setNeedsLayout()
         }
@@ -1096,7 +1105,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         inputView.addSubview(keyboard)
         let height = max(1, actionControlsView?.bounds.height ?? inputView.bounds.height)
         let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(inputView.bounds.width), surfaceHeight: Double(height))
-        keyboard.frame = layout.alternateContentFrame
+        keyboard.frame = layout.alternateContentBelowAccessoryFrame
         keyboard.setNeedsLayout()
         keyboard.layoutIfNeeded()
         numberKeyboardView = keyboard

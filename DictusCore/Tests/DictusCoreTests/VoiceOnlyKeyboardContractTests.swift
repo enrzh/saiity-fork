@@ -77,6 +77,39 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("state.requestStop()"))
     }
 
+    func testAuxiliaryModeOwnsOnlyRevertMicDeleteAndReturnControls() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(controller.contains("atButton?.isHidden = isAuxiliary || !leftRailVisible"))
+        XCTAssertTrue(controller.contains("emojiButton?.isHidden = isAuxiliary || !leftRailVisible"))
+        XCTAssertTrue(controller.contains("dismissButton?.isHidden = isAuxiliary || !rightRailVisible"))
+        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording && mode != .panel && mode != .emoji"))
+        XCTAssertTrue(controller.contains("numberButton?.frame = layout.accessoryRevertFrame"))
+        XCTAssertTrue(controller.contains("micButton?.frame = layout.accessoryMicFrame"))
+        XCTAssertTrue(controller.contains("deleteButton?.frame = layout.accessoryDeleteFrame"))
+        XCTAssertTrue(controller.contains("returnButton?.frame = layout.accessoryReturnFrame"))
+        XCTAssertTrue(root.contains("ZStack(alignment: .topLeading)"))
+        XCTAssertFalse(root.contains("HStack(spacing: 0)"))
+        let accessory = try XCTUnwrap(root.range(of: "private func alternateAccessoryRow"))
+        let languageIndicator = try XCTUnwrap(root.range(of: "private var languageIndicator"))
+        let row = String(root[accessory.lowerBound..<languageIndicator.lowerBound])
+        XCTAssertFalse(row.contains("keyboard.chevron.compact.down"))
+    }
+
+    func testUIKitBackdropAndPressedRadiusUseActualFrames() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let inputView = try source("DictusKeyboard/InputView.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(inputView.contains("inputViewStyle: .keyboard"))
+        XCTAssertTrue(controller.contains("kbInputView.backgroundColor = .clear"))
+        XCTAssertTrue(controller.contains("kbInputView.isOpaque = false"))
+        XCTAssertTrue(controller.contains("$0.layer.cornerRadius = $0.bounds.height / 2"))
+        XCTAssertTrue(controller.contains("micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2"))
+        XCTAssertFalse(root.contains("Color(uiColor: .systemBackground)"))
+    }
+
     func testAuxiliaryReturnUsesSharedAppleControlSurfaceSemantics() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let accessory = try XCTUnwrap(root.range(of: "private func alternateAccessoryRow"))
@@ -107,7 +140,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("numberKeyboardView?.page = .normal"))
         XCTAssertTrue(keyboardView.contains("keyRepeatTimer?.invalidate()"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height"))
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame"))
         XCTAssertTrue(controller.contains("let height = max(1, controls.bounds.height)"))
         XCTAssertTrue(controller.contains("handleDeleteHold"))
         XCTAssertTrue(controller.contains("RunLoop.main.add(timer, forMode: .common)"))
@@ -122,7 +155,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(controller.contains("let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))"))
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame"))
         XCTAssertTrue(root.contains("VoiceOnlyKeyboardPolicy.layout("))
         XCTAssertTrue(root.contains("surfaceHeight: Double(surfaceHeight)"))
     }
@@ -180,7 +213,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testAuxiliaryKeyboardUsesFullSurfaceAndActionControlsStayOnTop() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame"))
         XCTAssertTrue(controller.contains("actionControlsView = controls"))
         XCTAssertTrue(controller.contains("if let controls = actionControlsView"))
         XCTAssertTrue(controller.contains("inputView.bringSubviewToFront(controls)"))
@@ -423,13 +456,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         XCTAssertEqual(layout.centerAreaWidth, 150)
         XCTAssertTrue(root.contains("availableWidth: availableWidth"))
-        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentFrame"))
+        XCTAssertTrue(controller.contains("numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame"))
     }
 
     func testMicUIKitTargetIsHiddenOutsideKeysAndRecordingAndOwnsAccessibility() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording"))
+        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording && mode != .panel && mode != .emoji"))
         XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)"))
         XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
         XCTAssertTrue(root.contains(".accessibilityHidden(true)"))
@@ -506,7 +539,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertTrue(controller.contains("case .symbols:"),
                       "the symbols presentation must be covered by the height contract")
-        XCTAssertTrue(controller.contains("keyboard.frame = layout.alternateContentFrame"),
+        XCTAssertTrue(controller.contains("keyboard.frame = layout.alternateContentBelowAccessoryFrame"),
                       "symbols mode must use the live native surface bounds above the bottom actions")
         XCTAssertTrue(controller.contains("keyboard.autoresizingMask = [.flexibleWidth, .flexibleHeight]"),
                       "symbols mode must follow native surface size changes")

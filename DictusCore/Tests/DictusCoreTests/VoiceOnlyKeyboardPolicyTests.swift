@@ -14,6 +14,23 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(layout.surfaceFrame.contains(layout.alternateContentBelowAccessoryFrame))
     }
 
+    func testAuxiliaryAccessoryFramesAreCenteredAndNonOverlapping() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let frames = layout.alternateAccessoryFrames
+
+            XCTAssertEqual(frames[1].midX, layout.alternateAccessoryRowFrame.midX, accuracy: 0.001)
+            XCTAssertEqual(frames[1].midY, layout.alternateAccessoryRowFrame.midY, accuracy: 0.001)
+            XCTAssertTrue(frames.allSatisfy { $0.height >= 44 && layout.alternateAccessoryRowFrame.contains($0) },
+                          "width=\(width), frames=\(frames)")
+            for (index, frame) in frames.enumerated() {
+                for other in frames[(index + 1)...] {
+                    XCTAssertFalse(frame.intersects(other), "width=\(width)")
+                }
+            }
+        }
+    }
+
     func testTaskOneUsesInsetSurfaceAndSpacedInBoundsActionGeometry() {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 6)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
@@ -41,7 +58,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(layout.surfaceFrame, expectedSurface)
         XCTAssertEqual(layout.surfaceInset, 6)
         XCTAssertEqual(layout.centerX, layout.surfaceFrame.midX)
-        XCTAssertEqual(layout.alternateContentFrame, layout.surfaceFrame)
+        XCTAssertEqual(layout.alternateContentBelowAccessoryFrame.minY,
+                       layout.alternateAccessoryRowFrame.maxY)
         XCTAssertEqual(layout.surfaceFrame.height, VoiceOnlyKeyboardPolicy.surfaceHeight - 8)
     }
 
@@ -99,11 +117,11 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     func testAlternateContentUsesTheEntireEmbeddedSurface() {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
-            let frame = layout.alternateContentFrame
+            let frame = layout.alternateContentBelowAccessoryFrame
 
             XCTAssertEqual(frame.minX, layout.horizontalInset, "width=\(width)")
-            XCTAssertEqual(frame, layout.surfaceFrame, "width=\(width)")
-            XCTAssertEqual(frame.minY, VoiceOnlyKeyboardPolicy.verticalPadding, "width=\(width)")
+            XCTAssertEqual(frame.width, layout.surfaceFrame.width, "width=\(width)")
+            XCTAssertEqual(frame.minY, layout.alternateAccessoryRowFrame.maxY, "width=\(width)")
             XCTAssertEqual(frame.maxY, layout.surfaceFrame.maxY, "width=\(width)")
             XCTAssertGreaterThanOrEqual(frame.width, layout.centerAreaWidth, "width=\(width)")
         }
@@ -151,8 +169,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
         XCTAssertTrue(controller.contains("setAuxiliaryUtilityVisuals"))
         XCTAssertTrue(rootView.contains("state.areaMode != .panel && state.areaMode != .emoji"))
-        XCTAssertTrue(controller.contains("let showsNormalLeftRail = leftRailVisible && mode != .panel && mode != .emoji"))
-        XCTAssertTrue(controller.contains("atButton?.isHidden = !showsNormalLeftRail"))
+        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
+        XCTAssertTrue(controller.contains("atButton?.isHidden = isAuxiliary || !leftRailVisible"))
         XCTAssertTrue(controller.contains("numberButton?.isHidden = !leftRailVisible"))
     }
 
