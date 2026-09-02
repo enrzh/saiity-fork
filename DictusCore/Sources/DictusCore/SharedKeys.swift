@@ -44,6 +44,7 @@ public enum SharedKeys {
     /// Read and written only through `NumberRowPreference`, except for the Settings toggle's
     /// @AppStorage binding — the same split every other preference on that screen uses.
     public static let numberRowEnabled = "dictus.numberRowEnabled"
+    public static let keyboardAccessoryOrder = "dictus.keyboardAccessoryOrder"
     /// JSON-encoded [Float] waveform energy data written by app during recording
     public static let waveformEnergy = "dictus.waveformEnergy"
     /// Bool flag set by keyboard to request recording stop

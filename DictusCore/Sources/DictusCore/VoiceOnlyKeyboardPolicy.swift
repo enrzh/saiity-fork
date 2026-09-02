@@ -2,6 +2,52 @@ import Foundation
 import CoreGraphics
 
 public enum VoiceOnlyKeyboardPolicy {
+    public enum SymbolPage: Equatable {
+        case symbols1
+        case symbols2
+    }
+
+    public enum SymbolPageTransition: Equatable {
+        case symbols1ToSymbols2
+        case symbols2ToClose
+
+        public static func forToggle(from page: SymbolPage) -> Self {
+            switch page {
+            case .symbols1: return .symbols1ToSymbols2
+            case .symbols2: return .symbols2ToClose
+            }
+        }
+    }
+
+    public struct SymbolGrid {
+        public static func frames(
+            for rows: [[CGFloat]],
+            in size: CGSize,
+            spacing: CGFloat,
+            inset: CGFloat,
+            rowSpacing: CGFloat? = nil
+        ) -> [[CGRect]] {
+            guard !rows.isEmpty else { return [] }
+            let resolvedRowSpacing = rowSpacing ?? spacing
+            let rowHeight = max(1, (size.height - resolvedRowSpacing * CGFloat(rows.count - 1)) / CGFloat(rows.count))
+            let usableWidth = max(1, size.width - inset * 2)
+            return rows.enumerated().map { rowIndex, row in
+                let totalUnits = max(1, row.reduce(CGFloat.zero, +))
+                let gaps = spacing * CGFloat(max(0, row.count - 1))
+                let unitWidth = max(1, (usableWidth - gaps) / totalUnits)
+                var x = inset
+                return row.map { width in
+                    let frame = CGRect(x: x,
+                                       y: CGFloat(rowIndex) * (rowHeight + resolvedRowSpacing),
+                                       width: unitWidth * width,
+                                       height: rowHeight)
+                    x = frame.maxX + spacing
+                    return frame
+                }
+            }
+        }
+    }
+
     public static let usesLegacyKeyGrid = false
     /// The standard portrait iPhone keyboard grid height. The extension's UIKit
     /// height provider remains the source of truth at runtime; this is the
@@ -30,15 +76,16 @@ public enum VoiceOnlyKeyboardPolicy {
     /// the lower edge, matching the asymmetric system keyboard balance.
     public static let leftRailVerticalPadding: Double = 4
     public static let rightRailHeight: Double = actionHitSize.height * 2
-    /// Alternate symbol pages use four rows of at least 44pt. The center region
-    /// may occupy the full fixed surface because the outer rails own its sides.
+    /// Alternate symbol pages use three real rows. The accessory row owns the
+    /// fourth 44pt lane at the top of the native auxiliary keyboard.
     public static let contentHeight: Double = surfaceHeight
-    public static let symbolsMinimumContentHeight: Double = controlSize * 4
-    /// Auxiliary pages need one 44pt accessory row plus four 44pt symbol rows.
-    /// The inset surface at the normal 216pt keyboard height cannot contain both.
+    public static let symbolsMinimumContentHeight: Double = controlSize * 3
+    /// Auxiliary pages need one 44pt accessory row plus three 44pt symbol rows.
     public static let alternateMinimumHeight: Double = verticalPadding * 2 + controlSize + symbolsMinimumContentHeight
     public static let titleHeight: Double = 17
-    public static let statusHeight: Double = 16
+    /// Reserve a real text line for failures even at the standard 216pt
+    /// keyboard height. This lane stays outside the mic capsule.
+    public static let statusHeight: Double = 20
     public static let contentSpacing: Double = 6
     public static let topInset: Double = 8
 
@@ -97,6 +144,7 @@ public enum VoiceOnlyKeyboardPolicy {
         public let leftBottomCenterY: Double
         public let rightBottomCenterY: Double
         public let showsLanguageIndicator: Bool
+        public let controlOrder: KeyboardAccessoryOrder
 
         public var surfaceInset: Double { horizontalInset }
 
@@ -104,6 +152,46 @@ public enum VoiceOnlyKeyboardPolicy {
             CGRect(x: horizontalInset, y: verticalPadding,
                    width: max(0, surfaceWidth - horizontalInset * 2),
                    height: max(0, surfaceHeight - verticalPadding * 2))
+        }
+
+        public var bottomAuxiliaryControlFrame: CGRect {
+            CGRect(x: surfaceFrame.minX, y: surfaceFrame.maxY - visibleControlGap - controlSize,
+                   width: surfaceFrame.width, height: controlSize)
+        }
+
+        public var auxiliaryContentFrame: CGRect {
+            let maxY = bottomAuxiliaryControlFrame.minY - visibleControlGap
+            guard maxY > surfaceFrame.minY else { return .zero }
+            return CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY, width: surfaceFrame.width,
+                          height: maxY - surfaceFrame.minY)
+        }
+
+        public var auxiliaryControlFrames: [CGRect] {
+            switch controlOrder {
+            case .emojiFirst: return [leftUtilityFrames.emoji, leftUtilityFrames.number]
+            case .numberFirst: return [leftUtilityFrames.number, leftUtilityFrames.emoji]
+            }
+        }
+
+        @available(*, deprecated, message: "Use bottom auxiliary frames")
+        public var alternateAccessoryRowFrame: CGRect { bottomAuxiliaryControlFrame }
+        @available(*, deprecated, message: "Use auxiliaryContentFrame")
+        public var alternateContentBelowAccessoryFrame: CGRect { auxiliaryContentFrame }
+        @available(*, deprecated, message: "Use bottom auxiliary controls")
+        public var accessoryRevertFrame: CGRect { leftUtilityFrames.at }
+        @available(*, deprecated, message: "Use dictateFrame")
+        public var accessoryMicFrame: CGRect { dictateFrame }
+        @available(*, deprecated, message: "Use rightRailFrames")
+        public var accessoryDeleteFrame: CGRect { rightRailFrames.delete }
+        @available(*, deprecated, message: "Use rightRailFrames")
+        public var accessoryReturnFrame: CGRect { rightRailFrames.returnKey }
+        @available(*, deprecated, message: "Use auxiliaryControlFrames")
+        public var alternateAccessoryFrames: [CGRect] {
+            [accessoryRevertFrame, accessoryMicFrame, accessoryDeleteFrame, accessoryReturnFrame]
+        }
+        @available(*, deprecated, message: "Use explicit auxiliary frame checks")
+        public var hasValidAccessoryFrames: Bool {
+            alternateAccessoryFrames.allSatisfy { !$0.isEmpty }
         }
 
         public var rightCommandFrame: CGRect {
@@ -122,10 +210,12 @@ public enum VoiceOnlyKeyboardPolicy {
             guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
             let x = surfaceFrame.minX + visibleControlGap
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
+            let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
+            let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
             return (
                 CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height * 2, width: size.width, height: size.height),
-                CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height),
-                CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
+                controlOrder == .emojiFirst ? emojiFrame : numberFrame,
+                controlOrder == .emojiFirst ? numberFrame : emojiFrame
             )
         }
 
@@ -158,76 +248,6 @@ public enum VoiceOnlyKeyboardPolicy {
             surfaceFrame
         }
 
-        public var alternateAccessoryRowFrame: CGRect {
-            guard surfaceHeight >= VoiceOnlyKeyboardPolicy.controlSize else { return .zero }
-            return CGRect(x: 0, y: 0,
-                   width: surfaceWidth,
-                   height: VoiceOnlyKeyboardPolicy.controlSize)
-        }
-
-        public var alternateContentBelowAccessoryFrame: CGRect {
-            let row = alternateAccessoryRowFrame
-            guard !row.isEmpty else { return .zero }
-            guard row.maxY <= surfaceHeight else { return .zero }
-            return CGRect(x: 0, y: row.maxY,
-                          width: surfaceWidth, height: surfaceHeight - row.maxY)
-        }
-
-        public var accessoryRevertFrame: CGRect {
-            let row = alternateAccessoryRowFrame
-            guard !row.isEmpty else { return .zero }
-            return CGRect(x: row.minX + visibleControlGap, y: row.minY,
-                          width: controlSize, height: row.height)
-        }
-
-        public var accessoryMicFrame: CGRect {
-            let row = alternateAccessoryRowFrame
-            guard !row.isEmpty else { return .zero }
-            let width = primaryControlSize
-            return CGRect(x: row.midX - width / 2, y: row.minY,
-                          width: width, height: row.height)
-        }
-
-        public var accessoryDeleteFrame: CGRect {
-            let row = alternateAccessoryRowFrame
-            guard !row.isEmpty else { return .zero }
-            return CGRect(x: row.maxX - visibleControlGap - controlSize * 2, y: row.minY,
-                          width: controlSize, height: row.height)
-        }
-
-        public var accessoryReturnFrame: CGRect {
-            let row = alternateAccessoryRowFrame
-            guard !row.isEmpty else { return .zero }
-            return CGRect(x: row.maxX - visibleControlGap - controlSize, y: row.minY,
-                          width: controlSize, height: row.height)
-        }
-
-        public var alternateAccessoryFrames: [CGRect] {
-            [accessoryRevertFrame, accessoryMicFrame, accessoryDeleteFrame, accessoryReturnFrame]
-        }
-
-        public var hasValidAccessoryFrames: Bool {
-            let frames = alternateAccessoryFrames
-            guard frames.count == 4,
-                  frames.allSatisfy({ !$0.isEmpty && $0.width >= controlSize && $0.height >= controlSize }),
-                  frames.allSatisfy({ alternateAccessoryRowFrame.contains($0) }) else { return false }
-            for index in frames.indices {
-                for other in frames[(index + 1)...] where frames[index].intersects(other) {
-                    return false
-                }
-            }
-            return true
-        }
-
-        /// The symbols pages reserve their bottom row for the UIKit-owned ABC control.
-        /// This row stays inside the inset surface so the control is not clipped.
-        public var symbolsReservedRowFrame: CGRect {
-            CGRect(x: surfaceFrame.minX,
-                   y: surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.controlSize,
-                   width: surfaceFrame.width,
-                   height: VoiceOnlyKeyboardPolicy.controlSize)
-        }
-
         /// The hold-to-dictate capsule keeps one frame while its content changes.
         public var dictateFrame: CGRect {
             guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize + visibleControlGap else { return .zero }
@@ -241,6 +261,23 @@ public enum VoiceOnlyKeyboardPolicy {
                 width: width,
                 height: VoiceOnlyKeyboardPolicy.primaryControlSize
             )
+        }
+
+        /// The failure message gets its own non-interactive lane below the mic.
+        /// Keeping it in the center region prevents it from colliding with the
+        /// left and right utility rails while leaving the capsule's content stable.
+        public var dictationErrorFrame: CGRect {
+            let mic = dictateFrame
+            guard !mic.isEmpty else { return .zero }
+
+            let frame = CGRect(
+                x: micCenterArea.minX,
+                y: mic.maxY + visibleControlGap,
+                width: micCenterArea.width,
+                height: statusHeight
+            )
+            guard surfaceFrame.contains(frame), !frame.intersects(mic) else { return .zero }
+            return frame
         }
 
         public var actionRectangles: [CGRect] {
@@ -263,7 +300,8 @@ public enum VoiceOnlyKeyboardPolicy {
 
     public static func layout(
         for availableWidth: Double,
-        surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight
+        surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight,
+        controlOrder: KeyboardAccessoryOrder = .emojiFirst
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
@@ -310,7 +348,8 @@ public enum VoiceOnlyKeyboardPolicy {
             rightBottomCenterY: hasRails
                 ? resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight / 2
                 : 0,
-            showsLanguageIndicator: hasRails
+            showsLanguageIndicator: hasRails,
+            controlOrder: controlOrder
         )
     }
 

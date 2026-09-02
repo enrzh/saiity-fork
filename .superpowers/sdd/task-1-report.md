@@ -1,47 +1,28 @@
-# Task 1 report
+# Task 1 报告
 
-## Result
+## Status
+完成实现并提交。工作树原有 dirty/未跟踪内容均未清理或覆盖。
 
-Shared keyboard geometry contract updated in `VoiceOnlyKeyboardPolicy.swift`.
-The surface remains 216 points high; the standard insets are 6 points horizontally and 4 points vertically. The existing `Layout` now exposes explicit alternate-page accessory-row and below-row content frames. Runtime-height microphone fallback remains bounded, and 44-point action targets remain contained and non-overlapping at widths 320, 375, 390, and 430.
+## RED/GREEN
+- RED：`swift test --package-path DictusCore --scratch-path /tmp/saiity-keyboard-order-red` 失败：找不到 `KeyboardAccessoryOrder`，`SharedKeys` 没有 `keyboardAccessoryOrder`，`layout` 不接受 `controlOrder`，并连带缺少新布局属性。
+- GREEN：`swift test --package-path DictusCore --scratch-path /tmp/saiity-keyboard-order-green --filter KeyboardAccessoryOrderPreferenceTests` 通过，7 tests、0 failures。
 
-## TDD evidence
+## 完整测试
+`swift test --package-path DictusCore --scratch-path /tmp/saiity-keyboard-order-full`：1262 tests executed、10 skipped、71 failures。
 
-### RED
+失败集中在范围外的 `VoiceOnlyKeyboardPolicyTests` 与 `VoiceOnlyKeyboardContractTests`，它们仍断言旧 top accessory-row 几何；按要求未修改。后续任务需要迁移这些旧断言到 inset surface/bottom auxiliary contract。构建期间另有仓库既有 Swift 6、异步锁和资源声明 warnings。
 
-Command:
+## 文件
+- `DictusKeyboard/InputView.swift`：两个初始化路径设置 `backgroundColor = .clear`、`isOpaque = false`。
+- `DictusCore/Sources/DictusCore/SharedKeys.swift`：新增专用共享 key。
+- `DictusCore/Sources/DictusCore/KeyboardAccessoryOrder.swift`：新增两种顺序、`CaseIterable`/`Codable`、displayName、App Group helpers。
+- `DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift`：新增顺序参数及 inset/bottom frames；旧 API 仅保留弃用兼容访问器。
+- `DictusCore/Tests/DictusCoreTests/KeyboardAccessoryOrderPreferenceTests.swift`：覆盖 fallback、持久化、显示名、frame 和透明初始化。
 
-`swift test --package-path DictusCore --filter VoiceOnlyKeyboardPolicyTests/testSharedContractUsesSixByFourInsetsAndSplitsAlternatePageContent`
+## Self-review
+已检查 diff 范围，仅 stage 本任务五个文件及本报告；其他前序修改未 stage。
 
-Output/result: failed during test compilation because `VoiceOnlyKeyboardPolicy.Layout` had no `alternateAccessoryRowFrame` or `alternateContentBelowAccessoryFrame`. This was the expected missing-contract failure.
+## Concerns
+完整测试不能全绿，原因是旧测试契约冲突；迁移后应删除弃用兼容访问器。未执行 iOS 模拟器 UI 运行验证。
 
-### GREEN focused
-
-Command:
-
-`swift test --package-path DictusCore --filter VoiceOnlyKeyboard`
-
-Output/result: `VoiceOnlyKeyboardContractTests` executed 37 tests with 0 failures; `VoiceOnlyKeyboardPolicyTests` executed 48 tests with 0 failures; total 85 tests with 0 failures.
-
-### GREEN full
-
-Command:
-
-`swift test --package-path DictusCore`
-
-Output/result: `DictusCoreTests.xctest` executed 1220 tests, 10 skipped, 0 failures. The command exited successfully. Existing warnings remain: an unhandled `polish-harness/README.md` package file and the pre-existing Swift 6 `Sendable` warning for `SpeechEngine`; one existing frequency-data diagnostic was printed during the suite.
-
-## Files changed
-
-- `DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift`
-- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardPolicyTests.swift`
-- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`
-- This report file.
-
-## Review concerns
-
-No task-blocking concerns. The alternate-page consumers still use `alternateContentFrame`; this task adds the explicit policy geometry requested without changing unrelated keyboard view files, as required by the brief.
-
-## Commit
-
-Final commit: the hash printed by `git rev-parse --short HEAD` after this report was committed; commit message is `feat: share keyboard geometry contract`.
+Commit: `feat: share keyboard auxiliary control order`

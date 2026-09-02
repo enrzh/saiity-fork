@@ -20,13 +20,13 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
 
     override init(frame: CGRect, inputViewStyle: UIInputView.Style) {
         super.init(frame: frame, inputViewStyle: inputViewStyle)
-        backgroundColor = .systemGroupedBackground
-        isOpaque = true
+        backgroundColor = .clear
+        isOpaque = false
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        backgroundColor = .systemGroupedBackground
-        isOpaque = true
+        backgroundColor = .clear
+        isOpaque = false
     }
 }
