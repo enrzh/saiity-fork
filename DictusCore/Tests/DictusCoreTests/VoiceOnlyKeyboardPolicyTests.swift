@@ -31,6 +31,29 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         }
     }
 
+    func testAuxiliaryAccessoryFramesFailClosedBelow246PointSurfaceWidth() {
+        let belowBoundary = VoiceOnlyKeyboardPolicy.layout(for: 252, surfaceHeight: 228)
+        XCTAssertEqual(belowBoundary.surfaceFrame.width, 240)
+        XCTAssertFalse(belowBoundary.hasValidAccessoryFrames)
+        XCTAssertTrue(belowBoundary.alternateAccessoryFrames.allSatisfy(\.isEmpty))
+        XCTAssertTrue(belowBoundary.alternateContentBelowAccessoryFrame.isEmpty)
+
+        let boundary = VoiceOnlyKeyboardPolicy.layout(for: 258, surfaceHeight: 228)
+        XCTAssertEqual(boundary.surfaceFrame.width, 246)
+        XCTAssertTrue(boundary.hasValidAccessoryFrames)
+        XCTAssertTrue(boundary.alternateAccessoryFrames.allSatisfy { $0.width >= 44 && $0.height >= 44 })
+        XCTAssertTrue(boundary.alternateAccessoryFrames.allSatisfy { boundary.alternateAccessoryRowFrame.contains($0) })
+        for (index, frame) in boundary.alternateAccessoryFrames.enumerated() {
+            for other in boundary.alternateAccessoryFrames[(index + 1)...] {
+                XCTAssertFalse(frame.intersects(other))
+            }
+        }
+
+        let aboveBoundary = VoiceOnlyKeyboardPolicy.layout(for: 270, surfaceHeight: 228)
+        XCTAssertGreaterThanOrEqual(aboveBoundary.surfaceFrame.width, 246)
+        XCTAssertTrue(aboveBoundary.hasValidAccessoryFrames)
+    }
+
     func testAuxiliaryAccessoryFramesFailClosedWhenRowCannotReach44Points() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 43)
 

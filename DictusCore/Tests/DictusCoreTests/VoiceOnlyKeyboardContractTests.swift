@@ -107,6 +107,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("returnButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
     }
 
+    func testAuxiliaryStaticAccessoryRowFailsClosedWithItsGeometry() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains("if layout.hasValidAccessoryFrames"),
+                      "auxiliary static controls must be hidden when their geometry is invalid")
+    }
+
     func testUIKitBackdropAndPressedRadiusUseActualFrames() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let inputView = try source("DictusKeyboard/InputView.swift")
