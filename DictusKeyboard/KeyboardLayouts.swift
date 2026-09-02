@@ -14,11 +14,11 @@ import DictusCore
 /// Bottom row on letter pages: [123] [emoji] [space] [return] -- emoji key added in Phase 20.
 ///
 /// Letter pages are four rows, or five when the number row is on (#331) -- see
-/// `drawsDigitRow`. The symbols pages are always four.
+/// `drawsDigitRow`. The symbols pages have three real content rows; UIKit owns
+/// the top accessory row.
 enum KeyboardLayouts {
 
-    /// Symbols pages are deliberately kept at the native four-row geometry.
-    // Symbol pages contain their three real rows; accessory controls are UIKit-owned.
+    /// Symbol pages contain three real rows; accessory controls are UIKit-owned.
     static let symbolsRowCount = 3
 
     /// Glyph carried by the emoji-picker toggle key.

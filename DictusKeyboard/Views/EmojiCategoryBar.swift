@@ -3,15 +3,24 @@ import SwiftUI
 import AudioToolbox
 import DictusCore
 
-/// Bottom bar for emoji picker containing only search and category navigation.
+/// Bottom bar for emoji picker containing category navigation only.
 /// Icons act as bookmarks into the continuous horizontal emoji grid.
 struct EmojiCategoryBar: View {
     let sections: [CategoryInfo]
     let selectedCategoryID: String
     let onSelectCategory: (String) -> Void
+    let onBackToVoice: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
+            Button(action: onBackToVoice) {
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Return to voice keyboard")
+
             // Category icons — representative emojis like native iOS picker
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -32,12 +41,12 @@ struct EmojiCategoryBar: View {
                                 }
                             }
                             .frame(width: 44, height: 44)
-                            .background(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(isSelected ? Color(.systemGray4) : Color.clear)
-                            )
                             .opacity(isSelected ? 1.0 : 0.5)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(section.name)
+                        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                     }
                 }
                 .padding(.horizontal, 2)

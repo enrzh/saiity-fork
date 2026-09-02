@@ -16,6 +16,7 @@ struct CategoryInfo: Identifiable {
 /// - Category bar at bottom as bookmarks into the grid
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
+    let onBackToVoice: () -> Void
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
     /// SwiftUI content the full screen width due to safe area or layout margins.
@@ -163,6 +164,7 @@ struct EmojiPickerView: View {
             onSelectCategory: { id in
                 selectedCategoryID = id
             },
+            onBackToVoice: onBackToVoice
         )
     }
 

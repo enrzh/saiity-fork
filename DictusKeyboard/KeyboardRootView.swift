@@ -6,6 +6,7 @@ import DictusCore
 struct KeyboardRootView: View {
     let controllerID: String
     @ObservedObject private var state = KeyboardState.shared
+    @State private var symbolPage: KeyboardPage = .symbols1
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
@@ -19,57 +20,57 @@ struct KeyboardRootView: View {
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
             let surfaceFrame = layout.surfaceFrame
-            var contentFrame = layout.micCenterArea
-            if usesAuxiliarySurface {
-                contentFrame = layout.auxiliaryContentFrame
-            }
-            let centerSurface = embeddedSurface(
-                areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
-                frame: surfaceFrame
-            )
+            let contentFrame = usesAuxiliarySurface
+                ? layout.auxiliaryContentFrame
+                : layout.micCenterArea
 
             ZStack(alignment: .topLeading) {
                 if usesAuxiliarySurface {
                     areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight)
                         .frame(width: proxy.size.width, height: surfaceHeight, alignment: .topLeading)
                 } else {
-                    centerSurface
+                    embeddedSurface(
+                        areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
+                        frame: surfaceFrame
+                    )
                         .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
-                }
+                    if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
+                        languageIndicator
+                            .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
+                    }
 
-                if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
-                    languageIndicator
-                        .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
-                }
-
-                if !usesAuxiliarySurface && layout.leftRailWidth > 0 {
-                    if state.areaMode != .panel && state.areaMode != .emoji {
+                    if layout.leftRailWidth > 0 {
                         utilityGlyph(systemName: "at")
                             .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
                         utilityGlyph(systemName: "face.smiling")
                             .position(x: CGFloat(layout.leftUtilityFrames.emoji.midX), y: CGFloat(layout.leftUtilityFrames.emoji.midY))
+                        utilityGlyph(text: state.areaMode.modeControlTitle)
+                            .position(x: CGFloat(layout.leftUtilityFrames.number.midX), y: CGFloat(layout.leftUtilityFrames.number.midY))
                     }
-                    utilityGlyph(text: state.areaMode.modeControlTitle)
-                        .position(x: CGFloat(layout.leftUtilityFrames.number.midX), y: CGFloat(layout.leftUtilityFrames.number.midY))
-                }
 
-                if !usesAuxiliarySurface && layout.rightRailWidth > 0 {
-                    utilityGlyph(systemName: "delete.backward", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
-                        .position(x: CGFloat(layout.deleteFrame.midX), y: CGFloat(layout.deleteFrame.midY))
-                    utilityGlyph(systemName: "return", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
-                        .position(x: CGFloat(layout.returnFrame.midX), y: CGFloat(layout.returnFrame.midY))
+                    if layout.rightRailWidth > 0 {
+                        utilityGlyph(systemName: "delete.backward", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
+                            .position(x: CGFloat(layout.deleteFrame.midX), y: CGFloat(layout.deleteFrame.midY))
+                        utilityGlyph(systemName: "return", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
+                            .position(x: CGFloat(layout.returnFrame.midX), y: CGFloat(layout.returnFrame.midY))
 
-                    utilityGlyph(systemName: "keyboard.chevron.compact.down", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, usesInteractiveSurface: false)
-                    .position(
-                        x: CGFloat(layout.dismissFrame.midX),
-                        y: CGFloat(layout.dismissFrame.midY)
-                    )
+                        utilityGlyph(systemName: "keyboard.chevron.compact.down", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, usesInteractiveSurface: false)
+                            .position(
+                                x: CGFloat(layout.dismissFrame.midX),
+                                y: CGFloat(layout.dismissFrame.midY)
+                            )
+                    }
                 }
             }
             .frame(
                 maxWidth: .infinity,
                 maxHeight: .infinity
             )
+            .onChange(of: state.areaMode) { _, mode in
+                if mode == .panel {
+                    symbolPage = .symbols1
+                }
+            }
         }
     }
 
@@ -81,9 +82,7 @@ struct KeyboardRootView: View {
             centerSurface(layout: layout)
         case .emoji:
             VStack(spacing: 0) {
-                if layout.hasValidAccessoryFrames {
-                    alternateAccessoryRow(layout: layout)
-                }
+                Color.clear.frame(height: max(0, contentFrame.minY))
                 EmojiPickerView(
                     onEmojiInsert: { emoji in
                         guard let controller = state.controller as? KeyboardViewController else {
@@ -93,69 +92,54 @@ struct KeyboardRootView: View {
                         controller.routeProxyText(emoji)
                         state.closeArea()
                     },
+                    onBackToVoice: { state.closeArea() },
                     availableWidth: availableWidth,
                     availableHeight: contentFrame.height
                 )
+                .frame(width: contentFrame.width, height: contentFrame.height)
                 .accessibilityIdentifier("emoji-picker-surface")
             }
             .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
         case .panel:
             VStack(spacing: 0) {
-                if layout.hasValidAccessoryFrames {
-                    alternateAccessoryRow(layout: layout)
-                }
-                Color.clear
-                    .accessibilityIdentifier("number-layer-surface")
-                    .frame(height: contentFrame.height)
+                Color.clear.frame(height: max(0, contentFrame.minY))
+                LiquidSymbolPageView(
+                    page: symbolPage,
+                    availableWidth: contentFrame.width,
+                    availableHeight: contentFrame.height,
+                    onInsert: { text in routeProxyText(text) },
+                    onDelete: { routeProxyCommand(.delete) },
+                    onReturn: { routeProxyCommand(.returnKey) },
+                    onTogglePage: { nextPage in symbolPage = nextPage },
+                    onClose: { state.closeArea() },
+                    onBackToVoice: { state.closeArea() },
+                    onEmoji: { state.presentArea(.emoji) },
+                )
+                .frame(width: contentFrame.width, height: contentFrame.height)
+                .accessibilityIdentifier("number-layer-surface")
             }
             .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
         }
     }
 
-    private func proxyWidth(_ layout: VoiceOnlyKeyboardPolicy.Layout) -> CGFloat {
-        CGFloat(layout.surfaceWidth)
+    private func routeProxyText(_ text: String) {
+        guard let controller = state.controller as? KeyboardViewController else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            return
+        }
+        controller.routeProxyText(text)
     }
 
-    private func alternateAccessoryRow(layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
-        ZStack(alignment: .topLeading) {
-            Image(systemName: "arrow.uturn.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: CGFloat(layout.accessoryRevertFrame.width), height: CGFloat(layout.accessoryRevertFrame.height))
-                .position(x: CGFloat(layout.accessoryRevertFrame.midX - layout.alternateAccessoryRowFrame.minX),
-                          y: CGFloat(layout.accessoryRevertFrame.midY - layout.alternateAccessoryRowFrame.minY))
-
-            Image(systemName: "mic.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.black)
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
-                .background(Capsule().fill(Color.white))
-                .clipShape(Capsule())
-                .frame(width: CGFloat(layout.accessoryMicFrame.width), height: CGFloat(layout.accessoryMicFrame.height))
-                .position(x: CGFloat(layout.accessoryMicFrame.midX - layout.alternateAccessoryRowFrame.minX),
-                          y: CGFloat(layout.accessoryMicFrame.midY - layout.alternateAccessoryRowFrame.minY))
-
-            Image(systemName: "delete.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: CGFloat(layout.accessoryDeleteFrame.width), height: CGFloat(layout.accessoryDeleteFrame.height))
-                .position(x: CGFloat(layout.accessoryDeleteFrame.midX - layout.alternateAccessoryRowFrame.minX),
-                          y: CGFloat(layout.accessoryDeleteFrame.midY - layout.alternateAccessoryRowFrame.minY))
-
-            appleControlSurface(
-                Image(systemName: "return")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
-                in: Circle()
-            )
-            .frame(width: CGFloat(layout.accessoryReturnFrame.width), height: CGFloat(layout.accessoryReturnFrame.height))
-            .position(x: CGFloat(layout.accessoryReturnFrame.midX - layout.alternateAccessoryRowFrame.minX),
-                      y: CGFloat(layout.accessoryReturnFrame.midY - layout.alternateAccessoryRowFrame.minY))
+    private func routeProxyCommand(_ command: KeyboardCommand) {
+        guard let controller = state.controller as? KeyboardViewController else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            return
         }
-        .frame(width: layout.alternateAccessoryRowFrame.width, height: layout.alternateAccessoryRowFrame.height)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        controller.routeProxyCommand(command)
+    }
+
+    private func proxyWidth(_ layout: VoiceOnlyKeyboardPolicy.Layout) -> CGFloat {
+        CGFloat(layout.surfaceWidth)
     }
 
     private var languageIndicator: some View {
@@ -213,22 +197,26 @@ struct KeyboardRootView: View {
         if !layout.dictateFrame.isEmpty {
             let dictateFrame = layout.dictateFrame
             let surfaceCenterX = layout.surfaceFrame.midX
-            ZStack(alignment: .bottom) {
+            let errorFrame = layout.dictationErrorFrame
+            ZStack(alignment: .topLeading) {
                 dictateButton(frame: dictateFrame)
                     .frame(width: dictateFrame.width, height: dictateFrame.height)
                     .position(x: CGFloat(surfaceCenterX - layout.surfaceFrame.minX),
                               y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
-                if !dictationErrorMessage.isEmpty {
+                if !dictationErrorMessage.isEmpty && !errorFrame.isEmpty {
                     Text(dictationErrorMessage)
                         .font(.caption2)
                         .foregroundStyle(.red)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity)
-                        .offset(y: -2)
+                        .allowsTightening(true)
+                        .frame(width: max(CGFloat.zero, errorFrame.width - 8), height: errorFrame.height)
+                        .position(x: CGFloat(errorFrame.midX - layout.surfaceFrame.minX),
+                                  y: CGFloat(errorFrame.midY - layout.surfaceFrame.minY))
+                        .accessibilityIdentifier("dictation-error")
                 }
             }
-                .frame(maxWidth: .infinity, minHeight: CGFloat(layout.surfaceFrame.height), maxHeight: CGFloat(layout.surfaceFrame.height))
+            .frame(maxWidth: .infinity, minHeight: CGFloat(layout.surfaceFrame.height), maxHeight: CGFloat(layout.surfaceFrame.height))
         } else {
             Color.clear
         }
@@ -365,4 +353,257 @@ struct KeyboardRootView: View {
         .accessibilityHidden(true)
     }
 
+}
+
+private struct LiquidSymbolPageView: View {
+    let page: KeyboardPage
+    let availableWidth: CGFloat
+    let availableHeight: CGFloat
+    let onInsert: (String) -> Void
+    let onDelete: () -> Void
+    let onReturn: () -> Void
+    let onTogglePage: (KeyboardPage) -> Void
+    let onClose: () -> Void
+    let onBackToVoice: () -> Void
+    let onEmoji: () -> Void
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
+    @State private var activeKeyID: String?
+
+    private let rowSpacing: CGFloat = 6
+    private let keySpacing: CGFloat = 5
+    private let horizontalInset: CGFloat = 4
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frames = positionedKeys(in: proxy.size)
+            ZStack(alignment: .topLeading) {
+                ForEach(frames) { positionedKey in
+                    symbolKey(positionedKey.key, isActive: activeKeyID == positionedKey.key.id)
+                        .frame(width: positionedKey.frame.width, height: positionedKey.frame.height)
+                        .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
+                }
+                VStack(spacing: 4) {
+                    symbolControl(page == .symbols1 ? "#+=" : "ABC") { onTogglePage(.symbols2) }
+                    HStack(spacing: 4) {
+                        symbolControl("face.smiling") { onEmoji() }
+                        symbolControl("mic.fill", systemImage: true, action: onBackToVoice)
+                    }
+                }
+                .padding(.leading, horizontalInset)
+                .padding(.bottom, horizontalInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        let nextID = key(at: value.location, in: frames)?.id
+                        if nextID != activeKeyID {
+                            activeKeyID = nextID
+                            HapticFeedback.keyTapped()
+                        }
+                    }
+                    .onEnded { value in
+                        if let key = key(at: value.location, in: frames) {
+                            commit(key)
+                        }
+                        activeKeyID = nil
+                    }
+            )
+            .accessibilityElement(children: .contain)
+        }
+        .frame(width: availableWidth, height: availableHeight)
+        .clipped()
+        .onChange(of: page) { _, _ in activeKeyID = nil }
+    }
+
+    private func symbolControl(_ label: String, systemImage: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if systemImage { Image(systemName: label) } else { Text(label) }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(systemImage ? "Return to voice keyboard" : "Emoji")
+        .keyboardGlassEffect()
+    }
+
+    private var rows: [[LiquidSymbolKey]] {
+        let layout = KeyboardLayouts.current().currentDeviceLayout
+        let definitions: [[KeyDefinition]]
+        switch page {
+        case .symbols2:
+            definitions = layout?.symbols2 ?? []
+        default:
+            definitions = layout?.symbols1 ?? []
+        }
+
+        return definitions.enumerated().map { rowIndex, row in
+            row.enumerated().map { columnIndex, definition in
+                LiquidSymbolKey(
+                    id: "\(page)-\(rowIndex)-\(columnIndex)",
+                    definition: definition,
+                    page: page
+                )
+            }
+        }
+    }
+
+    private func positionedKeys(in size: CGSize) -> [PositionedLiquidSymbolKey] {
+        guard !rows.isEmpty else { return [] }
+        let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
+            for: rows.map { $0.map(\.width) }, in: size, spacing: keySpacing,
+            inset: horizontalInset, rowSpacing: rowSpacing
+        )
+        return zip(rows, frames).flatMap { row, rowFrames in
+            zip(row, rowFrames).map { PositionedLiquidSymbolKey(key: $0, frame: $1) }
+        }
+    }
+
+    private func key(at point: CGPoint, in frames: [PositionedLiquidSymbolKey]) -> LiquidSymbolKey? {
+        if let direct = frames.first(where: { $0.frame.contains(point) && !$0.key.isSpacer }) {
+            return direct.key
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private func symbolKey(_ key: LiquidSymbolKey, isActive: Bool) -> some View {
+        if key.isSpacer {
+            Color.clear
+                .accessibilityHidden(true)
+        } else {
+            keyContent(key)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    if reduceTransparency || accessibilityContrast == .increased {
+                        shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))
+                    } else if #available(iOS 26, *) {
+                        shape.fill(.clear).glassEffect(.regular.interactive(), in: shape)
+                    } else {
+                        shape.fill(.regularMaterial)
+                    }
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(isActive ? Color.primary.opacity(0.24) : .clear, lineWidth: 1)
+                }
+                .scaleEffect(isActive ? 1.035 : 1)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: isActive)
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(key.accessibilityLabel)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { commit(key) }
+        }
+    }
+
+    @ViewBuilder
+    private func keyContent(_ key: LiquidSymbolKey) -> some View {
+        switch key.action {
+        case .delete:
+            Image(systemName: "delete.backward")
+                .font(.system(size: 18, weight: .semibold))
+        case .togglePage:
+            Text(key.label)
+                .font(.system(size: 14, weight: .medium))
+        case .insert, .returnKey, .close:
+            Text(key.label)
+                .font(.system(size: 22, weight: .regular))
+        }
+    }
+
+    private func commit(_ key: LiquidSymbolKey) {
+        guard !key.isSpacer else { return }
+        switch key.action {
+        case .insert(let value): onInsert(value)
+        case .delete: onDelete()
+        case .returnKey: onReturn()
+        case .togglePage:
+            switch VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(
+                from: page == .symbols1 ? .symbols1 : .symbols2
+            ) {
+            case .symbols1ToSymbols2:
+                onTogglePage(.symbols2)
+            case .symbols2ToClose:
+                onClose()
+            }
+        case .close: onClose()
+        }
+    }
+}
+
+private struct LiquidSymbolKey: Identifiable {
+    enum Action {
+        case insert(String)
+        case delete
+        case returnKey
+        case togglePage
+        case close
+    }
+
+    let id: String
+    let label: String
+    let width: CGFloat
+    let action: Action
+    let isSpacer: Bool
+
+    init(id: String, definition: KeyDefinition, page: KeyboardPage) {
+        self.id = id
+        self.width = definition.size.width
+        switch definition.type {
+        case .input(let value, _):
+            label = value
+            action = .insert(value)
+            isSpacer = false
+        case .backspace:
+            label = "Delete"
+            action = .delete
+            isSpacer = false
+        case .returnkey:
+            label = "Return"
+            action = .returnKey
+            isSpacer = false
+        case .shiftSymbols:
+            label = page == .symbols1 ? "#+=" : "ABC"
+            action = .togglePage
+            isSpacer = false
+        case .symbols:
+            label = "123"
+            action = .togglePage
+            isSpacer = false
+        case .spacer:
+            label = ""
+            action = .close
+            isSpacer = true
+        default:
+            label = ""
+            action = .close
+            isSpacer = true
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch action {
+        case .insert: return label
+        case .delete: return "Delete backward"
+        case .returnKey: return "Return"
+        case .togglePage: return label == "#+=" ? "More symbols" : "Return to voice keyboard"
+        case .close: return "Close"
+        }
+    }
+}
+
+private struct PositionedLiquidSymbolKey: Identifiable {
+    let key: LiquidSymbolKey
+    let frame: CGRect
+    var id: String { key.id }
 }

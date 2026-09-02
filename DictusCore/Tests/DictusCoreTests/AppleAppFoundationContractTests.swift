@@ -358,16 +358,17 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(overlay.contains(".accessibilityAddTraits(.isModal)"))
     }
 
-    func testKeyboardEmojiAndSearchTargetsKeepFortyFourPointHitAreas() throws {
+    func testKeyboardEmojiAndCategoryTargetsKeepFortyFourPointHitAreas() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(picker.contains("private var rowHeight: CGFloat { 44 }"))
         XCTAssertTrue(picker.contains("frame(width: emojiCellWidth, height: rowHeight)"))
-        XCTAssertTrue(picker.contains("frame(width: emojiCellWidth, height: 44)"))
-        XCTAssertTrue(picker.contains("private let keyHeight: CGFloat = 44"))
+        XCTAssertTrue(picker.contains("private let categoryBarHeight: CGFloat = 44"))
+        XCTAssertFalse(picker.contains("Search Emoji"))
         XCTAssertTrue(categories.contains(".frame(height: 44)"))
         XCTAssertTrue(categories.contains(".frame(width: 44, height: 44)"))
+        XCTAssertFalse(categories.contains("magnifyingglass"))
     }
 
     private func source(_ path: String) throws -> String {
