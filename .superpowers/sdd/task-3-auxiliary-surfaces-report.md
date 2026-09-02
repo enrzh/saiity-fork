@@ -4,6 +4,13 @@
 
 已完成实现并提交。`KeyboardViewController.swift` 未修改、未暂存；工作树中其它 dirty/untracked 内容保持原样。
 
+## 本轮审查修复
+
+- Emoji 与 symbols 现在均由根视图唯一包裹共享的 inset `embeddedSurface`；surface 外保持透明，辅助内容使用 surface 内局部坐标，避免重复绝对 inset。
+- symbols page 1 的 `#+=` 切换 page 2；page 2 的 `ABC` 走既有 close voice 路径。
+- Emoji 按键在 `accessibilityReduceMotion` 开启时禁用 snappy 与 scale 反馈，正常模式保留轻微反馈。
+- focused contract tests 增加 shared surface、坐标清理、reduced motion 与 page2 close 路由约束。
+
 ## TDD 证据
 
 先新增 `DictusCore/Tests/DictusCoreTests/AuxiliarySurfaceContractTests.swift`，覆盖：
@@ -48,9 +55,9 @@ GREEN 命令：
 
 ## Concerns
 
-- 当前仓库未发现 `.xcodeproj`/`.xcworkspace`，所以未执行 iOS keyboard extension 编译或 simulator screenshot 验证；本次验证限于 source contract/policy geometry 与 DictusCore suite。
+- 项目存在 `.xcodeproj`/`.xcworkspace`，但本任务未执行 Xcode/SimSlim runtime verification；本次验证限于 source contract/policy geometry 与 DictusCore suite。
 - 既有编译警告未由本任务引入，建议后续单独处理 Swift 6 Sendable/NSLock 警告。
 
 ## Commit
 
-`feat: simplify auxiliary keyboard surfaces`
+`fix: correct auxiliary surface routing and motion`

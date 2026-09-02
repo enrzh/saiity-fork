@@ -25,15 +25,12 @@ struct KeyboardRootView: View {
                 : layout.micCenterArea
 
             ZStack(alignment: .topLeading) {
-                if usesAuxiliarySurface {
-                    areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight)
-                        .frame(width: proxy.size.width, height: surfaceHeight, alignment: .topLeading)
-                } else {
-                    embeddedSurface(
-                        areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
-                        frame: surfaceFrame
-                    )
-                        .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
+                embeddedSurface(
+                    areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
+                    frame: surfaceFrame
+                )
+                    .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
+                if !usesAuxiliarySurface {
                     if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                         languageIndicator
                             .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
@@ -81,44 +78,36 @@ struct KeyboardRootView: View {
         case .keys, .recording:
             centerSurface(layout: layout)
         case .emoji:
-            VStack(spacing: 0) {
-                Color.clear.frame(height: max(0, contentFrame.minY))
-                EmojiPickerView(
-                    onEmojiInsert: { emoji in
-                        guard let controller = state.controller as? KeyboardViewController else {
-                            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
-                            return
-                        }
-                        controller.routeProxyText(emoji)
-                        state.closeArea()
-                    },
-                    onBackToVoice: { state.closeArea() },
-                    availableWidth: availableWidth,
-                    availableHeight: contentFrame.height
-                )
-                .frame(width: contentFrame.width, height: contentFrame.height)
-                .accessibilityIdentifier("emoji-picker-surface")
-            }
-            .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
+            EmojiPickerView(
+                onEmojiInsert: { emoji in
+                    guard let controller = state.controller as? KeyboardViewController else {
+                        DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+                        return
+                    }
+                    controller.routeProxyText(emoji)
+                    state.closeArea()
+                },
+                onBackToVoice: { state.closeArea() },
+                availableWidth: availableWidth,
+                availableHeight: contentFrame.height
+            )
+            .frame(width: contentFrame.width, height: contentFrame.height)
+            .accessibilityIdentifier("emoji-picker-surface")
         case .panel:
-            VStack(spacing: 0) {
-                Color.clear.frame(height: max(0, contentFrame.minY))
-                LiquidSymbolPageView(
-                    page: symbolPage,
-                    availableWidth: contentFrame.width,
-                    availableHeight: contentFrame.height,
-                    onInsert: { text in routeProxyText(text) },
-                    onDelete: { routeProxyCommand(.delete) },
-                    onReturn: { routeProxyCommand(.returnKey) },
-                    onTogglePage: { nextPage in symbolPage = nextPage },
-                    onClose: { state.closeArea() },
-                    onBackToVoice: { state.closeArea() },
-                    onEmoji: { state.presentArea(.emoji) },
-                )
-                .frame(width: contentFrame.width, height: contentFrame.height)
-                .accessibilityIdentifier("number-layer-surface")
-            }
-            .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
+            LiquidSymbolPageView(
+                page: symbolPage,
+                availableWidth: contentFrame.width,
+                availableHeight: contentFrame.height,
+                onInsert: { text in routeProxyText(text) },
+                onDelete: { routeProxyCommand(.delete) },
+                onReturn: { routeProxyCommand(.returnKey) },
+                onTogglePage: { nextPage in symbolPage = nextPage },
+                onClose: { state.closeArea() },
+                onBackToVoice: { state.closeArea() },
+                onEmoji: { state.presentArea(.emoji) },
+            )
+            .frame(width: contentFrame.width, height: contentFrame.height)
+            .accessibilityIdentifier("number-layer-surface")
         }
     }
 
@@ -136,10 +125,6 @@ struct KeyboardRootView: View {
             return
         }
         controller.routeProxyCommand(command)
-    }
-
-    private func proxyWidth(_ layout: VoiceOnlyKeyboardPolicy.Layout) -> CGFloat {
-        CGFloat(layout.surfaceWidth)
     }
 
     private var languageIndicator: some View {
@@ -386,7 +371,9 @@ private struct LiquidSymbolPageView: View {
                         .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
                 }
                 VStack(spacing: 4) {
-                    symbolControl(page == .symbols1 ? "#+=" : "ABC") { onTogglePage(.symbols2) }
+                    symbolControl(page == .symbols1 ? "#+=" : "ABC") {
+                        page == .symbols1 ? onTogglePage(.symbols2) : onClose()
+                    }
                     HStack(spacing: 4) {
                         symbolControl("face.smiling") { onEmoji() }
                         symbolControl("mic.fill", systemImage: true, action: onBackToVoice)
@@ -431,7 +418,6 @@ private struct LiquidSymbolPageView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(systemImage ? "Return to voice keyboard" : "Emoji")
-        .keyboardGlassEffect()
     }
 
     private var rows: [[LiquidSymbolKey]] {

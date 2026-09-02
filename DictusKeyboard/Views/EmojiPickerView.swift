@@ -28,6 +28,7 @@ struct EmojiPickerView: View {
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
     @State private var pressedEmojiIndex: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let categories = EmojiStore.categories
 
@@ -128,8 +129,8 @@ struct EmojiPickerView: View {
                             .font(.system(size: 32))
                             .frame(width: emojiCellWidth, height: rowHeight)
                             .contentShape(Rectangle())
-                            .scaleEffect(pressedEmojiIndex == itemIndex ? 1.08 : 1)
-                            .animation(.snappy(duration: 0.16), value: pressedEmojiIndex)
+                            .scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == itemIndex ? 1.08 : 1)
+                            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)
                             .accessibilityLabel(item.emoji)
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAction {

@@ -13,7 +13,10 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
-        XCTAssertTrue(root.contains("embeddedSurface("))
+        XCTAssertEqual(root.components(separatedBy: "embeddedSurface(").count - 1, 1)
+        XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight)"))
+        XCTAssertTrue(root.contains(".offset(x: surfaceFrame.minX, y: surfaceFrame.minY)"))
+        XCTAssertFalse(root.contains("Color.clear.frame(height: max(0, contentFrame.minY))"))
         XCTAssertTrue(root.contains("EmojiPickerView("))
         XCTAssertTrue(root.contains("LiquidSymbolPageView("))
     }
@@ -29,6 +32,22 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(categories.contains("Button(action: onBackToVoice)"))
         XCTAssertFalse(categories.contains("keyboardGlassEffect()"))
         XCTAssertTrue(categories.contains("ScrollView(.horizontal"))
+    }
+
+    func testEmojiMotionDisablesScaleFeedbackWhenReduceMotionIsEnabled() throws {
+        let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+
+        XCTAssertTrue(picker.contains(".scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == itemIndex ? 1.08 : 1)"))
+        XCTAssertTrue(picker.contains(".animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)"))
+    }
+
+    func testSymbolsToggleUsesPageSpecificTransitionIncludingClosePath() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains("symbolControl(page == .symbols1 ? \"#+=\" : \"ABC\") {"))
+        XCTAssertTrue(root.contains("page == .symbols1 ? onTogglePage(.symbols2) : onClose()"))
+        XCTAssertTrue(root.contains("case .symbols2ToClose:"))
+        XCTAssertTrue(root.contains("onClose()"))
     }
 
     func testSymbolsKeepThreeRowsAndRouteBottomControlsThroughExistingCallbacks() throws {
