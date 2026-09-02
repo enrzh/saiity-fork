@@ -19,7 +19,7 @@ struct KeyboardRootView: View {
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
             let surfaceFrame = layout.surfaceFrame
-            let contentFrame = usesAuxiliarySurface ? layout.alternateContentFrame : layout.micCenterArea
+            let contentFrame = usesAuxiliarySurface ? layout.alternateContentBelowAccessoryFrame : layout.micCenterArea
             let centerSurface = embeddedSurface(
                 areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
                 frame: surfaceFrame
@@ -62,13 +62,6 @@ struct KeyboardRootView: View {
                 maxWidth: .infinity,
                 maxHeight: .infinity
             )
-            .background {
-                if reduceTransparency {
-                    Color(uiColor: .secondarySystemFill)
-                } else {
-                    Color(uiColor: .secondarySystemBackground)
-                }
-            }
         }
     }
 
@@ -79,22 +72,67 @@ struct KeyboardRootView: View {
         case .keys, .recording:
             centerSurface(layout: layout)
         case .emoji:
-            EmojiPickerView(
-                onEmojiInsert: { emoji in
-                    guard let controller = state.controller as? KeyboardViewController else {
-                        DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
-                        return
-                    }
-                    controller.routeProxyText(emoji)
-                    state.closeArea()
-                },
-                availableWidth: availableWidth,
-                availableHeight: contentFrame.height
-            )
-            .accessibilityIdentifier("emoji-picker-surface")
+            VStack(spacing: 0) {
+                alternateAccessoryRow(layout: layout)
+                EmojiPickerView(
+                    onEmojiInsert: { emoji in
+                        guard let controller = state.controller as? KeyboardViewController else {
+                            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+                            return
+                        }
+                        controller.routeProxyText(emoji)
+                        state.closeArea()
+                    },
+                    availableWidth: availableWidth,
+                    availableHeight: contentFrame.height
+                )
+                .accessibilityIdentifier("emoji-picker-surface")
+            }
+            .frame(width: layout.surfaceFrame.width, height: layout.surfaceFrame.height, alignment: .top)
         case .panel:
-            Color(uiColor: .systemBackground).accessibilityIdentifier("number-layer-surface")
+            VStack(spacing: 0) {
+                alternateAccessoryRow(layout: layout)
+                Color(uiColor: .systemBackground)
+                    .accessibilityIdentifier("number-layer-surface")
+                    .frame(height: contentFrame.height)
+            }
+            .frame(width: layout.surfaceFrame.width, height: layout.surfaceFrame.height, alignment: .top)
         }
+    }
+
+    private func alternateAccessoryRow(layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
+        HStack(spacing: 0) {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(layout.alternateAccessoryRowFrame.height))
+
+            Spacer()
+
+            Image(systemName: "mic.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.black)
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
+                .background(Capsule().fill(Color.white))
+                .clipShape(Capsule())
+
+            Spacer()
+
+            Image(systemName: "delete.backward")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(layout.alternateAccessoryRowFrame.height))
+
+            Image(systemName: "return")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
+                .background(Circle().fill(.regularMaterial))
+                .clipShape(Circle())
+        }
+        .frame(width: layout.alternateAccessoryRowFrame.width, height: layout.alternateAccessoryRowFrame.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var languageIndicator: some View {
@@ -166,7 +204,8 @@ struct KeyboardRootView: View {
     }
 
     private func dictateButton(frame: CGRect) -> some View {
-        VStack(spacing: 1) {
+        let capsuleHeight = frame.height
+        return VStack(spacing: 1) {
             Image(systemName: dictationSymbol)
                 .font(.system(size: 20, weight: .semibold))
                 .symbolEffect(
@@ -186,7 +225,7 @@ struct KeyboardRootView: View {
             }
         }
         .foregroundStyle(.primary)
-        .frame(width: frame.width, height: frame.height)
+        .frame(width: frame.width, height: capsuleHeight)
         .background(Capsule().fill(Color.white))
         .clipShape(Capsule())
         .contentShape(Capsule())

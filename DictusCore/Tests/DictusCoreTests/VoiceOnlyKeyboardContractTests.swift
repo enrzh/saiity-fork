@@ -42,6 +42,41 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("state.requestStop()"))
     }
 
+    func testKeyboardRootUsesOnlyTheInsetSurfaceAndLeavesNativeBackdropToInputView() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains("let surfaceFrame = layout.surfaceFrame"))
+        XCTAssertTrue(root.contains("frame: surfaceFrame"))
+        XCTAssertFalse(root.contains(".background {"),
+                      "the UIInputView owns the keyboard backdrop")
+
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
+        XCTAssertEqual(layout.surfaceFrame.minX, 6)
+        XCTAssertEqual(layout.surfaceFrame.minY, 4)
+    }
+
+    func testAuxiliaryContentStartsBelowStaticAccessoryRow() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("alternateAccessoryRow"))
+        XCTAssertTrue(root.contains("layout.alternateAccessoryRowFrame"))
+    }
+
+    func testAuxiliaryAccessoryRowDrawsStaticNativeVisualsWithoutSwiftUIActions() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains("arrow.uturn.backward"))
+        XCTAssertTrue(root.contains("mic.fill"))
+        XCTAssertTrue(root.contains("delete.backward"))
+        XCTAssertTrue(root.contains("return"))
+        XCTAssertTrue(root.contains("background(Capsule().fill(Color.white))"))
+        XCTAssertTrue(root.contains("Circle()"))
+        XCTAssertTrue(root.contains("allowsHitTesting(false)"))
+        XCTAssertFalse(root.contains("state.startRecording()"))
+        XCTAssertFalse(root.contains("state.requestStop()"))
+    }
+
     private func source(_ path: String) throws -> String {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -236,7 +271,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("state.areaMode.modeControlTitle"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
         XCTAssertTrue(root.contains("languageIndicatorTitle"))
-        XCTAssertTrue(root.contains("Color(uiColor: .secondarySystemBackground)"))
         XCTAssertTrue(root.contains(".accessibilityHidden(true)"))
         XCTAssertTrue(root.contains("Text(dictationTitle)"))
         XCTAssertFalse(root.contains("onDelete: onDelete"))
@@ -316,10 +350,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("Color.white"))
         XCTAssertTrue(root.contains(".foregroundStyle(.primary)"))
         XCTAssertTrue(root.contains("dictateFrame"))
+        XCTAssertTrue(root.contains("let capsuleHeight = frame.height"))
+        XCTAssertTrue(root.contains("height: capsuleHeight"))
         XCTAssertTrue(root.contains("surfaceFrame.midX"))
         XCTAssertTrue(root.contains("availableWidth: availableWidth"),
                       "emoji content must receive the complete embedded surface width")
-        XCTAssertTrue(root.contains("alternateContentFrame"))
+        XCTAssertTrue(root.contains("alternateContentBelowAccessoryFrame"))
     }
 
     func testLatestVoiceLayoutUsesThreeLeftTargetsAndBottomDismiss() {
