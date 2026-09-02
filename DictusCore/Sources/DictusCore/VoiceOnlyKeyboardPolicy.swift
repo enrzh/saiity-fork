@@ -34,6 +34,9 @@ public enum VoiceOnlyKeyboardPolicy {
     /// may occupy the full fixed surface because the outer rails own its sides.
     public static let contentHeight: Double = surfaceHeight
     public static let symbolsMinimumContentHeight: Double = controlSize * 4
+    /// Auxiliary pages need one 44pt accessory row plus four 44pt symbol rows.
+    /// The inset surface at the normal 216pt keyboard height cannot contain both.
+    public static let alternateMinimumHeight: Double = verticalPadding * 2 + controlSize + symbolsMinimumContentHeight
     public static let titleHeight: Double = 17
     public static let statusHeight: Double = 16
     public static let contentSpacing: Double = 6
@@ -156,7 +159,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var alternateAccessoryRowFrame: CGRect {
-            guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.controlSize else { return .zero }
+            guard surfaceHeight >= VoiceOnlyKeyboardPolicy.alternateMinimumHeight else { return .zero }
             let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize + visibleControlGap * 3
             guard surfaceFrame.width >= minimumWidth else { return .zero }
             return CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
@@ -167,9 +170,10 @@ public enum VoiceOnlyKeyboardPolicy {
         public var alternateContentBelowAccessoryFrame: CGRect {
             let row = alternateAccessoryRowFrame
             guard !row.isEmpty else { return .zero }
+            let contentHeight = VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight
+            guard row.maxY + contentHeight <= surfaceFrame.maxY else { return .zero }
             return CGRect(x: surfaceFrame.minX, y: row.maxY,
-                          width: surfaceFrame.width,
-                          height: max(0, surfaceFrame.maxY - row.maxY))
+                          width: surfaceFrame.width, height: contentHeight)
         }
 
         public var accessoryRevertFrame: CGRect {

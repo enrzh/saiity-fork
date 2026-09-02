@@ -3,7 +3,7 @@ import XCTest
 
 final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     func testSharedContractUsesSixByFourInsetsAndSplitsAlternatePageContent() {
-        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 180)
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 228)
 
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 6)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.verticalPadding, 4)
@@ -16,7 +16,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
     func testAuxiliaryAccessoryFramesAreCenteredAndNonOverlapping() {
         for width in [320.0, 375, 390, 430] {
-            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 228)
             let frames = layout.alternateAccessoryFrames
 
             XCTAssertEqual(frames[1].midX, layout.alternateAccessoryRowFrame.midX, accuracy: 0.001)
@@ -60,8 +60,26 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight / 4, 44)
     }
 
+    func testAlternatePagesFailClosedAt216And224AndFitAt228() {
+        for height in [216.0, 224.0] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: height)
+            XCTAssertTrue(layout.alternateAccessoryRowFrame.isEmpty, "height=\(height)")
+            XCTAssertTrue(layout.alternateContentBelowAccessoryFrame.isEmpty, "height=\(height)")
+        }
+
+        let expandedHeight = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 228)
+        let row = expandedHeight.alternateAccessoryRowFrame
+        let content = expandedHeight.alternateContentBelowAccessoryFrame
+        XCTAssertEqual(row.height, VoiceOnlyKeyboardPolicy.controlSize)
+        XCTAssertEqual(content.height, VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight)
+        XCTAssertEqual(content.minY, row.maxY)
+        XCTAssertEqual(content.maxY, expandedHeight.surfaceFrame.maxY)
+        XCTAssertTrue(expandedHeight.surfaceFrame.contains(row))
+        XCTAssertTrue(expandedHeight.surfaceFrame.contains(content))
+    }
+
     func testAuxiliaryAccessoryFramesKeepVisibleGapAtRowEdges() {
-        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 228)
         let row = layout.alternateAccessoryRowFrame
         let frames = layout.alternateAccessoryFrames
 
@@ -76,7 +94,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertGreaterThan(VoiceOnlyKeyboardPolicy.railSpacing, 0)
 
         for width in [320.0, 375, 390, 430] {
-            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 228)
             let bounds = CGRect(x: 0, y: 0, width: width, height: layout.surfaceHeight)
             let rectangles = layout.actionRectangles
 
@@ -155,7 +173,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
     func testAlternateContentUsesTheEntireEmbeddedSurface() {
         for width in [320.0, 375, 390, 430] {
-            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 228)
             let frame = layout.alternateContentBelowAccessoryFrame
 
             XCTAssertEqual(frame.minX, layout.horizontalInset, "width=\(width)")
