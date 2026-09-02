@@ -34,6 +34,8 @@ struct EmojiPickerView: View {
     private let headerHeight: CGFloat = 0
     private let categoryBarHeight: CGFloat = 44
     private let rowSpacing: CGFloat = 1
+    private let emojiColumnCount: Int = 8
+    private let gridHorizontalPadding: CGFloat = 2
 
     /// Number of complete rows that fit above the category bar.
     private var rowCount: Int {
@@ -51,12 +53,12 @@ struct EmojiPickerView: View {
 
     /// Columns for vertical grid: 8 emojis per row filling the full width.
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.fixed(emojiCellWidth), spacing: 0), count: 8)
+        Array(repeating: GridItem(.fixed(emojiCellWidth), spacing: 0), count: emojiColumnCount)
     }
 
     /// Dynamic cell width: exactly 8 emojis per row based on actual available width.
     private var emojiCellWidth: CGFloat {
-        (availableWidth - 4) / 8
+        (availableWidth - gridHorizontalPadding * 2) / CGFloat(emojiColumnCount)
     }
 
     // MARK: - Computed data
@@ -135,7 +137,7 @@ struct EmojiPickerView: View {
                             .id(item.id)
                         }
                 }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, gridHorizontalPadding)
             .id(selectedCategoryID)
             .contentShape(Rectangle())
             .gesture(
@@ -144,9 +146,11 @@ struct EmojiPickerView: View {
                         pressedEmojiIndex = emojiIndex(at: value.location)
                     }
                     .onEnded { value in
-                        if let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) {
-                            insertEmoji(currentCategoryEmojis[index].emoji)
+                        guard let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) else {
+                            pressedEmojiIndex = nil
+                            return
                         }
+                        insertEmoji(currentCategoryEmojis[index].emoji)
                         pressedEmojiIndex = nil
                     }
             )
@@ -173,8 +177,8 @@ struct EmojiPickerView: View {
                 }
                 .frame(width: max(emojiCellWidth - 8, 36), height: rowHeight - 8)
                 .position(
-                    x: CGFloat(index % 8) * emojiCellWidth + emojiCellWidth / 2,
-                    y: CGFloat(index / 8) * (rowHeight + rowSpacing) + rowHeight / 2
+                    x: gridHorizontalPadding + CGFloat(index % emojiColumnCount) * emojiCellWidth + emojiCellWidth / 2,
+                    y: CGFloat(index / emojiColumnCount) * (rowHeight + rowSpacing) + rowHeight / 2
                 )
                 .allowsHitTesting(false)
                 .transition(.opacity)
@@ -182,10 +186,10 @@ struct EmojiPickerView: View {
     }
 
     private func emojiIndex(at point: CGPoint) -> Int? {
-        let column = Int((point.x - 2) / emojiCellWidth)
+        let column = Int((point.x - gridHorizontalPadding) / emojiCellWidth)
         let row = Int(point.y / (rowHeight + rowSpacing))
-        guard column >= 0, column < 8, row >= 0 else { return nil }
-        let index = row * 8 + column
+        guard column >= 0, column < emojiColumnCount, row >= 0 else { return nil }
+        let index = row * emojiColumnCount + column
         return currentCategoryEmojis.indices.contains(index) ? index : nil
     }
 

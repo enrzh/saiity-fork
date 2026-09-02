@@ -121,6 +121,40 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the highlight must be layered behind the emoji grid")
     }
 
+    func testEmojiPointerUsesSharedGridGeometryAndReleaseContract() throws {
+        let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+
+        XCTAssertTrue(picker.contains("private let emojiColumnCount: Int = 8"),
+                      "grid geometry must define one shared column count")
+        XCTAssertTrue(picker.contains("private let gridHorizontalPadding: CGFloat = 2"),
+                      "grid geometry must define one shared horizontal padding")
+        XCTAssertTrue(picker.contains("count: emojiColumnCount"),
+                      "the LazyVGrid columns must use the shared column count")
+        XCTAssertTrue(picker.contains("availableWidth - gridHorizontalPadding * 2"),
+                      "cell width must use the shared horizontal padding")
+        XCTAssertTrue(picker.contains("x: gridHorizontalPadding +"),
+                      "the shared highlight must include the grid horizontal padding")
+        XCTAssertTrue(picker.contains("(point.x - gridHorizontalPadding)"),
+                      "pointer mapping must use the shared horizontal padding")
+        XCTAssertTrue(picker.contains("column < emojiColumnCount"),
+                      "pointer mapping must use the shared column count")
+
+        let gesture = try XCTUnwrap(picker.range(of: ".gesture("))
+        let gestureBody = String(picker[gesture.lowerBound...])
+        XCTAssertTrue(gestureBody.contains("DragGesture(minimumDistance: 0"),
+                      "emoji grid must use the zero-distance drag gesture")
+        XCTAssertTrue(gestureBody.contains(".onChanged { value in"),
+                      "pointer tracking must update during onChanged")
+        XCTAssertTrue(gestureBody.contains(".onEnded { value in"),
+                      "pointer tracking must handle release in onEnded")
+        XCTAssertTrue(gestureBody.contains("guard let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) else"),
+                      "release must have one legal insertion guard")
+        XCTAssertEqual(gestureBody.components(separatedBy: "insertEmoji(currentCategoryEmojis[index].emoji)").count - 1, 1,
+                       "release must insert at most once")
+        XCTAssertTrue(gestureBody.contains("pressedEmojiIndex = nil"),
+                      "release must clear the pressed state")
+    }
+
     func testEmojiSearchHasNoReachableUI() throws {
         let emoji = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categoryBar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
