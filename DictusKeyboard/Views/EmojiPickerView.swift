@@ -26,19 +26,20 @@ struct EmojiPickerView: View {
 
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
+    @State private var pressedEmojiIndex: Int?
 
     private let categories = EmojiStore.categories
 
     // Grid sizing constants
-    private let headerHeight: CGFloat = 20
-    private let categoryBarHeight: CGFloat = 36
+    private let headerHeight: CGFloat = 0
+    private let categoryBarHeight: CGFloat = 44
     private let rowSpacing: CGFloat = 1
 
-    /// Number of rows that fit in available height after subtracting header + category bar.
+    /// Number of complete rows that fit above the category bar.
     private var rowCount: Int {
         let gridSpace = availableHeight - headerHeight - categoryBarHeight
         let rowWithSpacing: CGFloat = rowHeight + rowSpacing
-        return max(3, Int(gridSpace / rowWithSpacing))
+        return max(1, Int(gridSpace / rowWithSpacing))
     }
 
     /// Height per emoji row, computed to fill available space evenly.
@@ -89,11 +90,6 @@ struct EmojiPickerView: View {
         return infos
     }
 
-    /// Display name for the currently selected category.
-    private var selectedCategoryName: String {
-        sectionInfos.first(where: { $0.id == selectedCategoryID })?.name.uppercased() ?? ""
-    }
-
     // MARK: - Body
 
     var body: some View {
@@ -114,42 +110,47 @@ struct EmojiPickerView: View {
 
     @ViewBuilder
     private var normalMode: some View {
-        // Category name label (e.g. "SMILEYS & PEOPLE")
-        HStack {
-            Text(selectedCategoryName)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-                .layoutPriority(1)
-            Spacer()
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 4)
-        .padding(.bottom, 1)
-
         // Vertical emoji grid — fills width first, scrolls down for more.
         // .id(selectedCategoryID) forces SwiftUI to destroy and recreate the grid when
         // the user switches categories, which releases the old Text views and their
         // CoreText glyph caches -- this is the key to keeping memory under 50 MiB.
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVGrid(columns: gridColumns, spacing: 0) {
-                ForEach(currentCategoryEmojis) { item in
-                    Button {
-                        HapticFeedback.keyTapped()
-                        onEmojiInsert(item.emoji)
-                        RecentEmojis.add(item.emoji)
-                        recentEmojis = RecentEmojis.load()
-                    } label: {
+            ZStack(alignment: .topLeading) {
+                emojiPointerHighlight
+
+                LazyVGrid(columns: gridColumns, spacing: rowSpacing) {
+                    ForEach(currentCategoryEmojis) { item in
+                        let itemIndex = currentCategoryEmojis.firstIndex(where: { $0.id == item.id }) ?? 0
                         Text(item.emoji)
                             .font(.system(size: 32))
                             .frame(width: emojiCellWidth, height: rowHeight)
-                    }
-                    .id(item.id)
+                            .contentShape(Rectangle())
+                            .scaleEffect(pressedEmojiIndex == itemIndex ? 1.08 : 1)
+                            .animation(.snappy(duration: 0.16), value: pressedEmojiIndex)
+                            .accessibilityLabel(item.emoji)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction {
+                                insertEmoji(item.emoji)
+                            }
+                            .id(item.id)
+                        }
                 }
-            }
             .padding(.horizontal, 2)
             .id(selectedCategoryID)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        pressedEmojiIndex = emojiIndex(at: value.location)
+                    }
+                    .onEnded { value in
+                        if let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) {
+                            insertEmoji(currentCategoryEmojis[index].emoji)
+                        }
+                        pressedEmojiIndex = nil
+                    }
+            )
+        }
         }
 
         EmojiCategoryBar(
@@ -161,6 +162,51 @@ struct EmojiPickerView: View {
         )
     }
 
+    @ViewBuilder
+    private var emojiPointerHighlight: some View {
+        if let index = pressedEmojiIndex {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                }
+                .frame(width: max(emojiCellWidth - 8, 36), height: rowHeight - 8)
+                .position(
+                    x: CGFloat(index % 8) * emojiCellWidth + emojiCellWidth / 2,
+                    y: CGFloat(index / 8) * (rowHeight + rowSpacing) + rowHeight / 2
+                )
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
+    }
+
+    private func emojiIndex(at point: CGPoint) -> Int? {
+        let column = Int((point.x - 2) / emojiCellWidth)
+        let row = Int(point.y / (rowHeight + rowSpacing))
+        guard column >= 0, column < 8, row >= 0 else { return nil }
+        let index = row * 8 + column
+        return currentCategoryEmojis.indices.contains(index) ? index : nil
+    }
+
+    private func insertEmoji(_ emoji: String) {
+        HapticFeedback.keyTapped()
+        onEmojiInsert(emoji)
+        RecentEmojis.add(emoji)
+        recentEmojis = RecentEmojis.load()
+    }
+
+}
+
+extension View {
+    @ViewBuilder
+    func keyboardGlassEffect() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+        } else {
+            self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
 }
 
 // MARK: - Supporting types
