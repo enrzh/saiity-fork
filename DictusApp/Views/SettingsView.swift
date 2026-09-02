@@ -26,8 +26,7 @@ struct SettingsView: View {
                 polishStateFooter
             }
             Section("Keyboard") {
-                Picker
-                    (selection: keyboardAccessoryOrderBinding, label: { Text("Control order") }) {
+                Picker(selection: keyboardAccessoryOrderBinding, label: Text("Control order")) {
                     ForEach([KeyboardAccessoryOrder.emojiFirst, .numberFirst], id: \.self) { order in
                         Text(order.displayName).tag(order)
                     }

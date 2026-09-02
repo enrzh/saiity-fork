@@ -32,6 +32,19 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                               height: layout.bottomAuxiliaryControlFrame.minY - VoiceOnlyKeyboardPolicy.visibleControlGap - layout.surfaceFrame.minY))
     }
 
+    func testSettingsKeyboardSectionUsesNativePickerSyntax() throws {
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+        let keyboardStart = try XCTUnwrap(settings.range(of: "Section(\"Keyboard\")"))
+        let nextSection = try XCTUnwrap(settings.range(of: "Section(\"Translation & Cleanup\")"))
+        let keyboardSection = String(settings[keyboardStart.lowerBound..<nextSection.lowerBound])
+
+        XCTAssertTrue(keyboardSection.contains("Picker(selection: keyboardAccessoryOrderBinding, label: Text(\"Control order\"))"))
+        XCTAssertTrue(keyboardSection.contains("KeyboardAccessoryOrder.emojiFirst"))
+        XCTAssertTrue(keyboardSection.contains(".numberFirst"))
+        XCTAssertTrue(keyboardSection.contains("NavigationLink { ModelManagerView(modelManager: modelManager) } label:"))
+        XCTAssertTrue(keyboardSection.contains("Label(\"Models\", systemImage: \"square.stack.3d.up.fill\")"))
+    }
+
     func testUIKitAndSwiftUIConsumeTheCurrentAccessoryOrder() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")

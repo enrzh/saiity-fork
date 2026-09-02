@@ -97,34 +97,6 @@ public enum VoiceOnlyKeyboardPolicy {
         return max(44, min(max(132, availableWidth * 0.39), centerAreaWidth - 16, globalWidthLimit))
     }
 
-    public static func rightRailFrames(
-        for width: CGFloat,
-        surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
-    ) -> (delete: CGRect, returnKey: CGRect) {
-        guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
-            return (.zero, .zero)
-        }
-        return layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailFrames
-    }
-
-    public static func leftUtilityFrames(
-        for width: CGFloat,
-        surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
-    ) -> (at: CGRect, emoji: CGRect, number: CGRect) {
-        let layout = layout(for: Double(width), surfaceHeight: Double(surfaceHeight))
-        return layout.leftUtilityFrames
-    }
-
-    public static func dismissFrame(
-        for width: CGFloat,
-        surfaceHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
-    ) -> CGRect {
-        guard layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).rightRailWidth > 0 else {
-            return .zero
-        }
-        return layout(for: Double(width), surfaceHeight: Double(surfaceHeight)).dismissFrame
-    }
-
     public struct Layout: Equatable {
         public let surfaceWidth: Double
         public let horizontalInset: Double
