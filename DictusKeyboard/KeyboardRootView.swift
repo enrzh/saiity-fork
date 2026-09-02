@@ -19,7 +19,10 @@ struct KeyboardRootView: View {
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
             let surfaceFrame = layout.surfaceFrame
-            let contentFrame = usesAuxiliarySurface ? layout.alternateContentBelowAccessoryFrame : layout.micCenterArea
+            var contentFrame = layout.micCenterArea
+            if usesAuxiliarySurface {
+                contentFrame = layout.alternateContentBelowAccessoryFrame
+            }
             let centerSurface = embeddedSurface(
                 areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),
                 frame: surfaceFrame

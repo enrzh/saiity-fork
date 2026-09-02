@@ -5,11 +5,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testPolicyExposesAlternatePageAccessoryAndContentGeometry() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 375, surfaceHeight: 228)
 
-        XCTAssertEqual(layout.alternateAccessoryRowFrame.minX, layout.surfaceFrame.minX)
-        XCTAssertEqual(layout.alternateAccessoryRowFrame.maxX, layout.surfaceFrame.maxX)
+        XCTAssertEqual(layout.alternateAccessoryRowFrame.minX, 0)
+        XCTAssertEqual(layout.alternateAccessoryRowFrame.maxX, 375)
         XCTAssertEqual(layout.alternateContentBelowAccessoryFrame.minY,
                        layout.alternateAccessoryRowFrame.maxY)
-        XCTAssertTrue(layout.surfaceFrame.contains(layout.alternateContentBelowAccessoryFrame))
+        XCTAssertEqual(layout.alternateContentBelowAccessoryFrame, CGRect(x: 0, y: 44, width: 375, height: 184))
     }
 
 
@@ -53,6 +53,72 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         XCTAssertEqual(layout.surfaceFrame.minX, 6)
         XCTAssertEqual(layout.surfaceFrame.minY, 4)
+    }
+
+    func testAlternatePagesLeaveTheInsetSurfaceAndUseTheNativeCanvas() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+
+        XCTAssertTrue(root.contains("if usesAuxiliarySurface"),
+                      "alternate pages must not be wrapped in the voice inset surface")
+        XCTAssertTrue(root.contains("frame(width: proxy.size.width, height: surfaceHeight"),
+                      "alternate pages must use the full input-view width")
+        XCTAssertTrue(root.contains("contentFrame = layout.alternateContentBelowAccessoryFrame"),
+                      "alternate content must begin below the accessory row")
+        XCTAssertTrue(controller.contains("KeyboardInputView(frame: .zero, inputViewStyle: .keyboard)"),
+                      "the UIKit input view must provide the native adaptive backdrop")
+        XCTAssertFalse(controller.contains("kbInputView.backgroundColor"),
+                       "a transparent input view leaks the host wallpaper behind the keyboard")
+        XCTAssertFalse(controller.contains("max(nativeHeight, CGFloat(VoiceOnlyKeyboardPolicy.alternateMinimumHeight))"),
+                       "alternate pages must not force a taller custom keyboard than UIKit")
+    }
+
+    func testDictationErrorsRenderOutsideTheMicButton() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let dictateButton = try XCTUnwrap(root.range(of: "private func dictateButton"))
+        let dictationTitle = try XCTUnwrap(root.range(of: "private var dictationTitle"))
+        let buttonBody = String(root[dictateButton.lowerBound..<dictationTitle.lowerBound])
+
+        XCTAssertTrue(root.contains("private var dictationErrorMessage"))
+        XCTAssertTrue(root.contains("Text(dictationErrorMessage)"))
+        XCTAssertTrue(root.contains(".foregroundStyle(.red)"))
+        XCTAssertFalse(buttonBody.contains("statusMessage"),
+                       "the mic capsule must remain reserved for its action state")
+        XCTAssertTrue(root.contains("case .failed: return \"Hold to dictate\""),
+                      "failure copy belongs in the separate error line")
+    }
+
+    func testEmojiSearchHasNoReachableUI() throws {
+        let emoji = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+        let categoryBar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
+
+        XCTAssertFalse(emoji.contains("isSearchActive"))
+        XCTAssertFalse(emoji.contains("searchMode"))
+        XCTAssertFalse(emoji.contains("MiniSearchKeyboard"))
+        XCTAssertFalse(emoji.contains("EmojiSearchFR"))
+        XCTAssertFalse(categoryBar.contains("onSearch"))
+        XCTAssertFalse(categoryBar.contains("magnifyingglass"))
+    }
+
+    func testSymbolsPageDoesNotReserveAHiddenPatchRow() throws {
+        let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let keyboardView = try source("DictusKeyboard/Vendored/Views/KeyboardView.swift")
+
+        let numbersStart = try XCTUnwrap(layouts.range(of: "private static func numbersPage"))
+        let symbolsStart = try XCTUnwrap(layouts.range(of: "private static func symbolsPage"))
+        let helperStart = try XCTUnwrap(layouts.range(of: "// MARK: - Bottom Rows"))
+        let numberBody = String(layouts[numbersStart.lowerBound..<symbolsStart.lowerBound])
+        let symbolsBody = String(layouts[symbolsStart.lowerBound..<helperStart.lowerBound])
+
+        XCTAssertTrue(layouts.contains("static let symbolsRowCount = 3"))
+        XCTAssertFalse(numberBody.contains("blankRow()"))
+        XCTAssertFalse(symbolsBody.contains("blankRow()"))
+        XCTAssertFalse(controller.contains("contentFrame.size.height = max(contentFrame.height"))
+        XCTAssertTrue(keyboardView.contains("let height = bounds.size.height / CGFloat(max(rowCount, 1))"),
+                      "symbol rows must fill the content frame instead of overflowing and clipping")
+        XCTAssertTrue(keyboardView.contains("backgroundColor = .clear"),
+                      "the symbol grid must reveal the native input-view backdrop between keys")
     }
 
     func testAuxiliaryContentStartsBelowStaticAccessoryRow() throws {
@@ -120,8 +186,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(inputView.contains("inputViewStyle: .keyboard"))
-        XCTAssertTrue(controller.contains("kbInputView.backgroundColor = .clear"))
-        XCTAssertTrue(controller.contains("kbInputView.isOpaque = false"))
+        XCTAssertTrue(inputView.contains("backgroundColor = .systemGroupedBackground"))
+        XCTAssertTrue(inputView.contains("isOpaque = true"))
         XCTAssertTrue(controller.contains("$0.layer.cornerRadius = $0.bounds.height / 2"))
         XCTAssertTrue(controller.contains("micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2"))
         XCTAssertFalse(root.contains("Color(uiColor: .systemBackground)"))
@@ -190,7 +256,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
 
-        XCTAssertTrue(layouts.contains("// Row 4 is reserved for the UIKit-owned public actions."))
+        XCTAssertTrue(layouts.contains("static let symbolsRowCount = 3"))
         XCTAssertTrue(layouts.contains("private static func blankRow()"))
         XCTAssertFalse(controller.contains("numberButton?.frame = layout.symbolsReservedRowFrame"),
                        "the runtime button must not claim the full reserved row")
@@ -519,7 +585,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             "private var language: String = SupportedLanguage.active.rawValue"
         ))
         XCTAssertFalse(prediction.contains("private var language: String = \"fr\""))
-        XCTAssertTrue(emoji.contains("let language = SupportedLanguage.active.rawValue"))
         XCTAssertFalse(emoji.contains("SharedKeys.language) ?? \"fr\""))
     }
 
@@ -571,8 +636,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the vendored grid must remember the bounds used for its cached cell sizes")
         XCTAssertTrue(keyboardView.contains("collectionView.collectionViewLayout.invalidateLayout()"),
                       "a native keyboard height transition must invalidate cached symbol cell frames")
-        XCTAssertTrue(keyboardView.contains("max(bounds.size.height / CGFloat(max(rowCount, 1)), 44)"),
-                      "symbols keys must keep a 44 point hit height")
+        XCTAssertTrue(keyboardView.contains("let height = bounds.size.height / CGFloat(max(rowCount, 1))"),
+                      "symbols keys must fill the available native content height")
     }
 
     func testSymbolsReturnRestoresTheVendoredKeyboardPage() throws {

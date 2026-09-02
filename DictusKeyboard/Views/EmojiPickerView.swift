@@ -12,8 +12,7 @@ struct CategoryInfo: Identifiable {
 }
 
 /// Full emoji picker matching Apple/SuperWhisper style:
-/// - Search bar at top (pill shape)
-/// - Single continuous horizontal LazyHGrid (4 rows, swipe left/right)
+/// - Single category-focused vertical grid
 /// - Category bar at bottom as bookmarks into the grid
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
@@ -27,7 +26,6 @@ struct EmojiPickerView: View {
 
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
-    private let language = SupportedLanguage.active.rawValue
 
     private let categories = EmojiStore.categories
 
@@ -171,125 +169,4 @@ private struct EmojiGridItem: Identifiable {
     let id: String
     let emoji: String
     let categoryID: String
-}
-
-/// Mini keyboard for emoji search with key popups and haptic feedback.
-/// Uses 40pt key height to fit within the emoji picker without clipping.
-/// Equatable to prevent re-renders when search text changes (layout is static).
-private struct MiniSearchKeyboard: View, Equatable {
-    let onCharacter: (String) -> Void
-    let onDelete: () -> Void
-    let onSpace: () -> Void
-
-    static func == (lhs: MiniSearchKeyboard, rhs: MiniSearchKeyboard) -> Bool {
-        true // Layout never changes, only closures differ
-    }
-
-    private let keyHeight: CGFloat = 44
-
-    private var rows: [[String]] {
-        switch LayoutType.active {
-        case .azerty:
-            return [
-                ["a", "z", "e", "r", "t", "y", "u", "i", "o", "p"],
-                ["q", "s", "d", "f", "g", "h", "j", "k", "l", "m"],
-                ["w", "x", "c", "v", "b", "n"]
-            ]
-        case .qwerty:
-            return [
-                ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-                ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-                ["z", "x", "c", "v", "b", "n", "m"]
-            ]
-        case .qwertz:
-            // Read from the shared layout data rather than re-typed here, so the
-            // search keyboard cannot drift from the real one (#151).
-            return QWERTZLayout.lowercasedLettersRows
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 3) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                HStack(spacing: 4) {
-                    ForEach(row, id: \.self) { letter in
-                        MiniKeyButton(label: letter, height: keyHeight) {
-                            HapticFeedback.keyTapped()
-                            AudioServicesPlaySystemSound(1104)
-                            onCharacter(letter)
-                        }
-                    }
-                    if rowIndex == 2 {
-                        Button {
-                            HapticFeedback.keyTapped()
-                            AudioServicesPlaySystemSound(1155)
-                            onDelete()
-                        } label: {
-                            Image(systemName: "delete.backward")
-                                .font(.system(size: 18))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: keyHeight)
-                                .background(KeyMetrics.letterKeyColor)
-                                .cornerRadius(KeyMetrics.keyCornerRadius)
-                        }
-                        .foregroundColor(Color(.label))
-                    }
-                }
-            }
-            Button {
-                HapticFeedback.keyTapped()
-                AudioServicesPlaySystemSound(1156)
-                onSpace()
-            } label: {
-                Text("space")
-                    .font(.system(size: 16))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: keyHeight)
-                    .background(KeyMetrics.letterKeyColor)
-                    .cornerRadius(KeyMetrics.keyCornerRadius)
-            }
-            .foregroundColor(Color(.label))
-        }
-        .padding(.horizontal, KeyMetrics.rowSidePadding)
-        .padding(.bottom, 2)
-    }
-}
-
-/// A single key in the mini search keyboard with press popup.
-/// Uses a lightweight ButtonStyle instead of DragGesture for better performance.
-private struct MiniKeyButton: View {
-    let label: String
-    let height: CGFloat
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 22))
-                .foregroundColor(Color(.label))
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .background(KeyMetrics.letterKeyColor)
-                .cornerRadius(KeyMetrics.keyCornerRadius)
-        }
-        .buttonStyle(MiniKeyButtonStyle(label: label, height: height))
-    }
-}
-
-private struct MiniKeyButtonStyle: ButtonStyle {
-    let label: String
-    let height: CGFloat
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .overlay(
-                Group {
-                    if configuration.isPressed {
-                        KeyPopup(label: label)
-                            .offset(y: -(height + 8))
-                    }
-                },
-                alignment: .top
-            )
-    }
 }

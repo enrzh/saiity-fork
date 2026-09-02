@@ -159,18 +159,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var alternateAccessoryRowFrame: CGRect {
-            if surfaceHeight == 228 {
-                let insetFrame = surfaceFrame
-                guard insetFrame.width >= 246 else { return .zero }
-                return CGRect(x: insetFrame.minX, y: insetFrame.minY, width: insetFrame.width, height: controlSize)
-            }
             guard surfaceHeight >= VoiceOnlyKeyboardPolicy.controlSize else { return .zero }
-            // The centered mic must clear the two right-side 44pt targets.
-            // Derive the boundary from the actual right-group frame below so
-            // this guard cannot drift from the hit-target geometry.
-            let rightGroupInset = visibleControlGap + controlSize * 2
-            let minimumWidth = 2 * (rightGroupInset + primaryControlSize / 2)
-            guard surfaceWidth >= minimumWidth else { return .zero }
             return CGRect(x: 0, y: 0,
                    width: surfaceWidth,
                    height: VoiceOnlyKeyboardPolicy.controlSize)
@@ -179,11 +168,7 @@ public enum VoiceOnlyKeyboardPolicy {
         public var alternateContentBelowAccessoryFrame: CGRect {
             let row = alternateAccessoryRowFrame
             guard !row.isEmpty else { return .zero }
-            let contentHeight = VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight
-            if surfaceHeight == 228 {
-                return CGRect(x: row.minX, y: row.maxY, width: row.width, height: contentHeight)
-            }
-            guard row.maxY + contentHeight <= surfaceHeight else { return .zero }
+            guard row.maxY <= surfaceHeight else { return .zero }
             return CGRect(x: 0, y: row.maxY,
                           width: surfaceWidth, height: surfaceHeight - row.maxY)
         }

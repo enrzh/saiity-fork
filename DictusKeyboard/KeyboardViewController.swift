@@ -149,17 +149,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // iOS manages the inputView's frame via autoresizing masks -- disabling them
         // causes the view to collapse to zero width.
 
-        // #92 fix: kbInputView is opaque by default (UIInputView base) and with
-        // backgroundColor=nil it paints a default grey in any region not covered
-        // by a subview. During iOS's keyboard entry animation, iOS forces the
-        // inputView to ~504pt at constraint priority 1000 (we cannot win against
-        // it). Our content fills only 276pt — without these two lines, the
-        // remaining 228pt rendered as a visible grey rectangle. Forcing the view
-        // truly transparent + non-opaque makes that uncovered area composite
-        // with whatever sits behind the keyboard window (the host app),
-        // matching what Apple's own keyboards do.
-        kbInputView.backgroundColor = .systemGroupedBackground
-        kbInputView.isOpaque = true
+        // KeyboardInputView owns the single semantic native backdrop.
 
         // --- 2. Create SwiftUI hosting for the voice surface ---
         // NOTE: do NOT pass `self` into KeyboardRootView. Storing the controller on

@@ -18,7 +18,8 @@ import DictusCore
 enum KeyboardLayouts {
 
     /// Symbols pages are deliberately kept at the native four-row geometry.
-    static let symbolsRowCount = 4
+    // Symbol pages contain their three real rows; accessory controls are UIKit-owned.
+    static let symbolsRowCount = 3
 
     /// Glyph carried by the emoji-picker toggle key.
     ///
@@ -287,8 +288,6 @@ enum KeyboardLayouts {
     }
 
     // MARK: - Numbers Page (symbols1)
-
-    static let symbolsRowCount = 3
 
     private static func numbersPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
         [
