@@ -74,8 +74,8 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func handleKeyboardChange(_ isDictus: Bool) {
+        dictusKeyboardActive = isDictus
         guard isDictus else { return }
-        dictusKeyboardActive = true
         fullAccessVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
         guard fullAccessVerified else {
             fullAccessRequired = true
@@ -533,12 +533,30 @@ private struct KeyboardDetectingTextField: UIViewRepresentable {
         }
 
         private func checkInputMode(for textView: UITextView) {
-            guard let inputMode = textView.textInputMode,
-                  let identifier = inputMode.value(forKey: "identifier") as? String else {
+            guard let inputMode = textView.textInputMode else {
+                reportInputMode(identifier: nil, primaryLanguage: nil)
                 return
             }
 
-            let isDictus = identifier.contains("de.aiity.saiity.ios")
+            reportInputMode(
+                identifier: inputMode.value(forKey: "identifier") as? String,
+                primaryLanguage: inputMode.primaryLanguage
+            )
+        }
+
+        private func reportInputMode(identifier: String?, primaryLanguage: String?) {
+            let isDictus = KeyboardSetupStatus.isDictusKeyboardIdentifier(identifier)
+            let activeIdentifiers = UITextInputMode.activeInputModes
+                .compactMap { $0.value(forKey: "identifier") as? String }
+                .joined(separator: ",")
+
+            PersistentLog.log(.diagnosticProbe(
+                component: "OnboardingKeyboard",
+                instanceID: "input-mode",
+                action: "inputModeObserved",
+                details: "identifier=\(identifier ?? "nil") primaryLanguage=\(primaryLanguage ?? "nil") isDictus=\(isDictus) activeIdentifiers=\(activeIdentifiers)"
+            ))
+
             DispatchQueue.main.async {
                 self.parent.onKeyboardChange(isDictus)
             }

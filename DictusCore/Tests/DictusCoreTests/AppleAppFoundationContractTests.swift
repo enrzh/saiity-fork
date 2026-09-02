@@ -215,6 +215,21 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(tutorial.contains("skipTutorial"))
     }
 
+    func testOnboardingDistinguishesInstalledAndCurrentlySelectedInputModes() throws {
+        let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
+
+        XCTAssertTrue(tutorial.contains("textView.textInputMode"),
+                      "the tutorial must inspect the input source currently editing the field")
+        XCTAssertTrue(tutorial.contains("UITextInputMode.activeInputModes"),
+                      "the diagnostic must retain the installed/enabled input-source context")
+        XCTAssertTrue(tutorial.contains("inputModeObserved"),
+                      "the current input source must be visible in exported diagnostics")
+        XCTAssertTrue(tutorial.contains("KeyboardSetupStatus.isDictusKeyboardIdentifier"),
+                      "current-mode classification must use the tested bundle identity rule")
+        XCTAssertTrue(tutorial.contains("dictusKeyboardActive = isDictus"),
+                      "switching back to the native keyboard must clear the active state")
+    }
+
     func testSettingsTaskFourUsesGroupedNativeSectionsAndShippedDestinations() throws {
         let settings = try source("DictusApp/Views/SettingsView.swift")
 

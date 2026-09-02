@@ -24,4 +24,17 @@ final class KeyboardSetupStatusTests: XCTestCase {
         XCTAssertTrue(status.fullAccessVerified)
         XCTAssertTrue(status.canContinue)
     }
+
+    func testInputModeIdentityDoesNotConfuseNativeEnglishWithDictus() {
+        XCTAssertTrue(
+            KeyboardSetupStatus.isDictusKeyboardIdentifier("de.aiity.saiity.ios.keyboard")
+        )
+        XCTAssertFalse(
+            KeyboardSetupStatus.isDictusKeyboardIdentifier("com.apple.keyboards.en_US")
+        )
+        XCTAssertFalse(
+            KeyboardSetupStatus.isDictusKeyboardIdentifier("com.example.de.aiity.saiity.ios.fake")
+        )
+        XCTAssertFalse(KeyboardSetupStatus.isDictusKeyboardIdentifier(nil))
+    }
 }

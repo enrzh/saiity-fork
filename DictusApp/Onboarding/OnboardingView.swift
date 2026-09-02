@@ -157,7 +157,7 @@ struct AvailabilityPage: View {
     }
     private func refreshKeyboard() {
         let inputModeInstalled = UITextInputMode.activeInputModes.contains {
-            ($0.value(forKey: "identifier") as? String)?.contains("de.aiity.saiity.ios") == true
+            KeyboardSetupStatus.isDictusKeyboardIdentifier($0.value(forKey: "identifier") as? String)
         }
         // The extension is the only component that can read `hasFullAccess`.
         // Keep that handshake authoritative when iOS has not refreshed its

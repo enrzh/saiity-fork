@@ -171,7 +171,7 @@ struct KeyboardSetupPage: View {
         PersistentLog.log(.onboardingKeyboardCheckStarted(modeCount: modes.count))
 
         let identifier = modes.compactMap { $0.value(forKey: "identifier") as? String }
-            .first { $0.contains("de.aiity.saiity.ios") }
+            .first { KeyboardSetupStatus.isDictusKeyboardIdentifier($0) }
         let inputModeInstalled = identifier != nil
         // The extension's handshake is the only real Full Access signal. iOS
         // can temporarily omit a third-party keyboard from activeInputModes

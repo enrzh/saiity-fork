@@ -4,10 +4,22 @@ import Foundation
 public struct KeyboardSetupStatus: Equatable, Sendable {
     public let keyboardInstalled: Bool
     public let fullAccessHandshake: Bool
+
+    /// The app and keyboard extension share this bundle-id prefix. It is used to
+    /// classify an input mode identifier, not to claim that the mode is currently
+    /// selected; `UITextInputMode.activeInputModes` only describes enabled modes.
+    public static let dictusKeyboardIdentifierPrefix = "de.aiity.saiity.ios"
+
     public init(keyboardInstalled: Bool, fullAccessHandshake: Bool) {
         self.keyboardInstalled = keyboardInstalled
         self.fullAccessHandshake = fullAccessHandshake
     }
+
+    public static func isDictusKeyboardIdentifier(_ identifier: String?) -> Bool {
+        guard let identifier else { return false }
+        return identifier.hasPrefix(dictusKeyboardIdentifierPrefix)
+    }
+
     /// A handshake can only be written by the sAiity keyboard extension itself.
     /// Treat it as proof that the extension is installed even when iOS briefly
     /// returns an incomplete `activeInputModes` list while returning from Settings.
