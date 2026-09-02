@@ -84,7 +84,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("atButton?.isHidden = isAuxiliary || !leftRailVisible"))
         XCTAssertTrue(controller.contains("emojiButton?.isHidden = isAuxiliary || !leftRailVisible"))
         XCTAssertTrue(controller.contains("dismissButton?.isHidden = isAuxiliary || !rightRailVisible"))
-        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording && mode != .panel && mode != .emoji"))
+        XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : (mode != .keys && mode != .recording)"))
         XCTAssertTrue(controller.contains("numberButton?.frame = layout.accessoryRevertFrame"))
         XCTAssertTrue(controller.contains("micButton?.frame = layout.accessoryMicFrame"))
         XCTAssertTrue(controller.contains("deleteButton?.frame = layout.accessoryDeleteFrame"))
@@ -95,6 +95,16 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let languageIndicator = try XCTUnwrap(root.range(of: "private var languageIndicator"))
         let row = String(root[accessory.lowerBound..<languageIndicator.lowerBound])
         XCTAssertFalse(row.contains("keyboard.chevron.compact.down"))
+    }
+
+    func testAuxiliaryControlsHideWhenAccessoryRowIsUnavailable() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+
+        XCTAssertTrue(controller.contains("let auxiliaryFramesAvailable = !layout.alternateAccessoryFrames.isEmpty"))
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable"))
+        XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
+        XCTAssertTrue(controller.contains("deleteButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
+        XCTAssertTrue(controller.contains("returnButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
     }
 
     func testUIKitBackdropAndPressedRadiusUseActualFrames() throws {
@@ -222,7 +232,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testBothAuxiliaryPagesKeepModeControlAvailableToReturnToNormal() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = !leftRailVisible"),
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible"),
                       "the mode control must remain reachable on both symbols and emoji pages")
         XCTAssertTrue(controller.contains("layoutVoiceActionControls()"),
                       "mode visibility must be refreshed after each layout transition")
@@ -462,7 +472,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testMicUIKitTargetIsHiddenOutsideKeysAndRecordingAndOwnsAccessibility() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(controller.contains("micButton?.isHidden = mode != .keys && mode != .recording && mode != .panel && mode != .emoji"))
+        XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : (mode != .keys && mode != .recording)"))
         XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)"))
         XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
         XCTAssertTrue(root.contains(".accessibilityHidden(true)"))

@@ -31,6 +31,24 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         }
     }
 
+    func testAuxiliaryAccessoryFramesFailClosedWhenRowCannotReach44Points() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 43)
+
+        XCTAssertTrue(layout.alternateAccessoryRowFrame.isEmpty)
+        XCTAssertTrue(layout.alternateAccessoryFrames.allSatisfy(\.isEmpty))
+        XCTAssertTrue(layout.alternateContentBelowAccessoryFrame.isEmpty)
+    }
+
+    func testAuxiliaryAccessoryFramesKeepVisibleGapAtRowEdges() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
+        let row = layout.alternateAccessoryRowFrame
+        let frames = layout.alternateAccessoryFrames
+
+        XCTAssertEqual(frames.first?.minX, row.minX + VoiceOnlyKeyboardPolicy.visibleControlGap)
+        XCTAssertEqual(frames.last?.maxX, row.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap)
+        XCTAssertTrue(frames.allSatisfy { $0.width >= VoiceOnlyKeyboardPolicy.controlSize })
+    }
+
     func testTaskOneUsesInsetSurfaceAndSpacedInBoundsActionGeometry() {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 6)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
@@ -171,7 +189,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(rootView.contains("state.areaMode != .panel && state.areaMode != .emoji"))
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
         XCTAssertTrue(controller.contains("atButton?.isHidden = isAuxiliary || !leftRailVisible"))
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = !leftRailVisible"))
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible"))
     }
 
     func testAtSitsAboveBottomUtilityRail() {

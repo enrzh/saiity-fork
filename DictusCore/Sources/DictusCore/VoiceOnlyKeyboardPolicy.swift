@@ -155,13 +155,17 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var alternateAccessoryRowFrame: CGRect {
-            CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
+            guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.controlSize else { return .zero }
+            let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize
+            guard surfaceFrame.width >= minimumWidth else { return .zero }
+            return CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
                    width: surfaceFrame.width,
-                   height: min(VoiceOnlyKeyboardPolicy.controlSize, surfaceFrame.height))
+                   height: VoiceOnlyKeyboardPolicy.controlSize)
         }
 
         public var alternateContentBelowAccessoryFrame: CGRect {
             let row = alternateAccessoryRowFrame
+            guard !row.isEmpty else { return .zero }
             return CGRect(x: surfaceFrame.minX, y: row.maxY,
                           width: surfaceFrame.width,
                           height: max(0, surfaceFrame.maxY - row.maxY))
@@ -169,11 +173,14 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var accessoryRevertFrame: CGRect {
             let row = alternateAccessoryRowFrame
-            return CGRect(x: row.minX, y: row.minY, width: controlSize, height: row.height)
+            guard !row.isEmpty else { return .zero }
+            return CGRect(x: row.minX + visibleControlGap, y: row.minY,
+                          width: controlSize, height: row.height)
         }
 
         public var accessoryMicFrame: CGRect {
             let row = alternateAccessoryRowFrame
+            guard !row.isEmpty else { return .zero }
             let width = primaryControlSize
             return CGRect(x: row.midX - width / 2, y: row.minY,
                           width: width, height: row.height)
@@ -181,13 +188,15 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var accessoryDeleteFrame: CGRect {
             let row = alternateAccessoryRowFrame
-            return CGRect(x: row.maxX - controlSize * 2, y: row.minY,
+            guard !row.isEmpty else { return .zero }
+            return CGRect(x: row.maxX - visibleControlGap - controlSize * 2, y: row.minY,
                           width: controlSize, height: row.height)
         }
 
         public var accessoryReturnFrame: CGRect {
             let row = alternateAccessoryRowFrame
-            return CGRect(x: row.maxX - controlSize, y: row.minY,
+            guard !row.isEmpty else { return .zero }
+            return CGRect(x: row.maxX - visibleControlGap - controlSize, y: row.minY,
                           width: controlSize, height: row.height)
         }
 

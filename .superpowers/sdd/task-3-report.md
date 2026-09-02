@@ -102,3 +102,52 @@ SimSlim 目标为既有授权设备 `AC636497-5EC6-4AD4-BD83-E5E2458FA702`，状
 1. SimSlim 当前不是 `170/170`，而是 `109/170` 部分 slim；本次没有强制修复或修改其环境。
 2. SwiftUI/ UIKit 的实际触控命中和 emoji/symbols 页面视觉仍需在 SimSlim 中打开键盘后人工确认；source contract、policy tests、完整 suite 和 generic build 已通过。
 3. 没有运行实体 iPhone、没有安装实体设备、没有上传或发布操作。
+
+## 修复轮次（2026-09-02）
+
+基线：`41e0fc5fe4e9b021923727dbf6fc1bac94c41776`
+
+### RED
+
+先增加 focused policy/contract regression tests，覆盖短 surface fail-closed、辅助 row 两侧 `visibleControlGap` 留白，以及 controller 在辅助 frame 不可用时隐藏四个辅助控件：
+
+```text
+swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'
+```
+
+预期 RED 已确认：`Executed 95 tests, with 9 failures (0 unexpected)`。失败来自新增边界/间距断言和尚未存在的 controller visibility contract，不是测试编译错误。
+
+### GREEN
+
+修改文件：
+
+- `DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift`
+- `DictusKeyboard/KeyboardViewController.swift`
+- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardPolicyTests.swift`
+- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`
+
+行为：alternate accessory row 在 surface 高度小于 44pt 或宽度不足以容纳四个 hit target 与边缘留白时返回空 frame；可用时四个 frame 均在 row 内、至少 44pt 高、互不重叠，并在左右边缘保留 `visibleControlGap`。controller 用共享 frame 可用性隐藏辅助控件，避免向可交互按钮设置零/小 frame。未修改 emoji/model/app 代码，也未触碰 `.superpowers/brainstorm/`。
+
+Focused：
+
+```text
+swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'
+Executed 95 tests, with 0 failures (0 unexpected)
+```
+
+完整覆盖：
+
+```text
+swift test --package-path DictusCore
+Executed 1230 tests, with 10 tests skipped and 0 failures (0 unexpected)
+```
+
+附加验证：`git diff --check` 通过。
+
+### Commit
+
+提交：`620332563eb34542ef46008447655fb0b02eb4af`
+
+### 疑点
+
+本轮未重复运行上一轮未完成的 SimSlim 三状态人工截图/逐个 hit target 检查；未运行实体 iPhone。测试输出仍包含既有未处理 README resource warning、Swift 6 Sendable warning，以及 frequency fixture JSON 解码诊断；均未造成测试失败。
