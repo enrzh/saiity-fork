@@ -31,7 +31,15 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         XCTAssertTrue(source.contains("KeyboardAccessoryOrder.emojiFirst.rawValue"))
         XCTAssertEqual(KeyboardAccessoryOrder.emojiFirst.displayName, "Emoji, 123")
         XCTAssertEqual(KeyboardAccessoryOrder.numberFirst.displayName, "123, Emoji")
-        XCTAssertTrue(source.contains("Label(\"Models\", systemImage:"))
+        let keyboardSection = try XCTUnwrap(
+            source.range(of: "Section(\"Keyboard\")")
+        )
+        let nextSection = try XCTUnwrap(
+            source.range(of: "Section(\"Translation & Cleanup\")", range: keyboardSection.upperBound..<source.endIndex)
+        )
+        let keyboardSectionSource = String(source[keyboardSection.lowerBound..<nextSection.lowerBound])
+        XCTAssertTrue(keyboardSectionSource.contains("Picker"))
+        XCTAssertTrue(keyboardSectionSource.contains("Label(\"Models\", systemImage:"))
 
         for removedSetting in [
             "sounds", "soundFeedbackEnabled", "soundVolume", "keyboardLanguage",
