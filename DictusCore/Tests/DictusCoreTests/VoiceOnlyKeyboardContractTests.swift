@@ -2,14 +2,34 @@ import XCTest
 @testable import DictusCore
 
 final class VoiceOnlyKeyboardContractTests: XCTestCase {
+    func testPolicyDoesNotExposeRemovedTopAccessoryContract() throws {
+        let policy = try source("DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift")
+
+        for obsoleteName in [
+            "alternateAccessoryRowFrame",
+            "alternateContentBelowAccessoryFrame",
+            "accessoryRevertFrame",
+            "accessoryMicFrame",
+            "accessoryDeleteFrame",
+            "accessoryReturnFrame",
+            "alternateAccessoryFrames",
+            "hasValidAccessoryFrames"
+        ] {
+            XCTAssertFalse(policy.contains(obsoleteName), "obsolete policy API remains: \(obsoleteName)")
+        }
+    }
+
     func testPolicyExposesAlternatePageAccessoryAndContentGeometry() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 375, surfaceHeight: 228)
 
-        XCTAssertEqual(layout.alternateAccessoryRowFrame.minX, 0)
-        XCTAssertEqual(layout.alternateAccessoryRowFrame.maxX, 375)
-        XCTAssertEqual(layout.alternateContentBelowAccessoryFrame.minY,
-                       layout.alternateAccessoryRowFrame.maxY)
-        XCTAssertEqual(layout.alternateContentBelowAccessoryFrame, CGRect(x: 0, y: 44, width: 375, height: 184))
+        XCTAssertEqual(layout.bottomAuxiliaryControlFrame.minX, layout.surfaceFrame.minX)
+        XCTAssertEqual(layout.bottomAuxiliaryControlFrame.maxX, layout.surfaceFrame.maxX)
+        XCTAssertEqual(layout.auxiliaryContentFrame.minY, layout.surfaceFrame.minY)
+        XCTAssertEqual(layout.auxiliaryContentFrame,
+                       CGRect(x: layout.surfaceFrame.minX,
+                              y: layout.surfaceFrame.minY,
+                              width: layout.surfaceFrame.width,
+                              height: layout.bottomAuxiliaryControlFrame.minY - VoiceOnlyKeyboardPolicy.visibleControlGap - layout.surfaceFrame.minY))
     }
 
 
@@ -63,7 +83,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "alternate pages must not be wrapped in the voice inset surface")
         XCTAssertTrue(root.contains("frame(width: proxy.size.width, height: surfaceHeight"),
                       "alternate pages must use the full input-view width")
-        XCTAssertTrue(root.contains("? layout.alternateContentBelowAccessoryFrame"),
+        XCTAssertTrue(root.contains("? layout.auxiliaryContentFrame"),
                       "alternate content must begin below the accessory row")
         XCTAssertTrue(controller.contains("KeyboardInputView(frame: .zero, inputViewStyle: .keyboard)"),
                       "the UIKit input view must provide the native adaptive backdrop")
@@ -192,7 +212,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("layout.auxiliaryContentFrame"))
         XCTAssertTrue(root.contains("Color.clear.frame(height: max(0, contentFrame.minY))"))
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
         XCTAssertTrue(controller.contains("configureAuxiliaryAccessoryControls"))
@@ -206,10 +226,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                        "the alternate accessory row must not be rendered inside SwiftUI")
         XCTAssertTrue(controller.contains("configureAuxiliaryAccessoryControls"),
                       "UIKit must own the alternate accessory controls and their hit targets")
-        XCTAssertTrue(controller.contains("accessoryRevertFrame"))
-        XCTAssertTrue(controller.contains("accessoryMicFrame"))
-        XCTAssertTrue(controller.contains("accessoryDeleteFrame"))
-        XCTAssertTrue(controller.contains("accessoryReturnFrame"))
     }
 
     func testAuxiliaryLayoutRaisesUIKitControlsAboveEveryAuxiliarySubview() throws {
@@ -244,10 +260,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("emojiButton?.isHidden = isAuxiliary || !leftRailVisible"))
         XCTAssertTrue(controller.contains("dismissButton?.isHidden = isAuxiliary || !rightRailVisible"))
         XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)"))
-        XCTAssertTrue(controller.contains("numberButton?.frame = layout.accessoryRevertFrame"))
-        XCTAssertTrue(controller.contains("micButton?.frame = layout.accessoryMicFrame"))
-        XCTAssertTrue(controller.contains("deleteButton?.frame = layout.accessoryDeleteFrame"))
-        XCTAssertTrue(controller.contains("returnButton?.frame = layout.accessoryReturnFrame"))
+        XCTAssertTrue(controller.contains("configureAuxiliaryAccessoryControls(for: mode)"))
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
         XCTAssertTrue(controller.contains("configureAuxiliaryAccessoryControls(for: mode)"))
     }
@@ -255,19 +268,29 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testAuxiliaryControlsHideWhenAccessoryRowIsUnavailable() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(controller.contains("let auxiliaryFramesAvailable = layout.hasValidAccessoryFrames"))
         XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !leftRailVisible"))
         XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)"))
         XCTAssertTrue(controller.contains("deleteButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
         XCTAssertTrue(controller.contains("returnButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
     }
 
+    func testReturningToVoiceRemovesAuxiliaryGlassBackgrounds() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let configurationStart = try XCTUnwrap(controller.range(of: "private func configureAuxiliaryAccessoryControls"))
+        let visualsStart = try XCTUnwrap(controller.range(of: "private func setAuxiliaryUtilityVisuals"))
+        let configurationBody = String(controller[configurationStart.lowerBound..<visualsStart.lowerBound])
+
+        XCTAssertTrue(configurationBody.contains("viewWithTag(Self.glassBackgroundTag)"),
+                      "voice mode must find the glass layer created by auxiliary mode")
+        XCTAssertTrue(configurationBody.contains("removeFromSuperview()"),
+                      "voice mode must remove the auxiliary glass layer before reusing the button")
+    }
+
     func testAuxiliaryUIKitAccessoryRowFailsClosedWithItsGeometry() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertFalse(root.contains("if layout.hasValidAccessoryFrames"))
-        XCTAssertTrue(controller.contains("let auxiliaryFramesAvailable = layout.hasValidAccessoryFrames"),
+        XCTAssertTrue(controller.contains("auxiliaryFramesAvailable"),
                       "auxiliary UIKit controls must be hidden when their geometry is invalid")
     }
 
@@ -312,7 +335,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onTogglePage: { nextPage in symbolPage = nextPage }"))
         XCTAssertTrue(root.contains("symbolPage = .symbols1"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height"))
-        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("layout.auxiliaryContentFrame"))
         XCTAssertTrue(controller.contains("let height = max(1, controls.bounds.height)"))
         XCTAssertTrue(controller.contains("handleDeleteHold"))
         XCTAssertTrue(controller.contains("RunLoop.main.add(timer, forMode: .common)"))
@@ -325,7 +348,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(controller.contains("let layout = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: Double(height))"))
-        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("layout.auxiliaryContentFrame"))
         XCTAssertTrue(root.contains("VoiceOnlyKeyboardPolicy.layout("))
         XCTAssertTrue(root.contains("surfaceHeight: Double(surfaceHeight)"))
     }
@@ -573,7 +596,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("surfaceFrame.midX"))
         XCTAssertTrue(root.contains("availableWidth: availableWidth"),
                       "emoji content must receive the complete embedded surface width")
-        XCTAssertTrue(root.contains("alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("auxiliaryContentFrame"))
     }
 
     func testLatestVoiceLayoutUsesThreeLeftTargetsAndBottomDismiss() {
@@ -629,7 +652,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         XCTAssertEqual(layout.centerAreaWidth, 150)
         XCTAssertTrue(root.contains("availableWidth: availableWidth"))
-        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"))
+        XCTAssertTrue(root.contains("layout.auxiliaryContentFrame"))
     }
 
     func testMicUIKitTargetIsHiddenOutsideKeysAndRecordingAndOwnsAccessibility() throws {
@@ -711,7 +734,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertTrue(controller.contains("case .symbols:"),
                       "the symbols presentation must be covered by the height contract")
-        XCTAssertTrue(root.contains("layout.alternateContentBelowAccessoryFrame"),
+        XCTAssertTrue(root.contains("layout.auxiliaryContentFrame"),
                       "symbols mode must use the live native surface bounds below the accessory row")
         XCTAssertTrue(root.contains("LiquidSymbolPageView("),
                       "symbols mode must be rendered by SwiftUI")

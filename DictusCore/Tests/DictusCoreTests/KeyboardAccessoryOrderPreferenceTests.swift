@@ -6,12 +6,12 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        defaults = UserDefaults(suiteName: "KeyboardAccessoryOrderPreferenceTests")
-        defaults.removePersistentDomain(forName: "KeyboardAccessoryOrderPreferenceTests")
+        defaults = AppGroup.defaults
+        defaults.removeObject(forKey: SharedKeys.keyboardAccessoryOrder)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: "KeyboardAccessoryOrderPreferenceTests")
+        defaults.removeObject(forKey: SharedKeys.keyboardAccessoryOrder)
         defaults = nil
         super.tearDown()
     }
@@ -38,7 +38,7 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         XCTAssertEqual(KeyboardAccessoryOrder.numberFirst.displayName, "123, Emoji")
     }
 
-    func testCurrentReadsTheAppGroupOrderAndDefaultsToEmojiFirst() {
+    func testCurrentReadsTheAppGroupDefaultsOrderAndDefaultsToEmojiFirst() {
         XCTAssertEqual(KeyboardAccessoryOrder.current, .emojiFirst)
 
         defaults.set(KeyboardAccessoryOrder.numberFirst.rawValue,
