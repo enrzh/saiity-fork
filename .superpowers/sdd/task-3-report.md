@@ -1,63 +1,104 @@
-# Task 3 报告
+# Task 3 实现报告
 
-## 根因调查
+日期：2026-09-02
+基线：`54bded4`
+实现 commit：`41e0fc5fe4e9b021923727dbf6fc1bac94c41776`
 
-`123` 的状态转换路径本身存在：公共按钮调用 `presentArea(.panel)`，状态发布后 controller 安装并显示 `symbols1`。不可观察切换的根因是公共控件只在 `keys/recording` 视觉显示，且 alternate 内容使用的宽度没有遵循 `VoiceOnlyKeyboardPolicy` 的 center region，造成 panel/emoji 的公共动作与内容层边界不一致。symbols 页底行也必须由公共 UIKit 控件拥有，避免重复动作和不可见拦截层。
+## RED
 
-## 改动文件
+先在现有 DictusCore policy/source-contract tests 中加入最小契约：
 
-- `DictusCore/Sources/DictusCore/KeyboardAreaMode.swift`
-- `DictusCore/Tests/DictusCoreTests/KeyboardAreaModeTests.swift`
-- `DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift`
-- `DictusKeyboard/KeyboardRootView.swift`
-- `DictusKeyboard/KeyboardViewController.swift`
-- `DictusKeyboard/KeyboardLayouts.swift`
-- `DictusKeyboard/Views/EmojiCategoryBar.swift`
-- `DictusKeyboard/Views/EmojiPickerView.swift`
+```text
+swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'
+```
 
-公共模式控件现在在 alternate surface 保持可见并显示 `ABC`；emoji 与 symbols 使用 shared policy 的 center region；symbols 页不再复制底部公共动作；delete/return/dismiss 与左右按钮继续由 UIKit 公共命中区域处理。
+第一次运行因新 policy API 尚不存在而编译失败：
 
-## TDD RED
+```text
+error: value of type 'VoiceOnlyKeyboardPolicy.Layout' has no member 'alternateAccessoryFrames'
+```
 
-命令：`swift test --package-path DictusCore --filter KeyboardAreaModeTests/testModeControlTitleReflectsTheVisibleSurface`
+将该条改为可编译的 source-contract RED 后再次运行，得到预期 XCTest 失败：
 
-结果：按预期失败，编译器报告 `KeyboardAreaMode` 没有 `modeControlTitle`，证明回归测试捕获了缺失行为。
+```text
+Executed 92 tests, with 19 failures (1 unexpected)
+```
+
+失败集中在 accessory frames、辅助模式控件 visibility/routing、symbols 内容 frame、root backdrop 和 pressed corner radius，证明测试覆盖的是尚未实现的 task 3 行为。
 
 ## GREEN
 
-命令：`swift test --package-path DictusCore --filter KeyboardAreaModeTests`
+实现后运行 focused suite：
 
-结果：14 tests，0 failures。
+```text
+swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'
+```
 
-覆盖的现有测试还核对 mode 转换、公共 rail 几何、44x44 命中目标和 88x44 delete/return 区域。
+结果：
 
-## 构建
+```text
+Executed 92 tests, with 0 failures (0 unexpected)
+```
 
-命令：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug build CODE_SIGNING_ALLOWED=NO`
+完整 suite：
 
-结果：`BUILD SUCCEEDED`。存在既有 deprecated/API 与 Sendable warnings。
+```text
+swift test --package-path DictusCore
+```
 
-完整 Core 命令 `swift test --package-path DictusCore`（此前基线）：1155 tests，10 skipped，4 failures。失败集合为 `PolishAvailabilityGateTests.testUnavailableAutoModeReturnsTheAutoFloor`、`PolishAvailabilityGateTests.testTheDefaultGateLeavesTheTransformUntouched`、`PolishContextBudgetTests.testTransformRunsAnUnboundedEngineOnAnEnormousInput`、`PolishContextBudgetTests.testTransformStillCallsTheEngineWhenTheInputFits`。本次复跑已为 1155 tests、10 skipped、0 failures。
+结果：
 
-## 差异检查与提交
+```text
+Executed 1227 tests, with 10 tests skipped and 0 failures (0 unexpected)
+```
+
+现有 SwiftPM warning（未处理的 polish-harness README、Swift 6 Sendable warning）以及既有 frequency fixture 解码诊断仍会输出，但没有失败。
+
+## 实现内容
+
+- `DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift`
+  - 在现有 `Layout` 增加 accessory revert/mic/delete/return 四个绝对 frame和 frames 集合。
+  - mic frame 的中心严格等于 accessory row 中心；正常目标宽度下四个 hit frame 均至少 44pt 高且互不重叠。
+- `DictusKeyboard/KeyboardRootView.swift`
+  - auxiliary row 改为相对 row frame 的 `ZStack` 绝对定位，避免不对称左右控件导致 mic 偏移。
+  - auxiliary 静态视觉只保留 revert、白色 mic、delete、appleControlSurface 圆形 return，并保持 `allowsHitTesting(false)`。
+  - auxiliary content 继续从 `alternateContentBelowAccessoryFrame` 开始；移除 auxiliary 下的额外固定 system background 矩形。
+  - voice 模式原有语言、delete、return、dismiss 视觉路径保留。
+- `DictusKeyboard/KeyboardViewController.swift`
+  - emoji/symbols 模式隐藏 at、emoji、dismiss；现有 number/mic/delete/return 控件使用 accessory frames。
+  - voice/recording 继续使用原有 voice frames；保留 mic touch lifecycle、delete repeat、return、dismiss routing 和 symbols page navigation。
+  - symbols `numberKeyboardView` 在辅助状态放到 `alternateContentBelowAccessoryFrame`，不再覆盖 accessory row。
+  - frame 更新后按实际 button bounds 更新 corner radius，主 voice mic 与 SwiftUI capsule 高度一致。
+  - `.keyboard` UIInputView、clear background、nonopaque 设置保留。
+- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardPolicyTests.swift`
+  - 新增四 frame 的中心、边界、44pt 和不重叠契约；更新旧 alternate content 断言。
+- `DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`
+  - 新增辅助模式 ownership/visibility、静态 row 和 backdrop/radius source contracts；更新旧 UIKit frame 断言。
+
+## 构建与 SimSlim
 
 `git diff --check`：通过。
 
-Commit：实现提交为 `1702c1c230dc6c09ee647825339f2e4685e4c0c3` 和 `6ce9f5062d3a8253b4022c757a93e15023747752`。报告本身不记录自引用 hash；当前提交以 `git log -- .superpowers/sdd/task-3-report.md` 为准。
+generic iOS Simulator build：
 
-## 未验证风险
+```text
+xcodebuild build -project Dictus.xcodeproj -scheme sAiity-iOS \
+  -destination 'platform=iOS Simulator,id=AC636497-5EC6-4AD4-BD83-E5E2458FA702' \
+  -derivedDataPath /tmp/saiity-dictus-task3 CODE_SIGNING_ALLOWED=NO
+```
 
-- 尚未在 SimSlim 中完成实际触控截图/命中回放，因此 123、ABC、emoji、delete、return、dismiss 的真实 UIKit 触控链仍需设备级验证。
-- 完整 Core 基线失败集合已在上方列出；本次复跑已清零。
-- 构建使用无签名 simulator generic build，不等同于安装或发布验证。
+结果：
 
-## 本轮独立审查修复
+```text
+** BUILD SUCCEEDED **
+```
 
-- RED：`swift test --package-path DictusCore --filter 'KeyboardAreaModeTests|VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'` 捕获 3 个旧 bottom-row/全宽契约失败。
-- GREEN：同一命令通过，64 tests，0 failures。
-- 修复 number keyboard frame，使 x、width、height 分别与 policy center region 和 alternate content height 一致；保留公共 UIKit controls 及其 hit targets。
-- 删除外层 `EmojiPickerView.onDelete`，保留搜索输入内部 delete；删除 `bottomRow` dead helper 并统一使用空白保留行。
-- 构建：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/saiity-keyboard-fix-build CODE_SIGNING_ALLOWED=NO build`，结果 `BUILD SUCCEEDED`。
-- `git diff --check`：通过。
-- 本轮聚焦修复前 RED 集合：`VoiceOnlyKeyboardContractTests.testUIKitOverlayIsHiddenWhenPolicyHasNoRightRail`、`VoiceOnlyKeyboardPolicyTests.testActionCentersAndRectanglesFitWithoutOverlapAtTargetWidths`、`VoiceOnlyKeyboardPolicyTests.testNormalPhoneWidthsKeepFourUtilityTargetsOutsideCenterSurface`、`VoiceOnlyKeyboardPolicyTests.testRightRailUsesThreeCommandsAndOneSeparateDismissAction`、`VoiceOnlyKeyboardPolicyTests.testVoiceSurfaceExposesStableCenterAreaAndRailGeometry`。
-- 本轮 GREEN：聚焦测试 65 tests，0 failures；完整 Core 复跑 1155 tests、10 skipped、0 failures。
+SimSlim 目标为既有授权设备 `AC636497-5EC6-4AD4-BD83-E5E2458FA702`，状态检查结果为 `109/170 managed daemons disabled`，即部分 slim。已确认 build 产物生成 `DictusApp.app` 和 `DictusKeyboard.appex`。
+
+本次没有完成 voice/emoji/symbols 三状态的屏幕截图和逐个 hit target 的人工交互检查：当前 checkout 没有现成的键盘状态切换脚本，且本任务不允许使用实体 iPhone。该部分是明确的 runtime follow-up，不作为已完成的截图证据或发布结论。
+
+## 疑点
+
+1. SimSlim 当前不是 `170/170`，而是 `109/170` 部分 slim；本次没有强制修复或修改其环境。
+2. SwiftUI/ UIKit 的实际触控命中和 emoji/symbols 页面视觉仍需在 SimSlim 中打开键盘后人工确认；source contract、policy tests、完整 suite 和 generic build 已通过。
+3. 没有运行实体 iPhone、没有安装实体设备、没有上传或发布操作。
