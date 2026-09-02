@@ -97,7 +97,7 @@ struct KeyboardRootView: View {
             LiquidSymbolPageView(
                 page: symbolPage,
                 availableWidth: contentFrame.width,
-                availableHeight: contentFrame.height,
+                availableHeight: surfaceFrame.height,
                 onInsert: { text in routeProxyText(text) },
                 onDelete: { routeProxyCommand(.delete) },
                 onReturn: { routeProxyCommand(.returnKey) },
@@ -363,21 +363,21 @@ private struct LiquidSymbolPageView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frames = positionedKeys(in: proxy.size)
+            let gridHeight = max(0, proxy.size.height - VoiceOnlyKeyboardPolicy.controlSize - VoiceOnlyKeyboardPolicy.visibleControlGap)
+            let gridSize = CGSize(width: proxy.size.width, height: gridHeight)
+            let frames = positionedKeys(in: gridSize)
             ZStack(alignment: .topLeading) {
                 ForEach(frames) { positionedKey in
                     symbolKey(positionedKey.key, isActive: activeKeyID == positionedKey.key.id)
                         .frame(width: positionedKey.frame.width, height: positionedKey.frame.height)
                         .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
                 }
-                VStack(spacing: 4) {
-                    symbolControl(page == .symbols1 ? "#+=" : "ABC") {
+                HStack(spacing: 4) {
+                    symbolControl(page == .symbols1 ? "#+=" : "ABC", purpose: .togglePage) {
                         page == .symbols1 ? onTogglePage(.symbols2) : onClose()
                     }
-                    HStack(spacing: 4) {
-                        symbolControl("face.smiling") { onEmoji() }
-                        symbolControl("mic.fill", systemImage: true, action: onBackToVoice)
-                    }
+                    symbolControl("face.smiling", purpose: .emoji) { onEmoji() }
+                    symbolControl("mic.fill", systemImage: true, purpose: .voice, action: onBackToVoice)
                 }
                 .padding(.leading, horizontalInset)
                 .padding(.bottom, horizontalInset)
@@ -408,7 +408,13 @@ private struct LiquidSymbolPageView: View {
         .onChange(of: page) { _, _ in activeKeyID = nil }
     }
 
-    private func symbolControl(_ label: String, systemImage: Bool = false, action: @escaping () -> Void) -> some View {
+    private enum SymbolControlPurpose {
+        case emoji
+        case voice
+        case togglePage
+    }
+
+    private func symbolControl(_ label: String, systemImage: Bool = false, purpose: SymbolControlPurpose, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Group {
                 if systemImage { Image(systemName: label) } else { Text(label) }
@@ -417,7 +423,15 @@ private struct LiquidSymbolPageView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(systemImage ? "Return to voice keyboard" : "Emoji")
+        .accessibilityLabel(accessibilityLabel(for: purpose))
+    }
+
+    private func accessibilityLabel(for purpose: SymbolControlPurpose) -> String {
+        switch purpose {
+        case .emoji: return "Emoji"
+        case .voice: return "Return to voice keyboard"
+        case .togglePage: return page == .symbols1 ? "More symbols" : "Return to voice keyboard/ABC"
+        }
     }
 
     private var rows: [[LiquidSymbolKey]] {

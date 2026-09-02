@@ -35,7 +35,7 @@ GREEN 命令：
 
 `swift test --package-path DictusCore --scratch-path /tmp/saiity-keyboard-surfaces-green`
 
-结果：通过。构建仍报告既有 Swift 6 Sendable/NSLock 警告，以及 `polish-harness/README.md` unhandled resource 警告；无测试失败。
+结果：该 suite 的其它测试通过；完整 suite 仍有 5 个 `VoiceOnlyKeyboardContractTests` 失败。这 5 个失败是后续未提交的 `KeyboardViewController.swift` 跨任务 warning 契约，不属于本轮辅助页修改，不能宣称全量通过。构建仍报告既有 Swift 6 Sendable/NSLock 警告，以及 `polish-harness/README.md` unhandled resource 警告。
 
 ## 实现文件
 
@@ -60,4 +60,6 @@ GREEN 命令：
 
 ## Commit
 
-`fix: correct auxiliary surface routing and motion`
+本轮修复追加内容：符号页三行网格现在使用 bottom auxiliary lane 以上的独立高度；Emoji、voice、page toggle 控件使用用途和 page-specific accessibility labels；focused policy/contract tests 锁定 lane 不重叠及 routes/labels。
+
+目标 commit：`fix: separate symbol controls from grid`

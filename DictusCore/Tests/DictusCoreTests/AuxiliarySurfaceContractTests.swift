@@ -1,4 +1,5 @@
 import XCTest
+@testable import DictusCore
 
 final class AuxiliarySurfaceContractTests: XCTestCase {
     private var repository: URL {
@@ -44,7 +45,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testSymbolsToggleUsesPageSpecificTransitionIncludingClosePath() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("symbolControl(page == .symbols1 ? \"#+=\" : \"ABC\") {"))
+        XCTAssertTrue(root.contains("symbolControl(page == .symbols1 ? \"#+=\" : \"ABC\", purpose: .togglePage) {"))
         XCTAssertTrue(root.contains("page == .symbols1 ? onTogglePage(.symbols2) : onClose()"))
         XCTAssertTrue(root.contains("case .symbols2ToClose:"))
         XCTAssertTrue(root.contains("onClose()"))
@@ -63,6 +64,28 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(root.contains("mic.fill"))
         XCTAssertTrue(root.contains("frame(minWidth: 44, minHeight: 44)"))
         XCTAssertTrue(root.contains("onEmoji: { state.presentArea(.emoji) }"))
+    }
+
+    func testSymbolGridUsesContentAbovePolicyReservedBottomLane() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 228)
+
+        XCTAssertTrue(layout.surfaceFrame.contains(layout.bottomAuxiliaryControlFrame))
+        XCTAssertTrue(layout.surfaceFrame.contains(layout.auxiliaryContentFrame))
+        XCTAssertFalse(layout.auxiliaryContentFrame.intersects(layout.bottomAuxiliaryControlFrame))
+        XCTAssertTrue(root.contains("let gridHeight = max(0, proxy.size.height - VoiceOnlyKeyboardPolicy.controlSize - VoiceOnlyKeyboardPolicy.visibleControlGap)"))
+        XCTAssertTrue(root.contains("SymbolGrid.frames("))
+        XCTAssertTrue(root.contains("in: size, spacing: keySpacing"))
+    }
+
+    func testSymbolControlLabelsFollowPurposeAndPage() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(root.contains(".accessibilityLabel(accessibilityLabel(for: purpose))"))
+        XCTAssertTrue(root.contains("case .emoji: return \"Emoji\""))
+        XCTAssertTrue(root.contains("case .voice: return \"Return to voice keyboard\""))
+        XCTAssertTrue(root.contains("case .togglePage: return page == .symbols1 ? \"More symbols\" : \"Return to voice keyboard/ABC\""))
+        XCTAssertTrue(root.contains("symbolControl(page == .symbols1 ? \"#+=\" : \"ABC\", purpose: .togglePage"))
     }
 
     private func source(_ path: String) throws -> String {
