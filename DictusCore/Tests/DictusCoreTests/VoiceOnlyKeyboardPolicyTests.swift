@@ -39,6 +39,27 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(layout.alternateContentBelowAccessoryFrame.isEmpty)
     }
 
+    func testAccessoryFramesAreInvalidWhenAllFramesAreZero() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 43)
+
+        XCTAssertFalse(layout.hasValidAccessoryFrames)
+        XCTAssertTrue(layout.alternateAccessoryFrames.allSatisfy(\.isEmpty))
+    }
+
+    func testVoiceAndRecordingActionsFailClosedOnShortSurface() {
+        for height in [43.0, 54.0, 64.0] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: height)
+
+            XCTAssertTrue(layout.dictateFrame.isEmpty, "height=\(height)")
+            XCTAssertTrue(layout.actionRectangles.filter { !$0.isEmpty }.allSatisfy { $0.height >= 44 },
+                          "height=\(height), frames=\(layout.actionRectangles)")
+        }
+    }
+
+    func testSymbolsContentHeightKeepsFourRowsAtLeast44Points() {
+        XCTAssertGreaterThanOrEqual(VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight / 4, 44)
+    }
+
     func testAuxiliaryAccessoryFramesKeepVisibleGapAtRowEdges() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         let row = layout.alternateAccessoryRowFrame

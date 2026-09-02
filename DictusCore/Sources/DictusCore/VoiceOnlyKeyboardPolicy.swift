@@ -33,6 +33,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Alternate symbol pages use four rows of at least 44pt. The center region
     /// may occupy the full fixed surface because the outer rails own its sides.
     public static let contentHeight: Double = surfaceHeight
+    public static let symbolsMinimumContentHeight: Double = controlSize * 4
     public static let titleHeight: Double = 17
     public static let statusHeight: Double = 16
     public static let contentSpacing: Double = 6
@@ -156,7 +157,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var alternateAccessoryRowFrame: CGRect {
             guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.controlSize else { return .zero }
-            let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize
+            let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize + visibleControlGap * 3
             guard surfaceFrame.width >= minimumWidth else { return .zero }
             return CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
                    width: surfaceFrame.width,
@@ -202,6 +203,19 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var alternateAccessoryFrames: [CGRect] {
             [accessoryRevertFrame, accessoryMicFrame, accessoryDeleteFrame, accessoryReturnFrame]
+        }
+
+        public var hasValidAccessoryFrames: Bool {
+            let frames = alternateAccessoryFrames
+            guard frames.count == 4,
+                  frames.allSatisfy({ !$0.isEmpty && $0.width >= controlSize && $0.height >= controlSize }),
+                  frames.allSatisfy({ alternateAccessoryRowFrame.contains($0) }) else { return false }
+            for index in frames.indices {
+                for other in frames[(index + 1)...] where frames[index].intersects(other) {
+                    return false
+                }
+            }
+            return true
         }
 
         /// The symbols pages reserve their bottom row for the UIKit-owned ABC control.

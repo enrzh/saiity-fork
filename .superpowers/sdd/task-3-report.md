@@ -105,6 +105,31 @@ SimSlim 目标为既有授权设备 `AC636497-5EC6-4AD4-BD83-E5E2458FA702`，状
 
 ## 修复轮次（2026-09-02）
 
+### 最终审查 Important 修复波次
+
+先添加回归测试并确认 RED：新 API 尚不存在，focused suite 编译失败于 `hasValidAccessoryFrames` 与 `symbolsMinimumContentHeight`，证明测试尚未被生产实现满足。
+
+本轮修复：
+
+- `VoiceOnlyKeyboardPolicy.Layout` 增加真实 `hasValidAccessoryFrames` 检查，验证四个 frame、尺寸、边界和互不重叠；辅助 row 最小宽度按四个 hit target、mic、两侧边距及三个内部间隙推导。
+- controller 使用该有效性检查；voice/recording 在 `dictateFrame` 为空时隐藏并禁用 mic，避免空 frame 留下可交互状态；symbols 内容高度至少按四行 44pt 处理。
+- vendored symbols key row 高度增加 44pt 下限，保留 symbols1/symbols2、clipping 和 ABC 返回路径。
+
+验证：
+
+```text
+swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardPolicyTests|VoiceOnlyKeyboardContractTests'
+Executed 98 tests, with 0 failures (0 unexpected)
+
+swift test --package-path DictusCore
+Executed 1233 tests, with 10 tests skipped and 0 failures (0 unexpected)
+
+git diff --check
+通过
+```
+
+本轮不进行 SimSlim runtime 操作；未使用实体 iPhone、DeviceHub 或额外模拟器，未上传/发布。
+
 基线：`41e0fc5fe4e9b021923727dbf6fc1bac94c41776`
 
 ### RED

@@ -961,7 +961,7 @@ final internal class GiellaKeyboardView: UIView,
 
         let width = key.size.width * ((bounds.size.width - 1) / rowNumberOfUnits[indexPath.section])
         let rowCount = max(currentPage.count, 1)
-        let height = bounds.size.height / CGFloat(max(rowCount, 1))
+        let height = max(bounds.size.height / CGFloat(max(rowCount, 1)), 44)
         return CGSize(width: width, height: height)
     }
 

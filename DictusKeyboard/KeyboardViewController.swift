@@ -994,12 +994,13 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // symbols still need the number button's ABC action in the reserved cell.
         let mode = KeyboardState.shared.areaMode
         let isAuxiliary = mode == .panel || mode == .emoji
-        let auxiliaryFramesAvailable = !layout.alternateAccessoryFrames.isEmpty
+        let auxiliaryFramesAvailable = layout.hasValidAccessoryFrames
+        let voiceMicFrameAvailable = !layout.dictateFrame.isEmpty
         atButton?.isHidden = isAuxiliary || !leftRailVisible
         emojiButton?.isHidden = isAuxiliary || !leftRailVisible
         numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible
-        micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : (mode != .keys && mode != .recording)
-        micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true)
+        micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)
+        micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true) && voiceMicFrameAvailable
         deleteButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !rightRailVisible
         returnButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !rightRailVisible
         dismissButton?.isHidden = isAuxiliary || !rightRailVisible
@@ -1022,7 +1023,11 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
         micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
         if let numberKeyboardView {
-            numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame
+            var contentFrame = layout.alternateContentBelowAccessoryFrame
+            if layout.hasValidAccessoryFrames {
+                contentFrame.size.height = max(contentFrame.height, CGFloat(VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight))
+            }
+            numberKeyboardView.frame = contentFrame
             numberKeyboardView.clipsToBounds = true
             numberKeyboardView.setNeedsLayout()
         }
