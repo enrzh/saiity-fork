@@ -9,23 +9,9 @@ struct EmojiCategoryBar: View {
     let sections: [CategoryInfo]
     let selectedCategoryID: String
     let onSelectCategory: (String) -> Void
-    let onSearch: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            // Search button — 44pt minimum tap target (Apple HIG)
-            Button {
-                HapticFeedback.keyTapped()
-                onSearch()
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(Color(.label))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .fixedSize()
-
             // Category icons — representative emojis like native iOS picker
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {

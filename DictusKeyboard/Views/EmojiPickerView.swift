@@ -27,11 +27,7 @@ struct EmojiPickerView: View {
 
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
-    @State private var isSearchActive: Bool = false
-    @State private var searchText: String = ""
-    @State private var showCursor: Bool = true
-    @State private var filteredEmojis: [String] = []
-    @State private var searchTask: Task<Void, Never>?
+    private let language = SupportedLanguage.active.rawValue
 
     private let categories = EmojiStore.categories
 
@@ -104,11 +100,7 @@ struct EmojiPickerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if isSearchActive {
-                searchMode
-            } else {
-                normalMode
-            }
+            normalMode
         }
         .frame(width: availableWidth, height: availableHeight)
         .clipped()
@@ -168,181 +160,9 @@ struct EmojiPickerView: View {
             onSelectCategory: { id in
                 selectedCategoryID = id
             },
-            onSearch: { isSearchActive = true }
         )
     }
 
-    // MARK: - Search mode
-
-    @ViewBuilder
-    private var searchMode: some View {
-        // Search input bar
-        searchInputBar
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
-            .padding(.bottom, 1)
-
-        // Emoji row: recents when empty, results when searching.
-        let emojiRow = searchModeEmojis
-        if emojiRow.isEmpty {
-            Text("No results")
-                .foregroundColor(.secondary)
-                .font(.system(size: 14))
-                .frame(height: 38)
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 2) {
-                    ForEach(Array(emojiRow.enumerated()), id: \.offset) { _, emoji in
-                        Button {
-                            HapticFeedback.keyTapped()
-                            onEmojiInsert(emoji)
-                            RecentEmojis.add(emoji)
-                        } label: {
-                            Text(emoji)
-                                .font(.system(size: 30))
-                                .frame(width: emojiCellWidth, height: 44)
-                        }
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-            .frame(height: 44)
-        }
-
-        Spacer(minLength: 0)
-
-        EquatableView(content: MiniSearchKeyboard(
-            onCharacter: { searchText.append($0) },
-            onDelete: { if !searchText.isEmpty { searchText.removeLast() } },
-            onSpace: { searchText.append(" ") }
-        ))
-        .onChange(of: searchText) { newValue in
-            searchTask?.cancel()
-            if newValue.isEmpty {
-                filteredEmojis = []
-                return
-            }
-            searchTask = Task {
-                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms debounce
-                guard !Task.isCancelled else { return }
-                let results = performSearch(query: newValue)
-                guard !Task.isCancelled else { return }
-                filteredEmojis = results
-            }
-        }
-    }
-
-    /// Search bar for search mode with cursor.
-    private var searchInputBar: some View {
-        let barWidth = availableWidth - 16 // 8pt margin each side
-        return HStack(spacing: 0) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-                .padding(.trailing, 6)
-
-            // Cursor at the start, then text or placeholder
-            if searchText.isEmpty {
-                blinkingCursor
-                Text("Search Emoji")
-                    .foregroundColor(.secondary)
-            } else {
-                Text(searchText)
-                    .foregroundColor(.primary)
-                blinkingCursor
-            }
-
-            Spacer(minLength: 0)
-
-            // × button: clears text if any, closes search if empty
-            Button {
-                if searchText.isEmpty {
-                    isSearchActive = false
-                } else {
-                    searchText = ""
-                }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .lineLimit(1)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .frame(width: barWidth)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(.systemGray6))
-        )
-    }
-
-    private var blinkingCursor: some View {
-        Rectangle()
-            .fill(Color.accentColor)
-            .frame(width: 2, height: 18)
-            .opacity(showCursor ? 1 : 0)
-            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: showCursor)
-            .onAppear { showCursor.toggle() }
-    }
-
-    /// Emojis to show in search mode row.
-    /// When nothing typed: recents (or first emojis from catalog if no recents).
-    /// When searching: debounced filtered results.
-    private var searchModeEmojis: [String] {
-        if searchText.isEmpty {
-            if recentEmojis.isEmpty {
-                return Array(EmojiStore.allEmojis.prefix(30))
-            }
-            return recentEmojis
-        }
-        return filteredEmojis
-    }
-
-    // MARK: - Search logic (debounced, pre-computed names)
-
-    private func performSearch(query: String) -> [String] {
-        let q = query.lowercased()
-        let language = SupportedLanguage.active.rawValue
-
-        if language == "fr" {
-            return searchFrench(query: q)
-        } else {
-            return searchUnicodeName(query: q)
-        }
-    }
-
-    private let maxSearchResults = 30
-
-    private func searchFrench(query: String) -> [String] {
-        var results: [String] = []
-        var seen = Set<String>()
-
-        for (keyword, emojis) in EmojiSearchFR.keywords where keyword.contains(query) {
-            for emoji in emojis where !seen.contains(emoji) {
-                results.append(emoji)
-                seen.insert(emoji)
-                if results.count >= maxSearchResults { return results }
-            }
-        }
-
-        // Fallback to pre-computed Unicode names
-        for entry in EmojiStore.allEmojiNames where !seen.contains(entry.emoji) {
-            if entry.name.contains(query) {
-                results.append(entry.emoji)
-                seen.insert(entry.emoji)
-                if results.count >= maxSearchResults { return results }
-            }
-        }
-        return results
-    }
-
-    private func searchUnicodeName(query: String) -> [String] {
-        var results: [String] = []
-        for entry in EmojiStore.allEmojiNames where entry.name.contains(query) {
-            results.append(entry.emoji)
-            if results.count >= maxSearchResults { return results }
-        }
-        return results
-    }
 }
 
 // MARK: - Supporting types

@@ -288,6 +288,8 @@ enum KeyboardLayouts {
 
     // MARK: - Numbers Page (symbols1)
 
+    static let symbolsRowCount = 3
+
     private static func numbersPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
         [
             // Row 1: digits
@@ -305,8 +307,6 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            // Row 4 is reserved for the UIKit-owned public actions.
-            blankRow()
         ]
     }
 
@@ -329,8 +329,6 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            // Row 4 is reserved for the UIKit-owned public actions.
-            blankRow()
         ]
     }
 

@@ -158,8 +158,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // truly transparent + non-opaque makes that uncovered area composite
         // with whatever sits behind the keyboard window (the host app),
         // matching what Apple's own keyboards do.
-        kbInputView.backgroundColor = .clear
-        kbInputView.isOpaque = false
+        kbInputView.backgroundColor = .systemGroupedBackground
+        kbInputView.isOpaque = true
 
         // --- 2. Create SwiftUI hosting for the voice surface ---
         // NOTE: do NOT pass `self` into KeyboardRootView. Storing the controller on
@@ -681,12 +681,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
     /// content rows. Voice and recording keep the device's native height.
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         let nativeHeight = computeKeyboardHeight()
-        switch mode {
-        case .emoji, .panel:
-            return max(nativeHeight, CGFloat(VoiceOnlyKeyboardPolicy.alternateMinimumHeight))
-        case .keys, .recording:
-            return nativeHeight
-        }
+        return nativeHeight
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -893,7 +888,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
                 for: Double(inputView?.bounds.width ?? 0),
                 surfaceHeight: Double(inputView?.bounds.height ?? 0)
             )
-            numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame
+            var contentFrame = layout.alternateContentBelowAccessoryFrame
+            numberKeyboardView.frame = contentFrame
             numberKeyboardView.setNeedsLayout()
             numberKeyboardView.layoutIfNeeded()
         }
@@ -1049,11 +1045,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
         micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
         if let numberKeyboardView {
-            var contentFrame = layout.alternateContentBelowAccessoryFrame
-            if layout.hasValidAccessoryFrames {
-                contentFrame.size.height = max(contentFrame.height, CGFloat(VoiceOnlyKeyboardPolicy.symbolsMinimumContentHeight))
-            }
-            numberKeyboardView.frame = contentFrame
+            numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame
             numberKeyboardView.clipsToBounds = true
             numberKeyboardView.setNeedsLayout()
         }

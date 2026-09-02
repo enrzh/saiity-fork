@@ -26,8 +26,13 @@ struct KeyboardRootView: View {
             )
 
             ZStack(alignment: .topLeading) {
-                centerSurface
-                    .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
+                if usesAuxiliarySurface {
+                    areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight)
+                        .frame(width: proxy.size.width, height: surfaceHeight, alignment: .topLeading)
+                } else {
+                    centerSurface
+                        .offset(x: surfaceFrame.minX, y: surfaceFrame.minY)
+                }
 
                 if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
@@ -90,7 +95,7 @@ struct KeyboardRootView: View {
                 )
                 .accessibilityIdentifier("emoji-picker-surface")
             }
-            .frame(width: layout.surfaceFrame.width, height: layout.surfaceFrame.height, alignment: .top)
+            .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
         case .panel:
             VStack(spacing: 0) {
                 if layout.hasValidAccessoryFrames {
@@ -100,8 +105,12 @@ struct KeyboardRootView: View {
                     .accessibilityIdentifier("number-layer-surface")
                     .frame(height: contentFrame.height)
             }
-            .frame(width: layout.surfaceFrame.width, height: layout.surfaceFrame.height, alignment: .top)
+            .frame(width: proxyWidth(layout), height: surfaceHeight, alignment: .top)
         }
+    }
+
+    private func proxyWidth(_ layout: VoiceOnlyKeyboardPolicy.Layout) -> CGFloat {
+        CGFloat(layout.surfaceWidth)
     }
 
     private func alternateAccessoryRow(layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
@@ -201,13 +210,21 @@ struct KeyboardRootView: View {
         if !layout.dictateFrame.isEmpty {
             let dictateFrame = layout.dictateFrame
             let surfaceCenterX = layout.surfaceFrame.midX
-            dictateButton(frame: dictateFrame)
-                .frame(
-                    width: dictateFrame.width,
-                    height: dictateFrame.height
-                )
-                .position(x: CGFloat(surfaceCenterX - layout.surfaceFrame.minX),
-                          y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
+            ZStack(alignment: .bottom) {
+                dictateButton(frame: dictateFrame)
+                    .frame(width: dictateFrame.width, height: dictateFrame.height)
+                    .position(x: CGFloat(surfaceCenterX - layout.surfaceFrame.minX),
+                              y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
+                if !dictationErrorMessage.isEmpty {
+                    Text(dictationErrorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: -2)
+                }
+            }
                 .frame(maxWidth: .infinity, minHeight: CGFloat(layout.surfaceFrame.height), maxHeight: CGFloat(layout.surfaceFrame.height))
         } else {
             Color.clear
@@ -227,13 +244,6 @@ struct KeyboardRootView: View {
                 .font(.caption2.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            if let statusMessage = state.statusMessage, !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .font(.caption2)
-                    .foregroundStyle(state.dictationStatus == .failed ? .red : .secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
         }
         .foregroundStyle(.primary)
         .frame(width: frame.width, height: capsuleHeight)
@@ -254,7 +264,7 @@ struct KeyboardRootView: View {
         case .recording: return "Listening..."
         case .transcribing: return "Transcribing..."
         case .processing: return "Cleaning up..."
-        case .failed: return state.failedRequiresApp ? "Open sAiity" : "Try again"
+        case .failed: return "Hold to dictate"
         }
     }
 
@@ -262,9 +272,14 @@ struct KeyboardRootView: View {
         switch state.dictationStatus {
         case .recording: return "waveform"
         case .requested, .transcribing, .processing: return "ellipsis"
-        case .failed: return state.failedRequiresApp ? "arrow.up.forward.app" : "arrow.clockwise"
+        case .failed: return "mic.fill"
         case .idle, .ready: return "mic.fill"
         }
+    }
+
+    private var dictationErrorMessage: String {
+        guard state.dictationStatus == .failed else { return "" }
+        return state.statusMessage ?? "Dictation could not be completed."
     }
 
     private let surfaceCornerRadius: CGFloat = 24

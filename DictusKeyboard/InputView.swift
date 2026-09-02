@@ -17,4 +17,16 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
     convenience init() {
         self.init(frame: .zero, inputViewStyle: .keyboard)
     }
+
+    override init(frame: CGRect, inputViewStyle: UIInputView.Style) {
+        super.init(frame: frame, inputViewStyle: inputViewStyle)
+        backgroundColor = .systemGroupedBackground
+        isOpaque = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        backgroundColor = .systemGroupedBackground
+        isOpaque = true
+    }
 }
