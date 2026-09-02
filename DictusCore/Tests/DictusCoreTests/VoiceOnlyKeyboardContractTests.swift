@@ -77,6 +77,17 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("state.requestStop()"))
     }
 
+    func testAuxiliaryReturnUsesSharedAppleControlSurfaceSemantics() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let accessory = try XCTUnwrap(root.range(of: "private func alternateAccessoryRow"))
+        let languageIndicator = try XCTUnwrap(root.range(of: "private var languageIndicator"))
+        let row = String(root[accessory.lowerBound..<languageIndicator.lowerBound])
+
+        XCTAssertTrue(row.contains("appleControlSurface("))
+        XCTAssertTrue(row.contains("in: Circle()"))
+        XCTAssertFalse(row.contains("regularMaterial"))
+    }
+
     private func source(_ path: String) throws -> String {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -238,3 +238,35 @@ GREEN：`swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardContrac
 本 Task 改动：`DictusKeyboard/KeyboardRootView.swift`、`DictusKeyboard/KeyboardViewController.swift`、`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`。UIKit mic 使用 `layout.dictateFrame`，touch down 启动，touch up inside/outside/cancel 停止；SwiftUI 仅渲染白色 capsule 和 `mic.fill`。
 
 Task 2 提交 SHA：`78000171cbbe277400c605f232b742a6b8700aec`。
+
+## Task 2 修复轮次：辅助页 Return 复用 appleControlSurface
+
+状态：DONE_WITH_CONCERNS。
+
+修复：`DictusKeyboard/KeyboardRootView.swift` 的辅助页 Return 静态视觉改为调用已有 `appleControlSurface(..., in: Circle())`，移除直接使用 `.regularMaterial` 的分支，因此沿用 `reduceTransparency` 与 increased contrast 语义。未修改 `KeyboardViewController.swift`；symbols content frame 与 `UIInputView` backdrop 留给任务 3。
+
+测试文件：`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift` 新增最小 source-contract，限定 `alternateAccessoryRow` 必须使用 `appleControlSurface` 圆形分支且不得直接包含 `regularMaterial`。
+
+### TDD RED
+
+```text
+swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests/testAuxiliaryReturnUsesSharedAppleControlSurfaceSemantics
+Executed 1 test, with 3 failures (0 unexpected)
+```
+
+失败为预期的三个契约断言失败：辅助行未使用 `appleControlSurface`、未声明 `Circle()`，且仍包含 `regularMaterial`。
+
+### TDD GREEN
+
+```text
+swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests
+Executed 41 tests, with 0 failures (0 unexpected)
+```
+
+`git diff --check` 通过。测试输出保留既有 `DictusCore/Sources/polish-harness/README.md` unhandled warning；未创建或启动 simulator，未使用实体手机。
+
+### 文件、提交与疑点
+
+本轮提交文件：`DictusKeyboard/KeyboardRootView.swift`、`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift` 和本报告。其他 dirty/untracked 未暂存、未修改、未重置。
+
+疑点：本轮仅验证 source contract 与 focused core test，未做运行时视觉验证；任务 3 仍负责 symbols content frame 和 `UIInputView` backdrop。

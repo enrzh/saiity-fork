@@ -123,12 +123,13 @@ struct KeyboardRootView: View {
                 .foregroundStyle(.primary)
                 .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(layout.alternateAccessoryRowFrame.height))
 
-            Image(systemName: "return")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
-                .background(Circle().fill(.regularMaterial))
-                .clipShape(Circle())
+            appleControlSurface(
+                Image(systemName: "return")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
+                in: Circle()
+            )
         }
         .frame(width: layout.alternateAccessoryRowFrame.width, height: layout.alternateAccessoryRowFrame.height)
         .allowsHitTesting(false)
