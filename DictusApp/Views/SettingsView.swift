@@ -7,6 +7,8 @@ struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
+    @AppStorage(SharedKeys.keyboardAccessoryOrder, store: UserDefaults(suiteName: AppGroup.identifier))
+    private var keyboardAccessoryOrderRawValue = KeyboardAccessoryOrder.emojiFirst.rawValue
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
     @StateObject private var modelManager = ModelManager()
     @State private var diagnosticResult = AppGroupDiagnostic.run()
@@ -24,6 +26,12 @@ struct SettingsView: View {
                 polishStateFooter
             }
             Section("Keyboard") {
+                Picker
+                    (selection: keyboardAccessoryOrderBinding, label: { Text("Control order") }) {
+                    ForEach(KeyboardAccessoryOrder.allCases, id: \.self) { order in
+                        Text(order.displayName).tag(order)
+                    }
+                }
                 NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
                     Label("Models", systemImage: "square.stack.3d.up.fill")
                 }
@@ -88,6 +96,15 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var keyboardAccessoryOrderBinding: Binding<KeyboardAccessoryOrder> {
+        Binding(
+            get: {
+                KeyboardAccessoryOrder(rawValue: keyboardAccessoryOrderRawValue) ?? .emojiFirst
+            },
+            set: { keyboardAccessoryOrderRawValue = $0.rawValue }
+        )
     }
 
     private var permissionLabel: String {
