@@ -101,7 +101,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         XCTAssertTrue(controller.contains("let auxiliaryFramesAvailable = layout.hasValidAccessoryFrames"))
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable"))
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !leftRailVisible"))
         XCTAssertTrue(controller.contains("micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)"))
         XCTAssertTrue(controller.contains("deleteButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
         XCTAssertTrue(controller.contains("returnButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable"))
@@ -232,7 +232,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testBothAuxiliaryPagesKeepModeControlAvailableToReturnToNormal() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible"),
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !leftRailVisible"),
                       "the mode control must remain reachable on both symbols and emoji pages")
         XCTAssertTrue(controller.contains("layoutVoiceActionControls()"),
                       "mode visibility must be refreshed after each layout transition")

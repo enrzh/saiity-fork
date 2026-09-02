@@ -228,7 +228,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(rootView.contains("state.areaMode != .panel && state.areaMode != .emoji"))
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
         XCTAssertTrue(controller.contains("atButton?.isHidden = isAuxiliary || !leftRailVisible"))
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible"))
+        XCTAssertTrue(controller.contains("numberButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !leftRailVisible"))
     }
 
     func testAtSitsAboveBottomUtilityRail() {

@@ -73,7 +73,9 @@ struct KeyboardRootView: View {
             centerSurface(layout: layout)
         case .emoji:
             VStack(spacing: 0) {
-                alternateAccessoryRow(layout: layout)
+                if layout.hasValidAccessoryFrames {
+                    alternateAccessoryRow(layout: layout)
+                }
                 EmojiPickerView(
                     onEmojiInsert: { emoji in
                         guard let controller = state.controller as? KeyboardViewController else {
@@ -91,7 +93,9 @@ struct KeyboardRootView: View {
             .frame(width: layout.surfaceFrame.width, height: layout.surfaceFrame.height, alignment: .top)
         case .panel:
             VStack(spacing: 0) {
-                alternateAccessoryRow(layout: layout)
+                if layout.hasValidAccessoryFrames {
+                    alternateAccessoryRow(layout: layout)
+                }
                 Color.clear
                     .accessibilityIdentifier("number-layer-surface")
                     .frame(height: contentFrame.height)

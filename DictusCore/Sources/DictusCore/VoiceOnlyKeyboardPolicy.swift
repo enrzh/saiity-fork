@@ -160,7 +160,9 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var alternateAccessoryRowFrame: CGRect {
             guard surfaceHeight >= VoiceOnlyKeyboardPolicy.alternateMinimumHeight else { return .zero }
-            let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize + visibleControlGap * 3
+            // The centered mic must clear the two right-side 44pt targets.
+            // Keep this threshold aligned with the actual frames below.
+            let minimumWidth = visibleControlGap * 2 + controlSize * 3 + primaryControlSize + visibleControlGap * 5
             guard surfaceFrame.width >= minimumWidth else { return .zero }
             return CGRect(x: surfaceFrame.minX, y: surfaceFrame.minY,
                    width: surfaceFrame.width,

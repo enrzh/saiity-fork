@@ -1024,7 +1024,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         let voiceMicFrameAvailable = !layout.dictateFrame.isEmpty
         atButton?.isHidden = isAuxiliary || !leftRailVisible
         emojiButton?.isHidden = isAuxiliary || !leftRailVisible
-        numberButton?.isHidden = isAuxiliary && !auxiliaryFramesAvailable || !leftRailVisible
+        numberButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !leftRailVisible
         micButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)
         micButton?.isUserInteractionEnabled = !(micButton?.isHidden ?? true) && voiceMicFrameAvailable
         deleteButton?.isHidden = isAuxiliary ? !auxiliaryFramesAvailable : !rightRailVisible
