@@ -21,7 +21,7 @@ struct KeyboardRootView: View {
             let surfaceFrame = layout.surfaceFrame
             var contentFrame = layout.micCenterArea
             if usesAuxiliarySurface {
-                contentFrame = layout.alternateContentBelowAccessoryFrame
+                contentFrame = layout.auxiliaryContentFrame
             }
             let centerSurface = embeddedSurface(
                 areaSurface(layout: layout, contentFrame: contentFrame, surfaceHeight: surfaceHeight),

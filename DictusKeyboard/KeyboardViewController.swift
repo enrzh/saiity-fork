@@ -1006,7 +1006,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // symbols still need the number button's ABC action in the reserved cell.
         let mode = KeyboardState.shared.areaMode
         let isAuxiliary = mode == .panel || mode == .emoji
-        let auxiliaryFramesAvailable = layout.hasValidAccessoryFrames
+        let auxiliaryFramesAvailable = !layout.bottomAuxiliaryControlFrame.isEmpty
         let voiceMicFrameAvailable = !layout.dictateFrame.isEmpty
         atButton?.isHidden = isAuxiliary || !leftRailVisible
         emojiButton?.isHidden = isAuxiliary || !leftRailVisible
@@ -1019,10 +1019,10 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         if isAuxiliary {
-            numberButton?.frame = layout.accessoryRevertFrame
-            micButton?.frame = layout.accessoryMicFrame
-            deleteButton?.frame = layout.accessoryDeleteFrame
-            returnButton?.frame = layout.accessoryReturnFrame
+            numberButton?.frame = layout.leftUtilityFrames.at
+            micButton?.frame = layout.dictateFrame
+            deleteButton?.frame = layout.rightRailFrames.delete
+            returnButton?.frame = layout.rightRailFrames.returnKey
         } else {
             numberButton?.frame = layout.leftUtilityFrames.number
             micButton?.frame = layout.dictateFrame

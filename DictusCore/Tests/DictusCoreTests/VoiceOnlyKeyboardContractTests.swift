@@ -300,8 +300,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(inputView.contains("inputViewStyle: .keyboard"))
-        XCTAssertTrue(inputView.contains("backgroundColor = .systemGroupedBackground"))
-        XCTAssertTrue(inputView.contains("isOpaque = true"))
+        XCTAssertTrue(inputView.contains("backgroundColor = .clear"))
+        XCTAssertTrue(inputView.contains("isOpaque = false"))
         XCTAssertTrue(controller.contains("$0.layer.cornerRadius = $0.bounds.height / 2"))
         XCTAssertTrue(controller.contains("micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2"))
         XCTAssertFalse(root.contains("Color(uiColor: .systemBackground)"))
