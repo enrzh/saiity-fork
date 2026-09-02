@@ -260,7 +260,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
 
         // Assign as the controller's inputView -- this activates audio feedback
         self.inputView = kbInputView
-        hostingHeightConstraint?.constant = computeKeyboardHeight()
+        hostingHeightConstraint?.constant = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
         hostingBottomToKeyboardTop?.isActive = false
         hostingBottomToInputBottom?.isActive = true
 
@@ -319,8 +319,9 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         // Force height recalculation when keyboard reappears (e.g., after app switch).
         // Without this, the inputView may retain a stale height from before the switch.
         let oldHeight = heightConstraint?.constant ?? -1
-        let newHeight = computeKeyboardHeight()
+        let newHeight = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
         heightConstraint?.constant = newHeight
+        hostingHeightConstraint?.constant = newHeight
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
@@ -451,7 +452,7 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
     /// without the entry animation flashing at 504pt.
     private func installInputViewHeightConstraint() {
         guard heightConstraint == nil, let kbInputView = inputView else { return }
-        let height = computeKeyboardHeight()
+        let height = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
         let constraint = kbInputView.heightAnchor.constraint(equalToConstant: height)
         constraint.priority = UILayoutPriority(999)
         constraint.isActive = true
@@ -676,6 +677,18 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
         return CGFloat(nativeHeight)
     }
 
+    /// Auxiliary pages need room for their accessory row and four native-sized
+    /// content rows. Voice and recording keep the device's native height.
+    private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
+        let nativeHeight = computeKeyboardHeight()
+        switch mode {
+        case .emoji, .panel:
+            return max(nativeHeight, CGFloat(VoiceOnlyKeyboardPolicy.alternateMinimumHeight))
+        case .keys, .recording:
+            return nativeHeight
+        }
+    }
+
     // MARK: - Keyboard Area Mode Observation
 
     /// Observe KeyboardState.areaMode to keep the UIKit side of the keyboard area
@@ -814,7 +827,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
 
         switch mode {
         case .keys:
-            let fullHeight = computeKeyboardHeight()
+            let fullHeight = computeKeyboardHeight(for: mode)
+            heightConstraint?.constant = fullHeight
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
@@ -827,7 +841,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             ))
 
         case .emoji:
-            let fullHeight = computeKeyboardHeight()
+            let fullHeight = computeKeyboardHeight(for: mode)
+            heightConstraint?.constant = fullHeight
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
@@ -840,7 +855,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             ))
 
         case .panel:
-            let fullHeight = computeKeyboardHeight()
+            let fullHeight = computeKeyboardHeight(for: mode)
+            heightConstraint?.constant = fullHeight
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
@@ -855,7 +871,8 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
             ))
 
         case .recording:
-            let fullHeight = computeKeyboardHeight()
+            let fullHeight = computeKeyboardHeight(for: mode)
+            heightConstraint?.constant = fullHeight
             hostingHeightConstraint?.constant = fullHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
@@ -871,6 +888,15 @@ class KeyboardViewController: UIInputViewController, GiellaKeyboardViewDelegate 
 
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
+        if let numberKeyboardView, mode == .panel {
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: Double(inputView?.bounds.width ?? 0),
+                surfaceHeight: Double(inputView?.bounds.height ?? 0)
+            )
+            numberKeyboardView.frame = layout.alternateContentBelowAccessoryFrame
+            numberKeyboardView.setNeedsLayout()
+            numberKeyboardView.layoutIfNeeded()
+        }
         layoutVoiceActionControls()
     }
 
