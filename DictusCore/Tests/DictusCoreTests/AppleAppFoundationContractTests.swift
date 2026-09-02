@@ -240,7 +240,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("NavigationLink { DebugLogView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DiagnosticDetailView"))
         XCTAssertTrue(settings.contains("Toggle("))
-        XCTAssertFalse(settings.contains("Picker("))
+        XCTAssertTrue(settings.contains("Picker(selection: keyboardAccessoryOrderBinding, label: Text(\"Control order\"))"))
         XCTAssertFalse(settings.contains("transcriptionLanguage"))
         XCTAssertFalse(settings.contains("Keyboard layout"))
         XCTAssertFalse(settings.contains("RoundedRectangle"))
