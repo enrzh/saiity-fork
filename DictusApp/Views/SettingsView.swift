@@ -28,7 +28,7 @@ struct SettingsView: View {
             Section("Keyboard") {
                 Picker
                     (selection: keyboardAccessoryOrderBinding, label: { Text("Control order") }) {
-                    ForEach(KeyboardAccessoryOrder.allCases, id: \.self) { order in
+                    ForEach([KeyboardAccessoryOrder.emojiFirst, .numberFirst], id: \.self) { order in
                         Text(order.displayName).tag(order)
                     }
                 }

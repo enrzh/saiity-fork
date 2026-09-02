@@ -41,3 +41,20 @@ Executed 1264 tests, with 10 tests skipped and 0 failures (0 unexpected)
 - 完整测试在 macOS 主机上有 10 个既有 App Group 权限相关 skipped 测试。
 - 测试输出仍有既有 Swift 6 并发 warning、未处理 README warning，以及 `FrequencyDictionary` fixture 解码诊断；本次测试最终退出成功。
 - 未运行 iOS Simulator UI 测试；本任务要求的设置源码契约和 DictusCore 全量测试均已通过。
+
+## Task 2 审查修复（2026-09-02）
+
+审查指出的测试契约缺口已修复：
+
+- `SettingsView` 的 Picker 现在显式使用 `KeyboardAccessoryOrder.emojiFirst` 与 `.numberFirst`，不再依赖 `allCases`。
+- 契约测试要求 `keyboardAccessoryOrder` 与 `store: UserDefaults(suiteName: AppGroup.identifier)` 出现在同一个 `@AppStorage` 属性声明中，并确认该声明唯一。
+- 契约测试锁定 `Models` 行，并排除 `sounds`、sound feedback/volume、keyboard language/layout、number row、haptics 与 autocorrect 等已删除旧键盘设置。
+
+TDD 验证：
+
+```text
+RED: Executed 1 test, with 4 failures (0 unexpected)
+GREEN: Executed 1 test, with 0 failures (0 unexpected)
+```
+
+本次修复仅涉及 `SettingsView.swift`、`KeyboardOrderSettingsContractTests.swift` 与本报告；其它工作树改动保留。
