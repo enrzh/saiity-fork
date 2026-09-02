@@ -16,7 +16,8 @@ struct KeyboardRootView: View {
             let surfaceHeight = max(proxy.size.height, 1)
             let layout = VoiceOnlyKeyboardPolicy.layout(
                 for: proxy.size.width,
-                surfaceHeight: Double(surfaceHeight)
+                surfaceHeight: Double(surfaceHeight),
+                controlOrder: KeyboardAccessoryOrder.current
             )
             let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
             let surfaceFrame = layout.surfaceFrame
@@ -97,7 +98,7 @@ struct KeyboardRootView: View {
             LiquidSymbolPageView(
                 page: symbolPage,
                 availableWidth: contentFrame.width,
-                availableHeight: surfaceFrame.height,
+                availableHeight: contentFrame.height,
                 onInsert: { text in routeProxyText(text) },
                 onDelete: { routeProxyCommand(.delete) },
                 onReturn: { routeProxyCommand(.returnKey) },
