@@ -3,7 +3,7 @@ import XCTest
 
 final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testPolicyExposesAlternatePageAccessoryAndContentGeometry() {
-        let layout = VoiceOnlyKeyboardPolicy.layout(for: 375, surfaceHeight: 180)
+        let layout = VoiceOnlyKeyboardPolicy.layout(for: 375, surfaceHeight: 228)
 
         XCTAssertEqual(layout.alternateAccessoryRowFrame.minX, layout.surfaceFrame.minX)
         XCTAssertEqual(layout.alternateAccessoryRowFrame.maxX, layout.surfaceFrame.maxX)
