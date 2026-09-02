@@ -173,27 +173,6 @@ public enum VoiceOnlyKeyboardPolicy {
             }
         }
 
-        @available(*, deprecated, message: "Use bottom auxiliary frames")
-        public var alternateAccessoryRowFrame: CGRect { bottomAuxiliaryControlFrame }
-        @available(*, deprecated, message: "Use auxiliaryContentFrame")
-        public var alternateContentBelowAccessoryFrame: CGRect { auxiliaryContentFrame }
-        @available(*, deprecated, message: "Use bottom auxiliary controls")
-        public var accessoryRevertFrame: CGRect { leftUtilityFrames.at }
-        @available(*, deprecated, message: "Use dictateFrame")
-        public var accessoryMicFrame: CGRect { dictateFrame }
-        @available(*, deprecated, message: "Use rightRailFrames")
-        public var accessoryDeleteFrame: CGRect { rightRailFrames.delete }
-        @available(*, deprecated, message: "Use rightRailFrames")
-        public var accessoryReturnFrame: CGRect { rightRailFrames.returnKey }
-        @available(*, deprecated, message: "Use auxiliaryControlFrames")
-        public var alternateAccessoryFrames: [CGRect] {
-            [accessoryRevertFrame, accessoryMicFrame, accessoryDeleteFrame, accessoryReturnFrame]
-        }
-        @available(*, deprecated, message: "Use explicit auxiliary frame checks")
-        public var hasValidAccessoryFrames: Bool {
-            alternateAccessoryFrames.allSatisfy { !$0.isEmpty }
-        }
-
         public var rightCommandFrame: CGRect {
             CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth, y: rightRailTop,
                    width: rightRailWidth, height: rightRailHeight)
