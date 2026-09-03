@@ -42,9 +42,9 @@ final class KeyboardRegressionTests: XCTestCase {
                        accuracy: 0.001)
     }
 
-    func testSurfaceFallbackIsFivePercentTaller() {
+    func testSurfaceFallbackIsTenPercentTaller() {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight,
-                       216 * 1.05,
+                       216 * 1.10,
                        accuracy: 0.001)
     }
 }

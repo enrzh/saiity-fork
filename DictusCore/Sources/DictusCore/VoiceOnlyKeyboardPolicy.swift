@@ -56,7 +56,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The standard portrait iPhone keyboard grid height. The extension's UIKit
     /// height provider remains the source of truth at runtime; this is the
     /// shared fallback used by policy tests and the initial SwiftUI layout.
-    public static let surfaceHeight: Double = 216 * 1.05
+    public static let surfaceHeight: Double = 216 * 1.10
 
     /// Chooses the height reported by the laid-out input view, falling back to
     /// the device provider while UIKit is still resolving the input surface.
