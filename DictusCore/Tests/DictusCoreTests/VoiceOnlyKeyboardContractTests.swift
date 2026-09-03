@@ -746,8 +746,15 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
             XCTAssertEqual(VoiceOnlyKeyboardPolicy.leftRailControlCount, 3)
             XCTAssertEqual(layout.leftUtilityFrames.at.width, 44)
-            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 116)
-            XCTAssertEqual(layout.leftUtilityFrames.at.maxY, layout.leftUtilityFrames.emoji.minY)
+            XCTAssertEqual(layout.leftUtilityFrames.at.minY,
+                           layout.leftUtilityFrames.emoji.minY
+                           - VoiceOnlyKeyboardPolicy.railSpacing
+                           - VoiceOnlyKeyboardPolicy.controlSize)
+            XCTAssertEqual(layout.leftUtilityFrames.at.maxY,
+                           layout.leftUtilityFrames.emoji.minY
+                           - VoiceOnlyKeyboardPolicy.railSpacing)
+            XCTAssertEqual(layout.leftUtilityFrames.emoji.minY - layout.leftUtilityFrames.at.maxY,
+                           VoiceOnlyKeyboardPolicy.railSpacing)
             XCTAssertEqual(layout.leftUtilityFrames.emoji.minX, layout.leftUtilityFrames.at.minX)
             XCTAssertEqual(layout.leftUtilityFrames.number.minX, layout.leftUtilityFrames.emoji.maxX + 4)
             XCTAssertEqual(layout.leftUtilityFrames.number.minY, layout.leftUtilityFrames.emoji.minY)
