@@ -7,6 +7,7 @@ public enum KeyboardSymbolsLayout {
         case pageToggle
         case emoji
         case voice
+        case space
         case delete
         case returnKey
         case spacer
@@ -25,15 +26,13 @@ public enum KeyboardSymbolsLayout {
     public static let numbers: [[Key]] = [
         ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { Key(.insert($0)) },
         ["-", "/", ":", ";", "(", ")", "€", "&", "@", "\""].map { Key(.insert($0)) },
-        bottomRow(),
-        actionRow()
+        bottomRow()
     ]
 
     public static let symbols: [[Key]] = [
         ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="].map { Key(.insert($0)) },
         ["_", "\\", "|", "~", "<", ">", "$", "£", "¥", "·"].map { Key(.insert($0)) },
-        bottomRow(),
-        actionRow()
+        bottomRow()
     ]
 
     private static func bottomRow() -> [Key] {
@@ -45,16 +44,6 @@ public enum KeyboardSymbolsLayout {
             Key(.insert("!"), width: 0.9),
             Key(.insert("'"), width: 0.9),
             Key(.spacer, width: 1)
-        ]
-    }
-
-    private static func actionRow() -> [Key] {
-        [
-            Key(.emoji, width: 1.5),
-            Key(.voice, width: 1.5),
-            Key(.spacer, width: 4),
-            Key(.delete, width: 1.5),
-            Key(.returnKey, width: 1.5)
         ]
     }
 }

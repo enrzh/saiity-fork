@@ -3,26 +3,15 @@ import SwiftUI
 import AudioToolbox
 import DictusCore
 
-/// Bottom bar for emoji picker containing category navigation only.
-/// Icons act as bookmarks into the vertical emoji grid and stay outside its scroll view.
+/// Category bookmarks for the emoji grid. The shared emoji / mic / space / delete /
+/// return bar lives below this row.
 struct EmojiCategoryBar: View {
     let sections: [CategoryInfo]
     let selectedCategoryID: String
     let onSelectCategory: (String) -> Void
-    let onBackToVoice: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onBackToVoice) {
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Return to voice keyboard")
-
-            // Category marks are deliberately plain ASCII so they stay stable across themes.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(sections) { section in
@@ -30,7 +19,7 @@ struct EmojiCategoryBar: View {
                         Button {
                             onSelectCategory(section.id)
                         } label: {
-                            Text(section.icon)
+                            Image(systemName: section.icon)
                                 .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
                                 .foregroundStyle(.primary)
                                 .frame(width: 44, height: 44)
@@ -45,7 +34,6 @@ struct EmojiCategoryBar: View {
             }
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
             .clipped()
-
         }
         .frame(height: 44)
         .clipped()

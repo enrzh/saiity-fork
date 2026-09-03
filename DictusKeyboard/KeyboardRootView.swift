@@ -89,6 +89,9 @@ struct KeyboardRootView: View {
                     routeText(emoji)
                 },
                 onBackToVoice: { state.closeArea() },
+                onSpace: { routeProxyCommand(.space) },
+                onDelete: { routeProxyCommand(.delete) },
+                onReturn: { routeProxyCommand(.returnKey) },
                 availableWidth: availableWidth,
                 availableHeight: surfaceFrame.height
             )
@@ -180,6 +183,13 @@ struct KeyboardRootView: View {
                     .frame(width: dictateFrame.width, height: dictateFrame.height)
                     .position(x: dictateButtonLocalX(for: dictateFrame, in: layout),
                               y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
+                if !layout.spaceFrame.isEmpty {
+                    spaceBar(frame: layout.spaceFrame)
+                        .position(
+                            x: CGFloat(layout.spaceFrame.midX - layout.surfaceFrame.minX),
+                            y: CGFloat(layout.spaceFrame.midY - layout.surfaceFrame.minY)
+                        )
+                }
                 if !dictationErrorMessage.isEmpty && !errorFrame.isEmpty {
                     Text(dictationErrorMessage)
                         .font(.caption2)
@@ -228,6 +238,24 @@ struct KeyboardRootView: View {
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel("Hold to dictate")
         .accessibilityValue(dictationTitle)
+        // UIKit overlay is the primary hit target. This gesture is the fallback
+        // when the overlay frame misses the visible capsule.
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in state.handleMicPressBegan() }
+                .onEnded { _ in state.handleMicPressEnded() }
+        )
+    }
+
+    private func spaceBar(frame: CGRect) -> some View {
+        Text("space")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: frame.width, height: frame.height)
+            .background(Capsule().fill(Color.primary.opacity(0.08)))
+            .clipShape(Capsule())
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var dictationTitle: String {
@@ -319,6 +347,7 @@ struct KeyboardRootView: View {
             }
         }
         .frame(width: CGFloat(width), height: CGFloat(height))
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
@@ -353,32 +382,62 @@ private struct LiquidSymbolPageView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
     @State private var activeKeyID: String?
+    @State private var symbolDragAxis: DragAxis?
+    @State private var symbolCommitLocked = false
+    @State private var variantSession: KeyVariantSession?
 
     private let rowSpacing: CGFloat = 6
     private let keySpacing: CGFloat = 5
+    private let bottomBarHeight: CGFloat = 44
     // Match the spacing around the shared inset surface so symbol keys and
     // auxiliary controls land on the same visual grid as the voice page.
     private let horizontalInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
 
+    private enum DragAxis {
+        case horizontal
+        case vertical
+    }
+
     var body: some View {
-        GeometryReader { proxy in
-            let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)
-            let frames = positionedKeys(in: gridSize)
-            ZStack(alignment: .topLeading) {
-                ForEach(frames) { positionedKey in
-                    symbolKey(positionedKey.key, isActive: activeKeyID == positionedKey.key.id)
-                        .frame(width: positionedKey.frame.width, height: positionedKey.frame.height)
-                        .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)
+                let frames = positionedKeys(in: gridSize)
+                ZStack(alignment: .topLeading) {
+                    ForEach(frames) { positionedKey in
+                        symbolKey(
+                            positionedKey.key,
+                            isActive: activeKeyID == positionedKey.key.id,
+                            frame: positionedKey.frame,
+                            bounds: gridSize
+                        )
+                            .frame(width: positionedKey.frame.width, height: positionedKey.frame.height)
+                            .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
+                    }
+                    .frame(width: gridSize.width, height: gridSize.height)
+                    if let session = variantSession {
+                        variantOverlay(session, in: gridSize)
+                    }
                 }
-                .frame(width: gridSize.width, height: gridSize.height)
-                .contentShape(Rectangle())
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .simultaneousGesture(symbolPointerGesture(frames: frames))
+                .accessibilityElement(children: .contain)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .accessibilityElement(children: .contain)
+            AuxiliaryBottomBar(
+                onEmoji: onEmoji,
+                onVoice: onBackToVoice,
+                onSpace: { onInsert(" ") },
+                onDelete: onDelete,
+                onReturn: onReturn
+            )
+            .frame(width: availableWidth, height: bottomBarHeight)
         }
         .frame(width: availableWidth, height: availableHeight)
         .clipped()
-        .onChange(of: page) { _, _ in activeKeyID = nil }
+        .onChange(of: page) { _, _ in
+            activeKeyID = nil
+            variantSession = nil
+        }
     }
 
     private var rows: [[LiquidSymbolKey]] {
@@ -419,48 +478,156 @@ private struct LiquidSymbolPageView: View {
     }
 
     @ViewBuilder
-    private func symbolKey(_ key: LiquidSymbolKey, isActive: Bool) -> some View {
+    private func symbolKey(_ key: LiquidSymbolKey, isActive: Bool, frame: CGRect, bounds: CGSize) -> some View {
         if key.isSpacer {
             Color.clear
                 .accessibilityHidden(true)
         } else {
+            let variants = insertVariants(for: key)
             Button { commitSymbolFromTap(key) } label: {
-                keyContent(key)
+                ZStack {
+                    if isActive {
+                        symbolPointerHighlight
+                    }
+                    keyContent(key)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SymbolGlowButtonStyle(isActive: isActive, reduceMotion: reduceMotion))
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .scaleEffect(isActive ? 1.035 : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: isActive)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(key.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
+            .modifier(OptionalLongPressModifier(enabled: variants.count > 1) {
+                presentVariants(variants, source: frame, in: bounds, isEmoji: false)
+            })
         }
     }
 
+    private func insertVariants(for key: LiquidSymbolKey) -> [String] {
+        guard case .insert(let value) = key.action else { return [] }
+        return SymbolKeyVariants.options(for: value)
+    }
+
+    private func presentVariants(_ options: [String], source: CGRect, in bounds: CGSize, isEmoji: Bool) {
+        guard options.count > 1 else { return }
+        symbolCommitLocked = true
+        HapticFeedback.keyTapped()
+        let popupFrame = KeyVariantPopup.frame(
+            for: source,
+            optionCount: options.count,
+            isEmoji: isEmoji,
+            in: bounds
+        )
+        variantSession = KeyVariantSession(
+            options: options,
+            sourceFrame: source,
+            popupFrame: popupFrame,
+            isEmoji: isEmoji,
+            selectedIndex: 0
+        )
+    }
+
+    @ViewBuilder
+    private func variantOverlay(_ session: KeyVariantSession, in bounds: CGSize) -> some View {
+        Color.clear
+            .frame(width: bounds.width, height: bounds.height)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let index = KeyVariantPopup.selectedIndex(
+                            at: value.location,
+                            popupFrame: session.popupFrame,
+                            optionCount: session.options.count
+                        )
+                        if variantSession?.selectedIndex != index {
+                            variantSession?.selectedIndex = index
+                            HapticFeedback.keyTapped()
+                        }
+                    }
+                    .onEnded { _ in
+                        commitVariantSession()
+                    }
+            )
+        KeyVariantPopup(
+            options: session.options,
+            selectedIndex: session.selectedIndex,
+            isEmoji: session.isEmoji
+        )
+        .frame(width: session.popupFrame.width, height: session.popupFrame.height)
+        .position(x: session.popupFrame.midX, y: session.popupFrame.midY)
+        .allowsHitTesting(false)
+    }
+
+    private func commitVariantSession() {
+        guard let session = variantSession,
+              session.options.indices.contains(session.selectedIndex) else {
+            variantSession = nil
+            resetSymbolGestureLock()
+            return
+        }
+        onInsert(session.options[session.selectedIndex])
+        variantSession = nil
+        resetSymbolGestureLock()
+    }
+
+    private func symbolPointerGesture(frames: [PositionedLiquidSymbolKey]) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .onChanged { value in
+                if symbolDragAxis == nil {
+                    symbolDragAxis = abs(value.translation.width) >= abs(value.translation.height)
+                        ? .horizontal : .vertical
+                }
+                guard symbolDragAxis == .horizontal else { return }
+                activeKeyID = key(at: value.location, in: frames)?.id
+            }
+            .onEnded { value in
+                let shouldCommit = symbolDragAxis == .horizontal && !symbolCommitLocked && variantSession == nil
+                symbolCommitLocked = true
+                let key = key(at: value.location, in: frames)
+                defer {
+                    symbolDragAxis = nil
+                    activeKeyID = nil
+                    resetSymbolGestureLock()
+                }
+                guard shouldCommit, let key else { return }
+                commit(key)
+            }
+    }
+
     private func commitSymbolFromTap(_ key: LiquidSymbolKey) {
+        guard !symbolCommitLocked else { return }
+        symbolCommitLocked = true
         commit(key)
+        resetSymbolGestureLock()
+    }
+
+    private func resetSymbolGestureLock() {
+        DispatchQueue.main.async {
+            symbolCommitLocked = false
+        }
+    }
+
+    private var symbolPointerHighlight: some View {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(Color.primary.opacity(0.12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+            }
+            .padding(4)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder
     private func keyContent(_ key: LiquidSymbolKey) -> some View {
         switch key.action {
-        case .emoji:
-            Image(systemName: "face.smiling")
-                .font(.system(size: 18, weight: .semibold))
-        case .voice:
-            Image(systemName: "mic.fill")
-                .font(.system(size: 18, weight: .semibold))
-        case .delete:
-            Image(systemName: "delete.backward")
-                .font(.system(size: 18, weight: .semibold))
         case .togglePage:
             Text(key.label)
                 .font(.system(size: 14, weight: .medium))
-        case .returnKey:
-            Image(systemName: "return")
-                .font(.system(size: 18, weight: .semibold))
         case .insert, .close:
             Text(key.label)
                 .font(.system(size: 22, weight: .regular))
@@ -471,10 +638,6 @@ private struct LiquidSymbolPageView: View {
         guard !key.isSpacer else { return }
         switch key.action {
         case .insert(let value): onInsert(value)
-        case .emoji: onEmoji()
-        case .voice: onBackToVoice()
-        case .delete: onDelete()
-        case .returnKey: onReturn()
         case .togglePage:
             switch VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(
                 from: page == .symbols1 ? .symbols1 : .symbols2
@@ -492,10 +655,6 @@ private struct LiquidSymbolPageView: View {
 private struct LiquidSymbolKey: Identifiable {
     enum Action {
         case insert(String)
-        case emoji
-        case voice
-        case delete
-        case returnKey
         case togglePage
         case close
     }
@@ -514,27 +673,11 @@ private struct LiquidSymbolKey: Identifiable {
             label = value
             action = .insert(value)
             isSpacer = false
-        case .emoji:
-            label = "Emoji"
-            action = .emoji
-            isSpacer = false
-        case .voice:
-            label = "Microphone"
-            action = .voice
-            isSpacer = false
-        case .delete:
-            label = "Delete"
-            action = .delete
-            isSpacer = false
-        case .returnKey:
-            label = "Return"
-            action = .returnKey
-            isSpacer = false
         case .pageToggle:
             label = page == .symbols1 ? "#+=" : "123"
             action = .togglePage
             isSpacer = false
-        case .spacer:
+        case .emoji, .voice, .space, .delete, .returnKey, .spacer:
             label = ""
             action = .close
             isSpacer = true
@@ -544,10 +687,6 @@ private struct LiquidSymbolKey: Identifiable {
     var accessibilityLabel: String {
         switch action {
         case .insert: return label
-        case .emoji: return "Emoji"
-        case .voice: return "Return to voice keyboard"
-        case .delete: return "Delete backward"
-        case .returnKey: return "Return"
         case .togglePage: return label == "#+=" ? "More symbols" : "Return to numbers keyboard"
         case .close: return "Close"
         }
@@ -563,4 +702,40 @@ private struct PositionedLiquidSymbolKey: Identifiable {
     let key: LiquidSymbolKey
     let frame: CGRect
     var id: String { key.id }
+}
+
+private struct OptionalLongPressModifier: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onLongPressGesture(minimumDuration: 0.4, perform: action)
+        } else {
+            content
+        }
+    }
+}
+
+private struct SymbolGlowButtonStyle: ButtonStyle {
+    let isActive: Bool
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed || isActive
+        configuration.label
+            .background {
+                if pressed {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.primary.opacity(0.12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                        }
+                        .padding(4)
+                }
+            }
+            .scaleEffect(reduceMotion ? 1 : pressed ? 1.08 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: pressed)
+    }
 }

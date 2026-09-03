@@ -9,6 +9,7 @@ final class KeyboardDictationURLTests: XCTestCase {
         XCTAssertEqual(KeyboardCommand.delete.proxyAction, .deleteBackward)
         XCTAssertEqual(KeyboardCommand.returnKey.proxyAction, .insertText("\n"))
         XCTAssertEqual(KeyboardCommand.at.proxyAction, .insertText("@"))
+        XCTAssertEqual(KeyboardCommand.space.proxyAction, .insertText(" "))
     }
 
     /// The URL the keyboard opens on a microphone tap (KeyboardState).

@@ -6,7 +6,7 @@ import Foundation
 struct EmojiCategory: Identifiable {
     let id: String
     let name: String
-    let icon: String  // Plain ASCII category mark
+    let icon: String  // SF Symbol used by the native emoji keyboard
     let emojis: [String]
 }
 
@@ -18,7 +18,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "smileys",
             name: "Smileys",
-            icon: ":)",
+            icon: "face.smiling",
             emojis: [
                 "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
                 "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "☺️", "😚",
@@ -41,7 +41,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "people",
             name: "People",
-            icon: "@",
+            icon: "person",
             emojis: [
                 "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "👌",
                 "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉",
@@ -65,7 +65,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "animals",
             name: "Animals & Nature",
-            icon: "[]",
+            icon: "leaf",
             emojis: [
                 "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐻‍❄️", "🐨",
                 "🐯", "🦁", "🐮", "🐷", "🐽", "🐸", "🐵", "🙈", "🙉", "🙊",
@@ -93,7 +93,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "food",
             name: "Food & Drink",
-            icon: "&",
+            icon: "fork.knife",
             emojis: [
                 "🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐",
                 "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅", "🍆", "🥑",
@@ -114,7 +114,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "activities",
             name: "Activities",
-            icon: "#",
+            icon: "sportscourt",
             emojis: [
                 "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱",
                 "🪀", "🏓", "🏸", "🏒", "🏑", "🥍", "🏏", "🪃", "🥅", "⛳",
@@ -132,7 +132,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "travel",
             name: "Travel",
-            icon: ">_",
+            icon: "car",
             emojis: [
                 "🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐",
                 "🛻", "🚚", "🚛", "🚜", "🦯", "🦽", "🦼", "🛴", "🚲", "🛵",
@@ -152,7 +152,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "objects",
             name: "Objects",
-            icon: "*",
+            icon: "lightbulb",
             emojis: [
                 "⌚", "📱", "📲", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "🖲️", "🕹️",
                 "🗜️", "💽", "💾", "💿", "📀", "📼", "📷", "📸", "📹", "🎥",
@@ -182,7 +182,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "symbols",
             name: "Symbols",
-            icon: "<3",
+            icon: "number",
             emojis: [
                 "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "❤️‍🔥",
                 "❤️‍🩹", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
@@ -217,7 +217,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "flags",
             name: "Flags",
-            icon: "!",
+            icon: "flag",
             emojis: [
                 "🏳️", "🏴", "🏴‍☠️", "🏁", "🚩", "🎌", "🏳️‍🌈", "🏳️‍⚧️",
                 "🇫🇷", "🇺🇸", "🇬🇧", "🇩🇪", "🇪🇸", "🇮🇹", "🇯🇵", "🇨🇳",

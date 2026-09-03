@@ -515,7 +515,16 @@ class KeyboardState: ObservableObject {
             // During cold start, the app transitions foreground→background while
             // setting up audio. Waveform data may not flow for ~10s. Use 15s threshold.
             let inGracePeriod = self.coldStartGraceEnd.map { Date() < $0 } ?? false
-            let threshold: TimeInterval = inGracePeriod ? 15.0 : 5.0
+            let threshold: TimeInterval
+            if inGracePeriod {
+                threshold = 15.0
+            } else {
+                switch self.dictationStatus {
+                case .transcribing: threshold = 30.0
+                case .processing: threshold = 60.0
+                default: threshold = 5.0
+                }
+            }
             if Date().timeIntervalSince(self.lastWaveformUpdate) > threshold {
                 // Before resetting, check the audio-thread heartbeat.
                 // WHY: In background, iOS throttles the main thread so waveform
@@ -578,6 +587,22 @@ class KeyboardState: ObservableObject {
     }
 
     // MARK: - Recording commands (keyboard -> app)
+
+    /// Press-and-hold began on the dictate control (UIKit overlay or SwiftUI fallback).
+    func handleMicPressBegan() {
+        guard dictationStatus == .idle || dictationStatus == .ready || dictationStatus == .failed else { return }
+        if dictationStatus == .failed, failedRequiresApp {
+            openDictusForRecovery()
+        } else {
+            startRecording()
+        }
+    }
+
+    /// Press-and-hold ended on the dictate control.
+    func handleMicPressEnded() {
+        guard dictationStatus == .requested || dictationStatus == .recording else { return }
+        requestStop()
+    }
 
     /// Request DictusApp to stop recording and begin transcription.
     /// Uses the Darwin notification + Bool flag pattern: write the flag first,
@@ -718,8 +743,12 @@ class KeyboardState: ObservableObject {
     /// Called when DictusApp posts waveformUpdate notification during recording.
     /// Updates lastWaveformUpdate so the watchdog knows data is still flowing.
     private func readWaveformData() {
-        // Update watchdog timestamp — data is still flowing from the app
-        lastWaveformUpdate = Date()
+        // Only a live capture produces waveform ticks. Re-arming the timestamp
+        // from stale App Group buffers during transcribing/cleanup is what kept
+        // the overlay stuck on those stages.
+        if dictationStatus == .recording {
+            lastWaveformUpdate = Date()
+        }
 
         // Read elapsed seconds
         recordingElapsed = defaults.double(forKey: SharedKeys.recordingElapsedSeconds)

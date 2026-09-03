@@ -25,7 +25,7 @@ final class DictationStatusTests: XCTestCase {
     }
 
     func testTranslationAndInsertionRemainBeforeAcknowledgement() {
-        XCTAssertTrue(DictationStatus.processing.ownsKeyboardArea)
+        XCTAssertFalse(DictationStatus.processing.ownsKeyboardArea)
         XCTAssertFalse(DictationStatus.ready.ownsKeyboardArea)
     }
 }

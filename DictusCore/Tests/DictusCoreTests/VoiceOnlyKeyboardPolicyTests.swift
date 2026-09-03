@@ -649,13 +649,14 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(layout.deleteFrame.isEmpty)
         XCTAssertTrue(layout.returnFrame.isEmpty)
         XCTAssertTrue(layout.dismissFrame.isEmpty)
-        XCTAssertEqual(layout.actionRectangles, [layout.dictateFrame])
+        XCTAssertEqual(layout.actionRectangles, [layout.dictateFrame, layout.spaceFrame].filter { !$0.isEmpty })
     }
 
     func testVoiceOnlyActionMappingUsesExistingCommands() {
         XCTAssertEqual(KeyboardCommand.delete.proxyAction, .deleteBackward)
         XCTAssertEqual(KeyboardCommand.returnKey.proxyAction, .insertText("\n"))
         XCTAssertEqual(KeyboardCommand.at.proxyAction, .insertText("@"))
+        XCTAssertEqual(KeyboardCommand.space.proxyAction, .insertText(" "))
     }
 
     func testDeleteAndReturnUseExactEightyEightByFortyFourFrames() {
@@ -689,7 +690,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
             let rectangles = layout.actionRectangles
 
-            XCTAssertEqual(rectangles.count, 7, "width=\(width)")
+            XCTAssertEqual(rectangles.count, layout.spaceFrame.isEmpty ? 7 : 8, "width=\(width)")
             XCTAssertTrue(rectangles.allSatisfy { $0.minX >= 0 && $0.maxX <= width && $0.minY >= 0 && $0.maxY <= VoiceOnlyKeyboardPolicy.surfaceHeight }, "width=\(width)")
             for (index, rectangle) in rectangles.enumerated() {
                 XCTAssertGreaterThanOrEqual(rectangle.width, 44, "index=\(index), width=\(width)")
@@ -737,10 +738,11 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         KeyboardCommand.delete.perform(deleteBackward: { deletes += 1 }, insertText: { inserts.append($0) })
         KeyboardCommand.returnKey.perform(deleteBackward: { deletes += 1 }, insertText: { inserts.append($0) })
         KeyboardCommand.at.perform(deleteBackward: { deletes += 1 }, insertText: { inserts.append($0) })
+        KeyboardCommand.space.perform(deleteBackward: { deletes += 1 }, insertText: { inserts.append($0) })
         KeyboardCommand.delete.perform(ifEnabled: false, deleteBackward: { deletes += 1 }, insertText: { inserts.append($0) })
 
         XCTAssertEqual(deletes, 1)
-        XCTAssertEqual(inserts, ["\n", "@"])
+        XCTAssertEqual(inserts, ["\n", "@", " "])
     }
 
     func testVoiceVisualAndUIKitRectsShareAbsoluteSurfaceGeometry() {
@@ -798,6 +800,24 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(controller.contains("let deviceContext = DeviceContext.current"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height("))
         XCTAssertTrue(controller.contains("traitCollection: traitCollection"))
+    }
+
+    func testResolvedSurfaceHeightNeverAdoptsAShorterObservedHeight() {
+        let fallback = 216 * 1.10
+        let first = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 216,
+            controllerViewHeight: 844,
+            fallbackHeight: fallback
+        )
+        let stable = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 216,
+            controllerViewHeight: 844,
+            fallbackHeight: fallback,
+            previousInputViewHeight: first.observedInputViewHeight,
+            stableInputViewPasses: first.stableInputViewPasses
+        )
+        XCTAssertEqual(stable.height, fallback, accuracy: 0.001)
+        XCTAssertGreaterThan(stable.height, 216)
     }
 
     func testResolvedSurfaceHeightUsesFallbackUntilInputViewGeometryIsStable() {

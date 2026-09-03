@@ -66,7 +66,7 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
                     rowSpacing: 6
                 )
 
-                XCTAssertEqual(frames.count, 4)
+                XCTAssertEqual(frames.count, 3)
                 XCTAssertTrue(frames.flatMap { $0 }.allSatisfy { $0.maxY <= surfaceHeight }, "height=\(height), page=\(page)")
                 XCTAssertTrue(frames.flatMap { $0 }.allSatisfy { $0.height >= 40 }, "height=\(height), page=\(page)")
             }
@@ -85,7 +85,7 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             rowSpacing: 6
         )
 
-        XCTAssertEqual(frames.count, 4)
+        XCTAssertEqual(frames.count, 3)
         XCTAssertTrue(frames.allSatisfy { row in
             row.allSatisfy { $0.height >= 40 }
         })
@@ -134,12 +134,10 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
         XCTAssertEqual(frames.map(\.count), [0, 0, 1])
     }
 
-    func testSymbolPagesUseFourthRowForEmojiMicDeleteAndReturn() {
+    func testSymbolPagesKeepThreeContentRowsAndPageToggle() {
         for page in [KeyboardSymbolsLayout.numbers, KeyboardSymbolsLayout.symbols] {
-            XCTAssertEqual(page.count, 4)
+            XCTAssertEqual(page.count, 3)
             XCTAssertEqual(page[2].first?.kind, .pageToggle)
-            XCTAssertEqual(page[3].map(\.kind), [.emoji, .voice, .spacer, .delete, .returnKey])
-            XCTAssertEqual(page[3].map(\.width), [1.5, 1.5, 4, 1.5, 1.5])
         }
     }
 
@@ -155,8 +153,8 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
         )
 
         XCTAssertFalse(root.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
-        XCTAssertTrue(root.contains("case .emoji"))
-        XCTAssertTrue(root.contains("case .voice"))
+        XCTAssertTrue(root.contains("case .emoji:"))
+        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
     }
 
     func testActionFramesStayInsideTheSharedSurfaceAtNativeHeights() {

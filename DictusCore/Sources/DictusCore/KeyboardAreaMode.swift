@@ -57,22 +57,16 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
 }
 
 public extension DictationStatus {
-    /// Whether a dictation round-trip currently owns the keyboard area, i.e.
-    /// whether the recording overlay should be filling it.
+    /// Whether a live capture currently owns the keyboard area.
     ///
-    /// WHY an exhaustive switch and not a `Set` membership test: adding a case to
-    /// `DictationStatus` must not silently fall through to "does not own the area".
-    /// The compiler stops on this function instead, which is how `processing`
-    /// (#267) got here.
-    ///
-    /// `processing` owning the area is what keeps the overlay on screen through the
-    /// LLM stage: it resolves to the same `.recording` mode every other in-flight
-    /// status does, so the view controller sees no new mode and no new height.
+    /// Only `.requested` and `.recording` lock the surface: the user is holding
+    /// the microphone. Transcription and cleanup continue in the background so
+    /// emoji / 123 remain reachable, matching the native dictation keyboard.
     var ownsKeyboardArea: Bool {
         switch self {
-        case .requested, .recording, .transcribing, .processing:
+        case .requested, .recording:
             return true
-        case .idle, .ready, .failed:
+        case .transcribing, .processing, .idle, .ready, .failed:
             return false
         }
     }

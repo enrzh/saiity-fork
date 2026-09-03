@@ -104,8 +104,12 @@ public enum VoiceOnlyKeyboardPolicy {
             ? max(0, stableInputViewPasses) + 1
             : 1
         let isStable = stablePasses >= 2
+        // Never shrink below the requested fallback. UIKit often reports the
+        // unscaled native keyboard height; adopting it undoes the 10% taller
+        // dictation board.
+        let resolvedHeight = isStable ? max(inputViewHeight, fallback) : fallback
         return SurfaceHeightResolution(
-            height: isStable ? inputViewHeight : fallback,
+            height: resolvedHeight,
             observedInputViewHeight: inputViewHeight,
             stableInputViewPasses: stablePasses,
             usesInputViewHeight: isStable
@@ -131,6 +135,8 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The primary voice action is larger than utility controls so it remains
     /// easy to press without turning the keyboard into a key grid.
     public static let primaryControlSize: Double = 54
+    /// Capsule under the microphone on the voice page.
+    public static let spacebarHeight: Double = 44
     public static let railSpacing: Double = 4
     public static let horizontalPadding: Double = 6
     public static let controlEdgeInset: Double = 12
@@ -266,34 +272,55 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
+        /// It sits above the space bar so both controls share the center column.
         public var dictateFrame: CGRect {
             guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize + visibleControlGap else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
                 availableWidth: surfaceWidth,
                 centerAreaWidth: centerAreaWidth
             )
+            let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
+                + visibleControlGap
+                + VoiceOnlyKeyboardPolicy.spacebarHeight
+            let usedHeight = surfaceFrame.height >= clusterHeight
+                ? clusterHeight
+                : VoiceOnlyKeyboardPolicy.primaryControlSize
             return CGRect(
                 x: centerX - width / 2,
-                y: surfaceFrame.minY + (surfaceFrame.height - VoiceOnlyKeyboardPolicy.primaryControlSize) / 2,
+                y: surfaceFrame.minY + (surfaceFrame.height - usedHeight) / 2,
                 width: width,
                 height: VoiceOnlyKeyboardPolicy.primaryControlSize
             )
         }
 
-        /// The failure message gets its own non-interactive lane below the mic.
-        /// Keeping it in the center region prevents it from colliding with the
-        /// left and right utility rails while leaving the capsule's content stable.
+        public var spaceFrame: CGRect {
+            let mic = dictateFrame
+            guard !mic.isEmpty else { return .zero }
+            let frame = CGRect(
+                x: mic.minX,
+                y: mic.maxY + visibleControlGap,
+                width: mic.width,
+                height: VoiceOnlyKeyboardPolicy.spacebarHeight
+            )
+            guard surfaceFrame.contains(frame), !frame.intersects(mic) else { return .zero }
+            return frame
+        }
+
+        /// The failure message gets its own non-interactive lane below the mic
+        /// (or below the space bar when that control is visible).
         public var dictationErrorFrame: CGRect {
             let mic = dictateFrame
             guard !mic.isEmpty else { return .zero }
+            let anchor = spaceFrame.isEmpty ? mic : spaceFrame
 
             let frame = CGRect(
                 x: micCenterArea.minX,
-                y: mic.maxY + visibleControlGap,
+                y: anchor.maxY + visibleControlGap,
                 width: micCenterArea.width,
                 height: statusHeight
             )
-            guard surfaceFrame.contains(frame), !frame.intersects(mic) else { return .zero }
+            guard surfaceFrame.contains(frame), !frame.intersects(mic),
+                  spaceFrame.isEmpty || !frame.intersects(spaceFrame) else { return .zero }
             return frame
         }
 
@@ -311,7 +338,8 @@ public enum VoiceOnlyKeyboardPolicy {
             } else {
                 commandRects = []
             }
-            return utilities + commandRects + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame]
+            let spaceRects = spaceFrame.isEmpty ? [] : [spaceFrame]
+            return utilities + commandRects + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame] + spaceRects
         }
     }
 

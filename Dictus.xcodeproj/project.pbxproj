@@ -52,6 +52,8 @@
 		AA0000B1 /* RecentEmojis.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B1 /* RecentEmojis.swift */; };
 		AA0000B2 /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B2 /* EmojiPickerView.swift */; };
 		AA0000B3 /* EmojiCategoryBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B3 /* EmojiCategoryBar.swift */; };
+		AA0000B5 /* AuxiliaryBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B5 /* AuxiliaryBottomBar.swift */; };
+		AA0000B6 /* KeyVariantPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B6 /* KeyVariantPopup.swift */; };
 		AA0000B4 /* EmojiSearchFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B4 /* EmojiSearchFR.swift */; };
 		AA0000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C0 /* Assets.xcassets */; };
 		AA0000D0 /* TextPredictionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D0 /* TextPredictionEngine.swift */; };
@@ -215,6 +217,8 @@
 		AA1000B1 /* RecentEmojis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentEmojis.swift; sourceTree = "<group>"; };
 		AA1000B2 /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
 		AA1000B3 /* EmojiCategoryBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiCategoryBar.swift; sourceTree = "<group>"; };
+		AA1000B5 /* AuxiliaryBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuxiliaryBottomBar.swift; sourceTree = "<group>"; };
+		AA1000B6 /* KeyVariantPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyVariantPopup.swift; sourceTree = "<group>"; };
 		AA1000B4 /* EmojiSearchFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSearchFR.swift; sourceTree = "<group>"; };
 		AA1000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA1000D0 /* TextPredictionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPredictionEngine.swift; sourceTree = "<group>"; };
@@ -440,6 +444,8 @@
 				AA100062 /* KeyboardWaveformView.swift */,
 				AA1000B2 /* EmojiPickerView.swift */,
 				AA1000B3 /* EmojiCategoryBar.swift */,
+				AA1000B5 /* AuxiliaryBottomBar.swift */,
+				AA1000B6 /* KeyVariantPopup.swift */,
 				AA1000D4 /* SuggestionBarView.swift */,
 			);
 			path = Views;
@@ -1008,6 +1014,8 @@
 				AA0000B1 /* RecentEmojis.swift in Sources */,
 				AA0000B2 /* EmojiPickerView.swift in Sources */,
 				AA0000B3 /* EmojiCategoryBar.swift in Sources */,
+				AA0000B5 /* AuxiliaryBottomBar.swift in Sources */,
+				AA0000B6 /* KeyVariantPopup.swift in Sources */,
 				AA0000B4 /* EmojiSearchFR.swift in Sources */,
 				AA0000D0 /* TextPredictionEngine.swift in Sources */,
 				AA0000D1 /* SuggestionState.swift in Sources */,

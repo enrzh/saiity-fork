@@ -18,8 +18,9 @@ import DictusCore
 /// auxiliary control row owned by SwiftUI.
 enum KeyboardLayouts {
 
-    /// Symbol pages contain three input rows plus one SwiftUI-owned control row.
-    static let symbolsRowCount = 4
+    /// Symbol pages contain three input rows. Emoji / mic / space / delete / return
+    /// live on the shared SwiftUI bottom bar.
+    static let symbolsRowCount = 3
 
     /// Glyph carried by the emoji-picker toggle key.
     ///
@@ -336,6 +337,7 @@ enum KeyboardLayouts {
         case .insert(let value): return KeyDefinition(type: .input(key: value, alternate: nil), size: size)
         case .pageToggle: return KeyDefinition(type: .shiftSymbols, size: size)
         case .emoji, .voice: return KeyDefinition(type: .spacer, size: size)
+        case .space: return KeyDefinition(type: .spacebar(name: lang.spaceName), size: size)
         case .delete: return KeyDefinition(type: .backspace, size: size)
         case .returnKey: return KeyDefinition(type: .returnkey(name: lang.returnName), size: size)
         case .spacer: return KeyDefinition(type: .spacer, size: size)

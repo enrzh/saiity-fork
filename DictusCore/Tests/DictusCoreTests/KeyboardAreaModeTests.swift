@@ -27,8 +27,8 @@ final class KeyboardAreaModeTests: XCTestCase {
     func testInFlightStatusesOwnTheKeyboardArea() {
         XCTAssertTrue(DictationStatus.requested.ownsKeyboardArea)
         XCTAssertTrue(DictationStatus.recording.ownsKeyboardArea)
-        XCTAssertTrue(DictationStatus.transcribing.ownsKeyboardArea)
-        XCTAssertTrue(DictationStatus.processing.ownsKeyboardArea)
+        XCTAssertFalse(DictationStatus.transcribing.ownsKeyboardArea)
+        XCTAssertFalse(DictationStatus.processing.ownsKeyboardArea)
     }
 
     func testTerminalStatusesDoNotOwnTheKeyboardArea() {
@@ -82,6 +82,13 @@ final class KeyboardAreaModeTests: XCTestCase {
             KeyboardAreaMode.resolving(status: .ready, current: .recording),
             .keys
         )
+    }
+
+    func testTranscriptionAndCleanupLeaveAuxiliaryPagesReachable() {
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .transcribing, current: .recording), .keys)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .processing, current: .recording), .keys)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .transcribing, current: .emoji), .emoji)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .processing, current: .panel), .panel)
     }
 
     func testClosingAnAuxiliaryAreaLeavesKeysAvailable() {

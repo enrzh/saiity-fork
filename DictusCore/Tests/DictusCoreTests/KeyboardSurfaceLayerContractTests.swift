@@ -64,9 +64,9 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let categories = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
-        XCTAssertFalse(emoji.contains("background("))
+        XCTAssertFalse(emoji.contains("keyboardGlassEffect()"))
         XCTAssertFalse(categories.contains("glassEffect"))
-        XCTAssertTrue(emoji.contains("availableHeight - categoryBarHeight"))
+        XCTAssertTrue(emoji.contains("availableHeight - categoryBarHeight - bottomBarHeight"))
         XCTAssertTrue(emoji.contains("alignment: .bottom"))
     }
 
@@ -95,35 +95,34 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(source.contains("KeyboardState.shared.noteStatusMessageHidden("))
     }
 
-    func testEmojiCategoryBarUsesPlainAsciiSymbolsWithoutImageRendering() throws {
+    func testEmojiCategoryBarUsesNativeSystemImages() throws {
         let bar = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
         let data = try read("DictusKeyboard/Models/EmojiData.swift")
 
-        XCTAssertTrue(bar.contains("Image(systemName: \"mic.fill\")"))
+        XCTAssertTrue(bar.contains("Image(systemName: section.icon)"))
         XCTAssertFalse(bar.contains("section.icon.contains"))
-        XCTAssertTrue(bar.contains("Text(section.icon)"))
-        XCTAssertTrue(data.contains("icon: \":)\""))
-        XCTAssertTrue(data.contains("icon: \"@\""))
-        XCTAssertTrue(data.contains("icon: \"[]\""))
-        XCTAssertFalse(data.contains("icon: \"face.smiling\""))
+        XCTAssertFalse(bar.contains("Text(section.icon)"))
+        XCTAssertTrue(data.contains("icon: \"face.smiling\""))
+        XCTAssertTrue(data.contains("icon: \"person\""))
+        XCTAssertTrue(data.contains("icon: \"leaf\""))
+        XCTAssertFalse(data.contains("icon: \":)\""))
     }
 
-    func testEmojiCategoryBarUsesNativeMicrophoneReturnButton() throws {
-        let source = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
+    func testSharedBottomBarUsesNativeMicrophoneReturnButton() throws {
+        let source = try read("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
 
-        XCTAssertTrue(source.contains("Image(systemName: \"mic.fill\")"))
+        XCTAssertTrue(source.contains("systemName: \"mic.fill\""))
         XCTAssertFalse(source.contains("Text(\"|\")"))
-        XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
-        XCTAssertTrue(source.contains(".accessibilityLabel(\"Return to voice keyboard\")"))
+        XCTAssertTrue(source.contains("width: 44, height: 44"))
+        XCTAssertTrue(source.contains("Return to voice keyboard"))
         XCTAssertFalse(source.contains("glassEffect"))
     }
 
-    func testEmojiRecentsCategoryUsesAsciiMarkerWithoutClockSymbol() throws {
+    func testEmojiRecentsCategoryUsesNativeClockSymbol() throws {
         let source = try read("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(source.contains("name: \"Recents\", icon: \"R\""))
-        XCTAssertFalse(source.contains("name: \"Recents\", icon: \"clock\""))
-        XCTAssertFalse(source.contains("Image(systemName: \"clock\")"))
+        XCTAssertTrue(source.contains("name: \"Recents\", icon: \"clock\""))
+        XCTAssertFalse(source.contains("name: \"Recents\", icon: \"R\""))
     }
 
     func testEmojiCategoryLaneHasAnExplicitBottomAlignedContainer() throws {
@@ -136,7 +135,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testEmojiCategoriesAreMonochromeOrASCIIWithoutLegacySearch() throws {
         let source = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
-        XCTAssertTrue(source.contains("Text(section.icon)"))
+        XCTAssertTrue(source.contains("Image(systemName: section.icon)"))
         XCTAssertTrue(source.contains(".foregroundStyle(.primary)"))
         XCTAssertFalse(source.contains("symbolRenderingMode"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("magnifyingglass"))

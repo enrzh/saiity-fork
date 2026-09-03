@@ -16,6 +16,7 @@ class KeyboardViewController: UIInputViewController {
     private var returnButton: UIButton?
     private var dismissButton: UIButton?
     private var micButton: UIButton?
+    private var spaceButton: UIButton?
     private var deleteRepeatTimer: Timer?
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
@@ -961,7 +962,10 @@ class KeyboardViewController: UIInputViewController {
         micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
         micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
         micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        [atButton, emojiButton, numberButton, micButton,
+        spaceButton = makeKeyboardActionButton(identifier: "space-key", label: "Space") { [weak self] in
+            self?.routeProxyCommand(.space)
+        }
+        [atButton, emojiButton, numberButton, micButton, spaceButton,
          deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
             controls.addSubview($0)
         }
@@ -1023,7 +1027,7 @@ class KeyboardViewController: UIInputViewController {
         controls.isHidden = isAuxiliary
         controls.isUserInteractionEnabled = !isAuxiliary
         guard !isAuxiliary else {
-            [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
+            [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
                 .compactMap { $0 }
                 .forEach {
                     $0.isHidden = true
@@ -1047,10 +1051,11 @@ class KeyboardViewController: UIInputViewController {
         emojiButton?.isHidden = !leftRailVisible
         numberButton?.isHidden = !leftRailVisible
         micButton?.isHidden = (mode != .keys && mode != .recording) || !voiceMicFrameAvailable
+        spaceButton?.isHidden = (mode != .keys && mode != .recording) || layout.spaceFrame.isEmpty
         deleteButton?.isHidden = !rightRailVisible
         returnButton?.isHidden = !rightRailVisible
         dismissButton?.isHidden = !rightRailVisible
-        [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
+        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
             .compactMap { $0 }
             .forEach {
                 $0.isEnabled = !$0.isHidden
@@ -1060,30 +1065,24 @@ class KeyboardViewController: UIInputViewController {
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         numberButton?.frame = layout.leftUtilityFrames.number
         micButton?.frame = layout.dictateFrame
+        spaceButton?.frame = layout.spaceFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
         dismissButton?.frame = layout.dismissFrame
-        [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
+        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
             .compactMap { $0 }
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
+        spaceButton?.layer.cornerRadius = (spaceButton?.bounds.height ?? 0) / 2
         micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
         if let inputView { inputView.bringSubviewToFront(controls) }
     }
 
     @objc private func handleMicTouchDown() {
-        let state = KeyboardState.shared
-        guard state.dictationStatus == .idle || state.dictationStatus == .ready || state.dictationStatus == .failed else { return }
-        if state.dictationStatus == .failed, state.failedRequiresApp {
-            state.openDictusForRecovery()
-        } else {
-            state.startRecording()
-        }
+        KeyboardState.shared.handleMicPressBegan()
     }
 
     @objc private func handleMicTouchUp() {
-        let state = KeyboardState.shared
-        guard state.dictationStatus == .requested || state.dictationStatus == .recording else { return }
-        state.requestStop()
+        KeyboardState.shared.handleMicPressEnded()
     }
 
     @objc private func handleDeleteHold(_ recognizer: UILongPressGestureRecognizer) {

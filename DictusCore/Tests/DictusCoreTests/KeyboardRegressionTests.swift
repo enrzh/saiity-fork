@@ -27,6 +27,7 @@ final class KeyboardRegressionTests: XCTestCase {
         let page = String(root[pageStart.lowerBound..<keyStart.lowerBound])
 
         XCTAssertFalse(page.contains(".simultaneousGesture(symbolDragGesture(frames: frames))"))
+        XCTAssertTrue(page.contains(".simultaneousGesture(symbolPointerGesture(frames: frames))"))
         XCTAssertTrue(page.contains("Button { commitSymbolFromTap(key) } label:"))
     }
 
@@ -39,8 +40,8 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(body.contains("Button { commitSymbolFromTap(key) } label:"))
         XCTAssertTrue(body.contains(".contentShape(RoundedRectangle"))
         XCTAssertTrue(body.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
-        XCTAssertFalse(body.contains("LongPressGesture"),
-                      "a symbol key must not need a hold gesture to reach its tap action")
+        XCTAssertTrue(body.contains("OptionalLongPressModifier"),
+                      "keys with native extras get a hold popup; tap still uses the button")
     }
 
     func testEmojiTapCannotBeRejectedByAStaleDragAxis() throws {
@@ -51,7 +52,7 @@ final class KeyboardRegressionTests: XCTestCase {
 
         XCTAssertFalse(body.contains("guard emojiDragAxis == nil"),
                       "a normal emoji tap must still commit if a prior drag left transient state")
-        XCTAssertTrue(body.contains("guard !emojiCommitLocked else"))
+        XCTAssertTrue(body.contains("guard !emojiCommitLocked, variantSession == nil else"))
         XCTAssertTrue(body.contains("insertEmoji(emoji)"))
     }
 
