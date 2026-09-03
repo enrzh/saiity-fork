@@ -160,13 +160,13 @@ class KeyboardViewController: UIInputViewController {
         // KeyboardInputView owns the single semantic native backdrop.
 
         // --- 2. Create SwiftUI hosting for the voice surface ---
-        // NOTE: do NOT pass `self` into KeyboardRootView. Storing the controller on
-        // the View struct creates a strong ref cycle through UIHostingController that
-        // prevents stale controllers from deiniting across app-switches (#134).
-        // The view accesses the controller through KeyboardState.shared.controller
-        // (weak), which is set in viewWillAppear below.
+        // Pass weak callbacks rather than the controller itself. This keeps the
+        // SwiftUI root owned by hosting without making a stale controller the
+        // routing authority after iOS rebuilds the keyboard.
         let rootView = KeyboardRootView(
-            controllerID: controllerID
+            controllerID: controllerID,
+            routeText: { [weak self] text in self?.routeProxyText(text) },
+            routeCommand: { [weak self] command in self?.routeProxyCommand(command) }
         )
         let hosting = UIHostingController(rootView: rootView)
         PersistentLog.log(.diagnosticProbe(
@@ -1117,7 +1117,6 @@ class KeyboardViewController: UIInputViewController {
     func routeProxyCommand(_ command: KeyboardCommand) {
         let ownerAvailable = isAttached && isOnScreen
             && KeyboardState.shared.activeControllerID == controllerID
-            && KeyboardState.shared.controller === self
         guard ownerAvailable else {
             DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
             PersistentLog.log(.diagnosticProbe(
@@ -1139,7 +1138,6 @@ class KeyboardViewController: UIInputViewController {
     func routeProxyText(_ text: String) {
         let ownerAvailable = isAttached && isOnScreen
             && KeyboardState.shared.activeControllerID == controllerID
-            && KeyboardState.shared.controller === self
         guard ownerAvailable else {
             DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
             PersistentLog.log(.diagnosticProbe(
@@ -1208,7 +1206,6 @@ class KeyboardViewController: UIInputViewController {
     func didMoveCursor(_ movement: Int) {
         let ownerAvailable = isAttached && isOnScreen
             && KeyboardState.shared.activeControllerID == controllerID
-            && KeyboardState.shared.controller === self
         guard ownerAvailable else {
             DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
             PersistentLog.log(.diagnosticProbe(

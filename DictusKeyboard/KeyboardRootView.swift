@@ -5,6 +5,8 @@ import DictusCore
 /// Root SwiftUI view for the voice-only keyboard surface.
 struct KeyboardRootView: View {
     let controllerID: String
+    let routeText: (String) -> Void
+    let routeCommand: (KeyboardCommand) -> Void
     @ObservedObject private var state = KeyboardState.shared
     @State private var symbolPage: KeyboardPage = .symbols1
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -84,11 +86,7 @@ struct KeyboardRootView: View {
         case .emoji:
             EmojiPickerView(
                 onEmojiInsert: { emoji in
-                    guard let controller = state.controller as? KeyboardViewController else {
-                        DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
-                        return
-                    }
-                    controller.routeProxyText(emoji)
+                    routeText(emoji)
                 },
                 onBackToVoice: { state.closeArea() },
                 availableWidth: availableWidth,
@@ -115,19 +113,11 @@ struct KeyboardRootView: View {
     }
 
     private func routeProxyText(_ text: String) {
-        guard let controller = state.controller as? KeyboardViewController else {
-            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
-            return
-        }
-        controller.routeProxyText(text)
+        routeText(text)
     }
 
     private func routeProxyCommand(_ command: KeyboardCommand) {
-        guard let controller = state.controller as? KeyboardViewController else {
-            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
-            return
-        }
-        controller.routeProxyCommand(command)
+        routeCommand(command)
     }
 
     private var languageIndicator: some View {
