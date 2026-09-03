@@ -20,13 +20,27 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
 
     override init(frame: CGRect, inputViewStyle: UIInputView.Style) {
         super.init(frame: frame, inputViewStyle: inputViewStyle)
-        backgroundColor = .clear
-        isOpaque = false
+        reassertTransparentBackdrop()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        reassertTransparentBackdrop()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        reassertTransparentBackdrop()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        reassertTransparentBackdrop()
+    }
+
+    private func reassertTransparentBackdrop() {
         backgroundColor = .clear
         isOpaque = false
+        layer.backgroundColor = UIColor.clear.cgColor
     }
 }
