@@ -564,9 +564,17 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
 
         XCTAssertEqual(layout.contentHeight, 216)
-            XCTAssertEqual(layout.leftUtilityFrames.at.minY, 112)
-            XCTAssertEqual(layout.leftUtilityFrames.number.minY, 160)
-            XCTAssertEqual(layout.dismissFrame, CGRect(x: 288, y: 160, width: 88, height: 44))
+        XCTAssertEqual(layout.leftUtilityFrames.at.minY,
+                       layout.leftUtilityFrames.emoji.minY
+                       - VoiceOnlyKeyboardPolicy.railSpacing
+                       - VoiceOnlyKeyboardPolicy.controlSize)
+        XCTAssertEqual(layout.leftUtilityFrames.number.minY,
+                       layout.leftUtilityFrames.emoji.minY)
+        XCTAssertEqual(layout.dismissFrame,
+                       CGRect(x: layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - layout.rightRailWidth,
+                              y: layout.surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.bottomActionHitHeight,
+                              width: layout.rightRailWidth,
+                              height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
         XCTAssertLessThanOrEqual(layout.rightRailBottom, layout.dismissFrame.minY)
         XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.maxY <= 216 })
     }
