@@ -11,16 +11,27 @@ final class KeyboardSetupStatusTests: XCTestCase {
     }
 
     func testFullAccessRequiresAnInstalledKeyboardAndARealHandshake() {
-        let status = KeyboardSetupStatus(keyboardInstalled: true, fullAccessHandshake: true)
+        let status = KeyboardSetupStatus(keyboardInstalled: true, fullAccessHandshake: true, handshakeDate: Date())
 
         XCTAssertTrue(status.fullAccessVerified)
         XCTAssertTrue(status.canContinue)
     }
 
-    func testExtensionHandshakeProvesKeyboardEvenIfInputModeListIsTemporarilyEmpty() {
-        let status = KeyboardSetupStatus(keyboardInstalled: false, fullAccessHandshake: true)
+    func testHandshakeProvesKeyboardDuringTransientEmptyInputModeList() {
+        let status = KeyboardSetupStatus(keyboardInstalled: false, fullAccessHandshake: true, handshakeDate: Date())
 
         XCTAssertTrue(status.keyboardDetected)
+        XCTAssertTrue(status.fullAccessVerified)
+        XCTAssertTrue(status.canContinue)
+    }
+
+    func testOldHandshakeStillVerifiesFullAccessWhenKeyboardIsInstalled() {
+        let status = KeyboardSetupStatus(
+            keyboardInstalled: true,
+            fullAccessHandshake: true,
+            handshakeDate: Date(timeIntervalSince1970: 100)
+        )
+
         XCTAssertTrue(status.fullAccessVerified)
         XCTAssertTrue(status.canContinue)
     }

@@ -97,6 +97,8 @@ public enum SharedKeys {
     /// The app cannot inspect the system toggle directly; it only trusts this
     /// value after the extension has actually appeared with Full Access.
     public static let onboardingFullAccessVerified = "dictus.onboardingFullAccessVerified"
+    /// Unix timestamp of the last keyboard extension Full Access handshake.
+    public static let onboardingFullAccessHandshakeDate = "dictus.onboardingFullAccessHandshakeDate"
 
     // Text prediction preferences (added for Phase 08)
     /// Whether autocorrect is enabled, default true

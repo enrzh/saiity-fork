@@ -2,22 +2,23 @@ import XCTest
 @testable import DictusCore
 
 final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
-    func testSymbolGridMatchesAllSupportedWidthsAndThreeRealRows() {
+    func testSymbolGridMatchesAllSupportedWidthsAndFourRealRows() {
         let rows: [[CGFloat]] = [
             Array(repeating: 1, count: 10),
             Array(repeating: 1, count: 10),
-            [1.5, 0.5, 1.2, 1.2, 1.2, 1.2, 1.2, 0.5, 1.5]
+            [1.5, 0.5, 1.2, 1.2, 1.2, 1.2, 1.2, 0.5, 1.5],
+            [1.5, 1.5]
         ]
 
         for width in [320, 375, 390, 430] {
             let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
-                for: rows, in: CGSize(width: width, height: 184), spacing: 5, inset: 4
+                for: rows, in: CGSize(width: width, height: 208), spacing: 5, inset: 4
             )
-            let bounds = CGRect(x: 0, y: 0, width: width, height: 184)
+            let bounds = CGRect(x: 0, y: 0, width: width, height: 208)
 
-            XCTAssertEqual(frames.count, 3, "width=\(width)")
-            XCTAssertEqual(frames.map(\.count), [10, 10, 9], "width=\(width)")
-            XCTAssertEqual(frames.flatMap { $0 }.count, 29, "width=\(width)")
+            XCTAssertEqual(frames.count, 4, "width=\(width)")
+            XCTAssertEqual(frames.map(\.count), [10, 10, 9, 2], "width=\(width)")
+            XCTAssertEqual(frames.flatMap { $0 }.count, 31, "width=\(width)")
             XCTAssertTrue(frames.flatMap { $0 }.allSatisfy(bounds.contains), "width=\(width)")
             for row in frames {
                 XCTAssertEqual(row.reduce(CGFloat.zero) { $0 + $1.width } + 5 * CGFloat(row.count - 1),
@@ -50,7 +51,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(from: .symbols2),
-            .symbols2ToClose
+            .symbols2ToSymbols1
         )
     }
 
@@ -291,15 +292,16 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(controller.contains("setAuxiliaryUtilityVisuals"))
-        XCTAssertTrue(controller.contains("configureAuxiliaryAccessoryControls"))
+        XCTAssertFalse(controller.contains("setAuxiliaryUtilityVisuals"))
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
         XCTAssertFalse(rootView.contains("alternateAccessoryRow"))
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
-        XCTAssertTrue(rootView.contains("? layout.auxiliaryContentFrame"))
-        XCTAssertTrue(rootView.contains(".frame(width: contentFrame.width, height: contentFrame.height)"))
-        XCTAssertTrue(controller.contains("let auxiliaryControlsHidden = isAuxiliary"))
-        XCTAssertTrue(controller.contains("atButton?.isHidden = auxiliaryControlsHidden || !leftRailVisible"))
-        XCTAssertTrue(controller.contains("numberButton?.isHidden = auxiliaryControlsHidden || !leftRailVisible"))
+        XCTAssertTrue(rootView.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
+        XCTAssertTrue(rootView.contains(".frame(width: surfaceFrame.width, height: surfaceFrame.height)"))
+        XCTAssertFalse(rootView.contains("availableHeight: contentFrame.height"))
+        XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .emoji)"))
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
+        XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
 
     func testAtSitsAboveBottomUtilityRail() {
@@ -788,5 +790,104 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertTrue(controller.contains("let deviceContext = DeviceContext.current"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height("))
         XCTAssertTrue(controller.contains("traitCollection: traitCollection"))
+    }
+
+    func testResolvedSurfaceHeightUsesFallbackUntilInputViewGeometryIsStable() {
+        let first = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 228,
+            controllerViewHeight: 240,
+            fallbackHeight: 216
+        )
+        XCTAssertEqual(first.height, 216)
+        let second = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 228,
+            controllerViewHeight: 240,
+            fallbackHeight: 216,
+            previousInputViewHeight: first.observedInputViewHeight,
+            stableInputViewPasses: first.stableInputViewPasses
+        )
+        XCTAssertEqual(second.height, 228)
+        XCTAssertTrue(second.usesInputViewHeight)
+        XCTAssertEqual(
+            VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+                inputViewHeight: 0,
+                controllerViewHeight: 240,
+                fallbackHeight: 216
+            ).height,
+            216
+        )
+        XCTAssertEqual(
+            VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+                inputViewHeight: nil,
+                controllerViewHeight: 0,
+                fallbackHeight: 216
+            ).height,
+            216
+        )
+        XCTAssertEqual(
+            VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+                inputViewHeight: .infinity,
+                controllerViewHeight: .nan,
+                fallbackHeight: 216
+            ).height,
+            216
+        )
+    }
+
+    func testFullScreenInputViewHeightFallsBackToNativeHeight() {
+        let first = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 504,
+            controllerViewHeight: 504,
+            fallbackHeight: 216
+        )
+        XCTAssertEqual(first.height, 216)
+        let feedback = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: first.height,
+            controllerViewHeight: 504,
+            fallbackHeight: 216,
+            previousInputViewHeight: first.observedInputViewHeight,
+            stableInputViewPasses: first.stableInputViewPasses
+        )
+        XCTAssertEqual(feedback.height, 216)
+        XCTAssertFalse(feedback.usesInputViewHeight)
+    }
+
+    func testInputViewHeightIsAcceptedOnlyAfterTwoStableNonFullScreenObservations() {
+        let first = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 228,
+            controllerViewHeight: 504,
+            fallbackHeight: 216
+        )
+        XCTAssertEqual(first.height, 216)
+
+        let second = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: 228,
+            controllerViewHeight: 504,
+            fallbackHeight: 216,
+            previousInputViewHeight: first.observedInputViewHeight,
+            stableInputViewPasses: first.stableInputViewPasses
+        )
+        XCTAssertEqual(second.height, 228)
+    }
+
+    func testFullScreenSequenceNeverBecomesStableThroughFeedback() {
+        var previousHeight: Double?
+        var stablePasses = 0
+        var resolvedHeights: [Double] = []
+
+        for observedHeight in [504.0, 504.0, 504.0, 216.0] {
+            let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+                inputViewHeight: observedHeight,
+                controllerViewHeight: 504,
+                fallbackHeight: 216,
+                previousInputViewHeight: previousHeight,
+                stableInputViewPasses: stablePasses
+            )
+            resolvedHeights.append(resolution.height)
+            previousHeight = resolution.observedInputViewHeight
+            stablePasses = resolution.stableInputViewPasses
+        }
+
+        XCTAssertEqual(resolvedHeights, [216, 216, 216, 216])
     }
 }

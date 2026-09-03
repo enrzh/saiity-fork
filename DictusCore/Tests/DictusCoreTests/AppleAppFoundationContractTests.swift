@@ -17,14 +17,29 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(notifications.contains("keyboardFullAccessChanged"))
         XCTAssertTrue(keyboard.contains("publishFullAccessHandshake()"))
         XCTAssertTrue(keyboard.contains("AppGroup.defaults.set(hasFullAccess"))
+        XCTAssertTrue(keyboard.contains("SharedKeys.onboardingFullAccessHandshakeDate"))
         XCTAssertTrue(keyboard.contains("DarwinNotificationCenter.post(DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("refreshKeyboard()"))
         XCTAssertTrue(availability.contains("let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
-        XCTAssertTrue(availability.contains("let installed = inputModeInstalled || handshake"))
+        XCTAssertTrue(availability.contains("let status = KeyboardSetupStatus"))
+        XCTAssertTrue(availability.contains("let installed = status.keyboardDetected"))
+        XCTAssertFalse(availability.contains("AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertFalse(availability.contains("AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessHandshakeDate)"))
         XCTAssertFalse(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
-        XCTAssertTrue(availability.contains("fullAccessVerified = handshake"))
+        XCTAssertTrue(availability.contains("fullAccessVerified = status.fullAccessVerified"))
+        XCTAssertTrue(availability.contains("keyboardInstalled: inputModeInstalled"))
+    }
+
+    func testKeyboardSetupPagePassesHandshakeDateForDiagnostics() throws {
+        let source = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
+
+        XCTAssertTrue(source.contains("handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil"))
+        XCTAssertTrue(source.contains("let status = KeyboardSetupStatus("))
+        XCTAssertTrue(source.contains("keyboardDetected = status.keyboardDetected"))
+        XCTAssertTrue(source.contains("keyboardInstalled: inputModeInstalled"))
+        XCTAssertFalse(source.contains("keyboardDetected = inputModeInstalled"))
     }
 
     func testColorsUseSemanticSystemSourcesWithoutFixedLowContrast() throws {
@@ -52,11 +67,32 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let mainTabView = try String(contentsOf: repository.appending(path: "DictusApp/Views/MainTabView.swift"), encoding: .utf8)
 
         XCTAssertTrue(mainTabView.contains("TabView(selection: $selectedTab)"))
-        XCTAssertEqual(mainTabView.components(separatedBy: "NavigationStack {").count - 1, 3)
-        XCTAssertEqual(mainTabView.components(separatedBy: ".tabItem {").count - 1, 3)
+        XCTAssertEqual(mainTabView.components(separatedBy: "NavigationStack {").count - 1, 2)
+        XCTAssertEqual(mainTabView.components(separatedBy: ".tabItem {").count - 1, 2)
         XCTAssertFalse(mainTabView.contains("safeAreaInset"))
         XCTAssertFalse(mainTabView.contains("frame(height: 96)"))
         XCTAssertFalse(mainTabView.contains("padding(.bottom, 96"))
+    }
+
+    func testHomeSettingsActionSelectsTheSettingsTabTag() throws {
+        let mainTabView = try source("DictusApp/Views/MainTabView.swift")
+
+        XCTAssertFalse(mainTabView.contains("selectedTab = 1"))
+        XCTAssertTrue(mainTabView.contains(".tabItem {\n                        Label(\"Settings\""))
+        XCTAssertTrue(mainTabView.contains(".tag(1)"))
+        XCTAssertFalse(mainTabView.contains("Label(\"Settings\", systemImage: \"slider.horizontal.3\")\n                    }\n                    .tag(2)"))
+    }
+
+    func testModelsAreOnlyAccessibleFromSettings() throws {
+        let mainTabView = try source("DictusApp/Views/MainTabView.swift")
+        let home = try source("DictusApp/Views/HomeView.swift")
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+
+        XCTAssertFalse(mainTabView.contains("HomeView(modelManager:"))
+        XCTAssertFalse(home.contains("ModelManager"))
+        XCTAssertFalse(home.contains("onModelsRequested"))
+        XCTAssertFalse(home.contains("Open Models"))
+        XCTAssertTrue(settings.contains("NavigationLink { ModelManagerView"))
     }
 
     func testHomeUsesOneReadinessSummaryAndExplicitCopyFeedback() throws {
@@ -184,7 +220,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let onboarding = try source("DictusApp/Onboarding/OnboardingView.swift")
         let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
 
-        XCTAssertTrue(onboarding.contains("keyboardInstalled && modelReady"))
+        XCTAssertTrue(onboarding.contains("keyboardStatus.keyboardDetected && modelReady"))
         XCTAssertFalse(onboarding.contains("keyboardInstalled && fullAccessVerified && modelReady"))
         XCTAssertTrue(onboarding.contains("switch to the sAiity keyboard and complete Full Access verification"))
         XCTAssertTrue(onboarding.contains("Open Keyboard Settings"))
@@ -369,6 +405,33 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(categories.contains(".frame(height: 44)"))
         XCTAssertTrue(categories.contains(".frame(width: 44, height: 44)"))
         XCTAssertFalse(categories.contains("magnifyingglass"))
+    }
+
+    func testGlobeTutorialRefreshesFullAccessAfterKeyboardHandshake() throws {
+        let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
+
+        XCTAssertTrue(tutorial.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(tutorial.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(tutorial.contains("DispatchQueue.main.async"))
+        XCTAssertTrue(tutorial.contains("AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertTrue(tutorial.contains("fullAccessRequired = false"))
+        XCTAssertTrue(tutorial.contains("dictationFailed = false"))
+        XCTAssertTrue(tutorial.contains("sAiity keyboard is active. Tap the microphone to dictate."))
+    }
+
+    func testGlobeTutorialDoesNotStackGenericFailureReturnWithFullAccessRecovery() throws {
+        let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
+
+        XCTAssertTrue(tutorial.contains("if fullAccessRequired {"))
+        XCTAssertTrue(tutorial.contains("Button(\"Open Settings\", action: openSettings)"))
+        XCTAssertTrue(tutorial.contains("if dictationFailed && !fullAccessRequired {"))
+    }
+
+    func testMissingModelErrorDirectsUsersToSettingsModels() throws {
+        let speechModelProtocol = try source("DictusApp/Audio/SpeechModelProtocol.swift")
+
+        XCTAssertTrue(speechModelProtocol.contains("Open sAiity and download it in Settings > Models."))
+        XCTAssertFalse(speechModelProtocol.contains("in the Models tab"))
     }
 
     private func source(_ path: String) throws -> String {

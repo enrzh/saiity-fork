@@ -1,12 +1,12 @@
 // DictusKeyboard/Models/EmojiData.swift
 import Foundation
 
-/// A category of emojis with a display name, SF Symbol icon, and emoji list.
+/// A category of emojis with a display name, monochrome SF Symbol name or ASCII
+/// fallback glyph, and emoji list.
 struct EmojiCategory: Identifiable {
     let id: String
     let name: String
-    let icon: String  // SF Symbol name
-    let representativeEmoji: String  // Emoji shown in category bar (like native iOS picker)
+    let icon: String  // Plain ASCII category mark
     let emojis: [String]
 }
 
@@ -18,8 +18,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "smileys",
             name: "Smileys",
-            icon: "face.smiling",
-            representativeEmoji: "😀",
+            icon: ":)",
             emojis: [
                 "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
                 "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "☺️", "😚",
@@ -42,8 +41,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "people",
             name: "People",
-            icon: "person.fill",
-            representativeEmoji: "👋",
+            icon: "@",
             emojis: [
                 "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "👌",
                 "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉",
@@ -67,8 +65,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "animals",
             name: "Animals & Nature",
-            icon: "leaf.fill",
-            representativeEmoji: "🐻",
+            icon: "[]",
             emojis: [
                 "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐻‍❄️", "🐨",
                 "🐯", "🦁", "🐮", "🐷", "🐽", "🐸", "🐵", "🙈", "🙉", "🙊",
@@ -96,8 +93,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "food",
             name: "Food & Drink",
-            icon: "fork.knife",
-            representativeEmoji: "🍔",
+            icon: "&",
             emojis: [
                 "🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐",
                 "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅", "🍆", "🥑",
@@ -118,8 +114,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "activities",
             name: "Activities",
-            icon: "sportscourt.fill",
-            representativeEmoji: "⚽",
+            icon: "#",
             emojis: [
                 "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱",
                 "🪀", "🏓", "🏸", "🏒", "🏑", "🥍", "🏏", "🪃", "🥅", "⛳",
@@ -137,8 +132,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "travel",
             name: "Travel",
-            icon: "car.fill",
-            representativeEmoji: "🚗",
+            icon: ">_",
             emojis: [
                 "🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐",
                 "🛻", "🚚", "🚛", "🚜", "🦯", "🦽", "🦼", "🛴", "🚲", "🛵",
@@ -158,8 +152,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "objects",
             name: "Objects",
-            icon: "lightbulb.fill",
-            representativeEmoji: "💡",
+            icon: "*",
             emojis: [
                 "⌚", "📱", "📲", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "🖲️", "🕹️",
                 "🗜️", "💽", "💾", "💿", "📀", "📼", "📷", "📸", "📹", "🎥",
@@ -189,8 +182,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "symbols",
             name: "Symbols",
-            icon: "heart.fill",
-            representativeEmoji: "❤️",
+            icon: "<3",
             emojis: [
                 "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "❤️‍🔥",
                 "❤️‍🩹", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
@@ -225,8 +217,7 @@ enum EmojiStore {
         EmojiCategory(
             id: "flags",
             name: "Flags",
-            icon: "flag.fill",
-            representativeEmoji: "🏁",
+            icon: "!",
             emojis: [
                 "🏳️", "🏴", "🏴‍☠️", "🏁", "🚩", "🎌", "🏳️‍🌈", "🏳️‍⚧️",
                 "🇫🇷", "🇺🇸", "🇬🇧", "🇩🇪", "🇪🇸", "🇮🇹", "🇯🇵", "🇨🇳",
@@ -240,17 +231,4 @@ enum EmojiStore {
         )
     ]
 
-    /// Flat array of all emojis across all categories (for search).
-    static let allEmojis: [String] = categories.flatMap { $0.emojis }
-
-    /// Pre-computed Unicode names for fast search (computed once, cached).
-    /// WHY pre-compute: `applyingTransform(.toUnicodeName)` is expensive (~0.1ms per emoji).
-    /// With 1800 emojis, calling it on every keystroke = ~180ms delay per character typed.
-    /// Pre-computing once reduces per-keystroke search to simple string matching.
-    static let allEmojiNames: [(emoji: String, name: String)] = {
-        allEmojis.compactMap { emoji in
-            guard let name = emoji.applyingTransform(.toUnicodeName, reverse: false) else { return nil }
-            return (emoji, name.lowercased())
-        }
-    }()
 }

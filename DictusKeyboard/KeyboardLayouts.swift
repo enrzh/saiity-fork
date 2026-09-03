@@ -14,12 +14,12 @@ import DictusCore
 /// Bottom row on letter pages: [123] [emoji] [space] [return] -- emoji key added in Phase 20.
 ///
 /// Letter pages are four rows, or five when the number row is on (#331) -- see
-/// `drawsDigitRow`. The symbols pages have three real content rows; UIKit owns
-/// the top accessory row.
+/// `drawsDigitRow`. The symbols pages expose four rendered rows, including the
+/// auxiliary control row owned by SwiftUI.
 enum KeyboardLayouts {
 
-    /// Symbol pages contain three real rows; accessory controls are UIKit-owned.
-    static let symbolsRowCount = 3
+    /// Symbol pages contain three input rows plus one SwiftUI-owned control row.
+    static let symbolsRowCount = 4
 
     /// Glyph carried by the emoji-picker toggle key.
     ///
@@ -290,45 +290,13 @@ enum KeyboardLayouts {
     // MARK: - Numbers Page (symbols1)
 
     private static func numbersPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
-        [
-            // Row 1: digits
-            inputRow("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            // Row 2: common punctuation and symbols
-            inputRow("-", "/", ":", ";", "(", ")", "\u{20AC}", "&", "@", "\""),
-            // Row 3: #+= toggle + punctuation + delete
-            [
-                KeyDefinition(type: .shiftSymbols, size: CGSize(width: 1.5, height: 1)),
-                // #+= and delete keep width 1.5 (identical to shift/delete on the letter pages).
-                // The 5 punctuation keys are widened to 1.2 with small 0.5 end spacers so the
-                // row totals 10 units and the cluster sits tighter -- matching Apple.
-                KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
-                punct("."), punct(","), punct("?"), punct("!"), punct("'"),
-                KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
-                KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
-            ],
-        ]
+        KeyboardSymbolsLayout.numbers.map { $0.map { keyDefinition($0, lang: lang) } }
     }
 
     // MARK: - Symbols Page (symbols2)
 
     private static func symbolsPage(lang: SupportedLanguage) -> [[KeyDefinition]] {
-        [
-            // Row 1: brackets and math
-            inputRow("[", "]", "{", "}", "#", "%", "^", "*", "+", "="),
-            // Row 2: special characters
-            inputRow("_", "\\", "|", "~", "<", ">", "$", "\u{00A3}", "\u{00A5}", "\u{00B7}"),
-            // Row 3: 123 toggle + punctuation + delete
-            [
-                KeyDefinition(type: .shiftSymbols, size: CGSize(width: 1.5, height: 1)),
-                // #+= and delete keep width 1.5 (identical to shift/delete on the letter pages).
-                // The 5 punctuation keys are widened to 1.2 with small 0.5 end spacers so the
-                // row totals 10 units and the cluster sits tighter -- matching Apple.
-                KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
-                punct("."), punct(","), punct("?"), punct("!"), punct("'"),
-                KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1)),
-                KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
-            ],
-        ]
+        KeyboardSymbolsLayout.symbols.map { $0.map { keyDefinition($0, lang: lang) } }
     }
 
     // MARK: - Bottom Rows
@@ -360,6 +328,18 @@ enum KeyboardLayouts {
     /// so the 5 keys sit tighter together like Apple's keyboard.
     private static func punct(_ char: String) -> KeyDefinition {
         KeyDefinition(type: .input(key: char, alternate: nil), size: CGSize(width: 1.2, height: 1))
+    }
+
+    private static func keyDefinition(_ key: KeyboardSymbolsLayout.Key, lang: SupportedLanguage) -> KeyDefinition {
+        let size = CGSize(width: key.width, height: 1)
+        switch key.kind {
+        case .insert(let value): return KeyDefinition(type: .input(key: value, alternate: nil), size: size)
+        case .pageToggle: return KeyDefinition(type: .shiftSymbols, size: size)
+        case .emoji, .voice: return KeyDefinition(type: .spacer, size: size)
+        case .delete: return KeyDefinition(type: .backspace, size: size)
+        case .returnKey: return KeyDefinition(type: .returnkey(name: lang.returnName), size: size)
+        case .spacer: return KeyDefinition(type: .spacer, size: size)
+        }
     }
 
     /// Create a row of standard input keys from variadic strings.

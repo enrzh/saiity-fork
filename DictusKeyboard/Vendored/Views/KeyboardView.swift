@@ -165,7 +165,10 @@ final internal class GiellaKeyboardView: UIView,
     var accentKeyLabel: String = "'"
 
     public func update() {
-        backgroundColor = theme.backgroundColor
+        // The controller places this symbols view on the shared UIInputView surface.
+        // Keep the root transparent so the system keyboard backdrop is the single
+        // background layer between the native-style key gaps.
+        backgroundColor = .clear
         calculateRows()
     }
 

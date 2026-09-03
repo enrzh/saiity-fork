@@ -7,18 +7,12 @@ import DictusCore
 struct HomeView: View {
     @EnvironmentObject var coordinator: DictationCoordinator
     @EnvironmentObject var proStatus: ProStatusManager
-    @ObservedObject var modelManager: ModelManager
-    var onModelsRequested: (() -> Void)?
+    @AppStorage(SharedKeys.modelReady, store: AppGroup.defaults) private var modelReady = false
 
     @State private var showCopiedFeedback = false
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
     @Environment(\.scenePhase) private var scenePhase
-
-    init(modelManager: ModelManager, onModelsRequested: (() -> Void)? = nil) {
-        self.modelManager = modelManager
-        self.onModelsRequested = onModelsRequested
-    }
 
     var body: some View {
         ScrollView {
@@ -63,11 +57,9 @@ struct HomeView: View {
             )
         }
         .onAppear {
-            modelManager.loadState()
             refreshMicrophonePermission()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DictusOnboardingCompleted"))) { _ in
-            modelManager.loadState()
             refreshMicrophonePermission()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -126,14 +118,9 @@ struct HomeView: View {
                     Label("Allow microphone", systemImage: "mic.badge.plus")
                 }
                 .buttonStyle(.bordered)
-            } else if !modelManager.isModelReady, let onModelsRequested {
-                Button(action: onModelsRequested) {
-                    Label("Open Models", systemImage: "arrow.down.circle")
-                }
-                .buttonStyle(.bordered)
             }
 
-            if microphonePermission.isAuthorized && modelManager.isModelReady {
+            if microphonePermission.isAuthorized && modelReady {
                 newDictationButton
             }
         }
@@ -184,14 +171,14 @@ struct HomeView: View {
 
     private var readinessSymbol: String {
         if !microphonePermission.isAuthorized { return "mic.slash" }
-        if !modelManager.isModelReady { return "arrow.down.circle" }
+        if !modelReady { return "arrow.down.circle" }
         return "checkmark.circle"
     }
 
     private var readinessTitle: String {
         if microphonePermission.isRecoverable { return "Microphone access is off" }
         if !microphonePermission.isAuthorized { return "Microphone access needed" }
-        if !modelManager.isModelReady { return "Choose a local model" }
+        if !modelReady { return "Choose a local model" }
         if coordinator.status == .failed { return "Dictation needs another try" }
         return "Ready to dictate"
     }
@@ -223,7 +210,7 @@ struct HomeView: View {
             return "Microphone access has not been granted yet."
         }
 
-        if !modelManager.isModelReady {
+        if !modelReady {
             return "Choose a local model to begin."
         }
 
@@ -266,7 +253,7 @@ struct HomeView: View {
 
 #Preview {
     NavigationStack {
-        HomeView(modelManager: ModelManager())
+        HomeView()
             .environmentObject(DictationCoordinator.shared)
             .environmentObject(ProStatusManager())
     }

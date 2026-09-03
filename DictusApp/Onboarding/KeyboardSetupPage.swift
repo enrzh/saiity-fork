@@ -13,6 +13,7 @@ struct KeyboardSetupPage: View {
     @State private var keyboardDetected = false
     @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults)
     private var fullAccessHandshake = false
+    @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
 
     /// Guard to prevent concurrent keyboard checks while returning from Settings.
     @State private var isCheckingKeyboard = false
@@ -23,7 +24,8 @@ struct KeyboardSetupPage: View {
     private var setupStatus: KeyboardSetupStatus {
         KeyboardSetupStatus(
             keyboardInstalled: keyboardDetected,
-            fullAccessHandshake: fullAccessHandshake
+            fullAccessHandshake: fullAccessHandshake,
+            handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
     }
 
@@ -177,18 +179,19 @@ struct KeyboardSetupPage: View {
         // can temporarily omit a third-party keyboard from activeInputModes
         // while it refreshes Settings, so do not erase a valid handshake here.
         let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
-        let installed = inputModeInstalled || handshake
-
-        keyboardDetected = installed
-        fullAccessHandshake = handshake
-
         if let identifier {
             PersistentLog.log(.onboardingKeyboardDetected(identifier: identifier))
         } else {
             PersistentLog.log(.onboardingKeyboardNotFound(modeCount: modes.count))
         }
 
-        let status = KeyboardSetupStatus(keyboardInstalled: installed, fullAccessHandshake: handshake)
+        let status = KeyboardSetupStatus(
+            keyboardInstalled: inputModeInstalled,
+            fullAccessHandshake: handshake,
+            handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
+        )
+        keyboardDetected = status.keyboardDetected
+        fullAccessHandshake = status.fullAccessHandshake
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"

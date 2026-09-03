@@ -20,8 +20,6 @@ class KeyboardViewController: UIInputViewController {
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
 
-    private static let glassBackgroundTag = 27026
-
     private final class PassthroughControlsView: UIView {
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
             for subview in subviews.reversed() where !subview.isHidden && subview.alpha > 0 && subview.isUserInteractionEnabled {
@@ -40,19 +38,19 @@ class KeyboardViewController: UIInputViewController {
     /// keyboard row bleeds through and the recording overlay gets compressed.
     private var heightConstraint: NSLayoutConstraint?
 
+    private var previousInputViewHeight: Double?
+    private var stableInputViewHeightPasses = 0
+
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
     /// The voice surface uses the standard 216pt input area above the system bar.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
     /// Layout ownership: SwiftUI owns symbol/emoji content; UIKit owns the
-    /// accessory hit controls and their bottom anchor.
+    /// voice-page hit controls and their bottom anchor.
     private var hostingBottomToKeyboardTop: NSLayoutConstraint?
 
     /// Explicit full-surface anchor used by mode transitions.
     private var hostingBottomToInputBottom: NSLayoutConstraint?
-
-    /// Fixed height of the voice-only input surface.
-    private let toolbarHeight = CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeight)
 
     /// Whether viewWillAppear has fired at least once. Guards the Combine handler
     /// from changing hosting height before the controller is registered with KeyboardState.
@@ -115,6 +113,9 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.layer.backgroundColor = UIColor.clear.cgColor
         // The extension owns dictation through its centered press-and-hold control.
         // Prevent iOS from adding a second system microphone key below our surface.
         hasDictationKey = true
@@ -150,6 +151,11 @@ class KeyboardViewController: UIInputViewController {
         // Do NOT set translatesAutoresizingMaskIntoConstraints = false on the inputView.
         // iOS manages the inputView's frame via autoresizing masks -- disabling them
         // causes the view to collapse to zero width.
+        // Reassert this after UIKit has constructed the keyboard-style input view;
+        // otherwise the style can leave an opaque rectangular layer behind the
+        // inset SwiftUI surface.
+        kbInputView.isOpaque = false
+        kbInputView.layer.backgroundColor = UIColor.clear.cgColor
 
         // KeyboardInputView owns the single semantic native backdrop.
 
@@ -185,6 +191,8 @@ class KeyboardViewController: UIInputViewController {
         addChild(hosting)
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
         hosting.view.backgroundColor = .clear
+        hosting.view.isOpaque = false
+        hosting.view.layer.backgroundColor = UIColor.clear.cgColor
         // Hide hosting view until viewWillAppear has applied the correct state.
         // During cold start, there's a gap between viewDidLoad (hosting created with
         // toolbar content) and viewWillAppear (constraint + SwiftUI state synchronized).
@@ -198,8 +206,12 @@ class KeyboardViewController: UIInputViewController {
         installVoiceActionControls(in: kbInputView)
 
         // --- 5. Set up Auto Layout constraints ---
-        // Hosting view (toolbar): pinned to top, leading, trailing. Height = toolbarHeight.
-        let hostingHeight = hosting.view.heightAnchor.constraint(equalToConstant: toolbarHeight)
+        // Use the device-aware native height from the first layout pass rather
+        // than making the hosting view start at a fixed 216pt height. UIKit can
+        // still refine the input view's bounds after attachment, and the live
+        // recalculation below remains authoritative.
+        let initialHeight = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
+        let hostingHeight = hosting.view.heightAnchor.constraint(equalToConstant: initialHeight)
         // Priority 999 (just below .required): ensures our explicit height always wins over
         // UIHostingController's intrinsic content size (compression resistance = 750).
         // At .defaultHigh (750), the constraint was ambiguous with SwiftUI's own sizing,
@@ -312,8 +324,8 @@ class KeyboardViewController: UIInputViewController {
         // Without this, the inputView may retain a stale height from before the switch.
         let oldHeight = heightConstraint?.constant ?? -1
         let newHeight = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
-        heightConstraint?.constant = newHeight
         hostingHeightConstraint?.constant = newHeight
+        heightConstraint?.constant = newHeight
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
@@ -377,6 +389,7 @@ class KeyboardViewController: UIInputViewController {
         // The app cannot inspect iOS' Full Access toggle. The extension can,
         // so publish this real handshake as early and repeatedly as iOS loads it.
         AppGroup.defaults.set(hasFullAccess, forKey: SharedKeys.onboardingFullAccessVerified)
+        AppGroup.defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.onboardingFullAccessHandshakeDate)
         AppGroup.defaults.synchronize()
         DarwinNotificationCenter.post(DarwinNotificationName.keyboardFullAccessChanged)
     }
@@ -424,7 +437,11 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        layoutVoiceActionControls()
+        reassertTransparentSurfaceLayers()
+        let liveHeight = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
+        hostingHeightConstraint?.constant = liveHeight
+        heightConstraint?.constant = liveHeight
+        layoutVoiceActionControls(surfaceHeight: liveHeight)
         if isFirstLayoutPass {
             isFirstLayoutPass = false
             // Defer constraint installation to the next runloop turn so we
@@ -659,25 +676,33 @@ class KeyboardViewController: UIInputViewController {
 
     /// Match the native keyboard's device-aware input height. The shared policy
     /// remains the geometry source for SwiftUI and UIKit overlays.
-    private func computeKeyboardHeight() -> CGFloat {
+    private func computeNativeKeyboardHeight() -> CGFloat {
         let deviceContext = DeviceContext.current
         let nativeHeight = KeyboardHeightProvider.height(
             for: deviceContext,
             traitCollection: traitCollection
         )
-        return CGFloat(nativeHeight)
+        return nativeHeight
     }
 
-    /// Auxiliary pages need room for their accessory row and three native-sized
-    /// content rows. Voice and recording keep the device's native height.
+    private func computeKeyboardHeight() -> CGFloat {
+        let nativeHeight = computeNativeKeyboardHeight()
+        let inputViewHeight = inputView?.bounds.height ?? 0
+        let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
+            inputViewHeight: Double(inputViewHeight),
+            controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil,
+            fallbackHeight: Double(nativeHeight),
+            previousInputViewHeight: previousInputViewHeight,
+            stableInputViewPasses: stableInputViewHeightPasses
+        )
+        previousInputViewHeight = resolution.observedInputViewHeight
+        stableInputViewHeightPasses = resolution.stableInputViewPasses
+        return CGFloat(resolution.height)
+    }
+
+    /// Every mode uses the native device-aware keyboard height.
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
-        let nativeHeight = computeKeyboardHeight()
-        switch mode {
-        case .panel, .emoji:
-            return max(nativeHeight, CGFloat(VoiceOnlyKeyboardPolicy.alternateMinimumHeight))
-        case .keys, .recording:
-            return nativeHeight
-        }
+        computeKeyboardHeight()
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -809,44 +834,41 @@ class KeyboardViewController: UIInputViewController {
     /// was conditional on the emoji flag being false, so a full-area state that
     /// was not added to the chain collapsed while still rendering.
     ///
-    /// None of these branches touches `heightConstraint`, the keyboard's own
-    /// declared height — that remains a no-go zone (#166).
+    /// Each branch applies one resolved live height to both UIKit and SwiftUI.
     private func applyLayout(for mode: KeyboardAreaMode) {
         let oldHosting = hostingHeightConstraint?.constant ?? -1
         let status = KeyboardState.shared.dictationStatus.rawValue
-        setVoiceActionControlsHidden(false)
+        let liveHeight = computeKeyboardHeight(for: mode)
+        setVoiceActionControlsHidden(mode == .panel || mode == .emoji)
 
         switch mode {
         case .keys:
-            let fullHeight = computeKeyboardHeight(for: mode)
-            heightConstraint?.constant = fullHeight
-            hostingHeightConstraint?.constant = fullHeight
+            heightConstraint?.constant = liveHeight
+            hostingHeightConstraint?.constant = liveHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "hostingSet_idle",
-                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=\(mode.rawValue)"
+                details: "old=\(oldHosting) new=\(liveHeight) status=\(status) mode=\(mode.rawValue)"
             ))
 
         case .emoji:
-            let fullHeight = computeKeyboardHeight(for: mode)
-            heightConstraint?.constant = fullHeight
-            hostingHeightConstraint?.constant = fullHeight
+            heightConstraint?.constant = liveHeight
+            hostingHeightConstraint?.constant = liveHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "hostingSet_emoji",
-                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=emoji"
+                details: "old=\(oldHosting) new=\(liveHeight) status=\(status) mode=emoji"
             ))
 
         case .panel:
-            let fullHeight = computeKeyboardHeight(for: mode)
-            heightConstraint?.constant = fullHeight
-            hostingHeightConstraint?.constant = fullHeight
+            heightConstraint?.constant = liveHeight
+            hostingHeightConstraint?.constant = liveHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
             PersistentLog.log(.diagnosticProbe(
@@ -857,9 +879,8 @@ class KeyboardViewController: UIInputViewController {
             ))
 
         case .recording:
-            let fullHeight = computeKeyboardHeight(for: mode)
-            heightConstraint?.constant = fullHeight
-            hostingHeightConstraint?.constant = fullHeight
+            heightConstraint?.constant = liveHeight
+            hostingHeightConstraint?.constant = liveHeight
             setHostingExpanded(true)
             hostingController?.view.isHidden = false
             setVoiceActionControlsHidden(false)
@@ -867,22 +888,36 @@ class KeyboardViewController: UIInputViewController {
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "hostingSet_recording",
-                details: "old=\(oldHosting) new=\(fullHeight) status=\(status) mode=\(mode.rawValue)"
+                details: "old=\(oldHosting) new=\(liveHeight) status=\(status) mode=\(mode.rawValue)"
             ))
         }
 
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
-        layoutVoiceActionControls()
+        layoutVoiceActionControls(surfaceHeight: liveHeight)
     }
 
     // MARK: - UIKit action controls
+
+    private func reassertTransparentSurfaceLayers() {
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.layer.backgroundColor = UIColor.clear.cgColor
+        hostingController?.view.backgroundColor = .clear
+        hostingController?.view.isOpaque = false
+        hostingController?.view.layer.backgroundColor = UIColor.clear.cgColor
+        actionControlsView?.backgroundColor = .clear
+        actionControlsView?.isOpaque = false
+        actionControlsView?.layer.backgroundColor = UIColor.clear.cgColor
+    }
 
     /// Transparent UIKit controls sit over the SwiftUI glyphs. UIKit owns the
     /// action and pressed state; SwiftUI only renders the visual surface.
     private func installVoiceActionControls(in inputView: UIView) {
         let controls = PassthroughControlsView(frame: inputView.bounds)
         controls.backgroundColor = .clear
+        controls.isOpaque = false
+        controls.layer.backgroundColor = UIColor.clear.cgColor
         controls.translatesAutoresizingMaskIntoConstraints = false
         inputView.addSubview(controls)
         NSLayoutConstraint.activate([
@@ -953,10 +988,9 @@ class KeyboardViewController: UIInputViewController {
         button.setTitleColor(.label, for: .normal)
         button.layer.cornerRadius = VoiceOnlyKeyboardPolicy.controlSize / 2
         button.configurationUpdateHandler = { control in
-            if control.isHighlighted {
-                control.backgroundColor = UIColor.label.withAlphaComponent(0.14)
-            } else if !control.isEnabled {
-                control.backgroundColor = UIColor.label.withAlphaComponent(0.06)
+            if control.isHighlighted || !control.isEnabled {
+                // UIKit owns hit testing only; the shared SwiftUI surface owns visuals.
+                control.backgroundColor = .clear
             } else {
                 control.backgroundColor = .clear
             }
@@ -982,176 +1016,58 @@ class KeyboardViewController: UIInputViewController {
         dismissButton?.accessibilityValue = isAttached ? "Available" : "Unavailable"
     }
 
-    private func layoutVoiceActionControls() {
+    private func layoutVoiceActionControls(surfaceHeight: CGFloat? = nil) {
         guard let controls = actionControlsView, controls.bounds.width > 0 else { return }
+        let mode = KeyboardState.shared.areaMode
+        let isAuxiliary = mode == .panel || mode == .emoji
+        controls.isHidden = isAuxiliary
+        controls.isUserInteractionEnabled = !isAuxiliary
+        guard !isAuxiliary else {
+            [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
+                .compactMap { $0 }
+                .forEach {
+                    $0.isHidden = true
+                    $0.isEnabled = false
+                    $0.isUserInteractionEnabled = false
+                }
+            return
+        }
+
         let width = controls.bounds.width
-        // UIKit's live bounds are authoritative during keyboard transitions.
-        let height = max(1, controls.bounds.height)
+        let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
         let layout = VoiceOnlyKeyboardPolicy.layout(
             for: Double(width),
-            surfaceHeight: Double(height),
+            surfaceHeight: Double(max(1, resolvedHeight)),
             controlOrder: KeyboardAccessoryOrder.current
         )
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
-        setAuxiliaryUtilityVisuals(for: KeyboardState.shared.areaMode)
-        // The vendored symbols and native emoji pages own their bottom controls.
-        // Keeping @ and emoji visible there would place them over the symbols grid;
-        // SwiftUI owns the symbol and emoji content; UIKit owns the full-width
-        // accessory row and its hit controls.
-        let mode = KeyboardState.shared.areaMode
-        let isAuxiliary = mode == .panel || mode == .emoji
-        let auxiliaryFramesAvailable = !layout.bottomAuxiliaryControlFrame.isEmpty
         let voiceMicFrameAvailable = !layout.dictateFrame.isEmpty
-        let auxiliaryControlsHidden = isAuxiliary
-        atButton?.isHidden = auxiliaryControlsHidden || !leftRailVisible
-        emojiButton?.isHidden = auxiliaryControlsHidden || !leftRailVisible
-        numberButton?.isHidden = auxiliaryControlsHidden || !leftRailVisible
-        micButton?.isHidden = auxiliaryControlsHidden || ((mode != .keys && mode != .recording) || !voiceMicFrameAvailable)
-        deleteButton?.isHidden = auxiliaryControlsHidden || !rightRailVisible
-        returnButton?.isHidden = auxiliaryControlsHidden || !rightRailVisible
-        dismissButton?.isHidden = isAuxiliary || !rightRailVisible
+        atButton?.isHidden = !leftRailVisible
+        emojiButton?.isHidden = !leftRailVisible
+        numberButton?.isHidden = !leftRailVisible
+        micButton?.isHidden = (mode != .keys && mode != .recording) || !voiceMicFrameAvailable
+        deleteButton?.isHidden = !rightRailVisible
+        returnButton?.isHidden = !rightRailVisible
+        dismissButton?.isHidden = !rightRailVisible
         [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
             .compactMap { $0 }
             .forEach {
-                $0.isEnabled = !isAuxiliary
-                $0.isUserInteractionEnabled = !isAuxiliary && !$0.isHidden
+                $0.isEnabled = !$0.isHidden
+                $0.isUserInteractionEnabled = !$0.isHidden
             }
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
-        if isAuxiliary {
-            numberButton?.frame = layout.leftUtilityFrames.at
-            micButton?.frame = layout.dictateFrame
-            deleteButton?.frame = layout.rightRailFrames.delete
-            returnButton?.frame = layout.rightRailFrames.returnKey
-        } else {
-            numberButton?.frame = layout.leftUtilityFrames.number
-            micButton?.frame = layout.dictateFrame
-            deleteButton?.frame = layout.deleteFrame
-            returnButton?.frame = layout.returnFrame
-        }
+        numberButton?.frame = layout.leftUtilityFrames.number
+        micButton?.frame = layout.dictateFrame
+        deleteButton?.frame = layout.deleteFrame
+        returnButton?.frame = layout.returnFrame
         dismissButton?.frame = layout.dismissFrame
-        configureAuxiliaryAccessoryControls(for: mode)
         [atButton, emojiButton, numberButton, micButton, deleteButton, returnButton, dismissButton]
             .compactMap { $0 }
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
         micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
-        if let controls = actionControlsView, let inputView {
-            inputView.bringSubviewToFront(controls)
-        }
-    }
-
-    /// SwiftUI owns symbol/emoji content; UIKit owns accessory hit controls so
-    /// native controls remain the sole owners of those touch targets.
-    private func configureAuxiliaryAccessoryControls(for mode: KeyboardAreaMode) {
-        let isAuxiliary = mode == .panel || mode == .emoji
-        let buttons = [numberButton, micButton, deleteButton, returnButton].compactMap { $0 }
-        guard isAuxiliary else {
-            buttons.forEach {
-                $0.viewWithTag(Self.glassBackgroundTag)?.removeFromSuperview()
-                $0.configuration = .plain()
-                $0.configuration?.contentInsets = .zero
-                $0.configuration?.baseForegroundColor = .label
-                $0.backgroundColor = .clear
-                $0.tintColor = .label
-            }
-            return
-        }
-
-        let iconConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-        let secondaryColor = UIColor.secondaryLabel
-        let accessoryColor = UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.12)
-                : UIColor(white: 0, alpha: 0.07)
-        }
-
-        func style(_ button: UIButton, imageName: String, foreground: UIColor = secondaryColor) {
-            var configuration = UIButton.Configuration.plain()
-            configuration.contentInsets = .zero
-            configuration.image = UIImage(systemName: imageName, withConfiguration: iconConfiguration)
-            configuration.baseForegroundColor = foreground
-            button.configuration = configuration
-            button.backgroundColor = .clear
-            button.tintColor = foreground
-            button.layer.cornerCurve = .continuous
-            button.layer.cornerRadius = button.bounds.height / 2
-            button.accessibilityTraits = [.button]
-            installGlassBackground(on: button, tint: accessoryColor)
-        }
-
-        if let numberButton { style(numberButton, imageName: "arrow.uturn.backward") }
-        if let deleteButton { style(deleteButton, imageName: "delete.left") }
-        if let returnButton { style(returnButton, imageName: "return") }
-
-        var micConfiguration = UIButton.Configuration.filled()
-        micConfiguration.contentInsets = .zero
-        micConfiguration.image = UIImage(systemName: "mic.fill", withConfiguration: iconConfiguration)
-        micConfiguration.baseForegroundColor = .black
-        micConfiguration.baseBackgroundColor = .white
-        micButton?.configuration = micConfiguration
-        micButton?.backgroundColor = .white
-        micButton?.tintColor = .black
-        micButton?.layer.cornerCurve = .continuous
-        micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
-        micButton?.accessibilityLabel = "Hold to dictate"
-    }
-
-    /// UIKit's native Liquid Glass effect keeps the accessory controls visually
-    /// consistent with the SwiftUI key surfaces on iOS 26 and later. The view is
-    /// non-interactive so the UIButton remains the sole touch target.
-    private func installGlassBackground(on button: UIButton, tint: UIColor) {
-        guard #available(iOS 26, *) else { return }
-
-        let glassView: UIVisualEffectView
-        if let existing = button.viewWithTag(Self.glassBackgroundTag) as? UIVisualEffectView {
-            glassView = existing
-        } else {
-            let effect = UIGlassEffect(style: .regular)
-            effect.isInteractive = true
-            glassView = UIVisualEffectView(effect: effect)
-            glassView.tag = Self.glassBackgroundTag
-            glassView.isUserInteractionEnabled = false
-            button.insertSubview(glassView, at: 0)
-        }
-        if let effect = glassView.effect as? UIGlassEffect {
-            effect.isInteractive = true
-            effect.tintColor = tint
-        }
-        glassView.frame = button.bounds
-        glassView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        glassView.layer.cornerCurve = .continuous
-        glassView.layer.cornerRadius = button.bounds.height / 2
-        glassView.clipsToBounds = true
-    }
-
-    private func setAuxiliaryUtilityVisuals(for mode: KeyboardAreaMode) {
-        let isAuxiliary = mode == .panel || mode == .emoji
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-        let atImage = isAuxiliary ? UIImage(systemName: "at", withConfiguration: symbolConfiguration) : nil
-        let emojiImage = isAuxiliary ? UIImage(systemName: "face.smiling", withConfiguration: symbolConfiguration) : nil
-        numberButton?.accessibilityLabel = isAuxiliary ? "Return to voice keyboard" : "Open symbols keyboard"
-        numberButton?.accessibilityHint = isAuxiliary ? "Returns to voice keyboard" : "Opens symbols keyboard"
-
-        atButton?.setImage(atImage, for: .normal)
-        atButton?.configuration?.image = atImage
-        atButton?.configuration?.baseForegroundColor = .label
-        atButton?.setTitle(nil, for: .normal)
-        atButton?.configuration?.title = nil
-
-        emojiButton?.setImage(emojiImage, for: .normal)
-        emojiButton?.configuration?.image = emojiImage
-        emojiButton?.configuration?.baseForegroundColor = .label
-        emojiButton?.setTitle(nil, for: .normal)
-        emojiButton?.configuration?.title = nil
-
-        // KeyboardRootView renders the shared ABC glyph. Keep this UIKit view
-        // transparent and use it only as the hit target and accessibility node.
-        numberButton?.setTitle(nil, for: .normal)
-        numberButton?.configuration?.title = nil
-        numberButton?.configuration?.baseForegroundColor = .label
-        numberButton?.setImage(nil, for: .normal)
-        numberButton?.configuration?.image = nil
+        if let inputView { inputView.bringSubviewToFront(controls) }
     }
 
     @objc private func handleMicTouchDown() {

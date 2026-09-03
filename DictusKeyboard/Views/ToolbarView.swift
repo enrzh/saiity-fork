@@ -26,12 +26,10 @@ struct ToolbarView: View {
     let dictationStatus: DictationStatus
     var onMicTap: () -> Void
 
-    // Suggestion bar integration parameters (default to idle/empty)
     var statusMessage: String?
 
     /// Identity carried purely so the status message's rendering can be attributed
-    /// to a view and a controller in the exported log (#261). Defaulted, so a call
-    /// site that does not care is unaffected; both current call sites supply them.
+    /// to a view and a controller in the exported log (#261).
     var messageProbeRootViewID: String = "unknown"
     var messageProbeControllerID: String = "unknown"
 
@@ -41,10 +39,6 @@ struct ToolbarView: View {
     /// a state, not a message. It carries no timer, is not dismissed, and goes
     /// away only when a fresh app process clears it.
     var showsPolishUnavailable: Bool = false
-
-    var suggestions: [String] = []
-    var suggestionMode: SuggestionMode = .idle
-    var onSuggestionTap: ((Int) -> Void)?
 
     /// Whether the last dictation insertion can still be undone (#266).
     /// Transient by construction: it is set for a few seconds after an insertion
@@ -97,29 +91,14 @@ struct ToolbarView: View {
 
     // MARK: - Presentations
 
-    /// The dictation cockpit: hamburger left (when idle), suggestion bar (when
-    /// typing), mic right.
-    ///
-    /// WHY the hamburger yields to suggestions:
-    /// The suggestion bar needs horizontal space to display 3 slots legibly. The
-    /// hamburger inherits that arbitration from the language switcher it replaced,
-    /// at the same 32 pt cost. Accepted consequence (#241): the keyboard language
-    /// cannot be changed mid-word.
-    ///
-    /// WHY undo sits between the error message and the suggestions (#266):
-    /// an error means the dictation failed, so there is nothing to undo and the
-    /// error wins. Suggestions lose because immediately after an insertion the user
-    /// has typed nothing, so whatever the bar is showing was predicted from text
-    /// that was just dictated — worth little, and worth less than a control that
-    /// expires in seconds and is the only alternative to holding backspace.
+    /// The dictation cockpit: hamburger left, status or undo message in the middle,
+    /// and mic right.
     ///
     /// WHY the polish-unavailable notice sits LAST, beside the hamburger rather
     /// than instead of anything (#315): it is the only occupant of this bar that
-    /// can last the whole app process. Above the suggestions it would suppress
-    /// completions and corrections for that entire time, which is the keyboard's
-    /// core job; in place of the hamburger it would make the panel unreachable
-    /// for the same duration. Sharing the slot costs visibility while the user is
-    /// mid-word, and that is the cheapest of the three prices.
+    /// can last the whole app process. It stays beside the hamburger so the
+    /// keyboard's primary controls remain reachable while it is shown.
+    /// Sharing the slot costs visibility while the user is mid-word.
     private var dictationBar: some View {
         HStack {
             if let message = statusMessage {
@@ -150,7 +129,7 @@ struct ToolbarView: View {
                 dictationUndoButton
 
                 Spacer()
-            } else if suggestions.isEmpty {
+            } else {
                 hamburgerButton
 
                 if showsPolishUnavailable {
@@ -158,12 +137,6 @@ struct ToolbarView: View {
                 } else {
                     Spacer()
                 }
-            } else {
-                SuggestionBarView(
-                    suggestions: suggestions,
-                    mode: suggestionMode,
-                    onTap: { index in onSuggestionTap?(index) }
-                )
             }
 
             AnimatedMicButton(status: dictationStatus, isPill: true, onTap: onMicTap)

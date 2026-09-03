@@ -1,13 +1,13 @@
 // DictusApp/Views/MainTabView.swift
-// Root navigation container with 3 tabs and full-screen recording overlay.
+// Root navigation container with 2 tabs and full-screen recording overlay.
 import SwiftUI
 import DictusCore
 
-/// Root view presenting the 3-tab navigation structure.
+/// Root view presenting the Home and Settings tab navigation structure.
 ///
 /// WHY TabView instead of NavigationStack:
-/// The app has 3 distinct sections (Home, Models, Settings) that the user should be able
-/// to switch between freely. A TabView provides standard iOS navigation for this pattern.
+/// The app's Home and Settings sections are the root tabs. A TabView provides standard
+/// iOS navigation for this pattern.
 /// Each tab wraps its content in its own NavigationStack so push navigation works
 /// independently per tab.
 ///
@@ -86,32 +86,21 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        HomeView(modelManager: modelManager) {
-                            selectedTab = 1
-                        }
+                        HomeView()
                     }
                     .tabItem {
                         Label("Home", systemImage: "waveform")
                     }
                     .tag(0)
 
-                    // Tab 1: Model management
-                    NavigationStack {
-                        ModelManagerView(modelManager: modelManager)
-                    }
-                    .tabItem {
-                        Label("Models", systemImage: "square.stack.3d.up.fill")
-                    }
-                    .tag(1)
-
-                    // Tab 2: Settings
+                    // Tab 1: Settings
                     NavigationStack {
                         SettingsView()
                     }
                     .tabItem {
                         Label("Settings", systemImage: "slider.horizontal.3")
                     }
-                    .tag(2)
+                    .tag(1)
                 }
             }
 

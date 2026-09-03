@@ -4,7 +4,7 @@ import AudioToolbox
 import DictusCore
 
 /// Bottom bar for emoji picker containing category navigation only.
-/// Icons act as bookmarks into the continuous horizontal emoji grid.
+/// Icons act as bookmarks into the vertical emoji grid and stay outside its scroll view.
 struct EmojiCategoryBar: View {
     let sections: [CategoryInfo]
     let selectedCategoryID: String
@@ -17,11 +17,12 @@ struct EmojiCategoryBar: View {
                 Image(systemName: "mic.fill")
                     .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Return to voice keyboard")
 
-            // Category icons — representative emojis like native iOS picker
+            // Category marks are deliberately plain ASCII so they stay stable across themes.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(sections) { section in
@@ -29,20 +30,11 @@ struct EmojiCategoryBar: View {
                         Button {
                             onSelectCategory(section.id)
                         } label: {
-                            Group {
-                                if let emoji = section.representativeEmoji {
-                                    Text(emoji)
-                                        .font(.system(size: 20))
-                                } else {
-                                    // Recents: use clock SF Symbol
-                                    Image(systemName: section.icon)
-                                        .font(.system(size: 16))
-                                        .foregroundColor(isSelected ? Color(.label) : Color(.tertiaryLabel))
-                                }
-                            }
-                            .frame(width: 44, height: 44)
-                            .opacity(isSelected ? 1.0 : 0.5)
-                            .contentShape(Rectangle())
+                            Text(section.icon)
+                                .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                                .foregroundStyle(.primary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(section.name)
@@ -51,8 +43,11 @@ struct EmojiCategoryBar: View {
                 }
                 .padding(.horizontal, 2)
             }
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+            .clipped()
 
         }
         .frame(height: 44)
+        .clipped()
     }
 }

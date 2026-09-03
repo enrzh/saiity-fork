@@ -76,6 +76,7 @@ struct AvailabilityPage: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var modelManager = ModelManager()
     @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
+    @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
     @AppStorage(SharedKeys.polishEnabled, store: AppGroup.defaults) private var polishEnabled = true
     @State private var keyboardInstalled = false
     @State private var isDownloading = false
@@ -88,12 +89,13 @@ struct AvailabilityPage: View {
     private var keyboardStatus: KeyboardSetupStatus {
         KeyboardSetupStatus(
             keyboardInstalled: keyboardInstalled,
-            fullAccessHandshake: fullAccessVerified
+            fullAccessHandshake: fullAccessVerified,
+            handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
     }
     // Full Access is verified by the keyboard extension, which can only report
     // after the user actually switches to it. The next stage provides that path.
-    private var canContinue: Bool { keyboardInstalled && modelReady }
+    private var canContinue: Bool { keyboardStatus.keyboardDetected && modelReady }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -160,14 +162,12 @@ struct AvailabilityPage: View {
             KeyboardSetupStatus.isDictusKeyboardIdentifier($0.value(forKey: "identifier") as? String)
         }
         // The extension is the only component that can read `hasFullAccess`.
-        // Keep that handshake authoritative when iOS has not refreshed its
-        // input-mode list yet after returning from Settings.
         let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
-        let installed = inputModeInstalled || handshake
+        let handshakeDate = AppGroup.defaults.object(forKey: SharedKeys.onboardingFullAccessHandshakeDate) as? Double
+        let status = KeyboardSetupStatus(keyboardInstalled: inputModeInstalled, fullAccessHandshake: handshake, handshakeDate: handshakeDate.map(Date.init(timeIntervalSince1970:)))
+        let installed = status.keyboardDetected
         keyboardInstalled = installed
-        fullAccessVerified = handshake
-
-        let status = KeyboardSetupStatus(keyboardInstalled: installed, fullAccessHandshake: handshake)
+        fullAccessVerified = status.fullAccessVerified
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"

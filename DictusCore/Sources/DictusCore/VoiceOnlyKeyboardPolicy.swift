@@ -9,12 +9,12 @@ public enum VoiceOnlyKeyboardPolicy {
 
     public enum SymbolPageTransition: Equatable {
         case symbols1ToSymbols2
-        case symbols2ToClose
+        case symbols2ToSymbols1
 
         public static func forToggle(from page: SymbolPage) -> Self {
             switch page {
             case .symbols1: return .symbols1ToSymbols2
-            case .symbols2: return .symbols2ToClose
+            case .symbols2: return .symbols2ToSymbols1
             }
         }
     }
@@ -30,11 +30,15 @@ public enum VoiceOnlyKeyboardPolicy {
             guard !rows.isEmpty else { return [] }
             let resolvedRowSpacing = rowSpacing ?? spacing
             let rowHeight = max(1, (size.height - resolvedRowSpacing * CGFloat(rows.count - 1)) / CGFloat(rows.count))
-            let usableWidth = max(1, size.width - inset * 2)
             return rows.enumerated().map { rowIndex, row in
+                guard !row.isEmpty,
+                      row.allSatisfy({ $0 >= 0 }) else { return [] }
+                let usableWidth = size.width - inset * 2
+                guard usableWidth > 0 else { return [] }
                 let totalUnits = max(1, row.reduce(CGFloat.zero, +))
                 let gaps = spacing * CGFloat(max(0, row.count - 1))
-                let unitWidth = max(1, (usableWidth - gaps) / totalUnits)
+                let unitWidth = (usableWidth - gaps) / totalUnits
+                guard unitWidth > 0 else { return [] }
                 var x = inset
                 return row.map { width in
                     let frame = CGRect(x: x,
@@ -53,7 +57,69 @@ public enum VoiceOnlyKeyboardPolicy {
     /// height provider remains the source of truth at runtime; this is the
     /// shared fallback used by policy tests and the initial SwiftUI layout.
     public static let surfaceHeight: Double = 216
+
+    /// Chooses the height reported by the laid-out input view, falling back to
+    /// the device provider while UIKit is still resolving the input surface.
+    /// The controller view is used only to reject a full-screen inputView
+    /// candidate while UIKit is still resolving the keyboard surface.
+    public struct SurfaceHeightResolution: Equatable {
+        public let height: Double
+        public let observedInputViewHeight: Double?
+        public let stableInputViewPasses: Int
+        public let usesInputViewHeight: Bool
+    }
+
+    public static func resolvedSurfaceHeight(
+        inputViewHeight: Double?,
+        controllerViewHeight: Double?,
+        fallbackHeight: Double,
+        previousInputViewHeight: Double? = nil,
+        stableInputViewPasses: Int = 0
+    ) -> SurfaceHeightResolution {
+        let fallback = fallbackHeight.isFinite && fallbackHeight > 0 ? fallbackHeight : 1
+        guard let inputViewHeight, inputViewHeight.isFinite, inputViewHeight > 0 else {
+            return SurfaceHeightResolution(height: fallback,
+                                           observedInputViewHeight: nil,
+                                           stableInputViewPasses: 0,
+                                           usesInputViewHeight: false)
+        }
+
+        // During keyboard entry UIKit can temporarily give inputView the same
+        // full-screen height as the controller. Never turn that transient
+        // container geometry into the keyboard's declared height.
+        if let controllerViewHeight,
+           controllerViewHeight.isFinite,
+           controllerViewHeight > 0,
+           inputViewHeight >= controllerViewHeight - 0.5 {
+            return SurfaceHeightResolution(height: fallback,
+                                           observedInputViewHeight: nil,
+                                           stableInputViewPasses: 0,
+                                           usesInputViewHeight: false)
+        }
+
+        let isSameAsPrevious = previousInputViewHeight.map {
+            abs($0 - inputViewHeight) <= 0.5
+        } ?? false
+        let stablePasses = isSameAsPrevious
+            ? max(0, stableInputViewPasses) + 1
+            : 1
+        let isStable = stablePasses >= 2
+        return SurfaceHeightResolution(
+            height: isStable ? inputViewHeight : fallback,
+            observedInputViewHeight: inputViewHeight,
+            stableInputViewPasses: stablePasses,
+            usesInputViewHeight: isStable
+        )
+    }
+
     public static let controlSize: Double = 44
+    public static let symbolControlGap: Double = 4
+    /// The auxiliary page keeps Emoji and microphone in one native-height bottom row.
+    /// The page toggle belongs to the first key of the third symbol row, so it does not
+    /// consume a second vertical control lane and compress the symbol keys.
+    public static let symbolBottomControlLaneHeight: Double = controlSize
+    public static let symbolBottomControlBottomInset: Double = 4
+    public static let symbolBottomControlBudget: Double = symbolBottomControlLaneHeight + symbolBottomControlBottomInset
     public static let actionHitSize = CGSize(width: 88, height: 44)
     public static let bottomActionHitHeight: CGFloat = 44
     public static let utilityVisualSize: Double = 36
@@ -76,11 +142,11 @@ public enum VoiceOnlyKeyboardPolicy {
     /// the lower edge, matching the asymmetric system keyboard balance.
     public static let leftRailVerticalPadding: Double = 4
     public static let rightRailHeight: Double = actionHitSize.height * 2
-    /// Alternate symbol pages use three real rows. The accessory row owns the
-    /// fourth 44pt lane at the top of the native auxiliary keyboard.
+    /// Alternate symbol pages use three real rows. SwiftUI owns the lower control lane
+    /// inside the shared surface; there is no legacy accessory row.
     public static let contentHeight: Double = surfaceHeight
     public static let symbolsMinimumContentHeight: Double = controlSize * 3
-    /// Auxiliary pages need one 44pt accessory row plus three 44pt symbol rows.
+    /// Auxiliary pages need three symbol rows plus one native-height SwiftUI control row.
     public static let alternateMinimumHeight: Double = verticalPadding * 2 + controlSize + symbolsMinimumContentHeight
     public static let titleHeight: Double = 17
     /// Reserve a real text line for failures even at the standard 216pt

@@ -344,7 +344,7 @@ public struct KeyboardDefinition: Codable {
     }
 }
 
-public enum KeyboardPage {
+public enum KeyboardPage: Equatable {
     case normal
     case shifted
     case capslock

@@ -4,15 +4,17 @@ import Foundation
 public struct KeyboardSetupStatus: Equatable, Sendable {
     public let keyboardInstalled: Bool
     public let fullAccessHandshake: Bool
+    public let handshakeDate: Date?
 
     /// The app and keyboard extension share this bundle-id prefix. It is used to
     /// classify an input mode identifier, not to claim that the mode is currently
     /// selected; `UITextInputMode.activeInputModes` only describes enabled modes.
     public static let dictusKeyboardIdentifierPrefix = "de.aiity.saiity.ios"
 
-    public init(keyboardInstalled: Bool, fullAccessHandshake: Bool) {
+    public init(keyboardInstalled: Bool, fullAccessHandshake: Bool, handshakeDate: Date? = nil) {
         self.keyboardInstalled = keyboardInstalled
         self.fullAccessHandshake = fullAccessHandshake
+        self.handshakeDate = handshakeDate
     }
 
     public static func isDictusKeyboardIdentifier(_ identifier: String?) -> Bool {
@@ -21,8 +23,8 @@ public struct KeyboardSetupStatus: Equatable, Sendable {
     }
 
     /// A handshake can only be written by the sAiity keyboard extension itself.
-    /// Treat it as proof that the extension is installed even when iOS briefly
-    /// returns an incomplete `activeInputModes` list while returning from Settings.
+    /// Preserve the extension-owned handshake across transiently incomplete
+    /// `activeInputModes` reads. A later false handshake is the removal signal.
     public var keyboardDetected: Bool { keyboardInstalled || fullAccessHandshake }
     public var fullAccessVerified: Bool { keyboardDetected && fullAccessHandshake }
     public var canContinue: Bool { fullAccessVerified }
