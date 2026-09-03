@@ -56,7 +56,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The standard portrait iPhone keyboard grid height. The extension's UIKit
     /// height provider remains the source of truth at runtime; this is the
     /// shared fallback used by policy tests and the initial SwiftUI layout.
-    public static let surfaceHeight: Double = 216
+    public static let surfaceHeight: Double = 216 * 1.05
 
     /// Chooses the height reported by the laid-out input view, falling back to
     /// the device provider while UIKit is still resolving the input surface.
@@ -230,7 +230,7 @@ public enum VoiceOnlyKeyboardPolicy {
             let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
             let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
             return (
-                CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height * 2, width: size.width, height: size.height),
+                CGRect(x: x, y: emojiFrame.minY - railSpacing - size.height, width: size.width, height: size.height),
                 controlOrder == .emojiFirst ? emojiFrame : numberFrame,
                 controlOrder == .emojiFirst ? numberFrame : emojiFrame
             )

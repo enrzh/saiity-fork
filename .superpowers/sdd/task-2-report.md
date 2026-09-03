@@ -1,272 +1,45 @@
-# Task 2 报告：complete model page and minimal settings
+# Task 2 报告：emoji/symbol interaction + geometry
 
-## 变更文件
+## 状态
 
-- `DictusApp/Views/ModelCardView.swift`
-  - 恢复模型 `localizedDescription`、引擎友好名称、大小、准确度/速度 gauge 和下载字节信息。
-  - 移除 `Text(model.engine.rawValue)`，不再显示 `WK`/`PK` raw internal engine badge。
-  - 保留下载、取消、选择、语言详情、失败清理和删除入口。
-- `DictusApp/Views/ModelManagerView.swift`
-  - 保留原生 `Installed`/`Available` 层级、设备兼容性状态和引擎说明 footer。
-  - 保留模型删除确认 alert 及 partial download 删除确认。
-- `DictusApp/Views/SettingsView.swift`
-  - 本次没有新增 diff；提交前已与 HEAD 一致，当前为 minimal settings 形态。
+实现完成。需求简报要求 shared surface fallback 从 216 精确增加 5%，因此采用 `216 * 1.05 = 226.8`；计划文件中的 10% 与简报冲突，未采用计划值。
 
-## TDD RED
+## RED
 
-命令：
+命令：`swift test --package-path DictusCore --filter KeyboardRegressionTests`
 
-```text
-swift test --package-path DictusCore --filter ModelInfoTests
-```
+结果：执行 4 项，4 failures。失败覆盖 emoji 插入关闭 picker、symbol 父级 simultaneous drag、`@`/emoji 垂直 gap，以及 fallback 高度。
 
-关键输出：
+## GREEN
 
-```text
-Executed 31 tests, with 0 failures
-```
+命令：`swift test --package-path DictusCore --filter KeyboardRegressionTests`
 
-随后运行 focused source contract：
+结果：执行 4 项，0 failures。
 
-```text
-if rg -n 'model\\.engine\\.rawValue' DictusApp/Views/ModelCardView.swift; then exit 1; fi
-```
+命令：`xcodebuild build -project Dictus.xcodeproj -scheme sAiity-iOS -configuration Debug -destination 'platform=iOS Simulator,id=AC636497-5EC6-4AD4-BD83-E5E2458FA702' -derivedDataPath /tmp/saiity-dictus-task2-build CODE_SIGNING_ALLOWED=NO`
 
-结果为 RED：
+结果：`BUILD SUCCEEDED`。仅使用指定 SimSlim UDID；`simslim status` 为 170/170 managed daemons disabled，`simslim verify` 通过。
 
-```text
-FAIL: raw internal engine badge is still present
-67:                Text(model.engine.rawValue)
-```
+## 测试摘要
 
-## TDD GREEN
+- focused keyboard regression：4/4 passed。
+- Core full suite：1342 executed，10 skipped，27 failures（既有基线失败，非本次 focused regression）。
+- `git diff --check`：通过。
+- 未使用真实 iPhone、DeviceHub、iPhone Mirroring 或 TestFlight。
 
-移除 raw badge 后运行：
+## 改动
 
-```text
-if rg -n 'model\\.engine\\.rawValue' DictusApp/Views/ModelCardView.swift; then exit 1; else echo 'PASS: no raw internal engine badge in ModelCardView.swift'; fi
-swift test --package-path DictusCore --filter ModelInfoTests
-git diff --check
-```
+- emoji 插入后移除 `state.closeArea()`，保持 emoji 页。
+- 移除符号页父级 competing `simultaneousGesture`，普通 tap 由 Button 提交。
+- `@` frame 改为与 emoji frame 使用相同 `railSpacing` 垂直 gap；emoji 到 123 已使用该常量。
+- fallback 改为 `216 * 1.05`；保留原有非法输入和全屏输入高度的边界安全逻辑。
 
-关键输出：
+## Commit
 
-```text
-PASS: no raw internal engine badge in ModelCardView.swift
-Executed 31 tests, with 0 failures
-```
+`52c03f7f7e713259d2361a704e70ec0dd8c5d643`
 
-App 编译命令：
+## 风险 / concerns
 
-```text
-xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-```
-
-关键输出：
-
-```text
-** BUILD SUCCEEDED **
-```
-
-## 提交
-
-```text
-70c89072f4b561d034bb5ad9bfd55ff04aabf116 Complete model page and minimal settings
-```
-
-本次 task commit 只包含指定 View 中实际属于本次 task 的两个文件；其它 dirty 文件未暂存、未修改、未重置。
-
-## 未解决问题
-
-- `xcodebuild` 仍报告既有 warning：`AVAudioSession.recordPermission` 在 iOS 17.0 deprecated；不属于本 task，未扩大改动范围。
-- 工作区仍存在其它既有 dirty 文件，包括 `Dictus.xcodeproj/project.pbxproj`、keyboard/core 文件、`.superpowers/` 和 `PRODUCT.md`；均未纳入本次提交。
-- 未进行 physical iPhone 验证；本次仅完成 focused core tests、source contract 和 generic iOS Simulator app build。
-
-## Task 2 审查修复：兼容旧模型保留在 Installed
-
-### 问题
-
-`ModelManagerView` 从 `ModelInfo.redesignCatalog` 构建 Installed，导致 manager state 中已下载的 deprecated Tiny/Base 没有对应 row；Available 也额外按 redesign catalog ID 过滤，混淆了当前 runtime catalog 与兼容解析 catalog。
-
-### TDD RED
-
-在实现前运行 source contract：
-
-```text
-if rg -n 'ModelInfo\\.redesignCatalog\\.filter|catalogIDs|ModelInfo\\.redesignCatalog\\.first' DictusApp/Views/ModelManagerView.swift; then exit 1; fi
-```
-
-结果为 RED，命中 Installed、Available 和 prewarming 的 `redesignCatalog` 依赖。
-
-### 修复与 GREEN
-
-- Installed 改为从 `ModelInfo.allIncludingDeprecated` 按 `downloadedModels`/`modelStates[identifier] == .ready` 过滤，因此已安装的 deprecated Tiny/Base 保留在页面。
-- Available 直接使用 `ModelInfo.available(on: deviceCapabilities)`，只按实际 manager state 排除已安装项；不再通过 redesign catalog ID 二次裁剪或制造重复。
-- prewarming 查找也使用完整 catalog，保证兼容旧模型的活动状态可解析。
-- 增加 `testAvailableCatalogHasUniqueDownloadableDeviceCompatibleRows`，覆盖可用 catalog 的唯一标识、下载可见性和设备兼容性契约。
-
-验证命令及结果：
-
-```text
-swift test --package-path DictusCore --filter ModelInfoTests
-Executed 32 tests, with 0 failures
-
-xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-** BUILD SUCCEEDED **
-
-git diff --check
-无输出
-```
-
-### 范围与顾虑
-
-本次只修改 `ModelManagerView.swift`、`ModelInfoTests.swift` 和本报告；未恢复旧键盘/设置入口，未修改键盘文件。工作区中其他既有 dirty 文件未暂存、未重置。测试与 build 均未替代 physical iPhone 验证。
-
-## Task 2 re-review Important 修复：Installed identifier 去重
-
-### RED
-
-新增 focused regression test：`ModelInfoTests.testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata`。
-
-先运行：
-
-```text
-swift test --filter ModelInfoTests/testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata
-```
-
-结果为预期 RED：测试执行 1 项、3 failures；三个断言均因 `ModelManagerView` 尚未包含去重逻辑而失败，未发生编译错误。
-
-### GREEN
-
-在 `ModelManagerView.installedModels` 中反向遍历 `allIncludingDeprecated`，用 `Set` 按 identifier 保留一行，再反转恢复 catalog 顺序。由于 current 条目位于 deprecated 条目之后，重复 identifier 会选择 current metadata；只有 deprecated 条目时仍会保留。
-
-GREEN focused test：
-
-```text
-swift test --filter ModelInfoTests/testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata
-Executed 1 test, with 0 failures (0 unexpected)
-```
-
-覆盖测试：
-
-```text
-swift test --enable-code-coverage
-Executed 1032 tests, with 10 tests skipped and 0 failures (0 unexpected)
-Test Suite 'All tests' passed
-```
-
-相关 iOS Simulator App build：
-
-```text
-xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-** BUILD SUCCEEDED **
-```
-
-`git diff --check` 无输出。
-
-### 变更文件与提交
-
-- `DictusApp/Views/ModelManagerView.swift`
-- `DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift`
-- `.superpowers/sdd/task-2-report.md`
-
-实现提交：`be3b6fcacd467e0009251c2dccb895426d8dd40a`。
-
-### 顾虑
-
-- regression test 位于现有 core test target，以 source-contract 方式锁定 app View 的去重策略；没有新增测试 target 或抽象层。
-- 测试/build 输出包含既有 warning：未处理的 polish-harness README、Swift 6 Sendable/NSLock warning，以及脚本 build phase 每次运行提示；均未改变且与本修复无关。
-- 未恢复旧键盘/设置入口，未修改 keyboard 文件或 ModelInfo catalog；工作区其它 dirty 文件未暂存、未重置。未进行 physical iPhone 验证。
-
-## Task 2 re-review Important 修复：行为测试替代源码断言
-
-### RED
-
-将 `ModelInfoTests.testModelManagerInstalledRowsDeduplicateIdentifiersAndPreferCurrentMetadata` 改为实际构造重复 identifier 的 `ModelInfo` 数组，并断言去重数量、current metadata 优先和 deprecated-only 条目保留。实现尚未添加时运行：
-
-```text
-swift test --package-path DictusCore --filter ModelInfoTests/testInstalledModelsDeduplicateIdentifiersPreferCurrentMetadataAndKeepDeprecatedOnly
-error: type 'ModelInfo' has no member 'installedRows'
-```
-
-这是预期 RED，失败原因是待实现行为缺失，而不是测试运行时错误。
-
-### GREEN
-
-在 `ModelInfo` 增加纯函数 `installedRows(from:)`，按 identifier 去重、保留数组中最后出现的 metadata，并恢复原有顺序；`ModelManagerView.installedModels` 改为使用该函数后再按实际安装状态过滤。`allIncludingDeprecated` 未改变，旧入口/设置入口未恢复。
-
-Focused test：
-
-```text
-swift test --package-path DictusCore --filter ModelInfoTests/testInstalledModelsDeduplicateIdentifiersPreferCurrentMetadataAndKeepDeprecatedOnly
-Executed 1 test, with 0 failures (0 unexpected)
-```
-
-完整 DictusCore suite：
-
-```text
-swift test --package-path DictusCore --enable-code-coverage
-Executed 1032 tests, with 10 tests skipped and 0 failures (0 unexpected)
-Test Suite 'All tests' passed
-```
-
-相关 App build：
-
-```text
-xcodebuild -project Dictus.xcodeproj -scheme DictusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-** BUILD SUCCEEDED **
-```
-
-`git diff --check` 无输出。
-
-### 文件、提交与顾虑
-
-本轮修改文件为 `DictusCore/Sources/DictusCore/ModelInfo.swift`、`DictusApp/Views/ModelManagerView.swift`、`DictusCore/Tests/DictusCoreTests/ModelInfoTests.swift` 和本报告；提交 SHA：`30bc1f5`。其他 dirty 文件未暂存、未重置。
-
-顾虑：验证使用 Simulator/build 和 macOS DictusCore suite，未进行 physical iPhone 验证。测试与 build 保留既有 unhandled README、Swift 6 Sendable/NSLock warning，以及测试中的坏 JSON 诊断输出；均不影响退出码且与本次无关。
-
-## Task 2 追加记录
-
-状态：DONE_WITH_CONCERNS。
-
-RED：`swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests`。新增 mic UIKit hit target、触摸生命周期和 SwiftUI 去重契约按预期失败；同次运行还包含工作区既有几何/旧桥接断言失败。
-
-GREEN：`swift test --package-path DictusCore --filter 'VoiceOnlyKeyboardContractTests/testMicrophone'`，2 项通过；`git diff --check` 通过。
-
-构建：`xcodebuild -project Dictus.xcodeproj -scheme DictusKeyboard -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/saiity-dictus-task2-derivedData CODE_SIGNING_ALLOWED=NO build`，`BUILD SUCCEEDED`。未创建或启动 simulator，未使用实体手机。
-
-本 Task 改动：`DictusKeyboard/KeyboardRootView.swift`、`DictusKeyboard/KeyboardViewController.swift`、`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift`。UIKit mic 使用 `layout.dictateFrame`，touch down 启动，touch up inside/outside/cancel 停止；SwiftUI 仅渲染白色 capsule 和 `mic.fill`。
-
-Task 2 提交 SHA：`78000171cbbe277400c605f232b742a6b8700aec`。
-
-## Task 2 修复轮次：辅助页 Return 复用 appleControlSurface
-
-状态：DONE_WITH_CONCERNS。
-
-修复：`DictusKeyboard/KeyboardRootView.swift` 的辅助页 Return 静态视觉改为调用已有 `appleControlSurface(..., in: Circle())`，移除直接使用 `.regularMaterial` 的分支，因此沿用 `reduceTransparency` 与 increased contrast 语义。未修改 `KeyboardViewController.swift`；symbols content frame 与 `UIInputView` backdrop 留给任务 3。
-
-测试文件：`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift` 新增最小 source-contract，限定 `alternateAccessoryRow` 必须使用 `appleControlSurface` 圆形分支且不得直接包含 `regularMaterial`。
-
-### TDD RED
-
-```text
-swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests/testAuxiliaryReturnUsesSharedAppleControlSurfaceSemantics
-Executed 1 test, with 3 failures (0 unexpected)
-```
-
-失败为预期的三个契约断言失败：辅助行未使用 `appleControlSurface`、未声明 `Circle()`，且仍包含 `regularMaterial`。
-
-### TDD GREEN
-
-```text
-swift test --package-path DictusCore --filter VoiceOnlyKeyboardContractTests
-Executed 41 tests, with 0 failures (0 unexpected)
-```
-
-`git diff --check` 通过。测试输出保留既有 `DictusCore/Sources/polish-harness/README.md` unhandled warning；未创建或启动 simulator，未使用实体手机。
-
-### 文件、提交与疑点
-
-本轮提交文件：`DictusKeyboard/KeyboardRootView.swift`、`DictusCore/Tests/DictusCoreTests/VoiceOnlyKeyboardContractTests.swift` 和本报告。其他 dirty/untracked 未暂存、未修改、未重置。
-
-疑点：本轮仅验证 source contract 与 focused core test，未做运行时视觉验证；任务 3 仍负责 symbols content frame 和 `UIInputView` backdrop。
+- Core 全套仍有 27 个基线失败，本次未扩大范围处理。
+- Xcode 构建有既有 unhandled README、Sendable 等 warning；未发现本次改动导致的编译失败。
+- 本次完成了 SimSlim 构建与 profile 验证，但未进行额外 UI 截图自动化；运行时交互风险仍需后续人工复核。

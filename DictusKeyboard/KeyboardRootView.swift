@@ -89,7 +89,6 @@ struct KeyboardRootView: View {
                         return
                     }
                     controller.routeProxyText(emoji)
-                    state.closeArea()
                 },
                 onBackToVoice: { state.closeArea() },
                 availableWidth: availableWidth,
@@ -385,8 +384,6 @@ private struct LiquidSymbolPageView: View {
                 }
                 .frame(width: gridSize.width, height: gridSize.height)
                 .contentShape(Rectangle())
-                // Preserve child Button taps while retaining press/drag-release.
-                .simultaneousGesture(symbolDragGesture(frames: frames))
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .accessibilityElement(children: .contain)
