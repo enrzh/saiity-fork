@@ -3,8 +3,8 @@ import SwiftUI
 import AudioToolbox
 import DictusCore
 
-/// Category bookmarks for the emoji grid. The shared emoji / mic / space / delete /
-/// return bar lives below this row.
+/// Native-style category bookmarks. Highlight follows the currently visible
+/// section of the continuous horizontal emoji grid.
 struct EmojiCategoryBar: View {
     let sections: [CategoryInfo]
     let selectedCategoryID: String
@@ -22,6 +22,13 @@ struct EmojiCategoryBar: View {
                             Image(systemName: section.icon)
                                 .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
                                 .foregroundStyle(.primary)
+                                .frame(width: 36, height: 36)
+                                .background {
+                                    if isSelected {
+                                        Circle()
+                                            .fill(Color.primary.opacity(0.12))
+                                    }
+                                }
                                 .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
@@ -33,9 +40,7 @@ struct EmojiCategoryBar: View {
                 .padding(.horizontal, 2)
             }
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
-            .clipped()
         }
         .frame(height: 44)
-        .clipped()
     }
 }

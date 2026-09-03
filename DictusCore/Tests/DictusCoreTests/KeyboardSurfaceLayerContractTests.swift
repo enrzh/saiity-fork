@@ -66,8 +66,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
         XCTAssertFalse(emoji.contains("keyboardGlassEffect()"))
         XCTAssertFalse(categories.contains("glassEffect"))
-        XCTAssertTrue(emoji.contains("availableHeight - categoryBarHeight - bottomBarHeight"))
-        XCTAssertTrue(emoji.contains("alignment: .bottom"))
+        XCTAssertTrue(emoji.contains("availableHeight - headerHeight - bottomBarHeight - edgeInset * 2"))
+        XCTAssertTrue(emoji.contains("ScrollView(.horizontal"))
     }
 
     func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
@@ -115,7 +115,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(source.contains("Text(\"|\")"))
         XCTAssertTrue(source.contains("width: 44, height: 44"))
         XCTAssertTrue(source.contains("Return to voice keyboard"))
-        XCTAssertFalse(source.contains("glassEffect"))
+        XCTAssertTrue(source.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertTrue(source.contains("controlOrder"))
     }
 
     func testEmojiRecentsCategoryUsesNativeClockSymbol() throws {
@@ -128,8 +129,9 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testEmojiCategoryLaneHasAnExplicitBottomAlignedContainer() throws {
         let source = try read("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(source.contains(".frame(width: availableWidth, height: availableHeight, alignment: .bottom)"))
-        XCTAssertTrue(source.contains(".frame(width: availableWidth, height: categoryBarHeight, alignment: .bottom)"))
+        XCTAssertTrue(source.contains(".frame(width: availableWidth, height: availableHeight)"))
+        XCTAssertTrue(source.contains("EmojiCategoryBar("))
+        XCTAssertTrue(source.contains("let categoryBarHeight: CGFloat = 44"))
     }
 
     func testEmojiCategoriesAreMonochromeOrASCIIWithoutLegacySearch() throws {

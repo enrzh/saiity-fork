@@ -47,6 +47,27 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .numberFirst)
     }
 
+    func testAuxiliaryBottomBarConsumesTheSharedControlOrder() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let bar = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Views/AuxiliaryBottomBar.swift"),
+            encoding: .utf8
+        )
+        let root = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(bar.contains("var controlOrder: KeyboardAccessoryOrder"))
+        XCTAssertTrue(bar.contains("case .emojiFirst:"))
+        XCTAssertTrue(bar.contains("case .numberFirst:"))
+        XCTAssertTrue(root.contains("controlOrder: KeyboardAccessoryOrder.current"))
+    }
+
     func testOrderAwareLayoutKeepsBottomControlFramesDeterministic() {
         let emojiFirst = VoiceOnlyKeyboardPolicy.layout(
             for: 390,

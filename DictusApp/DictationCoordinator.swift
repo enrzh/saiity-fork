@@ -95,18 +95,26 @@ class DictationCoordinator: ObservableObject {
     /// start (#311). `.invalid` when none is held. Managed entirely from
     /// `ColdStartResolution.swift`, which is why it is not `private`.
     ///
-    /// WHY this is the only such assertion in the app: every other path either runs in
-    /// the foreground, or runs while the audio engine is already capturing and
-    /// `UIBackgroundModes: audio` grants the runtime. This one runs from the
-    /// `.background` scene transition, so the process is on its way to suspension, and
-    /// the runtime it needs is the runtime it is trying to earn -- the audio mode
-    /// grants nothing until `startRecording()` has succeeded, which is the far side of
-    /// the window. Without an assertion that window is covered only by iOS's default
+    /// WHY this exists: the cold-start path runs from the `.background` scene
+    /// transition, so the process is on its way to suspension, and the runtime it
+    /// needs is the runtime it is trying to earn -- the audio mode grants nothing
+    /// until `startRecording()` has succeeded, which is the far side of the window.
+    /// Without an assertion that window is covered only by iOS's default
     /// post-background grace, which is a behaviour and not a contract. A suspension
     /// inside it would leave the flag cleared, no engine started and nothing reported:
     /// the exact silence this whole change exists to make impossible, with a log line
     /// to prove we had thought about it.
     var coldStartAssertion: UIBackgroundTaskIdentifier = .invalid
+
+    /// Background execution assertion held across Whisper + polish after recording
+    /// stops. `.invalid` when none is held.
+    ///
+    /// Audio background mode keeps the process alive only while the engine is
+    /// capturing. `collectSamples()` ends capture, and without an assertion iOS
+    /// suspends Dictus as soon as the user is looking at another app's keyboard.
+    /// That is why dictation finishes on the in-app setup screen (foreground) and
+    /// sits on "Cleaning up..." everywhere else.
+    var transcriptionAssertion: UIBackgroundTaskIdentifier = .invalid
 
     /// Task that resolves when WhisperKit is fully loaded.
     /// WHY: Both init() pre-load and startDictation() call ensureEngineReady().
@@ -692,13 +700,20 @@ class DictationCoordinator: ObservableObject {
         // The recording is ending; the prewarm (if it hasn't fired) is moot.
         polishPrewarmTask?.cancel()
 
+        // Hold the process after capture ends so Whisper and polish can finish
+        // while the user is looking at another app's keyboard.
+        beginTranscriptionAssertion()
+
         // The session this run belongs to. Every write it makes below is gated on
         // still being that session (#267) -- see `mayReport`.
         let session = sessionGeneration.current
         let capturedLanguageRequest = currentLanguageRequest
 
         dictationTask = Task {
-            defer { self.isTranscribingInFlight = false }
+            defer {
+                self.isTranscribingInFlight = false
+                self.endTranscriptionAssertion(reason: "task-exit")
+            }
             do {
                 let samples = audioEngine.collectSamples()
 
@@ -1210,6 +1225,7 @@ class DictationCoordinator: ObservableObject {
         dictationTask = nil
         // Reset the transcribe re-entry flag so the next stop/cancel cycle can proceed.
         isTranscribingInFlight = false
+        endTranscriptionAssertion(reason: "cancelled")
         stopStageWatchdog()
 
         // Discard samples but keep engine alive for next recording
@@ -1236,6 +1252,49 @@ class DictationCoordinator: ObservableObject {
         if #available(iOS 14.0, *) {
             DictusLogger.app.info("Dictation cancelled by keyboard")
         }
+    }
+
+    // MARK: - Transcription background assertion
+
+    func beginTranscriptionAssertion() {
+        guard transcriptionAssertion == .invalid else { return }
+        transcriptionAssertion = UIApplication.shared.beginBackgroundTask(
+            withName: "dictus.transcription"
+        ) { [weak self] in
+            self?.handleTranscriptionAssertionExpiryFromAnyThread()
+        }
+    }
+
+    func endTranscriptionAssertion(reason: String) {
+        guard transcriptionAssertion != .invalid else { return }
+        PersistentLog.log(.diagnosticProbe(
+            component: "transcription", instanceID: "0",
+            action: "assertionEnded",
+            details: "reason=\(reason)"
+        ))
+        PersistentLog.flush()
+        UIApplication.shared.endBackgroundTask(transcriptionAssertion)
+        transcriptionAssertion = .invalid
+    }
+
+    nonisolated func handleTranscriptionAssertionExpiryFromAnyThread() {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { self.handleTranscriptionAssertionExpiry() }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated { self.handleTranscriptionAssertionExpiry() }
+            }
+        }
+    }
+
+    func handleTranscriptionAssertionExpiry() {
+        guard transcriptionAssertion != .invalid else { return }
+        PersistentLog.log(.diagnosticProbe(
+            component: "transcription", instanceID: "0",
+            action: "assertionExpired",
+            details: "status=\(status.rawValue)"
+        ))
+        endTranscriptionAssertion(reason: "expired")
     }
 
     /// Reset status to idle (e.g., after user returns to keyboard).

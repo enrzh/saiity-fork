@@ -61,7 +61,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let data = try source("DictusKeyboard/Models/EmojiData.swift")
 
         XCTAssertTrue(picker.contains("let onBackToVoice: () -> Void"))
-        XCTAssertTrue(picker.contains("onVoice: onBackToVoice"))
+        XCTAssertTrue(picker.contains("action: onBackToVoice"))
         XCTAssertFalse(categories.contains("let onBackToVoice: () -> Void"))
         XCTAssertTrue(categories.contains("Image(systemName: section.icon)"))
         XCTAssertFalse(categories.contains("representativeEmoji"))
@@ -90,7 +90,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(symbolsLayout.contains("public static let numbers: [[Key]"))
         XCTAssertTrue(symbolsLayout.contains("public static let symbols: [[Key]"))
         XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
-        XCTAssertTrue(root.contains("onSpace: { routeProxyCommand(.space) }"))
+        XCTAssertTrue(root.contains("onSpace: { onInsert(\" \") }"))
         XCTAssertTrue(symbolsLayout.contains("bottomRow()"))
         XCTAssertFalse(symbolsLayout.contains("bottomRow(toggle:"))
         XCTAssertTrue(root.contains("onInsert: { text in routeProxyText(text) }"))
@@ -116,7 +116,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testEmojiMotionDisablesScaleFeedbackWhenReduceMotionIsEnabled() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(picker.contains(".scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == itemIndex ? 1.08 : 1)"))
+        XCTAssertTrue(picker.contains(".scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == index ? 1.08 : 1)"))
         XCTAssertTrue(picker.contains(".animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)"))
     }
 
@@ -181,8 +181,11 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
-        XCTAssertTrue(picker.contains(".frame(width: availableWidth, height: categoryBarHeight, alignment: .bottom)"))
-        XCTAssertTrue(picker.contains("AuxiliaryBottomBar("))
+        XCTAssertTrue(picker.contains("EmojiCategoryBar("))
+        XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
+        XCTAssertTrue(picker.contains("systemName: \"delete.backward\""))
+        XCTAssertFalse(picker.contains("AuxiliaryBottomBar("),
+                      "the emoji page keeps only microphone, categories, and delete")
         XCTAssertTrue(categories.contains(".frame(width: 44, height: 44)"))
     }
 

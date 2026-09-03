@@ -531,8 +531,14 @@ class KeyboardState: ObservableObject {
                 // Darwin notifications may not arrive. But the audio thread keeps
                 // writing a heartbeat directly to App Group. If the heartbeat is
                 // fresh, the app IS still recording — don't kill the overlay.
+                //
+                // Only recording gets this extension. After capture ends the engine
+                // can keep a warm-idle heartbeat while the main-actor transcribe
+                // task is frozen in the background, which would otherwise reset
+                // this timer forever and leave "Cleaning up..." on screen.
                 let heartbeat = self.defaults.double(forKey: SharedKeys.recordingHeartbeat)
-                if heartbeat > 0, Date().timeIntervalSince1970 - heartbeat < threshold {
+                if self.dictationStatus == .recording,
+                   heartbeat > 0, Date().timeIntervalSince1970 - heartbeat < threshold {
                     self.lastWaveformUpdate = Date()
                     return
                 }

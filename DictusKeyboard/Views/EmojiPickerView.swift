@@ -10,15 +10,13 @@ struct CategoryInfo: Identifiable {
     let icon: String
 }
 
-/// Full emoji picker matching Apple/SuperWhisper style:
-/// - Single category-focused vertical grid
-/// - Category bar at bottom as bookmarks into the grid
+/// Full emoji picker matching the native iOS keyboard:
+/// - One continuous horizontal grid (recents, then every category in order)
+/// - Bottom bar: microphone, category bookmarks, delete
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
     let onBackToVoice: () -> Void
-    let onSpace: () -> Void
     let onDelete: () -> Void
-    let onReturn: () -> Void
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
     /// SwiftUI content the full screen width due to safe area or layout margins.
@@ -30,31 +28,29 @@ struct EmojiPickerView: View {
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
     @State private var pressedEmojiIndex: Int?
-    @State private var emojiDragAxis: DragAxis?
     @State private var emojiCommitLocked = false
     @State private var variantSession: KeyVariantSession?
-    @State private var emojiFrames: [String: CGRect] = [:]
+    @State private var programmaticScroll = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let categories = EmojiStore.categories
 
-    // Grid sizing constants
     private let headerHeight: CGFloat = 0
     private let categoryBarHeight: CGFloat = 44
     private let bottomBarHeight: CGFloat = 44
     private let rowSpacing: CGFloat = 1
     private let gridHorizontalPadding: CGFloat = 2
     private let minimumEmojiTargetWidth: CGFloat = 44
+    private let edgeInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
 
     /// Keep every grid column wide enough for the Button's hit target.
-    /// The same computed count drives layout, highlighting, and hit testing.
     private var emojiColumnCount: Int {
         max(1, Int((availableWidth - gridHorizontalPadding * 2) / minimumEmojiTargetWidth))
     }
 
-    /// Number of complete rows that fit above the category bar.
+    /// Number of complete rows that fit above the bottom bar.
     private var rowCount: Int {
-        let gridSpace = availableHeight - headerHeight - categoryBarHeight - bottomBarHeight
+        let gridSpace = availableHeight - headerHeight - bottomBarHeight - edgeInset * 2
         let rowWithSpacing: CGFloat = rowHeight + rowSpacing
         return max(1, Int(gridSpace / rowWithSpacing))
     }
@@ -66,11 +62,6 @@ struct EmojiPickerView: View {
         Array(repeating: GridItem(.fixed(rowHeight), spacing: rowSpacing), count: rowCount)
     }
 
-    /// Columns for the vertical grid, sized from the actual keyboard width.
-    private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.fixed(emojiCellWidth), spacing: 0), count: emojiColumnCount)
-    }
-
     /// Dynamic cell width based on the shared computed column count.
     private var emojiCellWidth: CGFloat {
         max(0, availableWidth - gridHorizontalPadding * 2) / CGFloat(emojiColumnCount)
@@ -78,22 +69,29 @@ struct EmojiPickerView: View {
 
     // MARK: - Computed data
 
-    /// Returns only the emojis for the currently selected category.
-    /// WHY category pagination: The previous flat grid rendered ALL ~1800 emojis at once,
-    /// causing CoreText to cache every glyph (~65KB each) = 139 MiB. By showing only one
-    /// category at a time (max ~230 emojis), peak memory stays under ~15 MiB.
-    private var currentCategoryEmojis: [EmojiGridItem] {
-        if selectedCategoryID == "recents" {
-            return recentEmojis.enumerated().map { i, emoji in
+    /// Recents, then every category, concatenated so scrolling past one section
+    /// continues into the next — the native iOS emoji keyboard layout.
+    private var allGridItems: [EmojiGridItem] {
+        var items: [EmojiGridItem] = []
+        if !recentEmojis.isEmpty {
+            items.append(contentsOf: recentEmojis.enumerated().map { i, emoji in
                 EmojiGridItem(id: "recents_\(i)", emoji: emoji, categoryID: "recents")
-            }
+            })
         }
-        guard let cat = categories.first(where: { $0.id == selectedCategoryID }) else {
-            return []
+        for cat in categories {
+            items.append(contentsOf: cat.emojis.enumerated().map { i, emoji in
+                EmojiGridItem(id: "\(cat.id)_\(i)", emoji: emoji, categoryID: cat.id)
+            })
         }
-        return cat.emojis.enumerated().map { i, emoji in
-            EmojiGridItem(id: "\(cat.id)_\(i)", emoji: emoji, categoryID: cat.id)
+        return items
+    }
+
+    private var categoryAnchorIDs: [String: String] {
+        var anchors: [String: String] = [:]
+        for item in allGridItems where anchors[item.categoryID] == nil {
+            anchors[item.categoryID] = item.id
         }
+        return anchors
     }
 
     private var sectionInfos: [CategoryInfo] {
@@ -112,7 +110,10 @@ struct EmojiPickerView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                normalMode
+                Color.clear.frame(height: edgeInset)
+                horizontalGrid
+                emojiBottomBar
+                Color.clear.frame(height: edgeInset)
             }
             if let session = variantSession {
                 emojiVariantOverlay(session)
@@ -120,7 +121,7 @@ struct EmojiPickerView: View {
         }
         .frame(width: availableWidth, height: availableHeight)
         .coordinateSpace(name: "emojiPicker")
-        .clipped()
+        .onPreferenceChange(NamedFramePreference.self) { NamedFramePreference.latest.merge($0, uniquingKeysWith: { $1 }) }
         .onAppear {
             recentEmojis = RecentEmojis.load()
             if !recentEmojis.isEmpty {
@@ -129,127 +130,140 @@ struct EmojiPickerView: View {
         }
     }
 
-    // MARK: - Normal mode
+    // MARK: - Horizontal grid
 
     @ViewBuilder
-    private var normalMode: some View {
-        let gridHeight = max(0, availableHeight - categoryBarHeight - bottomBarHeight)
+    private var horizontalGrid: some View {
+        let items = allGridItems
+        let gridHeight = max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2)
 
-        VStack(spacing: 0) {
-            // Vertical emoji grid — fills width first, scrolls down for more.
-            // .id(selectedCategoryID) forces SwiftUI to destroy and recreate the grid when
-            // the user switches categories, which releases the old Text views and their
-            // CoreText glyph caches -- this is the key to keeping memory under 50 MiB.
-            ScrollView(.vertical, showsIndicators: false) {
-                ZStack(alignment: .topLeading) {
-                    LazyVGrid(columns: gridColumns, spacing: rowSpacing) {
-                        ForEach(currentCategoryEmojis) { item in
-                            let itemIndex = currentCategoryEmojis.firstIndex(where: { $0.id == item.id }) ?? 0
-                            Button { commitEmojiFromTap(item.emoji) } label: {
-                                ZStack {
-                                    if pressedEmojiIndex == itemIndex {
-                                        RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                            .fill(Color.primary.opacity(0.12))
-                                            .overlay {
-                                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-                                            }
-                                            .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
-                                            .allowsHitTesting(false)
-                                    }
-                                    Text(item.emoji)
-                                        .font(.system(size: 32))
-                                        .frame(width: emojiCellWidth, height: rowHeight)
-                                        .scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == itemIndex ? 1.08 : 1)
-                                        .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)
-                                }
-                                .frame(minWidth: 44, minHeight: 44)
-                                .frame(width: emojiCellWidth, height: rowHeight)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: NamedFramePreference.self,
-                                        value: [item.id: geo.frame(in: .named("emojiPicker"))]
-                                    )
-                                }
-                            )
-                            .modifier(OptionalEmojiLongPress(
-                                enabled: EmojiSkinToneVariants.options(for: item.emoji).count > 1
-                            ) {
-                                presentEmojiVariants(item)
-                            })
-                            .frame(minWidth: 44, minHeight: 44)
-                            .accessibilityLabel(item.emoji)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHGrid(rows: gridRows, spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        emojiCell(item, index: index)
                             .id(item.id)
-                        }
                     }
+                }
+                .padding(.horizontal, gridHorizontalPadding)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: EmojiScrollOffsetKey.self,
+                            value: geo.frame(in: .named("emojiViewport")).minX
+                        )
+                    }
+                )
             }
-            .padding(.horizontal, gridHorizontalPadding)
-            .id(selectedCategoryID)
-            .contentShape(Rectangle())
-            // Keep this simultaneous with the vertical ScrollView. The axis gate
-            // makes only horizontal intent eligible for drag selection.
-            .onPreferenceChange(NamedFramePreference.self) { emojiFrames.merge($0, uniquingKeysWith: { $1 }) }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .local)
-                    .onChanged { value in
-                        guard variantSession == nil else { return }
-                        if emojiDragAxis == nil {
-                            emojiDragAxis = abs(value.translation.width) >= abs(value.translation.height) ? .horizontal : .vertical
-                        }
-                        guard emojiDragAxis == .horizontal else { return }
-                        pressedEmojiIndex = emojiIndex(at: value.location)
-                    }
-                    .onEnded { value in
-                        let shouldCommit = emojiDragAxis == .horizontal && !emojiCommitLocked && variantSession == nil
-                        emojiCommitLocked = true
-                        defer {
-                            emojiDragAxis = nil
-                            pressedEmojiIndex = nil
-                            resetEmojiGestureLock()
-                        }
-                        guard shouldCommit else { return }
-                        guard let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) else {
-                            return
-                        }
-                        emojiCommitLocked = true
-                        insertEmoji(currentCategoryEmojis[index].emoji)
-                    }
-            )
-            }
+            .coordinateSpace(name: "emojiViewport")
             .frame(width: availableWidth, height: gridHeight, alignment: .top)
             .clipped()
+            .onPreferenceChange(EmojiScrollOffsetKey.self) { minX in
+                updateSelectedCategory(contentMinX: minX, items: items)
+            }
+            .onChange(of: selectedCategoryID) { _, id in
+                guard programmaticScroll, let anchor = categoryAnchorIDs[id] else { return }
+                proxy.scrollTo(anchor, anchor: .leading)
+                DispatchQueue.main.async {
+                    programmaticScroll = false
+                }
+            }
+        }
+    }
 
+    private func emojiCell(_ item: EmojiGridItem, index: Int) -> some View {
+        let variants = EmojiSkinToneVariants.options(for: item.emoji)
+        return Button { commitEmojiFromTap(item.emoji) } label: {
+            ZStack {
+                if pressedEmojiIndex == index {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.primary.opacity(0.12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                        }
+                        .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
+                        .allowsHitTesting(false)
+                }
+                Text(item.emoji)
+                    .font(.system(size: 32))
+                    .frame(width: emojiCellWidth, height: rowHeight)
+                    .scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == index ? 1.08 : 1)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .frame(width: emojiCellWidth, height: rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: NamedFramePreference.self,
+                    value: [item.id: geo.frame(in: .named("emojiPicker"))]
+                )
+            }
+        )
+        .modifier(OptionalEmojiLongPress(
+            enabled: variants.count > 1,
+            onChanged: { location in
+                handleEmojiLongPressChanged(item: item, location: location)
+            },
+            onEnded: {
+                commitEmojiVariantSession()
+            }
+        ))
+        .frame(minWidth: 44, minHeight: 44)
+        .accessibilityLabel(item.emoji)
+    }
+
+    private var emojiBottomBar: some View {
+        HStack(spacing: 6) {
+            glassRoundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onBackToVoice)
             EmojiCategoryBar(
                 sections: sectionInfos,
                 selectedCategoryID: selectedCategoryID,
                 onSelectCategory: { id in
+                    programmaticScroll = true
                     selectedCategoryID = id
                 }
             )
-            .frame(width: availableWidth, height: categoryBarHeight, alignment: .bottom)
-
-            AuxiliaryBottomBar(
-                onEmoji: {},
-                onVoice: onBackToVoice,
-                onSpace: onSpace,
-                onDelete: onDelete,
-                onReturn: onReturn
-            )
-            .frame(width: availableWidth, height: bottomBarHeight)
+            glassDeleteControl
         }
-        .frame(width: availableWidth, height: availableHeight, alignment: .bottom)
+        .padding(.horizontal, CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding))
+        .frame(width: availableWidth, height: max(bottomBarHeight, categoryBarHeight))
     }
 
-    private func emojiIndex(at point: CGPoint) -> Int? {
-        let column = Int((point.x - gridHorizontalPadding) / emojiCellWidth)
-        let row = Int(point.y / (rowHeight + rowSpacing))
-        guard column >= 0, column < emojiColumnCount, row >= 0 else { return nil }
-        let index = row * emojiColumnCount + column
-        return currentCategoryEmojis.indices.contains(index) ? index : nil
+    private func glassRoundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(
+                    width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                    height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+                )
+                .keyboardGlass(in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private var glassDeleteControl: some View {
+        DeleteRepeatButton(onDelete: onDelete)
+    }
+
+    private func updateSelectedCategory(contentMinX: CGFloat, items: [EmojiGridItem]) {
+        guard !programmaticScroll, !items.isEmpty, emojiCellWidth > 0 else { return }
+        let scrolled = max(0, -contentMinX - gridHorizontalPadding)
+        let column = Int(scrolled / emojiCellWidth)
+        let index = min(items.count - 1, max(0, column * rowCount))
+        let category = items[index].categoryID
+        if selectedCategoryID != category {
+            selectedCategoryID = category
+        }
     }
 
     private func insertEmoji(_ emoji: String) {
@@ -266,47 +280,48 @@ struct EmojiPickerView: View {
         resetEmojiGestureLock()
     }
 
-    private func presentEmojiVariants(_ item: EmojiGridItem) {
+    private func handleEmojiLongPressChanged(item: EmojiGridItem, location: CGPoint) {
         let options = EmojiSkinToneVariants.options(for: item.emoji)
-        guard options.count > 1, let source = emojiFrames[item.id] else { return }
-        emojiCommitLocked = true
-        HapticFeedback.keyTapped()
-        let popupFrame = KeyVariantPopup.frame(
-            for: source,
-            optionCount: options.count,
-            isEmoji: true,
-            in: CGSize(width: availableWidth, height: availableHeight)
+        guard options.count > 1 else { return }
+        if variantSession == nil {
+            emojiCommitLocked = true
+            HapticFeedback.keyTapped()
+            let source = NamedFramePreference.latest[item.id] ?? CGRect(
+                x: location.x - emojiCellWidth / 2,
+                y: location.y - rowHeight / 2,
+                width: emojiCellWidth,
+                height: rowHeight
+            )
+            let popupFrame = KeyVariantPopup.frame(
+                for: source,
+                optionCount: options.count,
+                isEmoji: true,
+                in: CGSize(width: availableWidth, height: availableHeight)
+            )
+            variantSession = KeyVariantSession(
+                options: options,
+                sourceFrame: source,
+                popupFrame: popupFrame,
+                isEmoji: true,
+                selectedIndex: 0
+            )
+            return
+        }
+        guard var session = variantSession else { return }
+        let index = KeyVariantPopup.selectedIndex(
+            at: location,
+            popupFrame: session.popupFrame,
+            optionCount: session.options.count
         )
-        variantSession = KeyVariantSession(
-            options: options,
-            sourceFrame: source,
-            popupFrame: popupFrame,
-            isEmoji: true,
-            selectedIndex: 0
-        )
+        if session.selectedIndex != index {
+            session.selectedIndex = index
+            variantSession = session
+            HapticFeedback.keyTapped()
+        }
     }
 
     @ViewBuilder
     private func emojiVariantOverlay(_ session: KeyVariantSession) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let index = KeyVariantPopup.selectedIndex(
-                            at: value.location,
-                            popupFrame: session.popupFrame,
-                            optionCount: session.options.count
-                        )
-                        if variantSession?.selectedIndex != index {
-                            variantSession?.selectedIndex = index
-                            HapticFeedback.keyTapped()
-                        }
-                    }
-                    .onEnded { _ in
-                        commitEmojiVariantSession()
-                    }
-            )
         KeyVariantPopup(
             options: session.options,
             selectedIndex: session.selectedIndex,
@@ -334,12 +349,6 @@ struct EmojiPickerView: View {
             emojiCommitLocked = false
         }
     }
-
-    private enum DragAxis {
-        case horizontal
-        case vertical
-    }
-
 }
 
 // MARK: - Supporting types
@@ -350,15 +359,91 @@ private struct EmojiGridItem: Identifiable {
     let categoryID: String
 }
 
+private struct EmojiScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private struct OptionalEmojiLongPress: ViewModifier {
     let enabled: Bool
-    let action: () -> Void
+    let onChanged: (CGPoint) -> Void
+    let onEnded: () -> Void
 
     func body(content: Content) -> some View {
         if enabled {
-            content.onLongPressGesture(minimumDuration: 0.4, perform: action)
+            content.highPriorityGesture(
+                LongPressGesture(minimumDuration: 0.4)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("emojiPicker")))
+                    .onChanged { value in
+                        if case .second(true, let drag?) = value {
+                            onChanged(drag.location)
+                        }
+                    }
+                    .onEnded { _ in
+                        onEnded()
+                    }
+            )
         } else {
             content
         }
     }
+}
+
+private struct DeleteRepeatButton: View {
+    let onDelete: () -> Void
+    @State private var deleteRepeatTimer: Timer?
+    @State private var deleteRepeatStarted = false
+
+    var body: some View {
+        Button {
+            if deleteRepeatStarted {
+                deleteRepeatStarted = false
+                return
+            }
+            onDelete()
+        } label: {
+            Image(systemName: "delete.backward")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(
+                    width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                    height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+                )
+                .keyboardGlass(in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Delete backward")
+        .onLongPressGesture(minimumDuration: 0.35, pressing: { pressing in
+            if pressing {
+                startDeleteRepeat()
+            } else {
+                stopDeleteRepeat()
+            }
+        }, perform: {})
+        .onDisappear { stopDeleteRepeat() }
+    }
+
+    private func startDeleteRepeat() {
+        stopDeleteRepeat()
+        deleteRepeatStarted = true
+        onDelete()
+        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
+            onDelete()
+        }
+        deleteRepeatTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopDeleteRepeat() {
+        deleteRepeatTimer?.invalidate()
+        deleteRepeatTimer = nil
+    }
+}
+
+extension NamedFramePreference {
+    static var latest: [String: CGRect] = [:]
 }

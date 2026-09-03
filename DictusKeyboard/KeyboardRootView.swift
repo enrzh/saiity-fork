@@ -89,9 +89,7 @@ struct KeyboardRootView: View {
                     routeText(emoji)
                 },
                 onBackToVoice: { state.closeArea() },
-                onSpace: { routeProxyCommand(.space) },
                 onDelete: { routeProxyCommand(.delete) },
-                onReturn: { routeProxyCommand(.returnKey) },
                 availableWidth: availableWidth,
                 availableHeight: surfaceFrame.height
             )
@@ -248,14 +246,16 @@ struct KeyboardRootView: View {
     }
 
     private func spaceBar(frame: CGRect) -> some View {
-        Text("space")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.primary)
-            .frame(width: frame.width, height: frame.height)
-            .background(Capsule().fill(Color.primary.opacity(0.08)))
-            .clipShape(Capsule())
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        appleControlSurface(
+            Text("space")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: frame.width, height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
+            in: Capsule()
+        )
+        .frame(width: frame.width, height: frame.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var dictationTitle: String {
@@ -389,6 +389,7 @@ private struct LiquidSymbolPageView: View {
     private let rowSpacing: CGFloat = 6
     private let keySpacing: CGFloat = 5
     private let bottomBarHeight: CGFloat = 44
+    private let edgeInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
     // Match the spacing around the shared inset surface so symbol keys and
     // auxiliary controls land on the same visual grid as the voice page.
     private let horizontalInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
@@ -400,6 +401,7 @@ private struct LiquidSymbolPageView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Color.clear.frame(height: edgeInset)
             GeometryReader { proxy in
                 let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)
                 let frames = positionedKeys(in: gridSize)
@@ -420,10 +422,12 @@ private struct LiquidSymbolPageView: View {
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .coordinateSpace(name: "symbolPage")
                 .simultaneousGesture(symbolPointerGesture(frames: frames))
                 .accessibilityElement(children: .contain)
             }
             AuxiliaryBottomBar(
+                controlOrder: KeyboardAccessoryOrder.current,
                 onEmoji: onEmoji,
                 onVoice: onBackToVoice,
                 onSpace: { onInsert(" ") },
@@ -431,9 +435,9 @@ private struct LiquidSymbolPageView: View {
                 onReturn: onReturn
             )
             .frame(width: availableWidth, height: bottomBarHeight)
+            Color.clear.frame(height: edgeInset)
         }
         .frame(width: availableWidth, height: availableHeight)
-        .clipped()
         .onChange(of: page) { _, _ in
             activeKeyID = nil
             variantSession = nil
@@ -500,9 +504,10 @@ private struct LiquidSymbolPageView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(key.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
-            .modifier(OptionalLongPressModifier(enabled: variants.count > 1) {
-                presentVariants(variants, source: frame, in: bounds, isEmoji: false)
-            })
+            .modifier(OptionalLongPressModifier(
+                enabled: variants.count > 1,
+                gesture: symbolVariantGesture(variants: variants, source: frame, bounds: bounds)
+            ))
         }
     }
 
@@ -511,47 +516,8 @@ private struct LiquidSymbolPageView: View {
         return SymbolKeyVariants.options(for: value)
     }
 
-    private func presentVariants(_ options: [String], source: CGRect, in bounds: CGSize, isEmoji: Bool) {
-        guard options.count > 1 else { return }
-        symbolCommitLocked = true
-        HapticFeedback.keyTapped()
-        let popupFrame = KeyVariantPopup.frame(
-            for: source,
-            optionCount: options.count,
-            isEmoji: isEmoji,
-            in: bounds
-        )
-        variantSession = KeyVariantSession(
-            options: options,
-            sourceFrame: source,
-            popupFrame: popupFrame,
-            isEmoji: isEmoji,
-            selectedIndex: 0
-        )
-    }
-
     @ViewBuilder
-    private func variantOverlay(_ session: KeyVariantSession, in bounds: CGSize) -> some View {
-        Color.clear
-            .frame(width: bounds.width, height: bounds.height)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let index = KeyVariantPopup.selectedIndex(
-                            at: value.location,
-                            popupFrame: session.popupFrame,
-                            optionCount: session.options.count
-                        )
-                        if variantSession?.selectedIndex != index {
-                            variantSession?.selectedIndex = index
-                            HapticFeedback.keyTapped()
-                        }
-                    }
-                    .onEnded { _ in
-                        commitVariantSession()
-                    }
-            )
+    private func variantOverlay(_ session: KeyVariantSession, in _: CGSize) -> some View {
         KeyVariantPopup(
             options: session.options,
             selectedIndex: session.selectedIndex,
@@ -560,6 +526,51 @@ private struct LiquidSymbolPageView: View {
         .frame(width: session.popupFrame.width, height: session.popupFrame.height)
         .position(x: session.popupFrame.midX, y: session.popupFrame.midY)
         .allowsHitTesting(false)
+    }
+
+    private func symbolVariantGesture(variants: [String], source: CGRect, bounds: CGSize) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.4)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("symbolPage")))
+            .onChanged { value in
+                guard case .second(true, let drag?) = value else { return }
+                var session = variantSession
+                if session == nil {
+                    session = makeVariantSession(variants, source: source, in: bounds)
+                    variantSession = session
+                    symbolCommitLocked = true
+                }
+                guard var session else { return }
+                let index = KeyVariantPopup.selectedIndex(
+                    at: drag.location,
+                    popupFrame: session.popupFrame,
+                    optionCount: session.options.count
+                )
+                if session.selectedIndex != index {
+                    session.selectedIndex = index
+                    variantSession = session
+                    HapticFeedback.keyTapped()
+                }
+            }
+            .onEnded { _ in
+                commitVariantSession()
+            }
+    }
+
+    private func makeVariantSession(_ options: [String], source: CGRect, in bounds: CGSize) -> KeyVariantSession {
+        HapticFeedback.keyTapped()
+        let popupFrame = KeyVariantPopup.frame(
+            for: source,
+            optionCount: options.count,
+            isEmoji: false,
+            in: bounds
+        )
+        return KeyVariantSession(
+            options: options,
+            sourceFrame: source,
+            popupFrame: popupFrame,
+            isEmoji: false,
+            selectedIndex: 0
+        )
     }
 
     private func commitVariantSession() {
@@ -577,6 +588,7 @@ private struct LiquidSymbolPageView: View {
     private func symbolPointerGesture(frames: [PositionedLiquidSymbolKey]) -> some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .local)
             .onChanged { value in
+                guard variantSession == nil else { return }
                 if symbolDragAxis == nil {
                     symbolDragAxis = abs(value.translation.width) >= abs(value.translation.height)
                         ? .horizontal : .vertical
@@ -704,13 +716,18 @@ private struct PositionedLiquidSymbolKey: Identifiable {
     var id: String { key.id }
 }
 
-private struct OptionalLongPressModifier: ViewModifier {
+private struct OptionalLongPressModifier<G: Gesture>: ViewModifier {
     let enabled: Bool
-    let action: () -> Void
+    let gesture: G
+
+    init(enabled: Bool, gesture: G) {
+        self.enabled = enabled
+        self.gesture = gesture
+    }
 
     func body(content: Content) -> some View {
         if enabled {
-            content.onLongPressGesture(minimumDuration: 0.4, perform: action)
+            content.highPriorityGesture(gesture)
         } else {
             content
         }

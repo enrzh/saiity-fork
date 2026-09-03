@@ -231,13 +231,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testEmojiGridUsesOnePointerHighlightInsteadOfPerCellGlass() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
-        let gridStart = try XCTUnwrap(picker.range(of: "LazyVGrid(columns: gridColumns"))
+        let gridStart = try XCTUnwrap(picker.range(of: "LazyHGrid(rows: gridRows"))
         let categoryStart = try XCTUnwrap(picker.range(of: "EmojiCategoryBar("))
         let gridBody = String(picker[gridStart.lowerBound..<categoryStart.lowerBound])
 
         XCTAssertFalse(gridBody.contains(".keyboardGlassEffect()"),
                        "emoji cells must not own individual glass containers")
-        XCTAssertTrue(picker.contains("pressedEmojiIndex == itemIndex"),
+        XCTAssertTrue(picker.contains("pressedEmojiIndex == index"),
                       "the picker must render a touch highlight behind the active emoji")
         XCTAssertTrue(picker.contains("pressedEmojiIndex"),
                       "the shared highlight must follow the active emoji target")
@@ -260,39 +260,22 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "narrow widths must still produce a valid positive column count")
         XCTAssertTrue(picker.contains("private let gridHorizontalPadding: CGFloat = 2"),
                       "grid geometry must define one shared horizontal padding")
-        XCTAssertTrue(picker.contains("count: emojiColumnCount"),
-                      "the LazyVGrid columns must use the shared column count")
         XCTAssertTrue(picker.contains("availableWidth - gridHorizontalPadding * 2"),
                       "cell width must use the shared horizontal padding")
         XCTAssertTrue(picker.contains("frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)"),
                       "the highlight must be centered in the emoji cell")
-        XCTAssertTrue(picker.contains("(point.x - gridHorizontalPadding)"),
-                      "pointer mapping must use the shared horizontal padding")
-        XCTAssertTrue(picker.contains("column < emojiColumnCount"),
-                      "pointer mapping must use the shared column count")
-
-        let gesture = try XCTUnwrap(picker.range(of: ".simultaneousGesture("))
-        let gestureBody = String(picker[gesture.lowerBound...])
-        XCTAssertTrue(gestureBody.contains("DragGesture(minimumDistance: 8"),
-                      "emoji drag selection must leave ordinary taps to Buttons")
-        XCTAssertTrue(gestureBody.contains(".simultaneousGesture("),
-                      "emoji drag selection must coexist with the vertical ScrollView")
-        XCTAssertTrue(gestureBody.contains("emojiDragAxis == .horizontal"),
-                      "emoji drag selection must require horizontal intent")
-        XCTAssertTrue(gestureBody.contains("!emojiCommitLocked"),
-                      "emoji tap and drag must share a one-time commit lock")
-        XCTAssertTrue(gestureBody.contains("resetEmojiGestureLock()"),
+        XCTAssertTrue(picker.contains("ScrollView(.horizontal"),
+                      "emoji scrolling is horizontal like the native keyboard")
+        XCTAssertTrue(picker.contains("LazyHGrid(rows: gridRows"),
+                      "all categories share one continuous horizontal grid")
+        XCTAssertTrue(picker.contains("updateSelectedCategory"),
+                      "scrolling must highlight the currently visible category")
+        XCTAssertTrue(picker.contains("OptionalEmojiLongPress"),
+                      "skin-tone extras use a sequenced long-press, not a competing grid drag")
+        XCTAssertFalse(picker.contains("emojiDragAxis"),
+                       "horizontal scrolling owns drag; there is no second drag-select axis")
+        XCTAssertTrue(picker.contains("resetEmojiGestureLock()"),
                       "emoji commit lock must reset after the gesture lifecycle")
-        XCTAssertTrue(gestureBody.contains(".onChanged { value in"),
-                      "pointer tracking must update during onChanged")
-        XCTAssertTrue(gestureBody.contains(".onEnded { value in"),
-                      "pointer tracking must handle release in onEnded")
-        XCTAssertTrue(gestureBody.contains("guard let index = emojiIndex(at: value.location), currentCategoryEmojis.indices.contains(index) else"),
-                      "release must have one legal insertion guard")
-        XCTAssertEqual(gestureBody.components(separatedBy: "insertEmoji(currentCategoryEmojis[index].emoji)").count - 1, 1,
-                       "release must insert at most once")
-        XCTAssertTrue(gestureBody.contains("pressedEmojiIndex = nil"),
-                      "release must clear the pressed state")
     }
 
     func testEmojiSearchHasNoReachableUI() throws {
@@ -557,15 +540,19 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testEmojiGridReservesTheCategoryBarLaneExplicitly() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
-        let normalModeStart = try XCTUnwrap(picker.range(of: "private var normalMode"))
-        let normalMode = picker[normalModeStart.lowerBound...]
 
-        XCTAssertTrue(picker.contains("let gridHeight = max(0, availableHeight - categoryBarHeight - bottomBarHeight)"),
-                      "emoji content must leave a real lane for the category bar and shared bottom bar")
+        XCTAssertTrue(picker.contains("let gridHeight = max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2)"),
+                      "emoji content must leave a real lane for the native bottom bar")
         XCTAssertTrue(picker.contains(".frame(width: availableWidth, height: gridHeight, alignment: .top)"),
-                      "emoji scrolling must stop above the category bar")
-        XCTAssertTrue(normalMode.contains("\n            }\n            .padding(.horizontal, gridHorizontalPadding)"),
-                      "normal mode must close the grid container before applying the outer padding")
+                      "emoji scrolling must stop above the bottom bar")
+        XCTAssertTrue(picker.contains("ScrollView(.horizontal, showsIndicators: false)"),
+                      "emoji scrolling is continuous and horizontal like the native keyboard")
+        XCTAssertTrue(picker.contains("LazyHGrid(rows: gridRows, spacing: 0)"),
+                      "all categories share one horizontal grid")
+        XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
+        XCTAssertTrue(picker.contains("systemName: \"delete.backward\""))
+        XCTAssertTrue(picker.contains("EmojiCategoryBar("))
+        XCTAssertFalse(picker.contains("AuxiliaryBottomBar("))
     }
 
     func testSymbolsReserveTheBottomLeftControlFootprintAcrossLastTwoRows() throws {

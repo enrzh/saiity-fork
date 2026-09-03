@@ -274,8 +274,14 @@ public enum VoiceOnlyKeyboardPolicy {
             surfaceFrame
         }
 
+        /// Bottom-bar Y shared with emoji / 123 / dismiss so the voice space key
+        /// lines up with the auxiliary pages.
+        var spaceLaneMinY: Double {
+            surfaceFrame.maxY - visibleControlGap - VoiceOnlyKeyboardPolicy.spacebarHeight
+        }
+
         /// The hold-to-dictate capsule keeps one frame while its content changes.
-        /// It sits above the space bar so both controls share the center column.
+        /// It sits in the remaining center column above the shared bottom space bar.
         public var dictateFrame: CGRect {
             guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize + visibleControlGap else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
@@ -285,40 +291,57 @@ public enum VoiceOnlyKeyboardPolicy {
             let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
                 + visibleControlGap
                 + VoiceOnlyKeyboardPolicy.spacebarHeight
-            let usedHeight = surfaceFrame.height >= clusterHeight
-                ? clusterHeight
-                : VoiceOnlyKeyboardPolicy.primaryControlSize
+            guard surfaceFrame.height >= clusterHeight else { return .zero }
+            let bottomLimit = spaceLaneMinY - visibleControlGap
+            let available = bottomLimit - surfaceFrame.minY
+            guard available >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
             return CGRect(
                 x: centerX - width / 2,
-                y: surfaceFrame.minY + (surfaceFrame.height - usedHeight) / 2,
+                y: surfaceFrame.minY + (available - VoiceOnlyKeyboardPolicy.primaryControlSize) / 2,
                 width: width,
                 height: VoiceOnlyKeyboardPolicy.primaryControlSize
             )
         }
 
         public var spaceFrame: CGRect {
-            let mic = dictateFrame
-            guard !mic.isEmpty else { return .zero }
-            let frame = CGRect(
-                x: mic.minX,
-                y: mic.maxY + visibleControlGap,
-                width: mic.width,
-                height: VoiceOnlyKeyboardPolicy.spacebarHeight
+            let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
+                + visibleControlGap
+                + VoiceOnlyKeyboardPolicy.spacebarHeight
+            guard surfaceFrame.height >= clusterHeight else { return .zero }
+            let y = spaceLaneMinY
+            let height = VoiceOnlyKeyboardPolicy.spacebarHeight
+            if leftRailWidth > 0 && rightRailWidth > 0 {
+                let leftMaxX = max(leftUtilityFrames.emoji.maxX, leftUtilityFrames.number.maxX)
+                let x = leftMaxX + railSpacing
+                let width = dismissFrame.minX - railSpacing - x
+                guard width >= 44 else { return .zero }
+                let frame = CGRect(x: x, y: y, width: width, height: height)
+                guard surfaceFrame.contains(frame) else { return .zero }
+                return frame
+            }
+            let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
+                availableWidth: surfaceWidth,
+                centerAreaWidth: centerAreaWidth
             )
-            guard surfaceFrame.contains(frame), !frame.intersects(mic) else { return .zero }
+            let frame = CGRect(
+                x: centerX - width / 2,
+                y: y,
+                width: width,
+                height: height
+            )
+            guard surfaceFrame.contains(frame) else { return .zero }
             return frame
         }
 
         /// The failure message gets its own non-interactive lane below the mic
-        /// (or below the space bar when that control is visible).
+        /// and above the shared bottom space bar.
         public var dictationErrorFrame: CGRect {
             let mic = dictateFrame
             guard !mic.isEmpty else { return .zero }
-            let anchor = spaceFrame.isEmpty ? mic : spaceFrame
 
             let frame = CGRect(
                 x: micCenterArea.minX,
-                y: anchor.maxY + visibleControlGap,
+                y: mic.maxY + visibleControlGap,
                 width: micCenterArea.width,
                 height: statusHeight
             )

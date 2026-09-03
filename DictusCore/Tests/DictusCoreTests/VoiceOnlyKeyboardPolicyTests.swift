@@ -381,6 +381,24 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         }
     }
 
+    func testVoiceSpaceBarSharesTheBottomLaneWithUtilityControls() {
+        let emojiFirst = VoiceOnlyKeyboardPolicy.layout(for: 390, controlOrder: .emojiFirst)
+        let numberFirst = VoiceOnlyKeyboardPolicy.layout(for: 390, controlOrder: .numberFirst)
+
+        for layout in [emojiFirst, numberFirst] {
+            let leftMaxX = max(layout.leftUtilityFrames.emoji.maxX, layout.leftUtilityFrames.number.maxX)
+            XCTAssertEqual(layout.spaceFrame.minY, layout.leftUtilityFrames.emoji.minY, accuracy: 0.001)
+            XCTAssertEqual(layout.spaceFrame.minY, layout.dismissFrame.minY, accuracy: 0.001)
+            XCTAssertEqual(layout.spaceFrame.height, VoiceOnlyKeyboardPolicy.spacebarHeight, accuracy: 0.001)
+            XCTAssertGreaterThan(layout.spaceFrame.minX, leftMaxX)
+            XCTAssertLessThan(layout.spaceFrame.maxX, layout.dismissFrame.minX)
+            XCTAssertFalse(layout.spaceFrame.intersects(layout.dictateFrame))
+            XCTAssertGreaterThan(layout.dictateFrame.maxY, 0)
+            XCTAssertLessThan(layout.dictateFrame.maxY, layout.spaceFrame.minY)
+        }
+        XCTAssertEqual(emojiFirst.spaceFrame, numberFirst.spaceFrame)
+    }
+
     func testDictationErrorFrameHasVisibleNonIntersectingLaneAtUsableHeights() {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
