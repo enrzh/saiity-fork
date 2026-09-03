@@ -231,6 +231,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
     func testVoiceOnlySurfaceDoesNotUseLegacyKeyGrid() {
         XCTAssertFalse(VoiceOnlyKeyboardPolicy.usesLegacyKeyGrid)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.10)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216 * 1.10)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.contentHeight, VoiceOnlyKeyboardPolicy.surfaceHeight)
     }

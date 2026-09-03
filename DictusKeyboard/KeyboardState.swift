@@ -579,6 +579,22 @@ class KeyboardState: ObservableObject {
 
     // MARK: - Recording commands (keyboard -> app)
 
+    /// Press-and-hold began on the dictate control (UIKit overlay or SwiftUI fallback).
+    func handleMicPressBegan() {
+        guard dictationStatus == .idle || dictationStatus == .ready || dictationStatus == .failed else { return }
+        if dictationStatus == .failed, failedRequiresApp {
+            openDictusForRecovery()
+        } else {
+            startRecording()
+        }
+    }
+
+    /// Press-and-hold ended on the dictate control.
+    func handleMicPressEnded() {
+        guard dictationStatus == .requested || dictationStatus == .recording else { return }
+        requestStop()
+    }
+
     /// Request DictusApp to stop recording and begin transcription.
     /// Uses the Darwin notification + Bool flag pattern: write the flag first,
     /// then post the notification so the app reads the flag when it handles the notification.

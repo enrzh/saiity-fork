@@ -53,10 +53,13 @@ public enum VoiceOnlyKeyboardPolicy {
     }
 
     public static let usesLegacyKeyGrid = false
-    /// The standard portrait iPhone keyboard grid height. The extension's UIKit
-    /// height provider remains the source of truth at runtime; this is the
-    /// shared fallback used by policy tests and the initial SwiftUI layout.
-    public static let surfaceHeight: Double = 216 * 1.10
+    /// Native compact iPhone portrait height before the sAiity scale.
+    public static let nativePortraitReferenceHeight: Double = 216
+    /// Extra dictation-board height on top of the native keyboard.
+    public static let surfaceHeightScale: Double = 1.10
+    /// Shared portrait fallback and the scale applied to device-native heights
+    /// at runtime by the keyboard extension.
+    public static let surfaceHeight: Double = nativePortraitReferenceHeight * surfaceHeightScale
 
     /// Chooses the height reported by the laid-out input view, falling back to
     /// the device provider while UIKit is still resolving the input surface.

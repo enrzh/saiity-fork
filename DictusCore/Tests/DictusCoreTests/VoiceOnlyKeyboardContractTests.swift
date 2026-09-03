@@ -807,10 +807,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     }
 
     func testFailedMicUsesRecoveryOnlyWhenRequiredAndRetriesOtherwise() throws {
+        let state = try source("DictusKeyboard/KeyboardState.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
-        XCTAssertTrue(controller.contains("if state.dictationStatus == .failed, state.failedRequiresApp"))
-        XCTAssertTrue(controller.contains("else {"))
-        XCTAssertTrue(controller.contains("state.startRecording()"))
+        XCTAssertTrue(state.contains("if dictationStatus == .failed, failedRequiresApp"))
+        XCTAssertTrue(state.contains("openDictusForRecovery()"))
+        XCTAssertTrue(state.contains("startRecording()"))
+        XCTAssertTrue(controller.contains("KeyboardState.shared.handleMicPressBegan()"))
+        XCTAssertTrue(controller.contains("KeyboardState.shared.handleMicPressEnded()"))
     }
 
     func testMicVisualUsesReadableSemanticForegroundAndIdleGlyph() throws {

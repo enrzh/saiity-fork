@@ -238,6 +238,13 @@ struct KeyboardRootView: View {
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel("Hold to dictate")
         .accessibilityValue(dictationTitle)
+        // UIKit overlay is the primary hit target. This gesture is the fallback
+        // when the overlay frame misses the visible capsule.
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in state.handleMicPressBegan() }
+                .onEnded { _ in state.handleMicPressEnded() }
+        )
     }
 
     private var dictationTitle: String {
@@ -329,6 +336,7 @@ struct KeyboardRootView: View {
             }
         }
         .frame(width: CGFloat(width), height: CGFloat(height))
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
@@ -381,7 +389,6 @@ private struct LiquidSymbolPageView: View {
                         .position(x: positionedKey.frame.midX, y: positionedKey.frame.midY)
                 }
                 .frame(width: gridSize.width, height: gridSize.height)
-                .contentShape(Rectangle())
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .accessibilityElement(children: .contain)
