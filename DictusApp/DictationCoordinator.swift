@@ -409,8 +409,7 @@ class DictationCoordinator: ObservableObject {
     func startDictation(fromURL: Bool = false, allowInactiveStart: Bool = false) {
         guard defaults.object(forKey: SharedKeys.serviceEnabled) == nil
                 || defaults.bool(forKey: SharedKeys.serviceEnabled) else {
-            DictationErrorChannel.record("Dictation service is turned off.")
-            status = .failed
+            handleError("Dictation service is turned off.", disposition: .requiresApp)
             return
         }
 
