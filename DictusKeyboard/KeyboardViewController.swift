@@ -691,7 +691,7 @@ class KeyboardViewController: UIInputViewController {
         let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
             inputViewHeight: Double(inputViewHeight),
             controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil,
-            fallbackHeight: Double(nativeHeight),
+            fallbackHeight: Double(nativeHeight) * 1.10,
             previousInputViewHeight: previousInputViewHeight,
             stableInputViewPasses: stableInputViewHeightPasses
         )
