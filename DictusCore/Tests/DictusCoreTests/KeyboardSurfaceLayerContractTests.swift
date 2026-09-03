@@ -49,17 +49,13 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(source.contains("positionedKeys(in: gridSize).filter"))
     }
 
-    func testSymbolDragHitTestingKeepsPageToggleTargets() throws {
+    func testSymbolButtonsCommitTapsAndPageToggleRemainsAvailable() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(source.contains("key(at: value.location, in: frames)"))
-        XCTAssertTrue(source.contains("simultaneousGesture(symbolDragGesture(frames: frames))"))
-        XCTAssertFalse(source.contains(".gesture(symbolDragGesture(frames: frames))"))
+        XCTAssertTrue(source.contains("Button { commitSymbolFromTap(key) } label:"))
+        XCTAssertFalse(source.contains("simultaneousGesture(symbolDragGesture(frames: frames))"))
         XCTAssertTrue(source.contains("case .symbols2ToSymbols1:"))
-        XCTAssertFalse(
-            source.contains("$0.frame.contains(point) && !$0.key.isSpacer && !$0.key.isPageToggle"),
-            "dragging over #+= or 123 must be able to switch symbol pages"
-        )
+        XCTAssertTrue(source.contains("case .togglePage:"))
     }
 
     func testAuxiliaryPagesUseOneTransparentSharedSurfaceAndNativeBottomLane() throws {

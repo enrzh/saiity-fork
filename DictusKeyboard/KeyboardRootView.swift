@@ -363,8 +363,6 @@ private struct LiquidSymbolPageView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
     @State private var activeKeyID: String?
-    @State private var symbolCommitLocked = false
-    @State private var symbolDragActive = false
 
     private let rowSpacing: CGFloat = 6
     private let keySpacing: CGFloat = 5
@@ -391,28 +389,6 @@ private struct LiquidSymbolPageView: View {
         .frame(width: availableWidth, height: availableHeight)
         .clipped()
         .onChange(of: page) { _, _ in activeKeyID = nil }
-    }
-
-    private func symbolDragGesture(frames: [PositionedLiquidSymbolKey]) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                let nextID = key(at: value.location, in: frames)?.id
-                symbolDragActive = true
-                if nextID != activeKeyID {
-                    activeKeyID = nextID
-                    HapticFeedback.keyTapped()
-                }
-            }
-            .onEnded { value in
-                let shouldCommit = !symbolCommitLocked
-                symbolCommitLocked = true
-                if let key = key(at: value.location, in: frames), shouldCommit {
-                    commit(key)
-                }
-                symbolDragActive = false
-                activeKeyID = nil
-                resetSymbolGestureLock()
-            }
     }
 
     private var rows: [[LiquidSymbolKey]] {
@@ -474,16 +450,7 @@ private struct LiquidSymbolPageView: View {
     }
 
     private func commitSymbolFromTap(_ key: LiquidSymbolKey) {
-        guard !symbolDragActive, !symbolCommitLocked else { return }
-        symbolCommitLocked = true
         commit(key)
-        resetSymbolGestureLock()
-    }
-
-    private func resetSymbolGestureLock() {
-        DispatchQueue.main.async {
-            symbolCommitLocked = false
-        }
     }
 
     @ViewBuilder
