@@ -760,7 +760,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                            layout.leftUtilityFrames.emoji.maxX + VoiceOnlyKeyboardPolicy.railSpacing)
             XCTAssertEqual(layout.leftUtilityFrames.number.minY, layout.leftUtilityFrames.emoji.minY)
             XCTAssertEqual(layout.dismissFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
-            XCTAssertEqual(layout.dismissFrame.maxY, layout.surfaceFrame.maxY - 8, accuracy: 0.001)
+            XCTAssertEqual(layout.dismissFrame.maxY, layout.surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.visibleControlGap, accuracy: 0.001)
             XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
         }
     }
