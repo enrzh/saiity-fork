@@ -18,4 +18,27 @@ final class DictationDisabledServiceTests: XCTestCase {
             .requiresApp
         )
     }
+
+    func testDisabledServiceStartUsesHandleErrorSoTheKeyboardReceivesFailure() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let coordinator = try String(
+            contentsOf: repository.appending(path: "DictusApp/DictationCoordinator.swift"),
+            encoding: .utf8
+        )
+        let start = try XCTUnwrap(coordinator.range(of: "func startDictation("))
+        let remainder = coordinator[start.upperBound...]
+        let next = remainder.range(of: "\n    func ")
+        let body: String
+        if let next {
+            body = String(coordinator[start.lowerBound..<next.lowerBound])
+        } else {
+            body = String(coordinator[start.lowerBound...].prefix(2500))
+        }
+        XCTAssertTrue(body.contains("handleError(\"Dictation service is turned off.\", disposition: .requiresApp)"))
+        XCTAssertFalse(body.contains("status = .failed"))
+    }
 }

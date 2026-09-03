@@ -43,7 +43,7 @@ class KeyboardViewController: UIInputViewController {
     private var stableInputViewHeightPasses = 0
 
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
-    /// The voice surface uses the standard 216pt input area above the system bar.
+    /// The voice surface uses the native input height scaled by `surfaceHeightScale`.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
     /// Layout ownership: SwiftUI owns symbol/emoji content; UIKit owns the
@@ -470,7 +470,7 @@ class KeyboardViewController: UIInputViewController {
     }
 
     /// Swap hosting view's bottom anchor between idle and expanded positions.
-    /// - Idle: hosting fills the standard 216pt voice surface.
+    /// - Idle: hosting fills the scaled voice surface.
     /// - Expanded: hosting.bottom = kbInputView.bottom (fills the full
     ///   keyboard area, used when the recording overlay or emoji picker is
     ///   shown and the keyboard view is hidden).
@@ -675,15 +675,15 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Keyboard Height
 
-    /// Match the native keyboard's device-aware input height. The shared policy
-    /// remains the geometry source for SwiftUI and UIKit overlays.
+    /// Match the native keyboard's device-aware input height, then apply the
+    /// shared sAiity scale so the dictation board is 10% taller than stock.
     private func computeNativeKeyboardHeight() -> CGFloat {
         let deviceContext = DeviceContext.current
         let nativeHeight = KeyboardHeightProvider.height(
             for: deviceContext,
             traitCollection: traitCollection
         )
-        return nativeHeight
+        return nativeHeight * CGFloat(VoiceOnlyKeyboardPolicy.surfaceHeightScale)
     }
 
     private func computeKeyboardHeight() -> CGFloat {
@@ -701,7 +701,7 @@ class KeyboardViewController: UIInputViewController {
         return CGFloat(resolution.height)
     }
 
-    /// Every mode uses the native device-aware keyboard height.
+    /// Every mode uses the scaled device-aware keyboard height.
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         computeKeyboardHeight()
     }
@@ -986,6 +986,9 @@ class KeyboardViewController: UIInputViewController {
         button.configuration = .plain()
         button.configuration?.contentInsets = .zero
         button.configuration?.baseForegroundColor = .label
+        // Size comes from explicit frames in layoutVoiceActionControls.
+        // A heightAnchor here would opt the control into Auto Layout and pin it
+        // to the creation frame, which drops hold-to-dictate hits.
         button.translatesAutoresizingMaskIntoConstraints = true
         button.backgroundColor = .clear
         button.tintColor = .label
@@ -1002,7 +1005,7 @@ class KeyboardViewController: UIInputViewController {
         if installPrimaryAction {
             button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
         }
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight).isActive = true
+        _ = minimumHeight
         return button
     }
 
