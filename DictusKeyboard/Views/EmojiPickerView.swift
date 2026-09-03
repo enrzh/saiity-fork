@@ -233,7 +233,7 @@ struct EmojiPickerView: View {
     }
 
     private func commitEmojiFromTap(_ emoji: String) {
-        guard emojiDragAxis == nil, !emojiCommitLocked else { return }
+        guard !emojiCommitLocked else { return }
         emojiCommitLocked = true
         insertEmoji(emoji)
         resetEmojiGestureLock()
