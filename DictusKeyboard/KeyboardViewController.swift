@@ -1067,7 +1067,7 @@ class KeyboardViewController: UIInputViewController {
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         numberButton?.frame = layout.leftUtilityFrames.number
-        micButton?.frame = layout.dictateFrame
+        micButton?.frame = layout.dictateFrame.insetBy(dx: -8, dy: -8)
         spaceButton?.frame = layout.spaceFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame

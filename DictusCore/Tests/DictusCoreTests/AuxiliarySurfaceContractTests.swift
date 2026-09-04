@@ -116,8 +116,8 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testEmojiMotionDisablesScaleFeedbackWhenReduceMotionIsEnabled() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(picker.contains(".scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == index ? 1.08 : 1)"))
-        XCTAssertTrue(picker.contains(".animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)"))
+        XCTAssertTrue(picker.contains(".scaleEffect(reduceMotion ? 1 : isPressed ? 1.08 : 1)"))
+        XCTAssertTrue(picker.contains(".animation(reduceMotion ? nil : .snappy(duration: 0.16), value: isPressed)"))
     }
 
     func testSymbolsToggleUsesPageSpecificTransitionIncludingReturnToNumbers() throws {

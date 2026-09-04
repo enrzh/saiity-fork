@@ -238,7 +238,7 @@ struct KeyboardRootView: View {
         .accessibilityValue(dictationTitle)
         // UIKit overlay is the primary hit target. This gesture is the fallback
         // when the overlay frame misses the visible capsule.
-        .gesture(
+        .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in state.handleMicPressBegan() }
                 .onEnded { _ in state.handleMicPressEnded() }

@@ -133,7 +133,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         XCTAssertTrue(controller.contains("micButton = makeKeyboardActionButton"))
-        XCTAssertTrue(controller.contains("micButton?.frame = layout.dictateFrame"))
+        XCTAssertTrue(controller.contains("micButton?.frame = layout.dictateFrame.insetBy(dx: -8, dy: -8)"))
         XCTAssertTrue(controller.contains(".touchDown"))
         XCTAssertTrue(controller.contains(".touchUpInside"))
         XCTAssertTrue(controller.contains(".touchUpOutside"))
@@ -145,7 +145,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testMicrophoneTouchDownGuardsBusyStatuses() throws {
         let state = try source("DictusKeyboard/KeyboardState.swift")
 
-        XCTAssertTrue(state.contains("guard dictationStatus == .idle || dictationStatus == .ready || dictationStatus == .failed else { return }"))
+        XCTAssertTrue(state.contains("case .transcribing, .processing:"))
+        XCTAssertTrue(state.contains("abandonStuckCleanup()"))
+        XCTAssertTrue(state.contains("case .requested, .recording:"))
     }
 
     func testMicrophoneVisualRemainsSwiftUIOnlyAndDoesNotInstallGestureStartStop() throws {
@@ -231,16 +233,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testEmojiGridUsesOnePointerHighlightInsteadOfPerCellGlass() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
-        let gridStart = try XCTUnwrap(picker.range(of: "LazyHGrid(rows: gridRows"))
-        let categoryStart = try XCTUnwrap(picker.range(of: "EmojiCategoryBar("))
-        let gridBody = String(picker[gridStart.lowerBound..<categoryStart.lowerBound])
 
-        XCTAssertFalse(gridBody.contains(".keyboardGlassEffect()"),
+        XCTAssertFalse(picker.contains(".keyboardGlassEffect()"),
                        "emoji cells must not own individual glass containers")
-        XCTAssertTrue(picker.contains("pressedEmojiIndex == index"),
+        XCTAssertTrue(picker.contains("isPressed"),
                       "the picker must render a touch highlight behind the active emoji")
-        XCTAssertTrue(picker.contains("pressedEmojiIndex"),
-                      "the shared highlight must follow the active emoji target")
         XCTAssertTrue(picker.contains("ZStack"),
                       "the highlight must be layered behind the emoji grid")
         XCTAssertTrue(picker.contains("stroke(Color.primary.opacity(0.16)"),
@@ -274,8 +271,16 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "skin-tone extras use a sequenced long-press, not a competing grid drag")
         XCTAssertFalse(picker.contains("emojiDragAxis"),
                        "horizontal scrolling owns drag; there is no second drag-select axis")
-        XCTAssertTrue(picker.contains("resetEmojiGestureLock()"),
-                      "emoji commit lock must reset after the gesture lifecycle")
+        XCTAssertTrue(picker.contains("simultaneousGesture"),
+                      "long-press must not steal the horizontal scroll gesture")
+        XCTAssertTrue(picker.contains("leftmostVisibleCategory"),
+                      "category highlight follows the leftmost visible emoji")
+        let insertStart = try XCTUnwrap(picker.range(of: "private func insertEmoji"))
+        let tapStart = try XCTUnwrap(picker.range(of: "private func commitEmojiFromTap"))
+        let insertBody = String(picker[insertStart.lowerBound..<tapStart.lowerBound])
+        XCTAssertTrue(insertBody.contains("RecentEmojis.add(emoji)"))
+        XCTAssertFalse(insertBody.contains("recentEmojis = RecentEmojis.load()"),
+                       "inserting an emoji must not rebuild the grid from recents")
     }
 
     func testEmojiSearchHasNoReachableUI() throws {
@@ -541,7 +546,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testEmojiGridReservesTheCategoryBarLaneExplicitly() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(picker.contains("let gridHeight = max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2)"),
+        XCTAssertTrue(picker.contains("availableHeight - headerHeight - bottomBarHeight - edgeInset * 2"),
                       "emoji content must leave a real lane for the native bottom bar")
         XCTAssertTrue(picker.contains(".frame(width: availableWidth, height: gridHeight, alignment: .top)"),
                       "emoji scrolling must stop above the bottom bar")
@@ -802,7 +807,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testFailedMicUsesRecoveryOnlyWhenRequiredAndRetriesOtherwise() throws {
         let state = try source("DictusKeyboard/KeyboardState.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
-        XCTAssertTrue(state.contains("if dictationStatus == .failed, failedRequiresApp"))
+        XCTAssertTrue(state.contains("case .failed:"))
+        XCTAssertTrue(state.contains("if failedRequiresApp"))
         XCTAssertTrue(state.contains("openDictusForRecovery()"))
         XCTAssertTrue(state.contains("startRecording()"))
         XCTAssertTrue(controller.contains("KeyboardState.shared.handleMicPressBegan()"))

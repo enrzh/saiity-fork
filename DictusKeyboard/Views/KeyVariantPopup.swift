@@ -6,11 +6,12 @@ struct KeyVariantPopup: View {
     let options: [String]
     let selectedIndex: Int
     let isEmoji: Bool
+    var onSelect: ((Int) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                Text(option)
+                let label = Text(option)
                     .font(.system(size: isEmoji ? 28 : 20))
                     .frame(width: Self.cellWidth(isEmoji: isEmoji), height: Self.cellHeight(isEmoji: isEmoji))
                     .background {
@@ -19,6 +20,12 @@ struct KeyVariantPopup: View {
                                 .fill(Color.primary.opacity(0.18))
                         }
                     }
+                if let onSelect {
+                    Button { onSelect(index) } label: { label }
+                        .buttonStyle(.plain)
+                } else {
+                    label
+                }
             }
         }
         .padding(6)

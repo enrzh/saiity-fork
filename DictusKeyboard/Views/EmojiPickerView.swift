@@ -27,10 +27,8 @@ struct EmojiPickerView: View {
 
     @State private var recentEmojis: [String] = []
     @State private var selectedCategoryID: String = "smileys"
-    @State private var pressedEmojiIndex: Int?
-    @State private var emojiCommitLocked = false
+    @State private var scrollRequest: EmojiScrollRequest?
     @State private var variantSession: KeyVariantSession?
-    @State private var programmaticScroll = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let categories = EmojiStore.categories
@@ -111,7 +109,21 @@ struct EmojiPickerView: View {
         ZStack {
             VStack(spacing: 0) {
                 Color.clear.frame(height: edgeInset)
-                horizontalGrid
+                EmojiScrollCanvas(
+                    items: allGridItems,
+                    availableWidth: availableWidth,
+                    gridHeight: max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2),
+                    emojiCellWidth: emojiCellWidth,
+                    rowHeight: rowHeight,
+                    gridRows: gridRows,
+                    gridHorizontalPadding: gridHorizontalPadding,
+                    reduceMotion: reduceMotion,
+                    scrollRequest: scrollRequest,
+                    onVisibleCategory: updateSelectedCategory,
+                    onTap: commitEmojiFromTap,
+                    onLongPress: presentEmojiVariants
+                )
+                .id("emoji-scroll-canvas")
                 emojiBottomBar
                 Color.clear.frame(height: edgeInset)
             }
@@ -121,100 +133,12 @@ struct EmojiPickerView: View {
         }
         .frame(width: availableWidth, height: availableHeight)
         .coordinateSpace(name: "emojiPicker")
-        .onPreferenceChange(NamedFramePreference.self) { NamedFramePreference.latest.merge($0, uniquingKeysWith: { $1 }) }
         .onAppear {
             recentEmojis = RecentEmojis.load()
             if !recentEmojis.isEmpty {
                 selectedCategoryID = "recents"
             }
         }
-    }
-
-    // MARK: - Horizontal grid
-
-    @ViewBuilder
-    private var horizontalGrid: some View {
-        let items = allGridItems
-        let gridHeight = max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2)
-
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHGrid(rows: gridRows, spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        emojiCell(item, index: index)
-                            .id(item.id)
-                    }
-                }
-                .padding(.horizontal, gridHorizontalPadding)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: EmojiScrollOffsetKey.self,
-                            value: geo.frame(in: .named("emojiViewport")).minX
-                        )
-                    }
-                )
-            }
-            .coordinateSpace(name: "emojiViewport")
-            .frame(width: availableWidth, height: gridHeight, alignment: .top)
-            .clipped()
-            .onPreferenceChange(EmojiScrollOffsetKey.self) { minX in
-                updateSelectedCategory(contentMinX: minX, items: items)
-            }
-            .onChange(of: selectedCategoryID) { _, id in
-                guard programmaticScroll, let anchor = categoryAnchorIDs[id] else { return }
-                proxy.scrollTo(anchor, anchor: .leading)
-                DispatchQueue.main.async {
-                    programmaticScroll = false
-                }
-            }
-        }
-    }
-
-    private func emojiCell(_ item: EmojiGridItem, index: Int) -> some View {
-        let variants = EmojiSkinToneVariants.options(for: item.emoji)
-        return Button { commitEmojiFromTap(item.emoji) } label: {
-            ZStack {
-                if pressedEmojiIndex == index {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-                        }
-                        .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
-                        .allowsHitTesting(false)
-                }
-                Text(item.emoji)
-                    .font(.system(size: 32))
-                    .frame(width: emojiCellWidth, height: rowHeight)
-                    .scaleEffect(reduceMotion ? 1 : pressedEmojiIndex == index ? 1.08 : 1)
-                    .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: pressedEmojiIndex)
-            }
-            .frame(minWidth: 44, minHeight: 44)
-            .frame(width: emojiCellWidth, height: rowHeight)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: NamedFramePreference.self,
-                    value: [item.id: geo.frame(in: .named("emojiPicker"))]
-                )
-            }
-        )
-        .modifier(OptionalEmojiLongPress(
-            enabled: variants.count > 1,
-            onChanged: { location in
-                handleEmojiLongPressChanged(item: item, location: location)
-            },
-            onEnded: {
-                commitEmojiVariantSession()
-            }
-        ))
-        .frame(minWidth: 44, minHeight: 44)
-        .accessibilityLabel(item.emoji)
     }
 
     private var emojiBottomBar: some View {
@@ -224,8 +148,10 @@ struct EmojiPickerView: View {
                 sections: sectionInfos,
                 selectedCategoryID: selectedCategoryID,
                 onSelectCategory: { id in
-                    programmaticScroll = true
                     selectedCategoryID = id
+                    if let anchor = categoryAnchorIDs[id] {
+                        scrollRequest = EmojiScrollRequest(id: anchor)
+                    }
                 }
             )
             glassDeleteControl
@@ -255,14 +181,9 @@ struct EmojiPickerView: View {
         DeleteRepeatButton(onDelete: onDelete)
     }
 
-    private func updateSelectedCategory(contentMinX: CGFloat, items: [EmojiGridItem]) {
-        guard !programmaticScroll, !items.isEmpty, emojiCellWidth > 0 else { return }
-        let scrolled = max(0, -contentMinX - gridHorizontalPadding)
-        let column = Int(scrolled / emojiCellWidth)
-        let index = min(items.count - 1, max(0, column * rowCount))
-        let category = items[index].categoryID
-        if selectedCategoryID != category {
-            selectedCategoryID = category
+    private func updateSelectedCategory(_ categoryID: String) {
+        if selectedCategoryID != categoryID {
+            selectedCategoryID = categoryID
         }
     }
 
@@ -270,84 +191,170 @@ struct EmojiPickerView: View {
         HapticFeedback.keyTapped()
         onEmojiInsert(emoji)
         RecentEmojis.add(emoji)
-        recentEmojis = RecentEmojis.load()
     }
 
     private func commitEmojiFromTap(_ emoji: String) {
-        guard !emojiCommitLocked, variantSession == nil else { return }
-        emojiCommitLocked = true
+        guard variantSession == nil else { return }
         insertEmoji(emoji)
-        resetEmojiGestureLock()
     }
 
-    private func handleEmojiLongPressChanged(item: EmojiGridItem, location: CGPoint) {
+    private func presentEmojiVariants(item: EmojiGridItem, source: CGRect) {
         let options = EmojiSkinToneVariants.options(for: item.emoji)
         guard options.count > 1 else { return }
-        if variantSession == nil {
-            emojiCommitLocked = true
-            HapticFeedback.keyTapped()
-            let source = NamedFramePreference.latest[item.id] ?? CGRect(
-                x: location.x - emojiCellWidth / 2,
-                y: location.y - rowHeight / 2,
-                width: emojiCellWidth,
-                height: rowHeight
-            )
-            let popupFrame = KeyVariantPopup.frame(
-                for: source,
-                optionCount: options.count,
-                isEmoji: true,
-                in: CGSize(width: availableWidth, height: availableHeight)
-            )
-            variantSession = KeyVariantSession(
-                options: options,
-                sourceFrame: source,
-                popupFrame: popupFrame,
-                isEmoji: true,
-                selectedIndex: 0
-            )
-            return
-        }
-        guard var session = variantSession else { return }
-        let index = KeyVariantPopup.selectedIndex(
-            at: location,
-            popupFrame: session.popupFrame,
-            optionCount: session.options.count
+        HapticFeedback.keyTapped()
+        let popupFrame = KeyVariantPopup.frame(
+            for: source,
+            optionCount: options.count,
+            isEmoji: true,
+            in: CGSize(width: availableWidth, height: availableHeight)
         )
-        if session.selectedIndex != index {
-            session.selectedIndex = index
-            variantSession = session
-            HapticFeedback.keyTapped()
-        }
+        variantSession = KeyVariantSession(
+            options: options,
+            sourceFrame: source,
+            popupFrame: popupFrame,
+            isEmoji: true,
+            selectedIndex: 0
+        )
     }
 
     @ViewBuilder
     private func emojiVariantOverlay(_ session: KeyVariantSession) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture {
+                variantSession = nil
+            }
         KeyVariantPopup(
             options: session.options,
             selectedIndex: session.selectedIndex,
-            isEmoji: true
+            isEmoji: true,
+            onSelect: { index in
+                guard session.options.indices.contains(index) else { return }
+                insertEmoji(session.options[index])
+                variantSession = nil
+            }
         )
         .frame(width: session.popupFrame.width, height: session.popupFrame.height)
         .position(x: session.popupFrame.midX, y: session.popupFrame.midY)
-        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Scroll canvas
+
+private struct EmojiScrollRequest: Equatable {
+    let id: String
+    let nonce = UUID()
+}
+
+private struct EmojiScrollCanvas: View {
+    let items: [EmojiGridItem]
+    let availableWidth: CGFloat
+    let gridHeight: CGFloat
+    let emojiCellWidth: CGFloat
+    let rowHeight: CGFloat
+    let gridRows: [GridItem]
+    let gridHorizontalPadding: CGFloat
+    let reduceMotion: Bool
+    let scrollRequest: EmojiScrollRequest?
+    let onVisibleCategory: (String) -> Void
+    let onTap: (String) -> Void
+    let onLongPress: (EmojiGridItem, CGRect) -> Void
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHGrid(rows: gridRows, spacing: 0) {
+                    ForEach(items) { item in
+                        EmojiKey(
+                            item: item,
+                            emojiCellWidth: emojiCellWidth,
+                            rowHeight: rowHeight,
+                            reduceMotion: reduceMotion,
+                            onTap: { onTap(item.emoji) },
+                            onLongPress: { frame in onLongPress(item, frame) }
+                        )
+                        .id(item.id)
+                    }
+                }
+                .padding(.horizontal, gridHorizontalPadding)
+            }
+            .coordinateSpace(name: "emojiViewport")
+            .frame(width: availableWidth, height: gridHeight, alignment: .top)
+            .clipped()
+            .onPreferenceChange(VisibleCategoryFramesKey.self) { frames in
+                guard let category = leftmostVisibleCategory(in: frames) else { return }
+                onVisibleCategory(category)
+            }
+            .onChange(of: scrollRequest) { _, request in
+                guard let request else { return }
+                proxy.scrollTo(request.id, anchor: .leading)
+            }
+        }
     }
 
-    private func commitEmojiVariantSession() {
-        guard let session = variantSession,
-              session.options.indices.contains(session.selectedIndex) else {
-            variantSession = nil
-            resetEmojiGestureLock()
-            return
-        }
-        insertEmoji(session.options[session.selectedIndex])
-        variantSession = nil
-        resetEmojiGestureLock()
+    private func leftmostVisibleCategory(in frames: [String: VisibleEmojiFrame]) -> String? {
+        frames.values
+            .filter { $0.frame.maxX > 1 && $0.frame.minX < availableWidth - 1 }
+            .min(by: { $0.frame.minX < $1.frame.minX })?
+            .categoryID
+    }
+}
+
+private struct EmojiKey: View {
+    let item: EmojiGridItem
+    let emojiCellWidth: CGFloat
+    let rowHeight: CGFloat
+    let reduceMotion: Bool
+    let onTap: () -> Void
+    let onLongPress: (CGRect) -> Void
+
+    @State private var isPressed = false
+    @State private var localFrame: CGRect = .zero
+
+    private var hasSkinTones: Bool {
+        EmojiSkinToneVariants.options(for: item.emoji).count > 1
     }
 
-    private func resetEmojiGestureLock() {
-        DispatchQueue.main.async {
-            emojiCommitLocked = false
-        }
+    var body: some View {
+        Text(item.emoji)
+            .font(.system(size: 32))
+            .frame(minWidth: 44, minHeight: 44)
+            .frame(width: emojiCellWidth, height: rowHeight)
+            .background {
+                if isPressed {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.primary.opacity(0.12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                        }
+                        .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
+                        .allowsHitTesting(false)
+                }
+            }
+            .scaleEffect(reduceMotion ? 1 : isPressed ? 1.08 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: isPressed)
+            .contentShape(Rectangle())
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: VisibleCategoryFramesKey.self,
+                        value: [item.id: VisibleEmojiFrame(
+                            categoryID: item.categoryID,
+                            frame: geo.frame(in: .named("emojiViewport"))
+                        )]
+                    )
+                    .onAppear { localFrame = geo.frame(in: .named("emojiPicker")) }
+                    .onChange(of: geo.frame(in: .named("emojiPicker"))) { _, frame in
+                        localFrame = frame
+                    }
+                }
+            )
+            .onTapGesture(perform: onTap)
+            .modifier(OptionalEmojiLongPress(enabled: hasSkinTones) {
+                onLongPress(localFrame)
+            })
+            .accessibilityLabel(item.emoji)
     }
 }
 
@@ -359,31 +366,28 @@ private struct EmojiGridItem: Identifiable {
     let categoryID: String
 }
 
-private struct EmojiScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+private struct VisibleEmojiFrame: Equatable {
+    let categoryID: String
+    let frame: CGRect
+}
+
+private struct VisibleCategoryFramesKey: PreferenceKey {
+    static var defaultValue: [String: VisibleEmojiFrame] = [:]
+
+    static func reduce(value: inout [String: VisibleEmojiFrame], nextValue: () -> [String: VisibleEmojiFrame]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
 private struct OptionalEmojiLongPress: ViewModifier {
     let enabled: Bool
-    let onChanged: (CGPoint) -> Void
-    let onEnded: () -> Void
+    let action: () -> Void
 
     func body(content: Content) -> some View {
         if enabled {
-            content.highPriorityGesture(
+            content.simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.4)
-                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("emojiPicker")))
-                    .onChanged { value in
-                        if case .second(true, let drag?) = value {
-                            onChanged(drag.location)
-                        }
-                    }
-                    .onEnded { _ in
-                        onEnded()
-                    }
+                    .onEnded { _ in action() }
             )
         } else {
             content
@@ -442,8 +446,4 @@ private struct DeleteRepeatButton: View {
         deleteRepeatTimer?.invalidate()
         deleteRepeatTimer = nil
     }
-}
-
-extension NamedFramePreference {
-    static var latest: [String: CGRect] = [:]
 }

@@ -47,12 +47,12 @@ final class KeyboardRegressionTests: XCTestCase {
     func testEmojiTapCannotBeRejectedByAStaleDragAxis() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let start = try XCTUnwrap(picker.range(of: "private func commitEmojiFromTap"))
-        let end = try XCTUnwrap(picker.range(of: "private func resetEmojiGestureLock"))
+        let end = try XCTUnwrap(picker.range(of: "private func presentEmojiVariants"))
         let body = String(picker[start.lowerBound..<end.lowerBound])
 
         XCTAssertFalse(body.contains("guard emojiDragAxis == nil"),
                       "a normal emoji tap must still commit if a prior drag left transient state")
-        XCTAssertTrue(body.contains("guard !emojiCommitLocked, variantSession == nil else"))
+        XCTAssertTrue(body.contains("guard variantSession == nil else { return }"))
         XCTAssertTrue(body.contains("insertEmoji(emoji)"))
     }
 

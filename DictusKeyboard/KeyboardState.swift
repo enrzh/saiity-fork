@@ -596,12 +596,31 @@ class KeyboardState: ObservableObject {
 
     /// Press-and-hold began on the dictate control (UIKit overlay or SwiftUI fallback).
     func handleMicPressBegan() {
-        guard dictationStatus == .idle || dictationStatus == .ready || dictationStatus == .failed else { return }
-        if dictationStatus == .failed, failedRequiresApp {
-            openDictusForRecovery()
-        } else {
+        switch dictationStatus {
+        case .idle, .ready:
             startRecording()
+        case .failed:
+            if failedRequiresApp {
+                openDictusForRecovery()
+            } else {
+                startRecording()
+            }
+        case .transcribing, .processing:
+            // Cleanup never finished (host app suspended). Don't leave the mic
+            // dead on "Cleaning up..." — drop the stale round and start again.
+            abandonStuckCleanup()
+            startRecording()
+        case .requested, .recording:
+            return
         }
+    }
+
+    private func abandonStuckCleanup() {
+        defaults.set(true, forKey: SharedKeys.cancelRequested)
+        defaults.synchronize()
+        DarwinNotificationCenter.post(DarwinNotificationName.cancelRecording)
+        lastMicTapDate = Date.distantPast
+        forceResetToIdle()
     }
 
     /// Press-and-hold ended on the dictate control.
