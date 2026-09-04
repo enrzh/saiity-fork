@@ -281,7 +281,7 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
-        /// It sits in the remaining center column above the shared bottom space bar.
+        /// It is vertically centered in the board above the shared bottom space bar.
         public var dictateFrame: CGRect {
             guard surfaceFrame.height >= VoiceOnlyKeyboardPolicy.primaryControlSize + visibleControlGap else { return .zero }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
@@ -292,8 +292,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 + visibleControlGap
                 + VoiceOnlyKeyboardPolicy.spacebarHeight
             guard surfaceFrame.height >= clusterHeight else { return .zero }
-            let bottomLimit = spaceLaneMinY - visibleControlGap
-            let available = bottomLimit - surfaceFrame.minY
+            let available = spaceLaneMinY - surfaceFrame.minY
             guard available >= VoiceOnlyKeyboardPolicy.primaryControlSize else { return .zero }
             return CGRect(
                 x: centerX - width / 2,

@@ -312,6 +312,11 @@ class KeyboardViewController: UIInputViewController {
         isAttached = true
         updateActionAvailability()
 
+        // Opening the keyboard always returns to the dictation board.
+        if !KeyboardState.shared.dictationStatus.ownsKeyboardArea {
+            KeyboardState.shared.closeArea()
+        }
+
         // (Re)subscribe to the keyboard area mode here, not in viewDidLoad.
         // WHY: iOS caches UIInputViewController instances across app-switches and
         // rarely deallocates them, so stale controllers would keep mutating

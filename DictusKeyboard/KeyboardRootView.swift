@@ -123,25 +123,30 @@ struct KeyboardRootView: View {
 
     private var languageIndicator: some View {
         Menu {
-            Menu {
-                ForEach(state.translationTargets, id: \.self) { target in
-                    let status = state.translationTargetStatus(target)
-                    Button {
-                        state.selectTranslation(target)
-                    } label: {
-                        Label(
-                            state.translationTargetMenuLabel(target),
-                            systemImage: state.selectedTranslationTarget == target
-                                ? "checkmark"
-                                : status == .supportedNeedsDownload ? "arrow.down.circle" : "character.bubble"
-                        )
-                    }
-                    .accessibilityLabel(state.translationTargetAccessibilityLabel(target))
-                }
+            Button {
+                state.selectTranscription()
             } label: {
-                Text(state.selectedTranslationTarget.map(state.translationTargetMenuLabel) ?? "Translate")
+                Label(
+                    "Auto",
+                    systemImage: state.selectedTranslationTarget == nil ? "checkmark" : "waveform"
+                )
             }
-            .disabled(state.translationTargets.isEmpty)
+            .accessibilityLabel("Auto, no translation")
+
+            ForEach(state.translationTargets, id: \.self) { target in
+                let status = state.translationTargetStatus(target)
+                Button {
+                    state.selectTranslation(target)
+                } label: {
+                    Label(
+                        state.translationTargetMenuLabel(target),
+                        systemImage: state.selectedTranslationTarget == target
+                            ? "checkmark"
+                            : status == .supportedNeedsDownload ? "arrow.down.circle" : "character.bubble"
+                    )
+                }
+                .accessibilityLabel(state.translationTargetAccessibilityLabel(target))
+            }
         } label: {
             appleControlSurface(
                     Text(languageIndicatorTitle)

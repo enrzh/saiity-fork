@@ -100,6 +100,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let data = try read("DictusKeyboard/Models/EmojiData.swift")
 
         XCTAssertTrue(bar.contains("Image(systemName: section.icon)"))
+        XCTAssertTrue(bar.contains("proxy.scrollTo(id, anchor: .center)"))
+        XCTAssertTrue(bar.contains("proxy.scrollTo(selectedCategoryID, anchor: .center)"))
         XCTAssertFalse(bar.contains("section.icon.contains"))
         XCTAssertFalse(bar.contains("Text(section.icon)"))
         XCTAssertTrue(data.contains("icon: \"face.smiling\""))

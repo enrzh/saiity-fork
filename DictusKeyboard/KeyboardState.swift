@@ -295,7 +295,9 @@ class KeyboardState: ObservableObject {
     }
 
     var translationTargets: [SupportedLanguage] {
-        translationReadiness?.selectableTargets(for: asrCapability.sourceLanguage) ?? []
+        let ready = translationReadiness?.selectableTargets(for: asrCapability.sourceLanguage) ?? []
+        if !ready.isEmpty { return ready }
+        return SupportedLanguage.allCases.filter { $0 != asrCapability.sourceLanguage }
     }
 
     func translationTargetStatus(_ target: SupportedLanguage) -> TranslationTargetStatus {

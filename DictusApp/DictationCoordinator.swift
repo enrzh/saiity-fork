@@ -6,6 +6,7 @@ import AVFoundation
 import UIKit
 import DictusCore
 import WhisperKit
+import NaturalLanguage
 #if canImport(Translation)
 import Translation
 #endif
@@ -957,7 +958,10 @@ class DictationCoordinator: ObservableObject {
             return .fallback(transcript, reason: .cancelled)
         }
 
-        let source = translationSource(for: request)
+        let source = translationSource(for: request) ?? detectedLanguage(from: transcript)
+        if source == target {
+            return .translated(transcript)
+        }
         let targetLocale = Locale.Language(identifier: target.rawValue)
         let availability = LanguageAvailability()
         let status: LanguageAvailability.Status
@@ -979,9 +983,7 @@ class DictationCoordinator: ObservableObject {
             return .fallback(transcript, reason: .unavailable)
         }
 
-        guard let currentSessionID = currentLanguageRequest.sessionID,
-              let currentClientIdentifier = currentLanguageRequest.clientIdentifier,
-              request.matches(
+        guard request.matches(
                   sessionID: currentSessionID,
                   generation: sessionGeneration.current,
                   clientIdentifier: currentClientIdentifier
@@ -990,22 +992,63 @@ class DictationCoordinator: ObservableObject {
         }
 
         if let source, status == .installed {
-            return await translateWithInstalledSource(
+            let installed = await translateWithInstalledSource(
                 transcript,
                 source: source,
                 target: target,
                 request: request,
                 generation: generation
             )
+            if case .translated = installed {
+                return installed
+            }
         }
 
-        return await translateWithHost(
+        return await translateWithHostLimited(
             transcript,
             source: source,
             target: target,
             request: request,
             generation: generation
         )
+    }
+
+    private func detectedLanguage(from transcript: String) -> SupportedLanguage? {
+        guard let raw = NLLanguageRecognizer.dominantLanguage(for: transcript)?.rawValue else {
+            return nil
+        }
+        return SupportedLanguage(rawValue: String(raw.prefix(2)).lowercased())
+    }
+
+    @available(iOS 26.0, *)
+    private func translateWithHostLimited(
+        _ transcript: String,
+        source: SupportedLanguage?,
+        target: SupportedLanguage,
+        request: DictationLanguageRequest,
+        generation: Int
+    ) async -> TranslationOutcome {
+        await withTaskGroup(of: TranslationOutcome.self) { group in
+            group.addTask { @MainActor in
+                await self.translateWithHost(
+                    transcript,
+                    source: source,
+                    target: target,
+                    request: request,
+                    generation: generation
+                )
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                return .fallback(transcript, reason: .unavailable)
+            }
+            let first = await group.next() ?? .fallback(transcript, reason: .unavailable)
+            group.cancelAll()
+            if case .fallbackOriginal(_, .unavailable) = first {
+                await MainActor.run { self.cancelPendingTranslation() }
+            }
+            return first
+        }
     }
 
     @available(iOS 26.0, *)

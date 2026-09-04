@@ -395,6 +395,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             XCTAssertFalse(layout.spaceFrame.intersects(layout.dictateFrame))
             XCTAssertGreaterThan(layout.dictateFrame.maxY, 0)
             XCTAssertLessThan(layout.dictateFrame.maxY, layout.spaceFrame.minY)
+            let contentMid = (layout.surfaceFrame.minY + layout.spaceLaneMinY) / 2
+            XCTAssertEqual(layout.dictateFrame.midY, contentMid, accuracy: 0.5)
         }
         XCTAssertEqual(emojiFirst.spaceFrame, numberFirst.spaceFrame)
     }
