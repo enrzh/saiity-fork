@@ -2,7 +2,7 @@
 
 ## 状态
 
-已完成一处生产修复并提交。根因是服务关闭时只修改 App 进程内 `status`，没有把失败状态发布到 App Group/Darwin；键盘因此持续显示 `.requested`，也没有可恢复反馈。
+Task 1 reviewer findings 已完成并提交。HEAD 为 `6ed14b279ad1acb59a16b93d10b1560c47c9fb1d`。
 
 ## 根因证据
 
@@ -12,17 +12,15 @@
 
 ## 改动
 
-- `DictusApp/DictationCoordinator.swift`：服务关闭分支改为调用 `handleError("Dictation service is turned off.", disposition: .requiresApp)`。
-- 新增 `DictusCore/Tests/DictusCoreTests/DictationDisabledServiceTests.swift`，验证关闭服务的可操作错误 disposition 可持久化给键盘消费者。
-- 未修改布局、emoji、symbol 或其它 dirty/untracked 文件。
+- `DictusKeyboard/KeyboardViewController.swift`：将 `computeKeyboardHeight()` 的 policy fallback 改为 `Double(nativeHeight) * 1.10`。
+- 纳入 `DictusCore/Tests/DictusCoreTests/DictationHandoffRegressionTests.swift`，覆盖 handoff retry/report、取消/超时、防止共享 controller 身份依赖、callback 路由和 10% runtime fallback。
+- 仅提交上述两个文件；未修改或提交 Task 2 的 `KeyboardRegressionTests.swift`、报告、计划及其它已有 dirty/untracked 文件。
 
 ## 验证
 
-新增测试首次运行：退出码 0，1 test，0 failures。该测试约束真实共享错误通道契约；生产改动使 coordinator 复用同一失败出口。
+TDD RED：`swift test --package-path DictusCore --filter 'DictationHandoffRegressionTests'`，退出码 1，5 tests，1 failure；失败为 fallback 字符串断言。
 
-覆盖测试：`swift test --package-path DictusCore --scratch-path /tmp/saiity-task1-cover --filter 'Dictation(HandoffRegression|DisabledService)Tests|DictationErrorChannelTests'`，退出码 0，22 tests，0 failures。
-
-完整测试：`swift test --package-path DictusCore --scratch-path /tmp/saiity-task1-full2`，退出码 1，1345 tests，27 failures；失败来自既有工作区测试，不涉及本次新增测试或生产改动。已有 warnings 包括 unhandled README、Swift 6 Sendable/NSLock。
+TDD GREEN：同一命令，退出码 0，5 tests，0 failures。输出包含既有 warning：`DictusCore/Sources/polish-harness/README.md` 未声明为 resource。
 
 SimSlim：设备 `AC636497-5EC6-4AD4-BD83-E5E2458FA702` status 为 booted，170/170 managed daemons disabled；`simslim verify` profile match。
 
@@ -30,10 +28,10 @@ iOS 构建：`xcodebuild -project Dictus.xcodeproj -scheme sAiity-iOS -destinati
 
 ## Commit
 
-`待提交；以最终 git 输出为准。`
+`6ed14b279ad1acb59a16b93d10b1560c47c9fb1d`：`修复键盘运行时高度回退并纳入 Task 1 回归测试`
 
 ## 剩余风险
 
-- 现有 SimSlim 日志缺少 Dictus PersistentLog 业务事件，无法证明真实设备端到端录音和结果插入。
-- 完整 suite 的 27 个既有失败仍未解决，需单独归因。
-- 本次测试无法直接实例化依赖 UIKit/AVAudioEngine 的 coordinator，因此生产出口仍需后续设备操作验证。
+- 未修改 callback weak capture 的 Minor finding；当前实现仍依赖闭包捕获的 controller 生命周期，需后续结合实际键盘重建场景评估。
+- 本次 focused suite 只验证源码契约与 DictusCore policy，未证明真实设备端到端录音和结果插入。
+- 未运行完整 suite；本次证据范围仅为指定的 `DictationHandoffRegressionTests`。

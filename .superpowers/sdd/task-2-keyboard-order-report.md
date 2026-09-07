@@ -58,3 +58,14 @@ GREEN: Executed 1 test, with 0 failures (0 unexpected)
 ```
 
 本次修复仅涉及 `SettingsView.swift`、`KeyboardOrderSettingsContractTests.swift` 与本报告；其它工作树改动保留。
+
+## Task 2 审查修复（同一 Keyboard Section 契约，2026-09-02）
+
+新增 focused assertion：截取 `Section("Keyboard")` 到下一个 `Section("Translation & Cleanup")` 的源码范围，要求该范围同时包含 `Picker` 和 `Label("Models", systemImage:)`。
+
+TDD 验证：
+
+```text
+RED: Executed 1 test, with 1 failure (0 unexpected)
+GREEN: Executed 1 test, with 0 failures (0 unexpected)
+```
