@@ -53,45 +53,7 @@ struct ModelManagerView: View {
     }
 
     private var modelManagerContent: some View {
-        List {
-            Section {
-                if installedModels.isEmpty {
-                    Text("No models installed")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(installedModels) { model in
-                        modelRow(model)
-                    }
-                }
-            } header: {
-                Text("Installed")
-            } footer: {
-                modelEngineFooter(for: installedModels)
-            }
-            .listSectionSeparator(.hidden)
-
-            Section {
-                if availableModels.isEmpty {
-                    Text("All available models are installed")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(availableModels) { model in
-                        modelRow(
-                            model,
-                            incompatibilityReason: model.incompatibilityReason(on: deviceCapabilities)
-                        )
-                    }
-                }
-            } header: {
-                Text("Available")
-            } footer: {
-                modelEngineFooter(for: availableModels)
-            }
-            .listSectionSeparator(.hidden)
-
-            customModelsSection(.asr, title: "Custom speech recognition")
-            customModelsSection(.cleanup, title: "Custom cleanup")
-        }
+        modelList
         .listStyle(.insetGrouped)
         .contentMargins(.bottom, 88, for: .scrollContent)
         .navigationTitle("Models")
@@ -167,6 +129,57 @@ struct ModelManagerView: View {
                 )
             )
         }
+    }
+
+    @ViewBuilder
+    private var modelList: some View {
+        List {
+            installedSection
+            availableSection
+            customModelsSection(.asr, title: "Custom speech recognition")
+            customModelsSection(.cleanup, title: "Custom cleanup")
+        }
+    }
+
+    @ViewBuilder
+    private var installedSection: some View {
+        Section {
+            if installedModels.isEmpty {
+                Text("No models installed")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(installedModels) { model in
+                    modelRow(model)
+                }
+            }
+        } header: {
+            Text("Installed")
+        } footer: {
+            modelEngineFooter(for: installedModels)
+        }
+        .listSectionSeparator(.hidden)
+    }
+
+    @ViewBuilder
+    private var availableSection: some View {
+        Section {
+            if availableModels.isEmpty {
+                Text("All available models are installed")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(availableModels) { model in
+                    modelRow(
+                        model,
+                        incompatibilityReason: model.incompatibilityReason(on: deviceCapabilities)
+                    )
+                }
+            }
+        } header: {
+            Text("Available")
+        } footer: {
+            modelEngineFooter(for: availableModels)
+        }
+        .listSectionSeparator(.hidden)
     }
 
     private struct PreparingModelItem: Identifiable {
