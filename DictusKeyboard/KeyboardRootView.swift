@@ -151,6 +151,11 @@ struct KeyboardRootView: View {
             appleControlSurface(
                     Text(languageIndicatorTitle)
                     .font(.caption2.weight(.semibold))
+                    // The keyboard control has a fixed frame; preserve a complete
+                    // label while allowing text growth through standard sizes.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
@@ -227,8 +232,10 @@ struct KeyboardRootView: View {
                 )
             Text(dictationTitle)
                 .font(.caption2.weight(.semibold))
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.5)
+                .padding(.horizontal, 8)
         }
         .foregroundStyle(.primary)
         .frame(width: frame.width, height: capsuleHeight)
@@ -241,6 +248,8 @@ struct KeyboardRootView: View {
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel("Hold to dictate")
         .accessibilityValue(dictationTitle)
+        // The UIKit button supplies the sole accessible start/stop action.
+        .accessibilityHidden(true)
         // UIKit overlay is the primary hit target. This gesture is the fallback
         // when the overlay frame misses the visible capsule.
         .simultaneousGesture(

@@ -303,6 +303,13 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
         hasValidRequestShape && sessionID != nil && generation != nil && clientIdentifier != nil
     }
 
+    /// Request generations belong to the keyboard process, not the app's local
+    /// cancellation counter. Compare the full transport identity independently.
+    public func hasSameIdentity(as other: Self) -> Bool {
+        isBound && other.isBound && sessionID == other.sessionID
+            && generation == other.generation && clientIdentifier == other.clientIdentifier
+    }
+
     /// Return the mode to use when starting a new dictation.
     ///
     /// Transcription is always Auto-detect. The argument remains in the API so

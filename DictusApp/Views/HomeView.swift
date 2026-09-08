@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var showCopiedFeedback = false
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
+    @AppStorage(SharedKeys.modelLoadState, store: AppGroup.defaults) private var modelLoadStateRaw = ModelLoadState.idle.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -70,16 +71,17 @@ struct HomeView: View {
     }
 
     private var greeting: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: serviceEnabled ? "waveform" : "waveform.slash")
+        let readiness = currentReadiness
+        return HStack(alignment: .center, spacing: 12) {
+            Image(systemName: readiness.symbol)
                 .font(.title2.weight(.medium))
-                .foregroundStyle(serviceEnabled ? Color.accentColor : .secondary)
+                .foregroundStyle(readiness.action == .start ? Color.accentColor : .secondary)
                 .frame(width: 34, height: 34)
                 .background(.thinMaterial, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(greetingTitle)
                     .font(.title2.weight(.semibold))
-                Text(serviceEnabled ? "Ready for private, on-device dictation" : "Dictation service is turned off")
+                Text(readinessSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -88,14 +90,15 @@ struct HomeView: View {
     }
 
     private var readinessSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let readiness = currentReadiness
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: readinessSymbol)
+                Image(systemName: readiness.symbol)
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(readinessTitle)
+                    Text(readiness.title)
                         .font(.body.weight(.semibold))
                     Text(readinessSubtitle)
                         .font(.subheadline)
@@ -104,23 +107,24 @@ struct HomeView: View {
             }
             .accessibilityElement(children: .combine)
 
-            if !serviceEnabled {
-                Text("Turn on the service from the top right to use dictation.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else if microphonePermission.isRecoverable {
+            if readiness.action == .openSettings {
                 Button { openSystemSettings() } label: {
                     Label("Open Settings", systemImage: "arrow.up.right")
                 }
                 .buttonStyle(.bordered)
-            } else if !microphonePermission.isAuthorized {
+            } else if readiness.action == .requestMicrophone {
                 Button { requestMicrophoneAccess() } label: {
                     Label("Allow microphone", systemImage: "mic.badge.plus")
                 }
                 .buttonStyle(.bordered)
             }
 
-            if microphonePermission.isAuthorized && modelReady {
+            if readiness.action == .retry {
+                Button { coordinator.startDictation() } label: {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+            } else if readiness.action == .start {
                 newDictationButton
             }
         }
@@ -169,18 +173,17 @@ struct HomeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showCopiedFeedback = false }
     }
 
-    private var readinessSymbol: String {
-        if !microphonePermission.isAuthorized { return "mic.slash" }
-        if !modelReady { return "arrow.down.circle" }
-        return "checkmark.circle"
+    private var currentReadiness: DictationReadiness {
+        DictationReadiness(serviceEnabled: serviceEnabled, microphonePermission: microphonePermission,
+                           modelReady: modelReady, modelLoadState: ModelLoadState(rawValue: modelLoadStateRaw) ?? .idle,
+                           status: coordinator.status)
     }
 
-    private var readinessTitle: String {
-        if microphonePermission.isRecoverable { return "Microphone access is off" }
-        if !microphonePermission.isAuthorized { return "Microphone access needed" }
-        if !modelReady { return "Choose a local model" }
-        if coordinator.status == .failed { return "Dictation needs another try" }
-        return "Ready to dictate"
+    private var readinessSubtitle: String {
+        if currentReadiness.action == .retry, let error = DictationErrorChannel.current {
+            return userFacingError(error)
+        }
+        return currentReadiness.subtitle
     }
 
     private func requestMicrophoneAccess() {
@@ -198,29 +201,6 @@ struct HomeView: View {
             return "Good afternoon"
         default:
             return "Good evening"
-        }
-    }
-
-    private var readinessSubtitle: String {
-        if let recoveryMessage = microphonePermission.recoveryMessage {
-            return recoveryMessage
-        }
-
-        if !microphonePermission.isAuthorized {
-            return "Microphone access has not been granted yet."
-        }
-
-        if !modelReady {
-            return "Choose a local model to begin."
-        }
-
-        switch coordinator.status {
-        case .idle, .ready:
-            return "Offline dictation, ready when you are."
-        case .failed:
-            return userFacingError(DictationErrorChannel.current ?? coordinator.status.recordingLabel)
-        default:
-            return coordinator.status.recordingLabel
         }
     }
 

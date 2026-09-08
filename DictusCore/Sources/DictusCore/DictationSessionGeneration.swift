@@ -81,4 +81,8 @@ public struct DictationSessionGeneration: Equatable, Sendable {
     public func mayReport(from generation: Int) -> Bool {
         generation == current
     }
+
+    public func mayReport(from generation: Int, request: DictationLanguageRequest, currentRequest: DictationLanguageRequest) -> Bool {
+        mayReport(from: generation) && request.hasSameIdentity(as: currentRequest)
+    }
 }

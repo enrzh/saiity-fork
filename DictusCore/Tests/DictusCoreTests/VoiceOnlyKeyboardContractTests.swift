@@ -133,7 +133,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         XCTAssertTrue(controller.contains("micButton = makeKeyboardActionButton"))
-        XCTAssertTrue(controller.contains("micButton?.frame = layout.dictateFrame.insetBy(dx: -8, dy: -8)"))
+        XCTAssertTrue(controller.contains("micButton?.frame = layout.dictateFrame"))
+        XCTAssertFalse(controller.contains("layout.dictateFrame.insetBy(dx: -8, dy: -8)"),
+                       "UIKit must use the same non-overlapping hit frame verified by the layout policy")
         XCTAssertTrue(controller.contains(".touchDown"))
         XCTAssertTrue(controller.contains(".touchUpInside"))
         XCTAssertTrue(controller.contains(".touchUpOutside"))

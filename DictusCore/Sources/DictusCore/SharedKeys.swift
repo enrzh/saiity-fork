@@ -6,6 +6,7 @@ import Foundation
 public enum SharedKeys {
     public static let dictationStatus = "dictus.dictationStatus"
     public static let lastTranscription = "dictus.lastTranscription"
+    public static let dictationDelivery = "dictus.dictationDelivery"
     public static let lastTranscriptionTimestamp = "dictus.lastTranscriptionTimestamp"
     public static let lastError = "dictus.lastError"
     public static let failureDisposition = "dictus.failureDisposition"

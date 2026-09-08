@@ -7,6 +7,7 @@ import DictusCore
 /// section of the continuous horizontal emoji grid, and the strip scrolls to
 /// keep that highlight on screen.
 struct EmojiCategoryBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let sections: [CategoryInfo]
     let selectedCategoryID: String
     let onSelectCategory: (String) -> Void
@@ -44,7 +45,11 @@ struct EmojiCategoryBar: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
                 .onChange(of: selectedCategoryID) { _, id in
-                    proxy.scrollTo(id, anchor: .center)
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = reduceMotion
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
                 }
                 .onAppear {
                     proxy.scrollTo(selectedCategoryID, anchor: .center)

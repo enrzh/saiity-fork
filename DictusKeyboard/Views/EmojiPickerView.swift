@@ -287,7 +287,11 @@ private struct EmojiScrollCanvas: View {
             }
             .onChange(of: scrollRequest) { _, request in
                 guard let request else { return }
-                proxy.scrollTo(request.id, anchor: .leading)
+                var transaction = Transaction()
+                transaction.disablesAnimations = reduceMotion
+                withTransaction(transaction) {
+                    proxy.scrollTo(request.id, anchor: .leading)
+                }
             }
         }
     }

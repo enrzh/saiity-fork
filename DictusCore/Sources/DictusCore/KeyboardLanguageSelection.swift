@@ -39,8 +39,15 @@ public enum KeyboardLanguageSelection: Equatable, Codable, Sendable {
     public static func migrateLegacyFrenchIfNeeded(in defaults: UserDefaults) {
         guard defaults.integer(forKey: SharedKeys.keyboardLanguageMigrationVersion) < version else { return }
         if defaults.object(forKey: SharedKeys.keyboardLanguageSelection) == nil,
-           defaults.string(forKey: SharedKeys.language) == SupportedLanguage.french.rawValue {
-            automatic.persist(to: defaults)
+           let stored = defaults.string(forKey: SharedKeys.language),
+           let language = SupportedLanguage(rawValue: stored) {
+            // Preserve supported choices from pre-selection releases. The old
+            // implicit French default alone migrates to system language.
+            if SupportedLanguage.allCases.contains(language) {
+                explicit(language).persist(to: defaults)
+            } else {
+                automatic.persist(to: defaults)
+            }
         }
         defaults.set(version, forKey: SharedKeys.keyboardLanguageMigrationVersion)
     }

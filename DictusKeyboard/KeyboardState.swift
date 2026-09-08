@@ -637,6 +637,16 @@ class KeyboardState: ObservableObject {
     func requestStop() {
         logProbe("requestStop", details: sessionDetails())
 
+        if dictationStatus == .requested {
+            defaults.synchronize()
+            let sharedStatus = defaults.string(forKey: SharedKeys.dictationStatus)
+                .flatMap(DictationStatus.init(rawValue:)) ?? .requested
+            if DictationStopAction.resolve(status: sharedStatus, isRecording: sharedStatus == .recording) == .cancel {
+                requestCancel()
+                return
+            }
+        }
+
         // A stop tapped by a keyboard that never started this dictation (#261). The
         // line is written whatever comes next, because two taps used to produce
         // nothing at all -- neither on screen nor in the log -- and that silence is
@@ -665,6 +675,10 @@ class KeyboardState: ObservableObject {
     /// while the Darwin notification tells the app to clean up its side.
     func requestCancel() {
         logProbe("requestCancel", details: sessionDetails())
+        sessionGeneration += 1
+        DictationDelivery.clear(in: defaults)
+        DictationLanguageRequest.load(from: defaults).unbound().persist(to: defaults)
+        defaults.set(DictationStatus.idle.rawValue, forKey: SharedKeys.dictationStatus)
         defaults.set(true, forKey: SharedKeys.cancelRequested)
         defaults.synchronize()
         DarwinNotificationCenter.post(DarwinNotificationName.cancelRecording)
@@ -810,32 +824,23 @@ class KeyboardState: ObservableObject {
     private func handleTranscriptionReady() {
         logProbe("handleTranscriptionReady", details: sessionDetails())
         refreshFromDefaults()
-
-        if let transcription = defaults.string(forKey: SharedKeys.lastTranscription),
-           !transcription.isEmpty {
-            // Clear from UserDefaults BEFORE inserting to prevent duplicate insertions.
-            // Darwin notifications can be delivered multiple times (extension lifecycle,
-            // multiple statusChanged posts). By clearing first, subsequent calls find
-            // nothing to insert.
-            defaults.removeObject(forKey: SharedKeys.lastTranscription)
-            defaults.synchronize()
-
-            insertTranscription(transcription)
-        } else {
-            // Retry after 100ms — mitigates UserDefaults race condition.
-            // Darwin notifications are posted immediately after synchronize(),
-            // but cross-App-Group propagation can lag on-device.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                guard let self = self else { return }
-                if let transcription = self.defaults.string(forKey: SharedKeys.lastTranscription),
-                   !transcription.isEmpty {
-                    self.defaults.removeObject(forKey: SharedKeys.lastTranscription)
-                    self.defaults.synchronize()
-
-                    self.insertTranscription(transcription)
-                }
-            }
+        let request = DictationLanguageRequest.load(from: defaults)
+        guard !consumeTranscription(for: request) else { return }
+        // Propagation can lag. Capture the identity so this callback cannot
+        // consume a newer session after cancellation or a quick retry.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            _ = self?.consumeTranscription(for: request)
         }
+    }
+
+    @discardableResult
+    private func consumeTranscription(for request: DictationLanguageRequest) -> Bool {
+        guard isKeyboardVisible, let controller,
+              controller.isViewLoaded, controller.view.window != nil,
+              request.hasSameIdentity(as: DictationLanguageRequest.load(from: defaults)),
+              let transcription = DictationDelivery.consume(for: request, from: defaults) else { return false }
+        insertTranscription(transcription)
+        return true
     }
 
     /// Insert a transcription into the host field and return the keyboard to idle.
@@ -1158,6 +1163,7 @@ class KeyboardState: ObservableObject {
         // Refresh state from App Group — picks up status changes that
         // happened while the keyboard extension was suspended.
         refreshFromDefaults()
+        handleTranscriptionReady()
     }
 
     /// Called when a controller disappears. Only the current owner may hide the keyboard.
@@ -1387,6 +1393,9 @@ class KeyboardState: ObservableObject {
             resolvedSourceLanguage: resolvedSourceLanguage
         )
         request.persist(to: defaults)
+        DictationDelivery.clear(in: defaults)
+        defaults.set(false, forKey: SharedKeys.stopRequested)
+        defaults.set(false, forKey: SharedKeys.cancelRequested)
         languageRequest = Self.loadLanguageRequest(from: defaults)
         logProbe("startRecording", details: sessionDetails())
 

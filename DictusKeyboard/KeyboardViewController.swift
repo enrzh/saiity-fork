@@ -4,6 +4,15 @@ import SwiftUI
 import Combine
 import DictusCore
 
+/// VoiceOver activation is a toggle, independent of physical touch-down/up.
+private final class DictationMicButton: UIButton {
+    var onAccessibilityActivate: (() -> Bool)?
+
+    override func accessibilityActivate() -> Bool {
+        onAccessibilityActivate?() ?? false
+    }
+}
+
 class KeyboardViewController: UIInputViewController {
     let controllerID = String(UUID().uuidString.prefix(8))
 
@@ -967,6 +976,19 @@ class KeyboardViewController: UIInputViewController {
         micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
         micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
         micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        (micButton as? DictationMicButton)?.onAccessibilityActivate = {
+            let state = KeyboardState.shared
+            switch state.dictationStatus {
+            case .requested, .recording:
+                state.handleMicPressEnded()
+            case .idle, .ready, .failed:
+                state.handleMicPressBegan()
+            case .transcribing, .processing:
+                return false
+            }
+            return true
+        }
+        micButton?.accessibilityHint = String(localized: "Double-tap to start or stop dictation.")
         spaceButton = makeKeyboardActionButton(identifier: "space-key", label: "Space") { [weak self] in
             self?.routeProxyCommand(.space)
         }
@@ -984,7 +1006,7 @@ class KeyboardViewController: UIInputViewController {
         installPrimaryAction: Bool = true,
         action: @escaping () -> Void
     ) -> UIButton {
-        let button = UIButton(type: .system)
+        let button = identifier == "dictate-button" ? DictationMicButton(type: .system) : UIButton(type: .system)
         button.accessibilityIdentifier = identifier
         button.accessibilityLabel = label
         button.accessibilityTraits = [.button]
@@ -1072,7 +1094,8 @@ class KeyboardViewController: UIInputViewController {
         atButton?.frame = layout.leftUtilityFrames.at
         emojiButton?.frame = layout.leftUtilityFrames.emoji
         numberButton?.frame = layout.leftUtilityFrames.number
-        micButton?.frame = layout.dictateFrame.insetBy(dx: -8, dy: -8)
+        micButton?.frame = layout.dictateFrame
+        micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
         spaceButton?.frame = layout.spaceFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
