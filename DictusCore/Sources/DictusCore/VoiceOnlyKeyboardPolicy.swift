@@ -62,6 +62,49 @@ public enum VoiceOnlyKeyboardPolicy {
                 }
             }
         }
+
+        /// Builds a symbol row whose first and last commands keep a native-sized
+        /// hit target while the punctuation keys share the remaining width.
+        ///
+        /// The row is intentionally rectangular: rounded visual surfaces are
+        /// rendered inside these frames, but the whole frame remains tappable at
+        /// the screen edge.
+        public static func fixedEdgeCommandRowFrames(
+            itemCount: Int,
+            rowFrame: CGRect,
+            spacing: CGFloat,
+            commandWidth: CGFloat
+        ) -> [CGRect] {
+            guard itemCount >= 2,
+                  rowFrame.minX.isFinite,
+                  rowFrame.minY.isFinite,
+                  rowFrame.width.isFinite,
+                  rowFrame.height.isFinite,
+                  spacing >= 0,
+                  rowFrame.width > 0,
+                  rowFrame.height > 0,
+                  commandWidth > 0 else { return [] }
+
+            let gapCount = CGFloat(itemCount - 1)
+            let widthAfterGaps = rowFrame.width - spacing * gapCount
+            guard widthAfterGaps > 0 else { return [] }
+
+            let edgeWidth = min(commandWidth, widthAfterGaps / 2)
+            let middleCount = itemCount - 2
+            let middleWidth = middleCount > 0
+                ? max(0, (widthAfterGaps - edgeWidth * 2) / CGFloat(middleCount))
+                : 0
+            guard edgeWidth > 0,
+                  middleCount == 0 || middleWidth > 0 else { return [] }
+
+            var x = rowFrame.minX
+            return (0..<itemCount).map { index in
+                let width = index == 0 || index == itemCount - 1 ? edgeWidth : middleWidth
+                let frame = CGRect(x: x, y: rowFrame.minY, width: width, height: rowFrame.height)
+                x = frame.maxX + spacing
+                return frame
+            }
+        }
     }
 
     public static let usesLegacyKeyGrid = false
@@ -284,6 +327,45 @@ public enum VoiceOnlyKeyboardPolicy {
                           width: rightRailWidth, height: bottomActionHitHeight)
         }
 
+        /// The letter keyboard keeps Enter and keyboard-dismiss in separate
+        /// native-style bottom-row slots. The voice surface still uses the
+        /// single wide dismiss slot above.
+        public var letterDismissFrame: CGRect {
+            guard rightRailWidth > 0 else { return .zero }
+            let frame = CGRect(
+                x: surfaceFrame.maxX - visibleControlGap - controlSize,
+                y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                width: controlSize,
+                height: bottomActionHitHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        public var letterReturnFrame: CGRect {
+            guard !letterDismissFrame.isEmpty else { return .zero }
+            let frame = CGRect(
+                x: letterDismissFrame.minX - railSpacing - actionHitSize.width,
+                y: letterDismissFrame.minY,
+                width: actionHitSize.width,
+                height: actionHitSize.height
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// The explicit letter-keyboard switch sits immediately above the native
+        /// keyboard-dismiss control. Keeping this frame outside the delete/return
+        /// rail makes the page switch stable while every surface changes below it.
+        public var keyboardModeFrame: CGRect {
+            guard rightRailWidth > 0 else { return .zero }
+            let frame = CGRect(
+                x: dismissFrame.minX,
+                y: dismissFrame.minY - visibleControlGap - controlSize,
+                width: rightRailWidth,
+                height: controlSize
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
         public var micCenterArea: CGRect {
             CGRect(x: centerX - centerAreaWidth / 2,
                    y: surfaceFrame.minY,
@@ -315,6 +397,26 @@ public enum VoiceOnlyKeyboardPolicy {
                 y: surfaceFrame.minY,
                 width: width,
                 height: letterKeyboardHeaderHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        public var letterSpaceFrame: CGRect {
+            let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
+                + visibleControlGap
+                + VoiceOnlyKeyboardPolicy.spacebarHeight
+            guard surfaceFrame.height >= clusterHeight,
+                  !letterReturnFrame.isEmpty else { return .zero }
+
+            let leftMaxX = max(leftUtilityFrames.emoji.maxX, leftUtilityFrames.number.maxX)
+            let x = leftMaxX + railSpacing
+            let width = letterReturnFrame.minX - railSpacing - x
+            guard width >= 44 else { return .zero }
+            let frame = CGRect(
+                x: x,
+                y: spaceLaneMinY,
+                width: width,
+                height: VoiceOnlyKeyboardPolicy.spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
         }
@@ -409,7 +511,8 @@ public enum VoiceOnlyKeyboardPolicy {
                 commandRects = []
             }
             let spaceRects = spaceFrame.isEmpty ? [] : [spaceFrame]
-            return utilities + commandRects + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame] + spaceRects
+            let pageSwitch = keyboardModeFrame.isEmpty ? [] : [keyboardModeFrame]
+            return utilities + commandRects + pageSwitch + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame] + spaceRects
         }
     }
 

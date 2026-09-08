@@ -7,6 +7,7 @@ struct KeyboardRootView: View {
     let controllerID: String
     let routeText: (String) -> Void
     let routeCommand: (KeyboardCommand) -> Void
+    let routeCursorMovement: (Int) -> Void
     @ObservedObject private var state = KeyboardState.shared
     @State private var symbolPage: KeyboardPage = .symbols1
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -32,21 +33,12 @@ struct KeyboardRootView: View {
                     frame: surfaceFrame
                 )
                     .position(x: surfaceFrame.midX, y: surfaceFrame.midY)
-                if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
+                if (state.areaMode == .keys || state.areaMode == .letters || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
 
-                if state.areaMode == .keys && !layout.letterMicFrame.isEmpty {
-                    dictateButton(frame: layout.letterMicFrame)
-                        .frame(width: layout.letterMicFrame.width, height: layout.letterMicFrame.height)
-                        .position(
-                            x: dictateButtonLocalX(for: layout.letterMicFrame, in: layout),
-                            y: CGFloat(layout.letterMicFrame.midY - layout.surfaceFrame.minY)
-                        )
-                }
-
-                if state.areaMode == .recording {
+                if state.areaMode == .keys || state.areaMode == .recording {
                     if layout.leftRailWidth > 0 {
                         utilityGlyph(systemName: "at")
                             .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
@@ -66,6 +58,33 @@ struct KeyboardRootView: View {
                             .position(
                                 x: CGFloat(layout.dismissFrame.midX),
                                 y: CGFloat(layout.dismissFrame.midY)
+                            )
+
+                        if state.areaMode == .keys && !layout.keyboardModeFrame.isEmpty {
+                            utilityGlyph(systemName: "keyboard", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
+                                .position(
+                                    x: CGFloat(layout.keyboardModeFrame.midX),
+                                    y: CGFloat(layout.keyboardModeFrame.midY)
+                                )
+                        }
+                    }
+                }
+
+                if state.areaMode == .letters {
+                    if !layout.letterMicFrame.isEmpty {
+                        dictateButton(frame: layout.letterMicFrame)
+                            .frame(width: layout.letterMicFrame.width, height: layout.letterMicFrame.height)
+                            .position(
+                                x: dictateButtonLocalX(for: layout.letterMicFrame, in: layout),
+                                y: CGFloat(layout.letterMicFrame.midY - layout.surfaceFrame.minY)
+                            )
+                    }
+
+                    if layout.rightRailWidth > 0 {
+                        utilityGlyph(systemName: "keyboard.chevron.compact.down", width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, usesInteractiveSurface: false)
+                            .position(
+                                x: CGFloat(layout.letterDismissFrame.midX),
+                                y: CGFloat(layout.letterDismissFrame.midY)
                             )
                     }
                 }
@@ -89,7 +108,25 @@ struct KeyboardRootView: View {
         let availableWidth = surfaceFrame.width
         switch state.areaMode {
         case .keys:
-            Color.clear
+            centerSurface(layout: layout)
+        case .letters:
+            LetterKeyboardPageView(
+                surfaceLayout: layout,
+                availableWidth: surfaceFrame.width,
+                availableHeight: surfaceFrame.height,
+                onInsert: routeProxyText,
+                onDelete: { routeProxyCommand(.delete) },
+                onReturn: { routeProxyCommand(.returnKey) },
+                onBackToVoice: { state.closeArea() },
+                onSymbols: { state.presentArea(.panel) },
+                onEmoji: { state.presentArea(.emoji) },
+                showsSymbolsControl: true,
+                onSpaceCursorBegan: {},
+                onSpaceCursorMoved: routeCursorMovement,
+                onSpaceCursorEnded: {}
+            )
+            .frame(width: surfaceFrame.width, height: surfaceFrame.height)
+            .accessibilityIdentifier("letter-keyboard-surface")
         case .recording:
             centerSurface(layout: layout)
         case .emoji:
@@ -118,6 +155,9 @@ struct KeyboardRootView: View {
                 onClose: { state.closeArea() },
                 onBackToVoice: { state.closeArea() },
                 onEmoji: { state.presentArea(.emoji) },
+                onSpaceCursorBegan: {},
+                onSpaceCursorMoved: routeCursorMovement,
+                onSpaceCursorEnded: {},
             )
             .frame(width: surfaceFrame.width, height: surfaceFrame.height)
             .accessibilityIdentifier("number-layer-surface")
@@ -393,6 +433,180 @@ struct KeyboardRootView: View {
 
 }
 
+/// SwiftUI-owned letter page. It consumes the same `KeyboardLayouts` definitions
+/// as the former UIKit grid, while sharing the auxiliary bottom bar with symbols.
+private struct LetterKeyboardPageView: View {
+    let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
+    let availableWidth: CGFloat
+    let availableHeight: CGFloat
+    let onInsert: (String) -> Void
+    let onDelete: () -> Void
+    let onReturn: () -> Void
+    let onBackToVoice: () -> Void
+    let onSymbols: () -> Void
+    let onEmoji: () -> Void
+    let showsSymbolsControl: Bool
+    let onSpaceCursorBegan: () -> Void
+    let onSpaceCursorMoved: (Int) -> Void
+    let onSpaceCursorEnded: () -> Void
+
+    @State private var page: KeyboardPage = .normal
+
+    private let edgeInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
+    private let headerHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.letterKeyboardHeaderHeight)
+    private let rowSpacing: CGFloat = 5
+    private let keySpacing: CGFloat = 5
+    private let bottomBarHeight: CGFloat = 44
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: edgeInset)
+            Color.clear.frame(height: headerHeight)
+            GeometryReader { proxy in
+                let frames = positionedKeys(in: proxy.size)
+                ZStack(alignment: .topLeading) {
+                    ForEach(frames.indices, id: \.self) { index in
+                        let positioned = frames[index]
+                        letterKey(positioned.key, frame: positioned.frame)
+                            .frame(width: positioned.frame.width, height: positioned.frame.height)
+                            .position(x: positioned.frame.midX, y: positioned.frame.midY)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+            }
+            AuxiliaryBottomBar(
+                layout: surfaceLayout,
+                onEmoji: onEmoji,
+                onVoice: onBackToVoice,
+                onSymbols: onSymbols,
+                showsSymbolsControl: showsSymbolsControl,
+                spaceFrame: surfaceLayout.letterSpaceFrame,
+                returnFrame: surfaceLayout.letterReturnFrame,
+                onSpace: { onInsert(" ") },
+                onSpaceCursorBegan: onSpaceCursorBegan,
+                onSpaceCursorMoved: onSpaceCursorMoved,
+                onSpaceCursorEnded: onSpaceCursorEnded,
+                onReturn: onReturn
+            )
+            .frame(width: availableWidth, height: bottomBarHeight)
+            Color.clear.frame(height: edgeInset)
+        }
+        .frame(width: availableWidth, height: availableHeight)
+        .onChange(of: LayoutType.active) { _, _ in
+            page = .normal
+        }
+    }
+
+    private var rows: [[KeyDefinition]] {
+        guard let layout = KeyboardLayouts.current().currentDeviceLayout else { return [] }
+        let pageRows: [[KeyDefinition]]
+        switch page {
+        case .normal:
+            pageRows = layout.normal
+        case .shifted, .capslock:
+            pageRows = layout.shifted
+        case .symbols1, .symbols2:
+            pageRows = layout.normal
+        }
+        // The common bottom bar owns emoji, symbols, space and return. Keeping
+        // those definitions out of this grid prevents a second shifting row.
+        return Array(pageRows.dropLast())
+    }
+
+    private func positionedKeys(in size: CGSize) -> [PositionedLetterKey] {
+        let weights = rows.map { row in row.map { CGFloat($0.size.width) } }
+        let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
+            for: weights,
+            in: size,
+            spacing: keySpacing,
+            inset: keySpacing,
+            rowSpacing: rowSpacing
+        )
+        return zip(rows, frames).flatMap { row, rowFrames in
+            zip(row, rowFrames).map { PositionedLetterKey(key: $0, frame: $1) }
+        }
+    }
+
+    @ViewBuilder
+    private func letterKey(_ key: KeyDefinition, frame: CGRect) -> some View {
+        Group {
+            switch key.type {
+            case .spacer:
+                Color.clear.accessibilityHidden(true)
+            case .backspace:
+                Button(action: onDelete) {
+                    Image(systemName: "delete.backward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .keyboardGlass(in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete backward")
+            default:
+                Button {
+                    commit(key)
+                } label: {
+                    letterGlyph(for: key)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .keyboardGlass(in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityLabel(key.accessibilityLabel(for: page) ?? "Keyboard key")
+            }
+        }
+        .frame(width: frame.width, height: frame.height)
+    }
+
+    @ViewBuilder
+    private func letterGlyph(for key: KeyDefinition) -> some View {
+        switch key.type {
+        case .input(let value, _):
+            Text(value)
+                .font(.system(size: 22, weight: .regular))
+        case .shift:
+            Image(systemName: page == .capslock ? "capslock.fill" : "shift")
+                .font(.system(size: 16, weight: .semibold))
+        case .symbols:
+            Text("123")
+                .font(.system(size: 14, weight: .medium))
+        case .returnkey(let name):
+            Text(name)
+                .font(.system(size: 14, weight: .medium))
+        default:
+            EmptyView()
+        }
+    }
+
+    private func commit(_ key: KeyDefinition) {
+        switch key.type {
+        case .input(let value, _):
+            if value == KeyboardLayouts.emojiKeyGlyph {
+                onEmoji()
+            } else {
+                onInsert(value)
+                if page == .shifted { page = .normal }
+            }
+        case .shift:
+            page = page == .capslock ? .normal : (page == .shifted ? .normal : .shifted)
+        case .symbols:
+            onSymbols()
+        case .returnkey:
+            onReturn()
+        case .spacebar:
+            onInsert(" ")
+        default:
+            break
+        }
+    }
+}
+
+private struct PositionedLetterKey {
+    let key: KeyDefinition
+    let frame: CGRect
+}
+
 private struct LiquidSymbolPageView: View {
     let page: KeyboardPage
     let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
@@ -405,6 +619,9 @@ private struct LiquidSymbolPageView: View {
     let onClose: () -> Void
     let onBackToVoice: () -> Void
     let onEmoji: () -> Void
+    let onSpaceCursorBegan: () -> Void
+    let onSpaceCursorMoved: (Int) -> Void
+    let onSpaceCursorEnded: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -458,7 +675,14 @@ private struct LiquidSymbolPageView: View {
                 layout: surfaceLayout,
                 onEmoji: onEmoji,
                 onVoice: onBackToVoice,
+                onSymbols: {},
+                showsSymbolsControl: false,
+                spaceFrame: surfaceLayout.spaceFrame,
+                returnFrame: surfaceLayout.dismissFrame,
                 onSpace: { onInsert(" ") },
+                onSpaceCursorBegan: onSpaceCursorBegan,
+                onSpaceCursorMoved: onSpaceCursorMoved,
+                onSpaceCursorEnded: onSpaceCursorEnded,
                 onReturn: onReturn
             )
             .frame(width: availableWidth, height: bottomBarHeight)
@@ -493,10 +717,34 @@ private struct LiquidSymbolPageView: View {
     private func positionedKeys(in size: CGSize) -> [PositionedLiquidSymbolKey] {
         guard !rows.isEmpty else { return [] }
         let rowWeights = rows.map { row in row.map(\.width) }
-        let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
+        let standardFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
             for: rowWeights, in: size, spacing: keySpacing,
             inset: horizontalInset, rowSpacing: rowSpacing
         )
+
+        guard let standardBottomFrame = standardFrames.last?.first,
+              let bottomRow = rows.last else {
+            return []
+        }
+        let bottomRowHeight = min(standardBottomFrame.height, CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
+        let bottomFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.fixedEdgeCommandRowFrames(
+            itemCount: bottomRow.count,
+            rowFrame: CGRect(
+                x: horizontalInset,
+                y: standardBottomFrame.minY,
+                width: max(0, size.width - horizontalInset * 2),
+                height: bottomRowHeight
+            ),
+            spacing: keySpacing,
+            commandWidth: CGFloat(VoiceOnlyKeyboardPolicy.actionHitSize.width)
+        )
+        guard bottomFrames.count == bottomRow.count else {
+            return zip(rows, standardFrames).flatMap { row, rowFrames in
+                zip(row, rowFrames).map { PositionedLiquidSymbolKey(key: $0, frame: $1) }
+            }
+        }
+
+        let frames = Array(standardFrames.dropLast()) + [bottomFrames]
         return zip(rows, frames).flatMap { row, rowFrames in
             zip(row, rowFrames).map { PositionedLiquidSymbolKey(key: $0, frame: $1) }
         }
@@ -523,7 +771,7 @@ private struct LiquidSymbolPageView: View {
                     if isActive {
                         symbolPointerHighlight
                     }
-                    keyContent(key)
+                    keyContent(key, frame: frame)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -667,18 +915,27 @@ private struct LiquidSymbolPageView: View {
     }
 
     @ViewBuilder
-    private func keyContent(_ key: LiquidSymbolKey) -> some View {
+    private func keyContent(_ key: LiquidSymbolKey, frame: CGRect) -> some View {
         switch key.action {
         case .togglePage:
             Text(key.label)
                 .font(.system(size: 14, weight: .medium))
+                .frame(width: commandVisualWidth(for: frame), height: 36)
+                .keyboardGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         case .delete:
             Image(systemName: "delete.backward")
                 .font(.system(size: 16, weight: .semibold))
+                .frame(width: commandVisualWidth(for: frame), height: 36)
+                .keyboardGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         case .insert, .close:
             Text(key.label)
                 .font(.system(size: 22, weight: .regular))
+                .frame(width: max(0, frame.width), height: max(0, frame.height))
         }
+    }
+
+    private func commandVisualWidth(for frame: CGRect) -> CGFloat {
+        min(80, max(44, frame.width - 8))
     }
 
     private func commit(_ key: LiquidSymbolKey) {
@@ -789,7 +1046,6 @@ private struct SymbolGlowButtonStyle: ButtonStyle {
                         .padding(4)
                 }
             }
-            .scaleEffect(reduceMotion ? 1 : pressed ? 1.08 : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: pressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: pressed)
     }
 }

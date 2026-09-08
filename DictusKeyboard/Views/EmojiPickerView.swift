@@ -146,15 +146,15 @@ struct EmojiPickerView: View {
         let surface = surfaceLayout.surfaceFrame
         let microphone = surfaceLayout.auxiliaryMicrophoneFrame
         let delete = CGRect(
-            x: surface.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.controlSize,
+            x: surface.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.actionHitSize.width,
             y: 0,
-            width: VoiceOnlyKeyboardPolicy.controlSize,
-            height: VoiceOnlyKeyboardPolicy.controlSize
+            width: VoiceOnlyKeyboardPolicy.actionHitSize.width,
+            height: VoiceOnlyKeyboardPolicy.actionHitSize.height
         )
         let microphoneLocalX = CGFloat(microphone.midX - surface.minX)
         let deleteLocalX = CGFloat(delete.midX - surface.minX)
         let categoryMinX = CGFloat(microphone.maxX - surface.minX + VoiceOnlyKeyboardPolicy.railSpacing)
-        let categoryWidth = max(0, deleteLocalX - CGFloat(VoiceOnlyKeyboardPolicy.controlSize / 2 + VoiceOnlyKeyboardPolicy.railSpacing) - categoryMinX)
+        let categoryWidth = max(0, deleteLocalX - CGFloat(VoiceOnlyKeyboardPolicy.actionHitSize.width / 2 + VoiceOnlyKeyboardPolicy.railSpacing) - categoryMinX)
 
         return ZStack(alignment: .topLeading) {
             glassRoundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onBackToVoice)
@@ -195,7 +195,7 @@ struct EmojiPickerView: View {
     }
 
     private var glassDeleteControl: some View {
-        DeleteRepeatButton(onDelete: onDelete)
+        KeyboardDeleteButton(onDelete: onDelete)
     }
 
     private func updateSelectedCategory(_ categoryID: String) {
@@ -413,58 +413,5 @@ private struct OptionalEmojiLongPress: ViewModifier {
         } else {
             content
         }
-    }
-}
-
-private struct DeleteRepeatButton: View {
-    let onDelete: () -> Void
-    @State private var deleteRepeatTimer: Timer?
-    @State private var deleteRepeatStarted = false
-
-    var body: some View {
-        Button {
-            if deleteRepeatStarted {
-                deleteRepeatStarted = false
-                return
-            }
-            onDelete()
-        } label: {
-            Image(systemName: "delete.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(
-                    width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
-                    height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
-                )
-                .keyboardGlass(in: Circle())
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Delete backward")
-        .onLongPressGesture(minimumDuration: 0.35, pressing: { pressing in
-            if pressing {
-                startDeleteRepeat()
-            } else {
-                stopDeleteRepeat()
-            }
-        }, perform: {})
-        .onDisappear { stopDeleteRepeat() }
-    }
-
-    private func startDeleteRepeat() {
-        stopDeleteRepeat()
-        deleteRepeatStarted = true
-        onDelete()
-        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-            onDelete()
-        }
-        deleteRepeatTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func stopDeleteRepeat() {
-        deleteRepeatTimer?.invalidate()
-        deleteRepeatTimer = nil
     }
 }

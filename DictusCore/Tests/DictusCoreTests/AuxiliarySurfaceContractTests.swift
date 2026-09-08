@@ -31,6 +31,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
 
         XCTAssertEqual(root.components(separatedBy: "areaSurface(layout: layout, contentFrame: surfaceFrame)").count - 1, 1)
         XCTAssertTrue(root.contains("case .keys:"))
+        XCTAssertTrue(root.contains("case .letters:"))
         XCTAssertTrue(root.contains("case .recording:"))
         XCTAssertTrue(root.contains("case .emoji:"))
         XCTAssertTrue(root.contains("case .panel:"))
@@ -207,7 +208,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
 
         XCTAssertTrue(picker.contains("EmojiCategoryBar("))
         XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(picker.contains("systemName: \"delete.backward\""))
+        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete)"))
         XCTAssertFalse(picker.contains("AuxiliaryBottomBar("),
                       "the emoji page keeps only microphone, categories, and delete")
         XCTAssertTrue(categories.contains(".frame(width: 44, height: 44)"))

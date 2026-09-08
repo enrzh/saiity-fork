@@ -26,6 +26,7 @@ class KeyboardViewController: UIInputViewController,
     private var deleteButton: UIButton?
     private var returnButton: UIButton?
     private var dismissButton: UIButton?
+    private var letterModeButton: UIButton?
     private var micButton: UIButton?
     private var spaceButton: UIButton?
     private var spaceCursorController: LongPressCursorMovementController?
@@ -187,7 +188,8 @@ class KeyboardViewController: UIInputViewController,
         let rootView = KeyboardRootView(
             controllerID: controllerID,
             routeText: { [weak self] text in self?.routeProxyText(text) },
-            routeCommand: { [weak self] command in self?.routeProxyCommand(command) }
+            routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
+            routeCursorMovement: { [weak self] movement in self?.didMoveCursor(movement) }
         )
         let hosting = UIHostingController(rootView: rootView)
         PersistentLog.log(.diagnosticProbe(
@@ -874,7 +876,9 @@ class KeyboardViewController: UIInputViewController,
         let status = KeyboardState.shared.dictationStatus.rawValue
         let liveHeight = computeKeyboardHeight(for: mode)
         setVoiceActionControlsHidden(mode == .panel || mode == .emoji)
-        giellaKeyboard?.isHidden = mode != .keys
+        // The letter page is SwiftUI-owned. Keep the vendored renderer installed
+        // for layout compatibility, but never let it compete for touches or pixels.
+        giellaKeyboard?.isHidden = true
 
         switch mode {
         case .keys:
@@ -886,6 +890,18 @@ class KeyboardViewController: UIInputViewController,
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "hostingSet_idle",
+                details: "old=\(oldHosting) new=\(liveHeight) status=\(status) mode=\(mode.rawValue)"
+            ))
+
+        case .letters:
+            heightConstraint?.constant = liveHeight
+            hostingHeightConstraint?.constant = liveHeight
+            setHostingExpanded(true)
+            hostingController?.view.isHidden = false
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "hostingSet_letters",
                 details: "old=\(oldHosting) new=\(liveHeight) status=\(status) mode=\(mode.rawValue)"
             ))
 
@@ -1000,7 +1016,7 @@ class KeyboardViewController: UIInputViewController,
         giellaTrailingConstraint?.constant = -(inputView.bounds.width - frame.maxX)
         giellaTopConstraint?.constant = frame.minY
         giellaBottomConstraint?.constant = -(resolvedHeight - frame.maxY)
-        keyboard.isHidden = KeyboardState.shared.areaMode != .keys
+        keyboard.isHidden = true
     }
 
     private func reassertTransparentSurfaceLayers() {
@@ -1064,6 +1080,9 @@ class KeyboardViewController: UIInputViewController,
         dismissButton = makeKeyboardActionButton(identifier: "dismiss-keyboard", label: "Dismiss keyboard") { [weak self] in
             self?.handleDismissKeyboard()
         }
+        letterModeButton = makeKeyboardActionButton(identifier: "letter-mode", label: "Open letter keyboard") { [weak self] in
+            self?.presentArea(.letters)
+        }
         micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
         micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
         micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
@@ -1096,7 +1115,7 @@ class KeyboardViewController: UIInputViewController,
         cursorController.delegate = self
         spaceCursorController = cursorController
         [atButton, emojiButton, numberButton, micButton, spaceButton,
-         deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
+         deleteButton, returnButton, letterModeButton, dismissButton].compactMap { $0 }.forEach {
             controls.addSubview($0)
         }
         setVoiceActionControlsHidden(true)
@@ -1156,11 +1175,33 @@ class KeyboardViewController: UIInputViewController,
     private func layoutVoiceActionControls(surfaceHeight: CGFloat? = nil) {
         guard let controls = actionControlsView, controls.bounds.width > 0 else { return }
         let mode = KeyboardState.shared.areaMode
+        let width = controls.bounds.width
+        let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
+        let layout = VoiceOnlyKeyboardPolicy.layout(
+            for: Double(width),
+            surfaceHeight: Double(max(1, resolvedHeight)),
+            controlOrder: KeyboardAccessoryOrder.current
+        )
+        let allButtons = [atButton, emojiButton, numberButton, micButton, spaceButton,
+                          deleteButton, returnButton, letterModeButton, dismissButton]
+            .compactMap { $0 }
+        allButtons.forEach {
+            $0.isHidden = true
+            $0.isEnabled = false
+            $0.isUserInteractionEnabled = false
+        }
+
+        // SwiftUI owns every auxiliary page. UIKit remains interactive only for
+        // the small letter-page mic and dismiss overlays; keeping the panel's
+        // transparent container hidden lets its SwiftUI spacebar receive the
+        // native-style cursor drag gesture.
         let isAuxiliary = mode == .panel || mode == .emoji
         controls.isHidden = isAuxiliary
         controls.isUserInteractionEnabled = !isAuxiliary
+
         guard !isAuxiliary else {
-            [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
+            [atButton, emojiButton, numberButton, micButton, spaceButton,
+             deleteButton, returnButton, letterModeButton, dismissButton]
                 .compactMap { $0 }
                 .forEach {
                     $0.isHidden = true
@@ -1170,24 +1211,7 @@ class KeyboardViewController: UIInputViewController,
             return
         }
 
-        // The idle page is the full native-style letter keyboard. Its bottom row
-        // owns 123, emoji, space, return and keyboard-dismiss actions, so only the
-        // compact dictation action remains in this transparent UIKit overlay.
-        if mode == .keys {
-            let width = controls.bounds.width
-            let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
-            let layout = VoiceOnlyKeyboardPolicy.layout(
-                for: Double(width),
-                surfaceHeight: Double(max(1, resolvedHeight)),
-                controlOrder: KeyboardAccessoryOrder.current
-            )
-            [atButton, emojiButton, numberButton, spaceButton, deleteButton, returnButton, dismissButton]
-                .compactMap { $0 }
-                .forEach {
-                    $0.isHidden = true
-                    $0.isEnabled = false
-                    $0.isUserInteractionEnabled = false
-                }
+        if mode == .letters {
             micButton?.isHidden = layout.letterMicFrame.isEmpty
             micButton?.isEnabled = !layout.letterMicFrame.isEmpty
             micButton?.isUserInteractionEnabled = !layout.letterMicFrame.isEmpty
@@ -1197,18 +1221,17 @@ class KeyboardViewController: UIInputViewController,
             micButton?.accessibilityHint = KeyboardState.shared.appNeedsModelPreparation
                 ? "Opens sAiity and prepares the dictation model."
                 : "Double-tap to start or stop dictation."
-            micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
+            dismissButton?.isHidden = layout.letterDismissFrame.isEmpty
+            dismissButton?.isEnabled = !layout.letterDismissFrame.isEmpty
+            dismissButton?.isUserInteractionEnabled = !layout.letterDismissFrame.isEmpty
+            dismissButton?.frame = layout.letterDismissFrame
+            [micButton, dismissButton].compactMap { $0 }.forEach {
+                $0.layer.cornerRadius = $0.bounds.height / 2
+            }
             if let inputView { inputView.bringSubviewToFront(controls) }
             return
         }
 
-        let width = controls.bounds.width
-        let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
-        let layout = VoiceOnlyKeyboardPolicy.layout(
-            for: Double(width),
-            surfaceHeight: Double(max(1, resolvedHeight)),
-            controlOrder: KeyboardAccessoryOrder.current
-        )
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
         let voiceMicFrameAvailable = !layout.dictateFrame.isEmpty
@@ -1217,10 +1240,11 @@ class KeyboardViewController: UIInputViewController,
         numberButton?.isHidden = !leftRailVisible
         micButton?.isHidden = (mode != .keys && mode != .recording) || !voiceMicFrameAvailable
         spaceButton?.isHidden = (mode != .keys && mode != .recording) || layout.spaceFrame.isEmpty
+        letterModeButton?.isHidden = mode != .keys || layout.keyboardModeFrame.isEmpty
         deleteButton?.isHidden = !rightRailVisible
         returnButton?.isHidden = !rightRailVisible
         dismissButton?.isHidden = !rightRailVisible
-        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
+        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, letterModeButton, dismissButton]
             .compactMap { $0 }
             .forEach {
                 $0.isEnabled = !$0.isHidden
@@ -1238,8 +1262,9 @@ class KeyboardViewController: UIInputViewController,
         spaceButton?.frame = layout.spaceFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
+        letterModeButton?.frame = layout.keyboardModeFrame
         dismissButton?.frame = layout.dismissFrame
-        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, dismissButton]
+        [atButton, emojiButton, numberButton, micButton, spaceButton, deleteButton, returnButton, letterModeButton, dismissButton]
             .compactMap { $0 }
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
         spaceButton?.layer.cornerRadius = (spaceButton?.bounds.height ?? 0) / 2
@@ -1390,7 +1415,7 @@ class KeyboardViewController: UIInputViewController,
         case .shift:
             toggleLetterShift()
         case .keyboardMode:
-            handleDismissKeyboard()
+            presentArea(.letters)
         case .shiftSymbols, .spacer, .caps, .splitKeyboard,
              .normalKeyboard, .sideKeyboardLeft, .sideKeyboardRight,
              .comma, .fullStop, .tab:

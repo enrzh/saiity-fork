@@ -53,16 +53,9 @@ struct ModelManagerView: View {
     }
 
     private var modelManagerContent: some View {
-        modelList
-        .listStyle(.insetGrouped)
-        .contentMargins(.bottom, 88, for: .scrollContent)
-        .navigationTitle("Models")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showAddModel = true } label: { Image(systemName: "plus") }
-                    .accessibilityLabel("Add custom model")
-            }
-        }
+        // Xcode 26.3 can time out when it carries the concrete nested List type
+        // through every sheet, alert, and cover modifier below.
+        AnyView(configuredModelList)
         .sheet(isPresented: $showAddModel) {
             NavigationStack { AddCustomModelView(modelManager: modelManager) }
         }
@@ -129,6 +122,22 @@ struct ModelManagerView: View {
                 )
             )
         }
+    }
+
+    /// Keep the large List result separate from its presentation modifiers.
+    /// Xcode 26.3 otherwise spends too long type-checking the nested sections
+    /// together with the alerts and full-screen cover below.
+    private var configuredModelList: some View {
+        modelList
+            .listStyle(.insetGrouped)
+            .contentMargins(.bottom, 88, for: .scrollContent)
+            .navigationTitle("Models")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAddModel = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("Add custom model")
+                }
+            }
     }
 
     @ViewBuilder

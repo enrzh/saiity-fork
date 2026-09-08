@@ -37,15 +37,18 @@ public enum KeyboardSymbolsLayout {
 
     private static func bottomRow() -> [Key] {
         [
-            Key(.pageToggle, width: 1.5),
-            Key(.insert("."), width: 0.9),
-            Key(.insert(","), width: 0.9),
-            Key(.insert("?"), width: 0.9),
-            Key(.insert("!"), width: 0.9),
-            Key(.insert("'"), width: 0.9),
+            // Give the two glass command keys the same visual width as the
+            // dictation board's delete/return controls. The punctuation keys
+            // keep the remaining row compact without sharing their hit target.
+            Key(.pageToggle, width: 2.25),
+            Key(.insert(".")),
+            Key(.insert(",")),
+            Key(.insert("?")),
+            Key(.insert("!")),
+            Key(.insert("'")),
             // Native symbols keyboards put Delete above Return. Delete therefore
             // belongs to the last symbol row while Return remains in the shared bar.
-            Key(.delete, width: 1.5)
+            Key(.delete, width: 2.25)
         ]
     }
 }

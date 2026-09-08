@@ -141,6 +141,23 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
         }
     }
 
+    func testSymbolCommandFramesMatchDictationBoardHitSize() {
+        for width in [320.0, 375.0, 390.0, 430.0] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
+            let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.fixedEdgeCommandRowFrames(
+                itemCount: KeyboardSymbolsLayout.numbers[2].count,
+                rowFrame: CGRect(x: 6, y: 100, width: layout.surfaceFrame.width - 12, height: 44),
+                spacing: 5,
+                commandWidth: 88
+            )
+
+            XCTAssertEqual(frames.count, KeyboardSymbolsLayout.numbers[2].count)
+            XCTAssertEqual(frames.first?.size, VoiceOnlyKeyboardPolicy.actionHitSize)
+            XCTAssertEqual(frames.last?.size, VoiceOnlyKeyboardPolicy.actionHitSize)
+            XCTAssertTrue(frames.allSatisfy { $0.maxX <= layout.surfaceFrame.width - 6 })
+        }
+    }
+
     func testPageToggleRoutesInBothDirectionsWithoutClosingVoiceSurface() {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(from: .symbols1), .symbols1ToSymbols2)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(from: .symbols2), .symbols2ToSymbols1)

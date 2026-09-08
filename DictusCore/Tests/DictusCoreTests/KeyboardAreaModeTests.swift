@@ -7,6 +7,7 @@ final class KeyboardAreaModeTests: XCTestCase {
     func testFullAreaModesOwnTheirOverlaySurface() {
         XCTAssertTrue(KeyboardAreaMode.keys.usesVoiceActionControls)
         XCTAssertTrue(KeyboardAreaMode.recording.usesVoiceActionControls)
+        XCTAssertFalse(KeyboardAreaMode.letters.usesVoiceActionControls)
         XCTAssertFalse(KeyboardAreaMode.emoji.usesVoiceActionControls)
         XCTAssertFalse(KeyboardAreaMode.panel.usesVoiceActionControls)
     }
@@ -14,7 +15,7 @@ final class KeyboardAreaModeTests: XCTestCase {
     // MARK: - Cases
 
     func testEnumHasOnlyVoiceModes() {
-        XCTAssertEqual(KeyboardAreaMode.allCases, [.keys, .emoji, .panel, .recording])
+        XCTAssertEqual(KeyboardAreaMode.allCases, [.keys, .letters, .emoji, .panel, .recording])
     }
 
     func testRawValues() {
@@ -120,6 +121,7 @@ final class KeyboardAreaModeTests: XCTestCase {
 
     func testModeControlTitleReflectsTheVisibleSurface() {
         XCTAssertEqual(KeyboardAreaMode.keys.modeControlTitle, "123")
+        XCTAssertEqual(KeyboardAreaMode.letters.modeControlTitle, "123")
         XCTAssertEqual(KeyboardAreaMode.recording.modeControlTitle, "123")
         XCTAssertEqual(KeyboardAreaMode.emoji.modeControlTitle, "ABC")
         XCTAssertEqual(KeyboardAreaMode.panel.modeControlTitle, "ABC")

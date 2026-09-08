@@ -21,8 +21,10 @@ import Foundation
 /// unit-testable — the keyboard extension target has no test bundle. Same
 /// reasoning as `DefaultKeyboardLayer` and `LayoutType`.
 public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
-    /// The idle voice surface with the toolbar visible.
+    /// The idle dictation surface with the toolbar visible.
     case keys
+    /// The native-style letter keyboard, opened explicitly from the dictation board.
+    case letters
     case emoji
     case panel
     /// The recording overlay fills the whole area, toolbar included.
@@ -33,7 +35,10 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
     }
 
     public var modeControlTitle: String {
-        self == .keys || self == .recording ? "123" : "ABC"
+        switch self {
+        case .keys, .letters, .recording: return "123"
+        case .emoji, .panel: return "ABC"
+        }
     }
 
     /// Toggles the symbols surface from the keyboard's ABC/123 action.

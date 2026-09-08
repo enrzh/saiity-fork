@@ -711,7 +711,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
             let rectangles = layout.actionRectangles
 
-            XCTAssertEqual(rectangles.count, layout.spaceFrame.isEmpty ? 7 : 8, "width=\(width)")
+            let expectedCount = (layout.spaceFrame.isEmpty ? 7 : 8)
+                + (layout.keyboardModeFrame.isEmpty ? 0 : 1)
+            XCTAssertEqual(rectangles.count, expectedCount, "width=\(width)")
             XCTAssertTrue(rectangles.allSatisfy { $0.minX >= 0 && $0.maxX <= width && $0.minY >= 0 && $0.maxY <= VoiceOnlyKeyboardPolicy.surfaceHeight }, "width=\(width)")
             for (index, rectangle) in rectangles.enumerated() {
                 XCTAssertGreaterThanOrEqual(rectangle.width, 44, "index=\(index), width=\(width)")
@@ -805,6 +807,27 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.utilityVisualSize, 36)
         XCTAssertLessThanOrEqual(VoiceOnlyKeyboardPolicy.utilityVisualSize, VoiceOnlyKeyboardPolicy.actionHitSize.height)
         XCTAssertLessThanOrEqual(VoiceOnlyKeyboardPolicy.utilityVisualSize, VoiceOnlyKeyboardPolicy.surfaceHeight)
+    }
+
+    func testLetterBottomRowSeparatesReturnDismissAndSpaceTargets() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
+            let surface = layout.surfaceFrame
+
+            XCTAssertFalse(layout.letterReturnFrame.isEmpty, "return width=\(width)")
+            XCTAssertFalse(layout.letterDismissFrame.isEmpty, "dismiss width=\(width)")
+            XCTAssertFalse(layout.letterSpaceFrame.isEmpty, "space width=\(width)")
+            XCTAssertEqual(layout.letterReturnFrame.size, VoiceOnlyKeyboardPolicy.actionHitSize)
+            XCTAssertEqual(layout.letterDismissFrame.size,
+                           CGSize(width: VoiceOnlyKeyboardPolicy.controlSize,
+                                  height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
+            XCTAssertFalse(layout.letterReturnFrame.intersects(layout.letterDismissFrame))
+            XCTAssertFalse(layout.letterSpaceFrame.intersects(layout.letterReturnFrame))
+            XCTAssertEqual(layout.letterReturnFrame.maxY, layout.letterDismissFrame.maxY, accuracy: 0.001)
+            XCTAssertTrue(surface.contains(layout.letterReturnFrame))
+            XCTAssertTrue(surface.contains(layout.letterDismissFrame))
+            XCTAssertTrue(surface.contains(layout.letterSpaceFrame))
+        }
     }
 
     func testKeyboardHeightUsesNativeProviderContract() throws {

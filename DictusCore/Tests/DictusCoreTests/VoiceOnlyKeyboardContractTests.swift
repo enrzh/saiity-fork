@@ -542,6 +542,20 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("inputView.bringSubviewToFront(controls)"))
     }
 
+    func testAuxiliarySpacebarKeepsSwiftUIOwnershipForCursorDragging() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+
+        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
+        XCTAssertTrue(controller.contains("guard !isAuxiliary else {"))
+        XCTAssertTrue(root.contains("onSpaceCursorMoved: routeCursorMovement"))
+        XCTAssertTrue(bar.contains("struct SpaceBarControl: View"))
+        XCTAssertTrue(bar.contains("onCursorMoved: onSpaceCursorMoved"))
+        XCTAssertFalse(controller.contains("spaceButton?.frame = layout.letterSpaceFrame"),
+                       "auxiliary pages must not cover the SwiftUI spacebar with UIKit")
+    }
+
     func testBothAuxiliaryPagesKeepModeControlAvailableToReturnToNormal() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
@@ -576,7 +590,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(picker.contains("LazyHGrid(rows: gridRows, spacing: 0)"),
                       "all categories share one horizontal grid")
         XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(picker.contains("systemName: \"delete.backward\""))
+        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete)"))
         XCTAssertTrue(picker.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("AuxiliaryBottomBar("))
     }
@@ -631,7 +645,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("identifier: \"emoji-picker\""))
         XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
         XCTAssertEqual(controller.components(separatedBy: "identifier: \"dismiss-keyboard\"").count - 1, 1)
-        XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 1)
+        XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 2)
         XCTAssertFalse(root.contains("openURL"))
         XCTAssertFalse(controller.contains("toggleEmojiPicker"))
         XCTAssertFalse(controller.contains("dictusTextDidChange"))
@@ -662,6 +676,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(controller.contains("nextInputModeButton"))
         XCTAssertFalse(root.contains("utilityGlyph(systemName: \"globe\")"))
         XCTAssertTrue(root.contains("state.areaMode.modeControlTitle"))
+        XCTAssertTrue(root.contains("state.areaMode == .letters"))
+        XCTAssertTrue(controller.contains("letterModeButton"))
+        XCTAssertTrue(root.contains("showsSymbolsControl: true"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
         XCTAssertTrue(root.contains("languageIndicatorTitle"))
         XCTAssertTrue(root.contains("state.selectTranscription()"))
@@ -853,8 +870,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             .deletingLastPathComponent()
         let root = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"), encoding: .utf8)
 
-        XCTAssertTrue(root.contains("if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator") ||
-                      root.contains("if layout.showsLanguageIndicator && (state.areaMode == .keys || state.areaMode == .recording)"),
+        XCTAssertTrue(root.contains("if (state.areaMode == .keys || state.areaMode == .letters || state.areaMode == .recording) && layout.showsLanguageIndicator"),
                       "language indicator must not be rendered for emoji or panel modes")
     }
 
