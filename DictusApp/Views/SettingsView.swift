@@ -81,8 +81,10 @@ struct SettingsView: View {
                 NavigationLink { LicensesView() } label: {
                     Label("Licenses", systemImage: "doc.text.fill")
                 }
-                Link(destination: URL(string: "https://github.com/enrzh")!) {
-                    Label("Get Support", systemImage: "questionmark.circle.fill")
+                if let supportURL = URL(string: "https://github.com/enrzh") {
+                    Link(destination: supportURL) {
+                        Label("Get Support", systemImage: "questionmark.circle.fill")
+                    }
                 }
             }
         }

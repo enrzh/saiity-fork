@@ -473,18 +473,21 @@ private struct LiquidSymbolPageView: View {
 
     private var rows: [[LiquidSymbolKey]] {
         switch page {
-        case .symbols2: return KeyboardSymbolsLayout.symbols.enumerated().map { rowIndex, row in
-            row.enumerated().map { columnIndex, key in
-                LiquidSymbolKey(id: "\(page)-\(rowIndex)-\(columnIndex)", key: key, page: page)
+        case .symbols2:
+            return KeyboardSymbolsLayout.symbols.enumerated().map { rowIndex, row in
+                row.enumerated().map { columnIndex, key in
+                    LiquidSymbolKey(id: "\(page)-\(rowIndex)-\(columnIndex)", key: key, page: page)
+                }
             }
-        }
-        case .symbols1: return KeyboardSymbolsLayout.numbers.enumerated().map { rowIndex, row in
-            row.enumerated().map { columnIndex, key in
-                LiquidSymbolKey(id: "\(page)-\(rowIndex)-\(columnIndex)", key: key, page: page)
+        case .symbols1:
+            return KeyboardSymbolsLayout.numbers.enumerated().map { rowIndex, row in
+                row.enumerated().map { columnIndex, key in
+                    LiquidSymbolKey(id: "\(page)-\(rowIndex)-\(columnIndex)", key: key, page: page)
+                }
             }
+        default:
+            return []
         }
-        default: return []
-    }
     }
 
     private func positionedKeys(in size: CGSize) -> [PositionedLiquidSymbolKey] {
@@ -758,11 +761,6 @@ private struct PositionedLiquidSymbolKey: Identifiable {
 private struct OptionalLongPressModifier<G: Gesture>: ViewModifier {
     let enabled: Bool
     let gesture: G
-
-    init(enabled: Bool, gesture: G) {
-        self.enabled = enabled
-        self.gesture = gesture
-    }
 
     func body(content: Content) -> some View {
         if enabled {

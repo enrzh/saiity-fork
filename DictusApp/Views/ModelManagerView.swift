@@ -49,6 +49,10 @@ struct ModelManagerView: View {
     }
 
     var body: some View {
+        modelManagerContent
+    }
+
+    private var modelManagerContent: some View {
         List {
             Section {
                 if installedModels.isEmpty {
