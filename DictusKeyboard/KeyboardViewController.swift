@@ -42,6 +42,19 @@ class KeyboardViewController: UIInputViewController,
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
 
+    private struct ThemeCacheKey: Equatable {
+        let style: UIUserInterfaceStyle
+        let idiom: UIUserInterfaceIdiom
+        let isLandscape: Bool
+        let isPad: Bool
+    }
+
+    private var lastThemeCacheKey: ThemeCacheKey?
+    private var lastLayoutSize: CGSize?
+    private var lastLayoutHeight: CGFloat?
+    private var lastLayoutMode: KeyboardAreaMode?
+    private var lastLayoutAccessoryOrder: KeyboardAccessoryOrder?
+
     private final class PassthroughControlsView: UIView {
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
             for subview in subviews.reversed() where !subview.isHidden && subview.alpha > 0 && subview.isUserInteractionEnabled {
@@ -382,9 +395,6 @@ class KeyboardViewController: UIInputViewController,
             details: "statusBefore=\(statusBeforeHandle) statusAfter=\(KeyboardState.shared.dictationStatus.rawValue) mode=\(KeyboardState.shared.areaMode.rawValue) hostingConst=\(hostingHeightConstraint?.constant ?? -1)"
         ))
 
-        inputView?.setNeedsLayout()
-        inputView?.layoutIfNeeded()  // Force synchronous layout to reduce loading flicker (#92)
-
         // Show hosting view now that constraints and SwiftUI state are synchronized.
         // Was hidden in viewDidLoad to prevent cold start flash (toolbar in full-height hosting).
         hostingController?.view.isHidden = false
@@ -472,12 +482,23 @@ class KeyboardViewController: UIInputViewController,
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        reassertTransparentSurfaceLayers()
         let liveHeight = computeKeyboardHeight(for: KeyboardState.shared.areaMode)
-        hostingHeightConstraint?.constant = liveHeight
-        heightConstraint?.constant = liveHeight
-        layoutVoiceActionControls(surfaceHeight: liveHeight)
-        layoutLetterKeyboard(surfaceHeight: liveHeight)
+        let mode = KeyboardState.shared.areaMode
+        let size = inputView?.bounds.size ?? .zero
+        let needsSurfaceLayout = lastLayoutSize != size
+            || lastLayoutHeight != liveHeight
+            || lastLayoutMode != mode
+            || lastLayoutAccessoryOrder != KeyboardAccessoryOrder.current
+        if needsSurfaceLayout {
+            hostingHeightConstraint?.constant = liveHeight
+            heightConstraint?.constant = liveHeight
+            layoutVoiceActionControls(surfaceHeight: liveHeight)
+            layoutLetterKeyboard(surfaceHeight: liveHeight)
+            lastLayoutSize = size
+            lastLayoutHeight = liveHeight
+            lastLayoutMode = mode
+            lastLayoutAccessoryOrder = KeyboardAccessoryOrder.current
+        }
         if isFirstLayoutPass {
             isFirstLayoutPass = false
             // Defer constraint installation to the next runloop turn so we
@@ -636,7 +657,10 @@ class KeyboardViewController: UIInputViewController,
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         let hadColorChange = traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection)
-        if hadColorChange {
+        if hadColorChange || previousTraitCollection == nil {
+            reassertTransparentSurfaceLayers()
+            refreshLetterKeyboardIfNeeded()
+            lastLayoutSize = nil
         }
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
@@ -943,10 +967,12 @@ class KeyboardViewController: UIInputViewController,
             ))
         }
 
+        // Mode changes happen outside viewDidLayoutSubviews. Refresh the action
+        // hit areas immediately so the visible surface and UIKit controls switch
+        // together before the next render pass.
+        layoutVoiceActionControls()
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
-        layoutVoiceActionControls(surfaceHeight: liveHeight)
-        layoutLetterKeyboard(surfaceHeight: liveHeight)
     }
 
     // MARK: - UIKit action controls
@@ -954,9 +980,10 @@ class KeyboardViewController: UIInputViewController,
     /// The letter grid is UIKit-owned so key hit testing, long-press variants and
     /// cursor movement stay on the same low-latency path as the vendored keyboard.
     private func installLetterKeyboard(in inputView: UIView) {
+        let theme = Theme.current(for: traitCollection)
         let keyboard = GiellaKeyboardView(
             definition: KeyboardLayouts.current(),
-            theme: Theme.current(for: traitCollection)
+            theme: theme
         )
         keyboard.translatesAutoresizingMaskIntoConstraints = false
         keyboard.delegate = self
@@ -976,14 +1003,19 @@ class KeyboardViewController: UIInputViewController,
         giellaTrailingConstraint = trailing
         giellaTopConstraint = top
         giellaBottomConstraint = bottom
+        lastThemeCacheKey = currentThemeCacheKey()
     }
 
     private func refreshLetterKeyboardIfNeeded() {
         guard let inputView else { return }
         let requestedLayout = LayoutType.active
         let requestedAccessoryOrder = KeyboardAccessoryOrder.current
+        let themeKey = currentThemeCacheKey()
         guard giellaLayoutType != requestedLayout || giellaAccessoryOrder != requestedAccessoryOrder else {
-            giellaKeyboard?.updateTheme(theme: Theme.current(for: traitCollection))
+            if lastThemeCacheKey != themeKey {
+                giellaKeyboard?.updateTheme(theme: Theme.current(for: traitCollection))
+                lastThemeCacheKey = themeKey
+            }
             return
         }
 
@@ -995,6 +1027,16 @@ class KeyboardViewController: UIInputViewController,
         giellaKeyboard = nil
         installLetterKeyboard(in: inputView)
         layoutLetterKeyboard()
+    }
+
+    private func currentThemeCacheKey() -> ThemeCacheKey {
+        let device = DeviceContext.current
+        return ThemeCacheKey(
+            style: traitCollection.userInterfaceStyle,
+            idiom: traitCollection.userInterfaceIdiom,
+            isLandscape: device.isLandscape,
+            isPad: device.isPad
+        )
     }
 
     private func layoutLetterKeyboard(surfaceHeight: CGFloat? = nil) {
@@ -1332,9 +1374,6 @@ class KeyboardViewController: UIInputViewController,
 
     private func closeNumberPanel() {
         KeyboardState.shared.closeArea()
-        inputView?.setNeedsLayout()
-        inputView?.layoutIfNeeded()
-        layoutVoiceActionControls()
     }
 
     private func presentArea(_ mode: KeyboardAreaMode) {

@@ -43,6 +43,56 @@ enum AudioEngineError: Error, LocalizedError {
     }
 }
 
+/// Persists the small cross-process waveform snapshot away from the real-time
+/// audio callback. Session tokens invalidate queued writes when recording ends.
+private final class AppGroupWaveformWriter {
+    private let queue = DispatchQueue(label: "de.aiity.saiity.waveform-writer", qos: .utility)
+    private let stateLock = NSLock()
+    private var nextSessionID: UInt64 = 0
+    private var activeSessionID: UInt64?
+
+    func beginSession() -> UInt64 {
+        stateLock.lock()
+        nextSessionID &+= 1
+        activeSessionID = nextSessionID
+        let sessionID = nextSessionID
+        stateLock.unlock()
+        return sessionID
+    }
+
+    func endSession() {
+        stateLock.lock()
+        activeSessionID = nil
+        stateLock.unlock()
+    }
+
+    func enqueueWaveform(_ values: [Float], elapsed: Double, sessionID: UInt64) {
+        queue.async { [weak self] in
+            guard let self, self.isCurrent(sessionID) else { return }
+            guard let data = try? JSONEncoder().encode(values) else { return }
+            // The recording may have ended while JSON encoding was in progress.
+            guard self.isCurrent(sessionID) else { return }
+            let defaults = AppGroup.defaults
+            defaults.set(data, forKey: SharedKeys.waveformEnergy)
+            defaults.set(elapsed, forKey: SharedKeys.recordingElapsedSeconds)
+            DarwinNotificationCenter.post(DarwinNotificationName.waveformUpdate)
+        }
+    }
+
+    func enqueueHeartbeat(_ timestamp: TimeInterval) {
+        queue.async {
+            AppGroup.defaults.set(timestamp, forKey: SharedKeys.recordingHeartbeat)
+        }
+    }
+
+    private func isCurrent(_ sessionID: UInt64) -> Bool {
+        stateLock.lock()
+        let isCurrent = activeSessionID == sessionID
+        stateLock.unlock()
+        return isCurrent
+    }
+}
+
 /// Unified audio engine for recording dictation audio.
 ///
 /// WHY this replaces AudioRecorder + RawAudioCapture:
@@ -111,6 +161,10 @@ class UnifiedAudioEngine: ObservableObject {
     /// read from audio callback thread in processBuffer(). Write completes before
     /// the audio tap is installed, so no race condition.
     private nonisolated(unsafe) var converter: AVAudioConverter?
+
+    /// Reused for every tap callback. Its capacity is sized when the hardware
+    /// format is known, avoiding an AVAudioPCMBuffer allocation per callback.
+    private nonisolated(unsafe) var reusableOutputBuffer: AVAudioPCMBuffer?
 
     /// Target format: 16kHz mono Float32 — what WhisperKit and Parakeet expect.
     ///
@@ -234,7 +288,12 @@ class UnifiedAudioEngine: ObservableObject {
     /// WHY nonisolated(unsafe): Single writer (audio callback thread).
     private nonisolated(unsafe) var audioThreadSampleCount: Int = 0
 
+    private nonisolated(unsafe) var waveformSessionID: UInt64?
+    private nonisolated(unsafe) var lastUIWaveformUpdate: TimeInterval = 0
+
     private let waveformBarCount = 30
+    private let inputBufferSize: AVAudioFrameCount = 4096
+    private nonisolated(unsafe) let waveformWriter = AppGroupWaveformWriter()
 
     // MARK: - Init / Deinit
 
@@ -336,6 +395,7 @@ class UnifiedAudioEngine: ObservableObject {
             isRecording = false
             isRecordingFlag = false
             cancelIdleRelease()
+            endWaveformSession()
 
             // Stop the engine so the next start() reinstalls the tap with a fresh
             // hardware format. Don't deactivate the session — iOS will do that for us
@@ -412,6 +472,7 @@ class UnifiedAudioEngine: ObservableObject {
         logHapticsAllowance(context: "mediaServicesReset")
 
         cancelIdleRelease()
+        endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         // Bump generation BEFORE replacing the engine so any in-flight tap callbacks
@@ -574,6 +635,7 @@ class UnifiedAudioEngine: ObservableObject {
             try startEngine(context: "startRecording")
         }
         purgeState()
+        waveformSessionID = waveformWriter.beginSession()
         isRecording = true
         isRecordingFlag = true
 
@@ -597,6 +659,7 @@ class UnifiedAudioEngine: ObservableObject {
     func collectSamples() -> [Float] {
         isRecording = false
         isRecordingFlag = false
+        endWaveformSession()
 
         let samples = audioSamples
         audioSamples = []
@@ -626,6 +689,7 @@ class UnifiedAudioEngine: ObservableObject {
         cancelIdleRelease()
         isRecording = false
         isRecordingFlag = false
+        endWaveformSession()
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -649,6 +713,7 @@ class UnifiedAudioEngine: ObservableObject {
         cancelIdleRelease()
         isRecording = false
         isRecordingFlag = false
+        endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         audioSamples = []
@@ -772,6 +837,7 @@ class UnifiedAudioEngine: ObservableObject {
 
         isRecording = false
         isRecordingFlag = false
+        endWaveformSession()
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -805,6 +871,11 @@ class UnifiedAudioEngine: ObservableObject {
 
     // MARK: - Private Helpers
 
+    private func endWaveformSession() {
+        waveformSessionID = nil
+        waveformWriter.endSession()
+    }
+
     /// Start the AVAudioEngine with a tap on the input node.
     ///
     /// - Parameter context: names the path that started the engine, so the
@@ -812,12 +883,14 @@ class UnifiedAudioEngine: ObservableObject {
     ///   (issue #293).
     private func startEngine(context: String) throws {
         audioSamples = []
+        reusableOutputBuffer = nil
         audioThreadEnergy = []
         audioThreadWaveformBins = []
         audioThreadSampleCount = 0
         lastHeartbeatWrite = 0
         lastWaveformWrite = 0
         lastWaveformDiagnosticsWrite = 0
+        lastUIWaveformUpdate = 0
 
         let inputNode = engine.inputNode
         var hwFormat = inputNode.outputFormat(forBus: 0)
@@ -843,6 +916,14 @@ class UnifiedAudioEngine: ObservableObject {
             ))
             throw AudioEngineError.audioHardwareUnavailable
         }
+
+        let outputFrameCapacity = AVAudioFrameCount(
+            ceil(Double(inputBufferSize) * 16000.0 / hwFormat.sampleRate)
+        ) + 1
+        reusableOutputBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: max(outputFrameCapacity, 1)
+        )
 
         // Guard: detect telephony audio route (phone call in progress)
         // WHY only check inputs for "telephony" (not builtInReceiver on outputs):
@@ -882,7 +963,7 @@ class UnifiedAudioEngine: ObservableObject {
         let installedGeneration = engineGeneration
         do {
             try ObjCExceptionCatcher.catchException {
-                inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buffer, _ in
+                inputNode.installTap(onBus: 0, bufferSize: inputBufferSize, format: hwFormat) { [weak self] buffer, _ in
                     guard let self else { return }
                     guard installedGeneration == self.engineGeneration else { return }
                     self.processBuffer(buffer)
@@ -946,6 +1027,7 @@ class UnifiedAudioEngine: ObservableObject {
         audioThreadSampleCount = 0
         lastWaveformWrite = 0
         lastWaveformDiagnosticsWrite = 0
+        lastUIWaveformUpdate = 0
     }
 
     /// Process incoming audio buffer: convert to 16kHz and compute energy for waveform.
@@ -977,21 +1059,13 @@ class UnifiedAudioEngine: ObservableObject {
             let idleHeartbeatThrottle: TimeInterval = 3.0
             if now - lastHeartbeatWrite >= idleHeartbeatThrottle {
                 lastHeartbeatWrite = now
-                AppGroup.defaults.set(now, forKey: SharedKeys.recordingHeartbeat)
+                waveformWriter.enqueueHeartbeat(now)
             }
             return
         }
 
-        guard let converter else { return }
-
-        // Calculate output frame count: input frames * (target rate / source rate) + 1
-        let ratio = 16000.0 / buffer.format.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: outputFrameCount
-        ) else { return }
+        guard let converter, let outputBuffer = reusableOutputBuffer else { return }
+        outputBuffer.frameLength = 0
 
         // Convert from hardware format to 16kHz mono
         var error: NSError?
@@ -1040,20 +1114,31 @@ class UnifiedAudioEngine: ObservableObject {
         // Write heartbeat (~1Hz) during recording
         if now - lastHeartbeatWrite >= 1.0 {
             lastHeartbeatWrite = now
-            AppGroup.defaults.set(now, forKey: SharedKeys.recordingHeartbeat)
+            waveformWriter.enqueueHeartbeat(now)
         }
 
-        // Write waveform data + elapsed time to App Group (~5Hz)
-        if now - lastWaveformWrite >= 0.2 {
+        // Update the sample count before publishing elapsed time so the value
+        // represents the complete callback rather than the previous one.
+        audioThreadSampleCount += samples.count
+
+        let shouldWriteWaveform = now - lastWaveformWrite >= 0.2
+        let shouldPublishUI = now - lastUIWaveformUpdate >= 0.1
+        var waveformSnapshot: [Float]?
+        if shouldWriteWaveform || shouldPublishUI {
+            waveformSnapshot = makeWaveformSnapshot()
+        } else {
+            waveformSnapshot = nil
+        }
+
+        // Persist waveform data away from the real-time audio callback (~5Hz).
+        if shouldWriteWaveform, let waveformSnapshot,
+           let waveformSessionID {
             lastWaveformWrite = now
-            audioThreadSampleCount += 0 // count is updated in main thread dispatch below
-            let snapshot = makeWaveformSnapshot()
-            if let data = try? JSONEncoder().encode(snapshot) {
-                AppGroup.defaults.set(data, forKey: SharedKeys.waveformEnergy)
-            }
-            AppGroup.defaults.set(Double(audioThreadSampleCount) / 16000.0, forKey: SharedKeys.recordingElapsedSeconds)
-            AppGroup.defaults.synchronize()
-            DarwinNotificationCenter.post(DarwinNotificationName.waveformUpdate)
+            waveformWriter.enqueueWaveform(
+                waveformSnapshot,
+                elapsed: Double(audioThreadSampleCount) / 16000.0,
+                sessionID: waveformSessionID
+            )
 
             if now - lastWaveformDiagnosticsWrite >= 1.0 {
                 lastWaveformDiagnosticsWrite = now
@@ -1061,13 +1146,14 @@ class UnifiedAudioEngine: ObservableObject {
                     component: "UnifiedAudioEngine",
                     instanceID: "shared",
                     action: "waveformSnapshot",
-                    details: waveformStatsDetails(snapshot)
+                    details: waveformStatsDetails(waveformSnapshot)
                 ))
             }
         }
 
-        // Track sample count on audio thread (needed for elapsed time in App Group writes)
-        audioThreadSampleCount += samples.count
+        if shouldPublishUI, let waveformSnapshot {
+            lastUIWaveformUpdate = now
+        }
 
         // === Main thread dispatch (for in-app UI: RecordingView, SwiftUI) ===
 
@@ -1076,10 +1162,10 @@ class UnifiedAudioEngine: ObservableObject {
             // SAMPLE GATE: only accumulate when recording
             guard self.isRecording else { return }
             self.audioSamples.append(contentsOf: samples)
-            self.bufferSeconds = Double(self.audioSamples.count) / 16000.0
-
-            // Maintain a rolling window of energy values (last 30 = matches barCount in BrandWaveform)
-            self.bufferEnergy = self.makeWaveformSnapshot()
+            if let waveformSnapshot {
+                self.bufferSeconds = Double(self.audioSamples.count) / 16000.0
+                self.bufferEnergy = waveformSnapshot
+            }
         }
     }
 

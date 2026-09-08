@@ -43,6 +43,28 @@ final class FrequencyDictionaryTests: XCTestCase {
         XCTAssertTrue(dict.rank(of: "de") < dict.rank(of: "anticonstitutionnellement"))
     }
 
+    func testRankedCompletionsKeepsOnlyTheRequestedTopK() {
+        var dict = FrequencyDictionary()
+        let json = #"{"alpha": 1, "beta": 80, "gamma": 40, "delta": 20}"#
+        dict.load(from: json.data(using: .utf8)!)
+
+        XCTAssertEqual(
+            dict.rankedCompletions(["alpha", "beta", "gamma", "delta"], limit: 2),
+            ["beta", "gamma"]
+        )
+    }
+
+    func testRankedCompletionsPreservesInputOrderForEqualRanks() {
+        var dict = FrequencyDictionary()
+        let json = #"{"first": 10, "second": 10, "third": 10}"#
+        dict.load(from: json.data(using: .utf8)!)
+
+        XCTAssertEqual(
+            dict.rankedCompletions(["third", "first", "second"], limit: 3),
+            ["third", "first", "second"]
+        )
+    }
+
     func testLoadFromFixtureFile() {
         guard let url = Bundle.module.url(forResource: "fr_frequency_test", withExtension: "json", subdirectory: "Fixtures"),
               let data = try? Data(contentsOf: url) else {

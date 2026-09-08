@@ -104,6 +104,29 @@ enum KeyboardLayouts {
 
     // MARK: - Public API
 
+    /// The inputs that change the programmatic definition returned by `current()`.
+    ///
+    /// The definition is read repeatedly while SwiftUI redraws the letter surface, but
+    /// its contents only change when one of these values changes. Keeping the key explicit
+    /// makes the cache invalidate for every preference or device condition that affects
+    /// the rendered rows.
+    private struct CurrentLayoutCacheKey: Equatable {
+        let language: SupportedLanguage
+        let layout: LayoutType
+        let accessoryOrder: KeyboardAccessoryOrder
+        let numberRowEnabled: Bool
+        let isLandscape: Bool
+        let isPad: Bool
+    }
+
+    private struct CachedCurrentLayout {
+        let key: CurrentLayoutCacheKey
+        let definition: KeyboardDefinition
+    }
+
+    private static let currentLayoutCacheLock = NSLock()
+    private static var cachedCurrentLayout: CachedCurrentLayout?
+
     /// AZERTY layout (default for French).
     static func azerty(lang: SupportedLanguage = .active) -> KeyboardDefinition {
         return KeyboardDefinition(
@@ -164,12 +187,31 @@ enum KeyboardLayouts {
     /// Returns the layout matching the user's App Group preferences.
     ///
     static func current() -> KeyboardDefinition {
-        let lang = SupportedLanguage.active
-        switch LayoutType.active {
-        case .azerty: return azerty(lang: lang, )
-        case .qwerty: return qwerty(lang: lang, )
-        case .qwertz: return qwertz(lang: lang, )
+        let device = DeviceContext.current
+        let key = CurrentLayoutCacheKey(
+            language: SupportedLanguage.active,
+            layout: LayoutType.active,
+            accessoryOrder: KeyboardAccessoryOrder.current,
+            numberRowEnabled: NumberRowPreference.isEnabled,
+            isLandscape: device.isLandscape,
+            isPad: device.isPad
+        )
+
+        currentLayoutCacheLock.lock()
+        defer { currentLayoutCacheLock.unlock() }
+
+        if let cachedCurrentLayout, cachedCurrentLayout.key == key {
+            return cachedCurrentLayout.definition
         }
+
+        let definition: KeyboardDefinition
+        switch key.layout {
+        case .azerty: definition = azerty(lang: key.language, )
+        case .qwerty: definition = qwerty(lang: key.language, )
+        case .qwertz: definition = qwertz(lang: key.language, )
+        }
+        cachedCurrentLayout = CachedCurrentLayout(key: key, definition: definition)
+        return definition
     }
 
     // MARK: - AZERTY Letter Pages

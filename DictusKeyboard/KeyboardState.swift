@@ -243,6 +243,12 @@ class KeyboardState: ObservableObject {
     @Published var waveformEnergy: [Float] = []
     @Published var recordingElapsed: Double = 0
 
+    /// Darwin notifications can arrive in bursts while the extension is waking.
+    /// Keep at most one main-queue read pending and skip payloads already decoded.
+    private let waveformReadLock = NSLock()
+    private var waveformReadScheduled = false
+    private var lastDecodedWaveformData: Data?
+
     /// True when the app must be foregrounded to warm the downloaded model before
     /// another background keyboard dictation can start.
     @Published private(set) var appNeedsModelPreparation = false
@@ -425,9 +431,7 @@ class KeyboardState: ObservableObject {
         DarwinNotificationCenter.addObserver(
             for: DarwinNotificationName.waveformUpdate
         ) { [weak self] in
-            DispatchQueue.main.async {
-                self?.readWaveformData()
-            }
+            self?.scheduleWaveformRead()
         }
 
     }
@@ -474,6 +478,7 @@ class KeyboardState: ObservableObject {
         stopWatchdog()
         dictationStatus = .idle
         waveformEnergy = []
+        lastDecodedWaveformData = nil
         recordingElapsed = 0
         assignStatusMessage(nil, reason: "forceResetToIdle")
         activeSessionID = nil
@@ -695,6 +700,7 @@ class KeyboardState: ObservableObject {
         // Reset local state immediately for responsive UI
         dictationStatus = .idle
         waveformEnergy = []
+        lastDecodedWaveformData = nil
         recordingElapsed = 0
         assignStatusMessage(nil, reason: "requestCancel")
         activeSessionID = nil
@@ -801,13 +807,18 @@ class KeyboardState: ObservableObject {
             lastWaveformUpdate = Date()
         }
 
-        // Read elapsed seconds
-        recordingElapsed = defaults.double(forKey: SharedKeys.recordingElapsedSeconds)
+        // Read elapsed seconds, but do not publish when the value did not change.
+        let elapsed = defaults.double(forKey: SharedKeys.recordingElapsedSeconds)
+        if elapsed != recordingElapsed {
+            recordingElapsed = elapsed
+        }
 
         // Read waveform energy: JSON-encoded [Float] array
         if let data = defaults.data(forKey: SharedKeys.waveformEnergy) {
+            guard data != lastDecodedWaveformData else { return }
             do {
                 let energy = try JSONDecoder().decode([Float].self, from: data)
+                lastDecodedWaveformData = data
                 // Log transitions between empty/populated energy data
                 if waveformEnergy.isEmpty != energy.isEmpty {
                     PersistentLog.log(.waveformEnergyTransition(
@@ -816,13 +827,34 @@ class KeyboardState: ObservableObject {
                         status: dictationStatus.rawValue
                     ))
                 }
-                waveformEnergy = energy
+                if waveformEnergy != energy {
+                    waveformEnergy = energy
+                }
             } catch {
                 // JSON decode failure — keep existing waveform data
                 if #available(iOS 14.0, *) {
                     DictusLogger.keyboard.warning("Failed to decode waveform energy: \(error, privacy: .public)")
                 }
             }
+        }
+    }
+
+    /// Coalesce cross-process waveform notifications into one main-thread read.
+    private func scheduleWaveformRead() {
+        waveformReadLock.lock()
+        guard !waveformReadScheduled else {
+            waveformReadLock.unlock()
+            return
+        }
+        waveformReadScheduled = true
+        waveformReadLock.unlock()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.readWaveformData()
+            self.waveformReadLock.lock()
+            self.waveformReadScheduled = false
+            self.waveformReadLock.unlock()
         }
     }
 
@@ -895,6 +927,7 @@ class KeyboardState: ObservableObject {
         stopWatchdog()
         dictationStatus = .idle
         waveformEnergy = []
+        lastDecodedWaveformData = nil
         recordingElapsed = 0
         assignStatusMessage(nil, reason: "textInserted")
         lastTranscription = nil

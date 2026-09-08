@@ -514,7 +514,8 @@ private struct LetterKeyboardPageView: View {
     }
 
     private func positionedKeys(in size: CGSize) -> [PositionedLetterKey] {
-        let weights = rows.map { row in row.map { CGFloat($0.size.width) } }
+        let currentRows = rows
+        let weights = currentRows.map { row in row.map { CGFloat($0.size.width) } }
         let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
             for: weights,
             in: size,
@@ -522,7 +523,7 @@ private struct LetterKeyboardPageView: View {
             inset: keySpacing,
             rowSpacing: rowSpacing
         )
-        return zip(rows, frames).flatMap { row, rowFrames in
+        return zip(currentRows, frames).flatMap { row, rowFrames in
             zip(row, rowFrames).map { PositionedLetterKey(key: $0, frame: $1) }
         }
     }

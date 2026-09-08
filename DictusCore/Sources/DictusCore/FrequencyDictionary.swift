@@ -72,6 +72,38 @@ public struct FrequencyDictionary {
         return counts[word.lowercased()] ?? 0
     }
 
+    /// Returns the highest-ranked completions without sorting the entire input.
+    ///
+    /// The keyboard only displays a few slots, so keeping a bounded ordered list
+    /// avoids doing O(n log n) work on every keystroke. Ties preserve the order
+    /// supplied by UITextChecker, which keeps its existing deterministic priority.
+    public func rankedCompletions(_ completions: [String], limit: Int) -> [String] {
+        guard limit > 0 else { return [] }
+
+        var best: [(word: String, score: Int, index: Int)] = []
+        best.reserveCapacity(min(limit, completions.count))
+
+        for (index, word) in completions.enumerated() {
+            let candidate = (word: word, score: rank(of: word), index: index)
+            let insertionIndex = best.firstIndex { current in
+                candidate.score > current.score
+                    || (candidate.score == current.score && candidate.index < current.index)
+            }
+
+            if let insertionIndex {
+                best.insert(candidate, at: insertionIndex)
+            } else if best.count < limit {
+                best.append(candidate)
+            }
+
+            if best.count > limit {
+                best.removeLast()
+            }
+        }
+
+        return best.map(\.word)
+    }
+
     /// Returns the top N most frequent words, sorted by count descending.
     /// Used as fallback when n-gram predictions return no results.
     ///
@@ -79,10 +111,8 @@ public struct FrequencyDictionary {
     /// stopwords are poor standalone predictions. We require at least 2 chars
     /// to provide useful fallback suggestions.
     public func topWords(count: Int) -> [String] {
-        return counts
-            .filter { $0.key.count >= 2 }
-            .sorted { $0.value > $1.value }
-            .prefix(count)
-            .map { $0.key }
+        guard count > 0 else { return [] }
+        let eligible = counts.keys.filter { $0.count >= 2 }
+        return rankedCompletions(Array(eligible), limit: count)
     }
 }
