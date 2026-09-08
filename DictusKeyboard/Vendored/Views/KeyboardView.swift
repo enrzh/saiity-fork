@@ -5,6 +5,7 @@
 import UIKit
 import AudioToolbox
 import DictusCore
+import os
 
 protocol GiellaKeyboardViewDelegate: AnyObject {
     func didSwipeKey(_ key: KeyDefinition)
@@ -108,6 +109,7 @@ final internal class GiellaKeyboardView: UIView,
     private var currentlyLongpressedKey: KeyDefinition?
 
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .light)
+    private var touchDownSignpostStates: [ObjectIdentifier: OSSignpostIntervalState] = [:]
 
     required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -553,6 +555,10 @@ final internal class GiellaKeyboardView: UIView,
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with _: UIEvent?) {
+        for touch in touches {
+            touchDownSignpostStates[ObjectIdentifier(touch)] = KeyTapSignposter.beginTouchDown()
+        }
+
         // Fire haptic on touchDown for ALL keys (not just triggersOnTouchDown).
         // The delegate's didTriggerKey() may fire on touchUp for input keys,
         // but the user should FEEL the tap immediately on finger contact.
@@ -560,6 +566,11 @@ final internal class GiellaKeyboardView: UIView,
         // resolves to a key — it needs the key to pick a category, the haptic does not (#286).
         hapticFeedback.prepare()
         HapticFeedback.keyTapped()
+        for touch in touches {
+            if let state = touchDownSignpostStates[ObjectIdentifier(touch)] {
+                KeyTapSignposter.emitHaptic(state)
+            }
+        }
 
         if let longpressController = self.longpressController, let touch = touches.first {
             longpressController.touchesBegan(touch.location(in: collectionView))
@@ -589,6 +600,7 @@ final internal class GiellaKeyboardView: UIView,
             let touchPoint = clampedPoint(touch.location(in: collectionView))
             if let indexPath = collectionView.indexPathForItem(at: touchPoint) {
                 let key = currentPage[indexPath.section][indexPath.row]
+                markTouchDownHighlight(for: touch)
 
                 // Click on finger contact, in step with the haptic fired above (#286).
                 // This is the only point where a touch resolves to a key, so it is also
@@ -692,6 +704,7 @@ final internal class GiellaKeyboardView: UIView,
     }
 
     override func touchesCancelled(_: Set<UITouch>, with _: UIEvent?) {
+        finishTouchDownSignposts()
         longpressController = nil
         stopKeyRepeat()
         activeKey = nil
@@ -703,11 +716,13 @@ final internal class GiellaKeyboardView: UIView,
             removeAllOverlays()
             stopKeyRepeat()
             activeKey = nil
+            finishTouchDownSignposts()
             return
         }
 
         if let activeKey = activeKey {
             if activeKey.key.type.triggersOnTouchUp {
+                let touchUpState = KeyTapSignposter.beginTouchUp()
                 if let cell = collectionView.cellForItem(at: activeKey.indexPath) as? KeyCell,
                     let swipeKeyView = cell.keyView,
                     swipeKeyView.isSwipeKey,
@@ -716,6 +731,7 @@ final internal class GiellaKeyboardView: UIView,
                 } else {
                     delegate?.didTriggerKey(activeKey.key)
                 }
+                KeyTapSignposter.endTouchUp(touchUpState)
             }
         }
 
@@ -723,6 +739,21 @@ final internal class GiellaKeyboardView: UIView,
             activeKey = nil
         }
         stopKeyRepeat()
+        finishTouchDownSignposts()
+    }
+
+    private func markTouchDownHighlight(for touch: UITouch) {
+        let identifier = ObjectIdentifier(touch)
+        guard let state = touchDownSignpostStates.removeValue(forKey: identifier) else { return }
+        KeyTapSignposter.emitHighlight(state)
+        KeyTapSignposter.endTouchDown(state)
+    }
+
+    private func finishTouchDownSignposts() {
+        for state in touchDownSignpostStates.values {
+            KeyTapSignposter.endTouchDown(state)
+        }
+        touchDownSignpostStates.removeAll(keepingCapacity: true)
     }
 
     private func showKeyboardModeOverlay(_ longpressGestureRecognizer: UILongPressGestureRecognizer, key: KeyDefinition) {

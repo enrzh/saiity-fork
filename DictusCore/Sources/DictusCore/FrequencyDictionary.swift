@@ -14,6 +14,12 @@ public struct FrequencyDictionary {
 
     private var counts: [String: Int] = [:]
 
+    private struct RankedCompletion {
+        let word: String
+        let score: Int
+        let index: Int
+    }
+
     /// Maximum words to keep in memory. Only the most frequent words are retained.
     /// This dictionary is only used for ranking UITextChecker completions —
     /// we don't need rare words for ranking purposes.
@@ -80,11 +86,11 @@ public struct FrequencyDictionary {
     public func rankedCompletions(_ completions: [String], limit: Int) -> [String] {
         guard limit > 0 else { return [] }
 
-        var best: [(word: String, score: Int, index: Int)] = []
+        var best: [RankedCompletion] = []
         best.reserveCapacity(min(limit, completions.count))
 
         for (index, word) in completions.enumerated() {
-            let candidate = (word: word, score: rank(of: word), index: index)
+            let candidate = RankedCompletion(word: word, score: rank(of: word), index: index)
             let insertionIndex = best.firstIndex { current in
                 candidate.score > current.score
                     || (candidate.score == current.score && candidate.index < current.index)

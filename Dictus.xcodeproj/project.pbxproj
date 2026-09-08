@@ -86,6 +86,7 @@
 		AA000301 /* ModelLoadingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100301 /* ModelLoadingOverlay.swift */; };
 		AA000302 /* ModelLanguageDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100302 /* ModelLanguageDetailView.swift */; };
 		AA000311 /* ColdStartResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100311 /* ColdStartResolution.swift */; };
+		AA000320 /* PerformanceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100320 /* PerformanceMetrics.swift */; };
 		AA0003A1 /* WhisperComputeOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1003A1 /* WhisperComputeOptions.swift */; };
 		AA000P10 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA100P10 /* PrivacyInfo.xcprivacy */; };
 		AA000P20 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA100P20 /* PrivacyInfo.xcprivacy */; };
@@ -252,6 +253,7 @@
 		AA100301 /* ModelLoadingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLoadingOverlay.swift; sourceTree = "<group>"; };
 		AA100302 /* ModelLanguageDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLanguageDetailView.swift; sourceTree = "<group>"; };
 		AA100311 /* ColdStartResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColdStartResolution.swift; sourceTree = "<group>"; };
+		AA100320 /* PerformanceMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetrics.swift; sourceTree = "<group>"; };
 		AA1003A1 /* WhisperComputeOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperComputeOptions.swift; sourceTree = "<group>"; };
 		AA100P10 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA100P20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -363,6 +365,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100001 /* DictusApp.swift */,
+				AA100320 /* PerformanceMetrics.swift */,
 				AA100002 /* ContentView.swift */,
 				AA100009 /* DictationCoordinator.swift */,
 				AA100264 /* ColdStartLaunch.swift */,
@@ -943,6 +946,7 @@
 				AA000005 /* DictationCoordinator.swift in Sources */,
 				AA000264 /* ColdStartLaunch.swift in Sources */,
 				AA000311 /* ColdStartResolution.swift in Sources */,
+				AA000320 /* PerformanceMetrics.swift in Sources */,
 				AA000006 /* DictationView.swift in Sources */,
 				AA0000F5 /* LiveActivityManager.swift in Sources */,
 				AA00P201 /* PolishAvailability.swift in Sources */,
@@ -1195,7 +1199,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1218,7 +1222,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1240,7 +1244,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1268,7 +1272,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1296,7 +1300,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
@@ -1318,7 +1322,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+			CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;

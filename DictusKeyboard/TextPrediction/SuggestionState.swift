@@ -90,6 +90,7 @@ class SuggestionState: ObservableObject {
     /// Without coalescing, rapid typing queues 6-10 suggestion computations per second,
     /// all running to completion. With coalescing, only the latest keystroke runs.
     private var currentSuggestionWork: DispatchWorkItem?
+    private var suggestionRequestGate = SuggestionRequestGate()
 
     /// Whether autocorrect is enabled (reads from App Group shared preferences).
     var autocorrectEnabled: Bool {
@@ -132,6 +133,8 @@ class SuggestionState: ObservableObject {
             }
             return
         }
+
+        _ = beginSuggestionRequest()
 
         // Extract the last word using substring enumeration
         let partial = extractLastWord(from: context)
@@ -224,15 +227,18 @@ class SuggestionState: ObservableObject {
             return
         }
 
-        // Cancel previous in-flight computation
-        currentSuggestionWork?.cancel()
+        let requestToken = beginSuggestionRequest()
 
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
 
             let partial = self.extractLastWord(from: context)
             guard !partial.isEmpty else {
-                DispatchQueue.main.async { self.clear() }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self,
+                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
+                    self.clear()
+                }
                 return
             }
 
@@ -243,7 +249,8 @@ class SuggestionState: ObservableObject {
             if containsDigit {
                 let completions = self.engine.suggestions(for: partial)
                 DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self,
+                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
                     self.currentWord = partial
                     self.suggestions = completions.isEmpty ? [] : completions
                     self.mode = completions.isEmpty ? .idle : .completions
@@ -279,8 +286,9 @@ class SuggestionState: ObservableObject {
             // Publish on main thread (required for @Published)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                // Check cancellation before publishing stale results
-                guard !(self.currentSuggestionWork?.isCancelled ?? true) else { return }
+                // Cancellation cannot identify stale work once a newer item has
+                // replaced currentSuggestionWork. Check the captured generation.
+                guard self.suggestionRequestGate.isCurrent(requestToken) else { return }
 
                 self.currentWord = partial
 
@@ -336,6 +344,7 @@ class SuggestionState: ObservableObject {
 
     /// Resets the suggestion state to idle.
     func clear() {
+        _ = beginSuggestionRequest()
         suggestions = []
         mode = .idle
         currentWord = ""
@@ -368,6 +377,7 @@ class SuggestionState: ObservableObject {
     /// word and running spell check, we extract the last 1-2 complete words and query
     /// the n-gram engine. The result is displayed in .predictions mode, not .corrections.
     func updatePredictions(context: String?) {
+        let requestToken = beginSuggestionRequest()
         // Host field traits gate (#200): no next-word predictions in search/URL fields.
         guard hostPolicy.suggestionsAllowed else {
             clear()
@@ -379,16 +389,17 @@ class SuggestionState: ObservableObject {
             return
         }
 
-        // Cancel any in-flight completion work
-        currentSuggestionWork?.cancel()
-
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
 
             // Extract last 1-2 complete words from context
             let words = self.extractLastWords(from: context, count: 2)
             guard !words.isEmpty else {
-                DispatchQueue.main.async { self.clear() }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self,
+                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
+                    self.clear()
+                }
                 return
             }
 
@@ -397,7 +408,7 @@ class SuggestionState: ObservableObject {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                guard !(self.currentSuggestionWork?.isCancelled ?? true) else { return }
+                guard self.suggestionRequestGate.isCurrent(requestToken) else { return }
 
                 if let undo = self.pendingUndo {
                     var undoSuggestions = [undo.originalWord]
@@ -436,6 +447,13 @@ class SuggestionState: ObservableObject {
     }
 
     // MARK: - Private
+
+    @discardableResult
+    private func beginSuggestionRequest() -> SuggestionRequestGate.Token {
+        currentSuggestionWork?.cancel()
+        currentSuggestionWork = nil
+        return suggestionRequestGate.begin()
+    }
 
     /// Extract the word before the current partial word in the text context.
     /// "Je sui" with currentWord "sui" returns "Je".

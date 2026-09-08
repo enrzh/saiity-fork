@@ -67,6 +67,7 @@ struct DictusApp: App {
         PersistentLog.source = "APP"
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PersistentLog.log(.appLaunched(version: version))
+        PerformanceMetricsSubscriber.shared.start()
 
         // Clean up any Live Activities left over from a previous app session.
         // WHY in init: If the app crashed or was force-quit, the Dynamic Island
