@@ -207,17 +207,15 @@ public struct DictationFinalizationDecision: Equatable, Sendable {
         transcript: String,
         outcome: TranslationOutcome,
         request: DictationLanguageRequest,
-        currentSessionID: String?,
-        currentGeneration: Int,
-        currentClientIdentifier: String?
+        currentRequest: DictationLanguageRequest
     ) -> Self {
         guard !transcript.isEmpty,
               !outcome.resolvedText.isEmpty,
-              let currentSessionID,
-              let currentClientIdentifier,
+              let currentSessionID = currentRequest.sessionID,
+              let currentClientIdentifier = currentRequest.clientIdentifier,
               request.matches(
                 sessionID: currentSessionID,
-                generation: currentGeneration,
+                generation: currentRequest.generation ?? 0,
                 clientIdentifier: currentClientIdentifier
               ) else {
             return Self(finalText: nil, steps: [], errorMessage: nil)

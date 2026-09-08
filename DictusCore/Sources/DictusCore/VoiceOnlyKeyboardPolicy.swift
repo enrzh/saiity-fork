@@ -2,6 +2,18 @@ import Foundation
 import CoreGraphics
 
 public enum VoiceOnlyKeyboardPolicy {
+    public struct LeftUtilityFrames: Equatable {
+        public let at: CGRect
+        public let emoji: CGRect
+        public let number: CGRect
+
+        public init(at: CGRect, emoji: CGRect, number: CGRect) {
+            self.at = at
+            self.emoji = emoji
+            self.number = number
+        }
+    }
+
     public enum SymbolPage: Equatable {
         case symbols1
         case symbols2
@@ -242,16 +254,16 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: VoiceOnlyKeyboardPolicy.controlSize)
         }
 
-        public var leftUtilityFrames: (at: CGRect, emoji: CGRect, number: CGRect) {
-            guard leftRailWidth > 0 else { return (.zero, .zero, .zero) }
+        public var leftUtilityFrames: LeftUtilityFrames {
+            guard leftRailWidth > 0 else { return LeftUtilityFrames(at: .zero, emoji: .zero, number: .zero) }
             let x = surfaceFrame.minX + visibleControlGap
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
             let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
             let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
-            return (
-                CGRect(x: x, y: emojiFrame.minY - railSpacing - size.height, width: size.width, height: size.height),
-                controlOrder == .emojiFirst ? emojiFrame : numberFrame,
-                controlOrder == .emojiFirst ? numberFrame : emojiFrame
+            return LeftUtilityFrames(
+                at: CGRect(x: x, y: emojiFrame.minY - railSpacing - size.height, width: size.width, height: size.height),
+                emoji: controlOrder == .emojiFirst ? emojiFrame : numberFrame,
+                number: controlOrder == .emojiFirst ? numberFrame : emojiFrame
             )
         }
 

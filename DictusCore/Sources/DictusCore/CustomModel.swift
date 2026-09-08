@@ -114,7 +114,7 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
                 return "Use a local Ollama address or https://ollama.com."
             }
         case (.huggingFace, _):
-            guard scheme == "https", (host == "huggingface.co" || host == "www.huggingface.co") else {
+            guard scheme == "https", host == "huggingface.co" || host == "www.huggingface.co" else {
                 return "Use a Hugging Face model URL."
             }
             guard isRepositoryPath(url.path, componentCount: 2) else {

@@ -4,6 +4,10 @@
 import ActivityKit
 import Foundation
 
+private enum DictusLiveActivityContentStateCodingKeys: String, CodingKey {
+    case phase, recordingStartDate, waveformLevels, transcriptionPreview, detectionMuted
+}
+
 /// Attributes for the Dictus Live Activity displayed in the Dynamic Island.
 ///
 /// WHY in DictusCore (not DictusWidgets):
@@ -79,12 +83,8 @@ public struct DictusLiveActivityAttributes: ActivityAttributes {
             self.detectionMuted = detectionMuted
         }
 
-        private enum CodingKeys: String, CodingKey {
-            case phase, recordingStartDate, waveformLevels, transcriptionPreview, detectionMuted
-        }
-
         public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try decoder.container(keyedBy: DictusLiveActivityContentStateCodingKeys.self)
             phase = try container.decode(Phase.self, forKey: .phase)
             recordingStartDate = try container.decodeIfPresent(Date.self, forKey: .recordingStartDate)
             waveformLevels = try container.decodeIfPresent([Float].self, forKey: .waveformLevels) ?? []

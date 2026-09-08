@@ -6,7 +6,7 @@ struct KeyVariantPopup: View {
     let options: [String]
     let selectedIndex: Int
     let isEmoji: Bool
-    var onSelect: ((Int) -> Void)? = nil
+    var onSelect: ((Int) -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {

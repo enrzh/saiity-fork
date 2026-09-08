@@ -207,8 +207,6 @@ struct DictusLiveActivity: Widget {
                 .buttonStyle(.plain)
 
                 // Record button
-                // Force unwrap is safe: compile-time constant deep link, always well-formed.
-                // swiftlint:disable:next force_unwrapping
                 Button(intent: StopStandbyIntent(toggleDetection: true)) {
                     Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
                         .font(.system(size: 14, weight: .semibold))
@@ -220,15 +218,15 @@ struct DictusLiveActivity: Widget {
                 .buttonStyle(.plain)
             case .recording:
                 // Stop button (left side)
-                // Force unwrap is safe: compile-time constant deep link, always well-formed.
-                // swiftlint:disable:next force_unwrapping
-                Link(destination: URL(string: "saiity://stop")!) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color.sAiityRecording)
-                        .clipShape(Circle())
+                if let stopURL = URL(string: "saiity://stop") {
+                    Link(destination: stopURL) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.sAiityRecording)
+                            .clipShape(Circle())
+                    }
                 }
 
                 // Timer (right, naturally trailing — aligns with compact trailing)
@@ -340,8 +338,6 @@ struct DictusLiveActivity: Widget {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    // Force unwrap is safe: compile-time constant deep link, always well-formed.
-                    // swiftlint:disable:next force_unwrapping
                     Button(intent: StopStandbyIntent(toggleDetection: true)) {
                         Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
                             .font(.system(size: 14, weight: .semibold))
@@ -353,15 +349,15 @@ struct DictusLiveActivity: Widget {
                     .buttonStyle(.plain)
                 }
             case .recording:
-                // Force unwrap is safe: compile-time constant deep link, always well-formed.
-                // swiftlint:disable:next force_unwrapping
-                Link(destination: URL(string: "saiity://stop")!) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .frame(width: 48, height: 48)
-                        .background(Color.sAiityRecording)
-                        .clipShape(Circle())
+                if let stopURL = URL(string: "saiity://stop") {
+                    Link(destination: stopURL) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .frame(width: 48, height: 48)
+                            .background(Color.sAiityRecording)
+                            .clipShape(Circle())
+                    }
                 }
             default:
                 EmptyView()

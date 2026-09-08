@@ -558,10 +558,19 @@ struct PaywallView: View {
     // Apple requires functional Terms of Use and Privacy Policy links for
     // auto-renewable subscriptions (guideline 3.1.2). Force unwrap is safe:
     // compile-time constant URLs that cannot be malformed.
-    // swiftlint:disable:next force_unwrapping
-    private static let termsURL = URL(string: "https://aiity.de/terms")!
-    // swiftlint:disable:next force_unwrapping
-    private static let privacyURL = URL(string: "https://aiity.de/privacy")!
+    private static var termsURL: URL {
+        guard let url = URL(string: "https://aiity.de/terms") else {
+            preconditionFailure("The terms URL literal must be valid")
+        }
+        return url
+    }
+
+    private static var privacyURL: URL {
+        guard let url = URL(string: "https://aiity.de/privacy") else {
+            preconditionFailure("The privacy URL literal must be valid")
+        }
+        return url
+    }
 
     private var bottomLinks: some View {
         VStack(spacing: 8) {

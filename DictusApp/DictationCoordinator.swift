@@ -829,9 +829,7 @@ class DictationCoordinator: ObservableObject {
                         ? .fallback(formattedText, reason: .unavailable)
                         : .translated(formattedText),
                     request: capturedLanguageRequest,
-                    currentSessionID: currentLanguageRequest.sessionID,
-                    currentGeneration: currentLanguageRequest.generation ?? sessionGeneration.current,
-                    currentClientIdentifier: currentLanguageRequest.clientIdentifier
+                    currentRequest: currentLanguageRequest
                 )
 
                 // The gate that matters most. Everything below is irreversible from

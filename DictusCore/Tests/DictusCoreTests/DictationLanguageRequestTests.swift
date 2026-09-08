@@ -295,9 +295,7 @@ final class DictationLanguageRequestTests: XCTestCase {
             transcript: "Bonjour",
             outcome: .translated("Hello"),
             request: request,
-            currentSessionID: "session-1",
-            currentGeneration: 4,
-            currentClientIdentifier: "client-1"
+            currentRequest: request
         )
         XCTAssertEqual(success.finalText, "Hello")
         XCTAssertTrue(success.shouldPublish)
@@ -310,9 +308,7 @@ final class DictationLanguageRequestTests: XCTestCase {
             transcript: "Bonjour",
             outcome: .fallback("Bonjour", reason: .unavailable),
             request: request,
-            currentSessionID: "session-1",
-            currentGeneration: 4,
-            currentClientIdentifier: "client-1"
+            currentRequest: request
         )
         XCTAssertEqual(fallback.finalText, "Bonjour")
         XCTAssertTrue(fallback.shouldPublish)
@@ -331,9 +327,13 @@ final class DictationLanguageRequestTests: XCTestCase {
             transcript: "Bonjour",
             outcome: .translated("Hello"),
             request: request,
-            currentSessionID: "session-2",
-            currentGeneration: 5,
-            currentClientIdentifier: "client-2"
+            currentRequest: DictationLanguageRequest(
+                mode: .explicit(.french),
+                translationTarget: .english,
+                sessionID: "session-2",
+                generation: 5,
+                clientIdentifier: "client-2"
+            )
         )
         XCTAssertNil(decision.finalText)
         XCTAssertFalse(decision.shouldPublish)
