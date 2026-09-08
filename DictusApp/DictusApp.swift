@@ -264,6 +264,10 @@ struct DictusApp: App {
             if keyboardIntent == .prepare {
                 DictusLogger.app.info("Keyboard requested model preparation without recording")
                 PersistentLog.log(.dictationDeferred(reason: "keyboard prepare-only URL"))
+                // The keyboard opens this URL when the model is not warm enough for a
+                // background start. Start preparation explicitly so the overlay reflects
+                // real work instead of waiting on a state change that never arrives.
+                coordinator.preloadActiveModel()
                 NotificationCenter.default.post(
                     name: .dictusKeyboardPreparationRequested,
                     object: nil

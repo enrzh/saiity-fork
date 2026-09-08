@@ -43,7 +43,7 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
 
         for removedSetting in [
             "sounds", "soundFeedbackEnabled", "soundVolume", "keyboardLanguage",
-            "keyboardLanguageSelection", "keyboardLayout", "numberRowEnabled",
+            "keyboardLanguageSelection", "numberRowEnabled",
             "hapticsEnabled", "autocorrectEnabled"
         ] {
             XCTAssertFalse(source.localizedCaseInsensitiveContains(removedSetting), "旧键盘设置仍出现在 SettingsView: \(removedSetting)")

@@ -144,6 +144,9 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let horizontalPadding: Double = 6
     public static let controlEdgeInset: Double = 12
     public static let visibleControlGap: Double = 8
+    /// The letter keyboard keeps a compact action header above its four key rows.
+    /// This leaves the dictation action visible without covering the top letter row.
+    public static let letterKeyboardHeaderHeight: Double = 44
     /// The right rail spans the voice surface with the same breathing room as
     /// Apple's compact keyboard controls.
     public static let verticalPadding: Double = 4
@@ -220,6 +223,13 @@ public enum VoiceOnlyKeyboardPolicy {
             }
         }
 
+        /// The microphone keeps the same physical accessory slot on the emoji
+        /// and symbols pages. `leftUtilityFrames.number` is the second slot for
+        /// the default order and the first slot for the reversed order.
+        public var auxiliaryMicrophoneFrame: CGRect {
+            leftUtilityFrames.number
+        }
+
         public var rightCommandFrame: CGRect {
             CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth, y: rightRailTop,
                    width: rightRailWidth, height: rightRailHeight)
@@ -272,6 +282,29 @@ public enum VoiceOnlyKeyboardPolicy {
         /// action rails are drawn on top by the owning controls overlay.
         public var alternateContentFrame: CGRect {
             surfaceFrame
+        }
+
+        /// Full-width UIKit letter grid, below the compact dictation header.
+        public var letterKeyboardFrame: CGRect {
+            let frame = CGRect(
+                x: surfaceFrame.minX,
+                y: surfaceFrame.minY + letterKeyboardHeaderHeight,
+                width: surfaceFrame.width,
+                height: max(0, surfaceFrame.height - letterKeyboardHeaderHeight)
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// Hit target for the compact dictation action shown above the letter grid.
+        public var letterMicFrame: CGRect {
+            let width = min(132, max(96, centerAreaWidth))
+            let frame = CGRect(
+                x: surfaceFrame.maxX - visibleControlGap - width,
+                y: surfaceFrame.minY,
+                width: width,
+                height: letterKeyboardHeaderHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
         }
 
         /// Bottom-bar Y shared with emoji / 123 / dismiss so the voice space key

@@ -61,10 +61,14 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
             encoding: .utf8
         )
+        let picker = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Views/EmojiPickerView.swift"),
+            encoding: .utf8
+        )
 
-        XCTAssertTrue(bar.contains("var controlOrder: KeyboardAccessoryOrder"))
-        XCTAssertTrue(bar.contains("case .emojiFirst:"))
-        XCTAssertTrue(bar.contains("case .numberFirst:"))
+        XCTAssertTrue(bar.contains("let layout: VoiceOnlyKeyboardPolicy.Layout"))
+        XCTAssertTrue(bar.contains("layout.auxiliaryMicrophoneFrame"))
+        XCTAssertTrue(picker.contains("surfaceLayout.auxiliaryMicrophoneFrame"))
         XCTAssertTrue(root.contains("controlOrder: KeyboardAccessoryOrder.current"))
     }
 
@@ -117,6 +121,19 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         XCTAssertEqual(controls.width, surface.width)
         XCTAssertEqual(controls.maxY, surface.maxY - VoiceOnlyKeyboardPolicy.visibleControlGap)
         XCTAssertEqual(content.maxY, controls.minY - VoiceOnlyKeyboardPolicy.visibleControlGap)
+    }
+
+    func testAuxiliaryMicrophoneKeepsItsPhysicalSlotAcrossPagesAndAccessoryOrders() {
+        for order in KeyboardAccessoryOrder.allCases {
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: 390,
+                surfaceHeight: 216,
+                controlOrder: order
+            )
+
+            XCTAssertEqual(layout.auxiliaryMicrophoneFrame, layout.leftUtilityFrames.number)
+            XCTAssertTrue(layout.bottomAuxiliaryControlFrame.contains(layout.auxiliaryMicrophoneFrame))
+        }
     }
 
     func testKeyboardInputViewInitializersKeepTheOuterViewTransparent() throws {

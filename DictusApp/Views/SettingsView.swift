@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @AppStorage(SharedKeys.keyboardAccessoryOrder, store: UserDefaults(suiteName: AppGroup.identifier))
     private var keyboardAccessoryOrderRawValue = KeyboardAccessoryOrder.emojiFirst.rawValue
+    @State private var keyboardLayout = KeyboardLayoutPreference.layout(for: .active)
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
     @StateObject private var modelManager = ModelManager()
     @State private var diagnosticResult = AppGroupDiagnostic.run()
@@ -26,6 +27,14 @@ struct SettingsView: View {
                 polishStateFooter
             }
             Section("Keyboard") {
+                Picker("Keyboard layout", selection: $keyboardLayout) {
+                    ForEach(LayoutType.allCases, id: \.self) { layout in
+                        Text(layout.displayName).tag(layout)
+                    }
+                }
+                .onChange(of: keyboardLayout) { _, layout in
+                    KeyboardLayoutPreference.setLayout(layout, for: .active)
+                }
                 Picker(selection: keyboardAccessoryOrderBinding, label: Text("Control order")) {
                     ForEach([KeyboardAccessoryOrder.emojiFirst, .numberFirst], id: \.self) { order in
                         Text(order.displayName).tag(order)

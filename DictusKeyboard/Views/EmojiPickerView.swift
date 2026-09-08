@@ -17,6 +17,7 @@ struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
     let onBackToVoice: () -> Void
     let onDelete: () -> Void
+    let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
     /// SwiftUI content the full screen width due to safe area or layout margins.
@@ -142,8 +143,22 @@ struct EmojiPickerView: View {
     }
 
     private var emojiBottomBar: some View {
-        HStack(spacing: 6) {
+        let surface = surfaceLayout.surfaceFrame
+        let microphone = surfaceLayout.auxiliaryMicrophoneFrame
+        let delete = CGRect(
+            x: surface.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.controlSize,
+            y: 0,
+            width: VoiceOnlyKeyboardPolicy.controlSize,
+            height: VoiceOnlyKeyboardPolicy.controlSize
+        )
+        let microphoneLocalX = CGFloat(microphone.midX - surface.minX)
+        let deleteLocalX = CGFloat(delete.midX - surface.minX)
+        let categoryMinX = CGFloat(microphone.maxX - surface.minX + VoiceOnlyKeyboardPolicy.railSpacing)
+        let categoryWidth = max(0, deleteLocalX - CGFloat(VoiceOnlyKeyboardPolicy.controlSize / 2 + VoiceOnlyKeyboardPolicy.railSpacing) - categoryMinX)
+
+        return ZStack(alignment: .topLeading) {
             glassRoundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onBackToVoice)
+                .position(x: microphoneLocalX, y: 22)
             EmojiCategoryBar(
                 sections: sectionInfos,
                 selectedCategoryID: selectedCategoryID,
@@ -154,10 +169,12 @@ struct EmojiPickerView: View {
                     }
                 }
             )
+            .frame(width: categoryWidth, height: 44)
+            .position(x: categoryMinX + categoryWidth / 2, y: 22)
             glassDeleteControl
+                .position(x: deleteLocalX, y: 22)
         }
-        .padding(.horizontal, CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding))
-        .frame(width: availableWidth, height: max(bottomBarHeight, categoryBarHeight))
+        .frame(width: CGFloat(surface.width), height: max(bottomBarHeight, categoryBarHeight))
     }
 
     private func glassRoundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {

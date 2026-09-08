@@ -187,8 +187,8 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .input(key: "'", alternate: "accent")),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            // Row 4: 123 + emoji + space + return
-            blankRow()
+            // Row 4: shared native-style bottom bar.
+            letterBottomRow(lang: lang)
         ])
     }
 
@@ -206,7 +206,7 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
             // Row 4: same as normal
-            blankRow()
+            letterBottomRow(lang: lang)
         ])
     }
 
@@ -229,7 +229,7 @@ enum KeyboardLayouts {
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
             // Row 4: unified bottom row (123 + emoji + space + return)
-            blankRow()
+            letterBottomRow(lang: lang)
         ])
     }
 
@@ -246,7 +246,7 @@ enum KeyboardLayouts {
                 key("Z"), key("X"), key("C"), key("V"), key("B"), key("N"), key("M"),
                 KeyDefinition(type: .backspace, size: CGSize(width: 1.5, height: 1))
             ],
-            blankRow()
+            letterBottomRow(lang: lang)
         ])
     }
 
@@ -284,7 +284,7 @@ enum KeyboardLayouts {
                 + rows[2].map { key($0) }
                 + [KeyDefinition(type: .backspace, size: flankSize)],
             // Row 4: unified bottom row (123 + emoji + space + return)
-            blankRow()
+            letterBottomRow(lang: lang)
         ])
     }
 
@@ -302,8 +302,21 @@ enum KeyboardLayouts {
 
     // MARK: - Bottom Rows
 
-    private static func blankRow() -> [KeyDefinition] {
-        Array(repeating: KeyDefinition(type: .spacer, size: CGSize(width: 1, height: 1)), count: 10)
+    private static func letterBottomRow(lang: SupportedLanguage) -> [KeyDefinition] {
+        let first = KeyboardAccessoryOrder.current == .emojiFirst
+            ? KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1))
+            : KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1))
+        let second = KeyboardAccessoryOrder.current == .emojiFirst
+            ? KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1))
+            : KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1))
+
+        return [
+            first,
+            second,
+            KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 5.0, height: 1)),
+            KeyDefinition(type: .returnkey(name: lang.returnName), size: CGSize(width: 1.8, height: 1)),
+            KeyDefinition(type: .keyboardMode, size: CGSize(width: 0.8, height: 1))
+        ]
     }
 
     // MARK: - Long Press Accents

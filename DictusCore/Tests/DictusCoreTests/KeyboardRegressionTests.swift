@@ -38,7 +38,7 @@ final class KeyboardRegressionTests: XCTestCase {
         let body = String(root[start.lowerBound..<end.lowerBound])
 
         XCTAssertTrue(body.contains("Button { commitSymbolFromTap(key) } label:"))
-        XCTAssertTrue(body.contains(".contentShape(RoundedRectangle"))
+        XCTAssertTrue(body.contains(".contentShape(Rectangle())"))
         XCTAssertTrue(body.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
         XCTAssertTrue(body.contains("OptionalLongPressModifier"),
                       "keys with native extras get a hold popup; tap still uses the button")

@@ -278,7 +278,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("Toggle("))
         XCTAssertTrue(settings.contains("Picker(selection: keyboardAccessoryOrderBinding, label: Text(\"Control order\"))"))
         XCTAssertFalse(settings.contains("transcriptionLanguage"))
-        XCTAssertFalse(settings.contains("Keyboard layout"))
+        XCTAssertTrue(settings.contains("Keyboard layout"))
+        XCTAssertTrue(settings.contains("ForEach(LayoutType.allCases"))
         XCTAssertFalse(settings.contains("RoundedRectangle"))
     }
 

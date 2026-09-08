@@ -33,7 +33,8 @@ public enum AppScenePhaseMarker: String {
 /// No new IPC path: this is the App Group's shared `UserDefaults`, the same channel
 /// every other cross-process value in this app travels on.
 ///
-/// Observation only. Nothing reads these keys to make a decision.
+/// The keyboard also reads the phase as a live readiness signal when deciding
+/// whether a background microphone tap must foreground Dictus for preparation.
 public enum AppScenePhaseProbe {
 
     /// Publishes `marker` as DictusApp's current phase. Called from the app only.

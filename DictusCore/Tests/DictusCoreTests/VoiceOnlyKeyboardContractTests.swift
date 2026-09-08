@@ -140,6 +140,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains(".touchUpInside"))
         XCTAssertTrue(controller.contains(".touchUpOutside"))
         XCTAssertTrue(controller.contains(".touchCancel"))
+        XCTAssertTrue(controller.contains("handleMicTap"))
+        XCTAssertTrue(controller.contains("guard !KeyboardState.shared.appNeedsModelPreparation else { return }"))
         XCTAssertTrue(controller.contains("handleMicPressBegan()"))
         XCTAssertTrue(controller.contains("handleMicPressEnded()"))
     }
@@ -156,7 +158,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(root.contains(".background(Capsule().fill(Color.white))"))
-        XCTAssertTrue(root.contains("case .idle, .ready: return \"mic.fill\""))
+        XCTAssertTrue(root.contains("state.appNeedsModelPreparation ? \"arrow.up.right.square.fill\" : \"mic.fill\""))
         XCTAssertTrue(root.contains("handleMicPressBegan()"))
         XCTAssertFalse(root.contains("state.startRecording()"))
         XCTAssertFalse(root.contains("state.requestStop()"))
@@ -451,6 +453,23 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(layouts.contains("static let symbolsRowCount = 3"))
     }
 
+    func testLetterKeyboardUsesVendoredRendererAndSharedBottomRow() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
+        let policy = try source("DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift")
+
+        XCTAssertTrue(controller.contains("GiellaKeyboardView("))
+        XCTAssertTrue(controller.contains("keyboard.delegate = self"))
+        XCTAssertTrue(controller.contains("case .keyboardMode:"))
+        XCTAssertTrue(controller.contains("case .symbols:"))
+        XCTAssertTrue(controller.contains("didMoveCursor"))
+        XCTAssertTrue(layouts.contains("private static func letterBottomRow"))
+        XCTAssertTrue(layouts.contains("emojiKeyGlyph"))
+        XCTAssertTrue(layouts.contains("KeyDefinition(type: .keyboardMode"))
+        XCTAssertTrue(policy.contains("public var letterKeyboardFrame"))
+        XCTAssertTrue(policy.contains("public var letterMicFrame"))
+    }
+
     func testRuntimeSurfaceUsesOneSharedLayoutContract() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
@@ -539,8 +558,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
-        XCTAssertTrue(bar.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(bar.contains("systemName: \"face.smiling\""))
+        XCTAssertTrue(bar.contains("roundControl(systemName: \"face.smiling\", label: \"Emoji\", action: onEmoji)"))
+        XCTAssertTrue(bar.contains("layout.auxiliaryMicrophoneFrame"))
         XCTAssertFalse(controller.contains("configureAuxiliaryAccessoryControls"))
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
     }
@@ -650,7 +669,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("Opening the keyboard always returns to the dictation board"))
         XCTAssertTrue(root.contains(".accessibilityHidden(true)"))
         XCTAssertTrue(root.contains("Text(dictationTitle)"))
-        XCTAssertTrue(root.contains("onDelete: onDelete"))
+        XCTAssertTrue(root.contains("onDelete: { routeProxyCommand(.delete) }"))
         XCTAssertFalse(root.contains("onDismiss: onDismiss"))
         XCTAssertFalse(controller.contains("hostingController?.view.isHidden = true"))
         XCTAssertFalse(controller.contains("setVoiceActionControlsHidden(mode == .emoji)"))
@@ -694,7 +713,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(systemKeys.contains("type: .keyboard,"))
         XCTAssertFalse(keyView.contains("globe"))
         XCTAssertFalse(soundPolicy.contains(".keyboard,"))
-        XCTAssertFalse(controller.contains("case .keyboard"))
+        XCTAssertFalse(controller.contains("case .keyboard:"))
         XCTAssertTrue(try String(contentsOf: repository.appending(path: "DictusKeyboard/InputView.swift"), encoding: .utf8).contains("inputViewStyle: .keyboard"))
     }
 
@@ -823,7 +842,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testMicVisualUsesReadableSemanticForegroundAndIdleGlyph() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertTrue(root.contains(".foregroundStyle(.black)"))
-        XCTAssertTrue(root.contains("case .idle, .ready: return \"mic.fill\""))
+        XCTAssertTrue(root.contains("state.appNeedsModelPreparation ? \"arrow.up.right.square.fill\" : \"mic.fill\""))
     }
 
     func testLanguageIndicatorIsRestrictedToKeysAndRecordingModes() throws {

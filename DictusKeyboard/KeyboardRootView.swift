@@ -22,8 +22,6 @@ struct KeyboardRootView: View {
                 controlOrder: KeyboardAccessoryOrder.current
             )
             let surfaceFrame = layout.surfaceFrame
-            let usesAuxiliarySurface = state.areaMode == .emoji || state.areaMode == .panel
-
             ZStack(alignment: .topLeading) {
                 // Keep the hosting canvas transparent so the native UIInputView
                 // backdrop is the only layer behind the inset surface.
@@ -34,12 +32,21 @@ struct KeyboardRootView: View {
                     frame: surfaceFrame
                 )
                     .position(x: surfaceFrame.midX, y: surfaceFrame.midY)
-                if !usesAuxiliarySurface {
-                    if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
-                        languageIndicator
-                            .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
-                    }
+                if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
+                    languageIndicator
+                        .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
+                }
 
+                if state.areaMode == .keys && !layout.letterMicFrame.isEmpty {
+                    dictateButton(frame: layout.letterMicFrame)
+                        .frame(width: layout.letterMicFrame.width, height: layout.letterMicFrame.height)
+                        .position(
+                            x: dictateButtonLocalX(for: layout.letterMicFrame, in: layout),
+                            y: CGFloat(layout.letterMicFrame.midY - layout.surfaceFrame.minY)
+                        )
+                }
+
+                if state.areaMode == .recording {
                     if layout.leftRailWidth > 0 {
                         utilityGlyph(systemName: "at")
                             .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
@@ -81,7 +88,9 @@ struct KeyboardRootView: View {
         let surfaceFrame = contentFrame
         let availableWidth = surfaceFrame.width
         switch state.areaMode {
-        case .keys, .recording:
+        case .keys:
+            Color.clear
+        case .recording:
             centerSurface(layout: layout)
         case .emoji:
             EmojiPickerView(
@@ -90,6 +99,7 @@ struct KeyboardRootView: View {
                 },
                 onBackToVoice: { state.closeArea() },
                 onDelete: { routeProxyCommand(.delete) },
+                surfaceLayout: layout,
                 availableWidth: availableWidth,
                 availableHeight: surfaceFrame.height
             )
@@ -98,6 +108,7 @@ struct KeyboardRootView: View {
         case .panel:
             LiquidSymbolPageView(
                 page: symbolPage,
+                surfaceLayout: layout,
                 availableWidth: surfaceFrame.width,
                 availableHeight: surfaceFrame.height,
                 onInsert: { text in routeProxyText(text) },
@@ -246,7 +257,7 @@ struct KeyboardRootView: View {
         .contentShape(Capsule())
         .foregroundStyle(.black)
         .accessibilityIdentifier("dictate-button")
-        .accessibilityLabel("Hold to dictate")
+        .accessibilityLabel(state.dictationActionLabel)
         .accessibilityValue(dictationTitle)
         // The UIKit button supplies the sole accessible start/stop action.
         .accessibilityHidden(true)
@@ -274,7 +285,8 @@ struct KeyboardRootView: View {
 
     private var dictationTitle: String {
         switch state.dictationStatus {
-        case .idle, .ready: return "Hold to dictate"
+        case .idle, .ready:
+            return state.appNeedsModelPreparation ? "Open sAiity" : "Hold to dictate"
         case .requested: return "Getting ready..."
         case .recording: return "Listening..."
         case .transcribing: return "Transcribing..."
@@ -288,7 +300,8 @@ struct KeyboardRootView: View {
         case .recording: return "waveform"
         case .requested, .transcribing, .processing: return "ellipsis"
         case .failed: return "mic.fill"
-        case .idle, .ready: return "mic.fill"
+        case .idle, .ready:
+            return state.appNeedsModelPreparation ? "arrow.up.right.square.fill" : "mic.fill"
         }
     }
 
@@ -382,6 +395,7 @@ struct KeyboardRootView: View {
 
 private struct LiquidSymbolPageView: View {
     let page: KeyboardPage
+    let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
     let availableWidth: CGFloat
     let availableHeight: CGFloat
     let onInsert: (String) -> Void
@@ -441,11 +455,10 @@ private struct LiquidSymbolPageView: View {
                 .accessibilityElement(children: .contain)
             }
             AuxiliaryBottomBar(
-                controlOrder: KeyboardAccessoryOrder.current,
+                layout: surfaceLayout,
                 onEmoji: onEmoji,
                 onVoice: onBackToVoice,
                 onSpace: { onInsert(" ") },
-                onDelete: onDelete,
                 onReturn: onReturn
             )
             .frame(width: availableWidth, height: bottomBarHeight)
@@ -514,7 +527,9 @@ private struct LiquidSymbolPageView: View {
             .buttonStyle(SymbolGlowButtonStyle(isActive: isActive, reduceMotion: reduceMotion))
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            // Use the complete rectangular key frame. Rounded hit shapes leave the
+            // outer corners of edge keys, such as "=", intermittently untappable.
+            .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(key.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
@@ -654,6 +669,9 @@ private struct LiquidSymbolPageView: View {
         case .togglePage:
             Text(key.label)
                 .font(.system(size: 14, weight: .medium))
+        case .delete:
+            Image(systemName: "delete.backward")
+                .font(.system(size: 16, weight: .semibold))
         case .insert, .close:
             Text(key.label)
                 .font(.system(size: 22, weight: .regular))
@@ -664,6 +682,7 @@ private struct LiquidSymbolPageView: View {
         guard !key.isSpacer else { return }
         switch key.action {
         case .insert(let value): onInsert(value)
+        case .delete: onDelete()
         case .togglePage:
             switch VoiceOnlyKeyboardPolicy.SymbolPageTransition.forToggle(
                 from: page == .symbols1 ? .symbols1 : .symbols2
@@ -681,6 +700,7 @@ private struct LiquidSymbolPageView: View {
 private struct LiquidSymbolKey: Identifiable {
     enum Action {
         case insert(String)
+        case delete
         case togglePage
         case close
     }
@@ -703,7 +723,11 @@ private struct LiquidSymbolKey: Identifiable {
             label = page == .symbols1 ? "#+=" : "123"
             action = .togglePage
             isSpacer = false
-        case .emoji, .voice, .space, .delete, .returnKey, .spacer:
+        case .delete:
+            label = ""
+            action = .delete
+            isSpacer = false
+        case .emoji, .voice, .space, .returnKey, .spacer:
             label = ""
             action = .close
             isSpacer = true
@@ -713,6 +737,7 @@ private struct LiquidSymbolKey: Identifiable {
     var accessibilityLabel: String {
         switch action {
         case .insert: return label
+        case .delete: return "Delete backward"
         case .togglePage: return label == "#+=" ? "More symbols" : "Return to numbers keyboard"
         case .close: return "Close"
         }

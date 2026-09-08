@@ -243,6 +243,10 @@ class KeyboardState: ObservableObject {
     @Published var waveformEnergy: [Float] = []
     @Published var recordingElapsed: Double = 0
 
+    /// True when the app must be foregrounded to warm the downloaded model before
+    /// another background keyboard dictation can start.
+    @Published private(set) var appNeedsModelPreparation = false
+
     /// Which controller owns the keyboard area, and whether an ownerless area is
     /// still reclaimable (#260). Single source of truth for the two published
     /// properties below, which are what every consumer actually reads.
@@ -600,7 +604,12 @@ class KeyboardState: ObservableObject {
     func handleMicPressBegan() {
         switch dictationStatus {
         case .idle, .ready:
-            startRecording()
+            if appNeedsModelPreparation {
+                PersistentLog.log(.keyboardMicTapped)
+                deferRecordingForModelPreparation(reason: "app is not warm in background")
+            } else {
+                startRecording()
+            }
         case .failed:
             if failedRequiresApp {
                 openDictusForRecovery()
@@ -699,6 +708,7 @@ class KeyboardState: ObservableObject {
     func refreshFromDefaults() {
         logProbe("refreshFromDefaults", details: "storedStatus=\(defaults.string(forKey: SharedKeys.dictationStatus) ?? "nil") visible=\(isKeyboardVisible) \(sessionDetails())")
         languageRequest = Self.loadLanguageRequest(from: defaults)
+        refreshModelPreparationState()
 
         // Read BEFORE the reconcile guard below (#315): that guard returns early
         // on an abandoned dictation, and the polish state has nothing to do with
@@ -831,6 +841,20 @@ class KeyboardState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             _ = self?.consumeTranscription(for: request)
         }
+    }
+
+    private func refreshModelPreparationState() {
+        defaults.synchronize()
+        let rawLoadState = defaults.string(forKey: SharedKeys.modelLoadState)
+            ?? ModelLoadState.idle.rawValue
+        let loadState = ModelLoadState(rawValue: rawLoadState) ?? .idle
+        let phase = defaults.string(forKey: SharedKeys.appScenePhase)
+            .flatMap(AppScenePhaseMarker.init(rawValue:)) ?? .unknown
+        appNeedsModelPreparation = KeyboardModelPreparationPolicy.shouldOpenApp(
+            modelReady: defaults.bool(forKey: SharedKeys.modelReady),
+            modelLoadState: loadState,
+            appPhase: phase
+        )
     }
 
     @discardableResult
@@ -1308,6 +1332,7 @@ class KeyboardState: ObservableObject {
     /// cause sub-1-second recordings that Parakeet rejects, triggering a cascade
     /// of errors. 1.5s matches the natural human rhythm between dictation sessions.
     private var lastMicTapDate = Date.distantPast
+    private var lastModelPreparationOpenDate = Date.distantPast
     private var sessionGeneration = 0
 
     /// Start recording: set local state, then signal DictusApp.
@@ -1455,6 +1480,11 @@ class KeyboardState: ObservableObject {
     /// Open Dictus without creating a recording request. The user explicitly
     /// starts dictation with a second tap once preparation has completed (#262).
     private func openModelPreparation() {
+        // The preparation action can arrive through both touchDown and
+        // primaryActionTriggered on a keyboard host. Coalesce that pair so a
+        // single tap opens one app handoff.
+        guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 1 else { return }
+        lastModelPreparationOpenDate = Date()
         guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else {
             return
         }
@@ -1468,6 +1498,10 @@ class KeyboardState: ObservableObject {
         let rawState = defaults.string(forKey: SharedKeys.modelLoadState)
             ?? ModelLoadState.idle.rawValue
         return rawState == ModelLoadState.loading.rawValue
+    }
+
+    var dictationActionLabel: String {
+        appNeedsModelPreparation ? "Open sAiity to prepare dictation" : "Hold to dictate"
     }
 
     /// Defer recording without leaving a requested state behind in the keyboard.

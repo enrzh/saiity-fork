@@ -1540,7 +1540,9 @@ class DictationCoordinator: ObservableObject {
         defaults.set(false, forKey: SharedKeys.cancelRequested)
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)
-        DictationLanguageRequest.load(from: defaults).unbound().persist(to: defaults)
+        // Keep the request identity until the keyboard consumes DictationDelivery.
+        // The Darwin notification can arrive after this cleanup runs, and unbinding
+        // here makes a valid result look unrelated to the visible keyboard.
         defaults.synchronize()
     }
 

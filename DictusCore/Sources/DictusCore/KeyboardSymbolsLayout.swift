@@ -43,7 +43,9 @@ public enum KeyboardSymbolsLayout {
             Key(.insert("?"), width: 0.9),
             Key(.insert("!"), width: 0.9),
             Key(.insert("'"), width: 0.9),
-            Key(.spacer, width: 1)
+            // Native symbols keyboards put Delete above Return. Delete therefore
+            // belongs to the last symbol row while Return remains in the shared bar.
+            Key(.delete, width: 1.5)
         ]
     }
 }

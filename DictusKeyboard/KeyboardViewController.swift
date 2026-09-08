@@ -13,7 +13,9 @@ private final class DictationMicButton: UIButton {
     }
 }
 
-class KeyboardViewController: UIInputViewController {
+class KeyboardViewController: UIInputViewController,
+    LongPressCursorMovementDelegate,
+    GiellaKeyboardViewDelegate {
     let controllerID = String(UUID().uuidString.prefix(8))
 
     private var hostingController: UIHostingController<KeyboardRootView>?
@@ -26,6 +28,15 @@ class KeyboardViewController: UIInputViewController {
     private var dismissButton: UIButton?
     private var micButton: UIButton?
     private var spaceButton: UIButton?
+    private var spaceCursorController: LongPressCursorMovementController?
+    private var giellaKeyboard: GiellaKeyboardView?
+    private var giellaLayoutType: LayoutType?
+    private var giellaAccessoryOrder: KeyboardAccessoryOrder?
+    private var giellaLeadingConstraint: NSLayoutConstraint?
+    private var giellaTrailingConstraint: NSLayoutConstraint?
+    private var giellaTopConstraint: NSLayoutConstraint?
+    private var giellaBottomConstraint: NSLayoutConstraint?
+    private var lastShiftTapDate = Date.distantPast
     private var deleteRepeatTimer: Timer?
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var areaModeCancellable: AnyCancellable?
@@ -213,6 +224,7 @@ class KeyboardViewController: UIInputViewController {
         // The voice surface owns the entire input view.
         kbInputView.addSubview(hosting.view)
         hosting.didMove(toParent: self)
+        installLetterKeyboard(in: kbInputView)
         installVoiceActionControls(in: kbInputView)
 
         // --- 5. Set up Auto Layout constraints ---
@@ -317,9 +329,15 @@ class KeyboardViewController: UIInputViewController {
         // so call sites in KeyboardRootView and KeyboardState can access textDocumentProxy.
         // Previously set from KeyboardRootView.onAppear, which held a strong ref → #134.
         KeyboardState.shared.controller = self
+        // Model readiness and the app scene phase can change while this cached
+        // keyboard controller is off-screen. Refresh before laying out the mic
+        // action so the button does not keep a stale "Open sAiity" state.
+        KeyboardState.shared.refreshFromDefaults()
         hasAppeared = true
         isAttached = true
         updateActionAvailability()
+        refreshLetterKeyboardIfNeeded()
+        giellaKeyboard?.page = .normal
 
         // Opening the keyboard always returns to the dictation board.
         if !KeyboardState.shared.dictationStatus.ownsKeyboardArea {
@@ -457,6 +475,7 @@ class KeyboardViewController: UIInputViewController {
         hostingHeightConstraint?.constant = liveHeight
         heightConstraint?.constant = liveHeight
         layoutVoiceActionControls(surfaceHeight: liveHeight)
+        layoutLetterKeyboard(surfaceHeight: liveHeight)
         if isFirstLayoutPass {
             isFirstLayoutPass = false
             // Defer constraint installation to the next runloop turn so we
@@ -855,6 +874,7 @@ class KeyboardViewController: UIInputViewController {
         let status = KeyboardState.shared.dictationStatus.rawValue
         let liveHeight = computeKeyboardHeight(for: mode)
         setVoiceActionControlsHidden(mode == .panel || mode == .emoji)
+        giellaKeyboard?.isHidden = mode != .keys
 
         switch mode {
         case .keys:
@@ -910,9 +930,78 @@ class KeyboardViewController: UIInputViewController {
         inputView?.setNeedsLayout()
         inputView?.layoutIfNeeded()
         layoutVoiceActionControls(surfaceHeight: liveHeight)
+        layoutLetterKeyboard(surfaceHeight: liveHeight)
     }
 
     // MARK: - UIKit action controls
+
+    /// The letter grid is UIKit-owned so key hit testing, long-press variants and
+    /// cursor movement stay on the same low-latency path as the vendored keyboard.
+    private func installLetterKeyboard(in inputView: UIView) {
+        let keyboard = GiellaKeyboardView(
+            definition: KeyboardLayouts.current(),
+            theme: Theme.current(for: traitCollection)
+        )
+        keyboard.translatesAutoresizingMaskIntoConstraints = false
+        keyboard.delegate = self
+        keyboard.isHidden = true
+        inputView.addSubview(keyboard)
+
+        let leading = keyboard.leadingAnchor.constraint(equalTo: inputView.leadingAnchor)
+        let trailing = keyboard.trailingAnchor.constraint(equalTo: inputView.trailingAnchor)
+        let top = keyboard.topAnchor.constraint(equalTo: inputView.topAnchor)
+        let bottom = keyboard.bottomAnchor.constraint(equalTo: inputView.bottomAnchor)
+        NSLayoutConstraint.activate([leading, trailing, top, bottom])
+
+        giellaKeyboard = keyboard
+        giellaLayoutType = LayoutType.active
+        giellaAccessoryOrder = KeyboardAccessoryOrder.current
+        giellaLeadingConstraint = leading
+        giellaTrailingConstraint = trailing
+        giellaTopConstraint = top
+        giellaBottomConstraint = bottom
+    }
+
+    private func refreshLetterKeyboardIfNeeded() {
+        guard let inputView else { return }
+        let requestedLayout = LayoutType.active
+        let requestedAccessoryOrder = KeyboardAccessoryOrder.current
+        guard giellaLayoutType != requestedLayout || giellaAccessoryOrder != requestedAccessoryOrder else {
+            giellaKeyboard?.updateTheme(theme: Theme.current(for: traitCollection))
+            return
+        }
+
+        giellaKeyboard?.delegate = nil
+        giellaKeyboard?.removeFromSuperview()
+        [giellaLeadingConstraint, giellaTrailingConstraint, giellaTopConstraint, giellaBottomConstraint]
+            .compactMap { $0 }
+            .forEach { $0.isActive = false }
+        giellaKeyboard = nil
+        installLetterKeyboard(in: inputView)
+        layoutLetterKeyboard()
+    }
+
+    private func layoutLetterKeyboard(surfaceHeight: CGFloat? = nil) {
+        guard let inputView,
+              let keyboard = giellaKeyboard,
+              inputView.bounds.width > 0 else { return }
+        let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: KeyboardState.shared.areaMode)
+        let layout = VoiceOnlyKeyboardPolicy.layout(
+            for: Double(inputView.bounds.width),
+            surfaceHeight: Double(max(1, resolvedHeight)),
+            controlOrder: KeyboardAccessoryOrder.current
+        )
+        let frame = layout.letterKeyboardFrame
+        guard !frame.isEmpty else {
+            keyboard.isHidden = true
+            return
+        }
+        giellaLeadingConstraint?.constant = frame.minX
+        giellaTrailingConstraint?.constant = -(inputView.bounds.width - frame.maxX)
+        giellaTopConstraint?.constant = frame.minY
+        giellaBottomConstraint?.constant = -(resolvedHeight - frame.maxY)
+        keyboard.isHidden = KeyboardState.shared.areaMode != .keys
+    }
 
     private func reassertTransparentSurfaceLayers() {
         view.backgroundColor = .clear
@@ -924,6 +1013,8 @@ class KeyboardViewController: UIInputViewController {
         actionControlsView?.backgroundColor = .clear
         actionControlsView?.isOpaque = false
         actionControlsView?.layer.backgroundColor = UIColor.clear.cgColor
+        giellaKeyboard?.backgroundColor = .clear
+        giellaKeyboard?.isOpaque = false
     }
 
     /// Transparent UIKit controls sit over the SwiftUI glyphs. UIKit owns the
@@ -976,6 +1067,11 @@ class KeyboardViewController: UIInputViewController {
         micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
         micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
         micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        micButton?.addTarget(self, action: #selector(handleMicTap), for: .touchUpInside)
+        // A preparation tap is a regular button activation, not a recording
+        // hold. Keep a primary-action fallback because some iOS keyboard hosts
+        // deliver that event more reliably than touchDown to extension views.
+        micButton?.addTarget(self, action: #selector(handleMicPrimaryAction), for: .primaryActionTriggered)
         (micButton as? DictationMicButton)?.onAccessibilityActivate = {
             let state = KeyboardState.shared
             switch state.dictationStatus {
@@ -992,6 +1088,13 @@ class KeyboardViewController: UIInputViewController {
         spaceButton = makeKeyboardActionButton(identifier: "space-key", label: "Space") { [weak self] in
             self?.routeProxyCommand(.space)
         }
+        let cursorGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleSpaceCursorGesture(_:)))
+        cursorGesture.minimumPressDuration = 0.3
+        cursorGesture.cancelsTouchesInView = true
+        spaceButton?.addGestureRecognizer(cursorGesture)
+        let cursorController = LongPressCursorMovementController()
+        cursorController.delegate = self
+        spaceCursorController = cursorController
         [atButton, emojiButton, numberButton, micButton, spaceButton,
          deleteButton, returnButton, dismissButton].compactMap { $0 }.forEach {
             controls.addSubview($0)
@@ -1067,6 +1170,38 @@ class KeyboardViewController: UIInputViewController {
             return
         }
 
+        // The idle page is the full native-style letter keyboard. Its bottom row
+        // owns 123, emoji, space, return and keyboard-dismiss actions, so only the
+        // compact dictation action remains in this transparent UIKit overlay.
+        if mode == .keys {
+            let width = controls.bounds.width
+            let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: Double(width),
+                surfaceHeight: Double(max(1, resolvedHeight)),
+                controlOrder: KeyboardAccessoryOrder.current
+            )
+            [atButton, emojiButton, numberButton, spaceButton, deleteButton, returnButton, dismissButton]
+                .compactMap { $0 }
+                .forEach {
+                    $0.isHidden = true
+                    $0.isEnabled = false
+                    $0.isUserInteractionEnabled = false
+                }
+            micButton?.isHidden = layout.letterMicFrame.isEmpty
+            micButton?.isEnabled = !layout.letterMicFrame.isEmpty
+            micButton?.isUserInteractionEnabled = !layout.letterMicFrame.isEmpty
+            micButton?.frame = layout.letterMicFrame
+            micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
+            micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
+            micButton?.accessibilityHint = KeyboardState.shared.appNeedsModelPreparation
+                ? "Opens sAiity and prepares the dictation model."
+                : "Double-tap to start or stop dictation."
+            micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
+            if let inputView { inputView.bringSubviewToFront(controls) }
+            return
+        }
+
         let width = controls.bounds.width
         let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: mode)
         let layout = VoiceOnlyKeyboardPolicy.layout(
@@ -1096,6 +1231,10 @@ class KeyboardViewController: UIInputViewController {
         numberButton?.frame = layout.leftUtilityFrames.number
         micButton?.frame = layout.dictateFrame
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
+        micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
+        micButton?.accessibilityHint = KeyboardState.shared.appNeedsModelPreparation
+            ? "Opens sAiity and prepares the dictation model."
+            : "Double-tap to start or stop dictation."
         spaceButton?.frame = layout.spaceFrame
         deleteButton?.frame = layout.deleteFrame
         returnButton?.frame = layout.returnFrame
@@ -1109,11 +1248,44 @@ class KeyboardViewController: UIInputViewController {
     }
 
     @objc private func handleMicTouchDown() {
+        // Preparation is a tap-to-open action. Waiting for touch-up lets the
+        // keyboard host finish the control activation before NSExtensionContext
+        // hands the app URL to iOS.
+        guard !KeyboardState.shared.appNeedsModelPreparation else { return }
         KeyboardState.shared.handleMicPressBegan()
     }
 
     @objc private func handleMicTouchUp() {
+        guard !KeyboardState.shared.appNeedsModelPreparation else { return }
         KeyboardState.shared.handleMicPressEnded()
+    }
+
+    @objc private func handleMicTap() {
+        guard KeyboardState.shared.appNeedsModelPreparation else { return }
+        KeyboardState.shared.handleMicPressBegan()
+    }
+
+    @objc private func handleMicPrimaryAction() {
+        guard KeyboardState.shared.appNeedsModelPreparation else { return }
+        KeyboardState.shared.handleMicPressBegan()
+    }
+
+    /// Match the native keyboard's spacebar trackpad behavior. A short tap is
+    /// still handled by the UIButton action; once this recognizer begins it
+    /// cancels that action and forwards horizontal movement to the text proxy.
+    @objc private func handleSpaceCursorGesture(_ recognizer: UILongPressGestureRecognizer) {
+        guard let spaceButton, let spaceCursorController else { return }
+        let point = recognizer.location(in: spaceButton)
+        switch recognizer.state {
+        case .began:
+            spaceCursorController.touchesBegan(point)
+        case .changed:
+            spaceCursorController.touchesMoved(point)
+        case .ended, .cancelled:
+            spaceCursorController.touchesEnded(point)
+        default:
+            break
+        }
     }
 
     @objc private func handleDeleteHold(_ recognizer: UILongPressGestureRecognizer) {
@@ -1203,18 +1375,23 @@ class KeyboardViewController: UIInputViewController {
                 presentArea(.emoji)
             } else {
                 routeProxyText(value)
+                if giellaKeyboard?.page == .shifted {
+                    giellaKeyboard?.page = .normal
+                }
             }
         case .backspace:
             routeProxyCommand(.delete)
         case .returnkey:
             routeProxyCommand(.returnKey)
         case .spacebar:
-            routeProxyText(" ")
+            routeProxyCommand(.space)
         case .symbols:
-            closeNumberPanel()
-        case .shiftSymbols:
-            KeyboardState.shared.closeArea()
-        case .shift, .spacer, .caps, .keyboardMode, .splitKeyboard,
+            presentArea(.panel)
+        case .shift:
+            toggleLetterShift()
+        case .keyboardMode:
+            handleDismissKeyboard()
+        case .shiftSymbols, .spacer, .caps, .splitKeyboard,
              .normalKeyboard, .sideKeyboardLeft, .sideKeyboardRight,
              .comma, .fullStop, .tab:
             break
@@ -1225,7 +1402,11 @@ class KeyboardViewController: UIInputViewController {
         didTriggerKey(key)
     }
 
-    func didTriggerDoubleTap(forKey key: KeyDefinition) { }
+    func didTriggerDoubleTap(forKey key: KeyDefinition) {
+        guard case .shift = key.type else { return }
+        giellaKeyboard?.page = .capslock
+        lastShiftTapDate = .distantPast
+    }
 
     func didTriggerHoldKey(_ key: KeyDefinition) {
         if case .backspace = key.type {
@@ -1248,6 +1429,32 @@ class KeyboardViewController: UIInputViewController {
         }
         textDocumentProxy.adjustTextPosition(byCharacterOffset: movement)
     }
+
+    private func toggleLetterShift() {
+        guard let keyboard = giellaKeyboard else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastShiftTapDate) < 0.35 {
+            keyboard.page = .capslock
+            lastShiftTapDate = .distantPast
+            return
+        }
+
+        lastShiftTapDate = now
+        switch keyboard.page {
+        case .normal:
+            keyboard.page = .shifted
+        case .shifted, .capslock:
+            keyboard.page = .normal
+        case .symbols1, .symbols2:
+            break
+        }
+    }
+
+    func longpress(movedCursor movement: Int) {
+        didMoveCursor(movement)
+    }
+
+    func longpressDidCancel() { }
 
     // MARK: - Text Change
 

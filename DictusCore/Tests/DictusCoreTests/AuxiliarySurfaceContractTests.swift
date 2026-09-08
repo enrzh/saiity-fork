@@ -30,7 +30,8 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertEqual(root.components(separatedBy: "areaSurface(layout: layout, contentFrame: surfaceFrame)").count - 1, 1)
-        XCTAssertTrue(root.contains("case .keys, .recording:"))
+        XCTAssertTrue(root.contains("case .keys:"))
+        XCTAssertTrue(root.contains("case .recording:"))
         XCTAssertTrue(root.contains("case .emoji:"))
         XCTAssertTrue(root.contains("case .panel:"))
         XCTAssertFalse(root.contains("contentFrame: layout.auxiliaryContentFrame"))
@@ -113,6 +114,25 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertEqual(KeyboardSymbolsLayout.symbols.count, 3)
     }
 
+    func testSymbolDeleteStaysAboveTheSharedReturnControl() throws {
+        for rows in [KeyboardSymbolsLayout.numbers, KeyboardSymbolsLayout.symbols] {
+            guard let bottomRow = rows.last else {
+                XCTFail("symbol page must have a bottom symbol row")
+                continue
+            }
+
+            guard case .delete = bottomRow.last?.kind else {
+                XCTFail("delete must be the last key in the third symbol row")
+                continue
+            }
+            XCTAssertEqual(bottomRow.dropLast().count, 6)
+        }
+
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
+        XCTAssertTrue(root.contains("onReturn: onReturn"))
+    }
+
     func testEmojiMotionDisablesScaleFeedbackWhenReduceMotionIsEnabled() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
@@ -141,6 +161,10 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(
             symbolPage.contains("variantOverlay"),
             "the long-press overlay may own a hit shape only while a variant popup is visible"
+        )
+        XCTAssertTrue(
+            symbolPage.contains(".contentShape(Rectangle())"),
+            "symbol keys must keep the complete rectangular edge hit target"
         )
     }
 

@@ -113,12 +113,12 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testSharedBottomBarUsesNativeMicrophoneReturnButton() throws {
         let source = try read("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
 
-        XCTAssertTrue(source.contains("systemName: \"mic.fill\""))
+        XCTAssertTrue(source.contains("layout.auxiliaryMicrophoneFrame"))
         XCTAssertFalse(source.contains("Text(\"|\")"))
         XCTAssertTrue(source.contains("width: 44, height: 44"))
         XCTAssertTrue(source.contains("Return to voice keyboard"))
         XCTAssertTrue(source.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(source.contains("controlOrder"))
+        XCTAssertTrue(source.contains("layout.leftUtilityFrames"))
     }
 
     func testEmojiRecentsCategoryUsesNativeClockSymbol() throws {
