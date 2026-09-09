@@ -298,7 +298,11 @@ private struct EmojiScrollCanvas: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 0) {
+                // Keep the page track eager and stable. LazyHStack can stop
+                // extending a horizontal keyboard track after its initially
+                // realized pages, which makes a swipe appear to hit an invisible
+                // end. The emoji cells remain lazy inside each page.
+                HStack(spacing: 0) {
                     ForEach(pages) { page in
                         let columns = columnsPerPage(for: page)
                         let pageWidth = pageWidth(for: page, columns: columns)

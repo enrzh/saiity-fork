@@ -192,6 +192,22 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(layout.surfaceFrame.height, 216 - 8)
     }
 
+    func testSuggestionLaneIsOutsideTheInsetSurface() {
+        let native = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 216)
+        let withSuggestions = VoiceOnlyKeyboardPolicy.layout(
+            for: 390,
+            surfaceHeight: 216 + VoiceOnlyKeyboardPolicy.suggestionLaneHeight,
+            topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+        )
+
+        XCTAssertEqual(withSuggestions.surfaceFrame.width, native.surfaceFrame.width)
+        XCTAssertEqual(withSuggestions.surfaceFrame.height, native.surfaceFrame.height)
+        XCTAssertEqual(withSuggestions.surfaceFrame.minY,
+                       native.surfaceFrame.minY + VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        XCTAssertEqual(withSuggestions.surfaceFrame.maxY,
+                       native.surfaceFrame.maxY + VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+    }
+
     func testRightRailFitsWithinVoiceSurfaceHeight() {
         XCTAssertLessThanOrEqual(
             VoiceOnlyKeyboardPolicy.rightRailHeight,

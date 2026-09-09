@@ -68,6 +68,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(categories.contains("glassEffect"))
         XCTAssertTrue(emoji.contains("availableHeight - headerHeight - bottomBarHeight - edgeInset * 2"))
         XCTAssertTrue(emoji.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(emoji.contains("HStack(spacing: 0)"),
+                      "the horizontal page track must have a stable extent")
     }
 
     func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
@@ -191,7 +193,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testComputeKeyboardHeightUsesInputViewAndIgnoresControllerBounds() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("let inputViewHeight = inputView?.bounds.height ?? 0"))
+        XCTAssertTrue(source.contains("let observedInputViewHeight = inputView?.bounds.height ?? 0"))
+        XCTAssertTrue(source.contains("let inputViewHeight = max(0, observedInputViewHeight - previousAccessoryHeight)"))
         XCTAssertTrue(source.contains("VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight("))
         XCTAssertTrue(source.contains("inputViewHeight: Double(inputViewHeight)"))
         XCTAssertTrue(source.contains("controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil"))

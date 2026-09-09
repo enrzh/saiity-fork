@@ -279,8 +279,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the highlight must be centered in the emoji cell")
         XCTAssertTrue(picker.contains("ScrollView(.horizontal"),
                       "emoji scrolling is horizontal like the native keyboard")
-        XCTAssertTrue(picker.contains("LazyHStack(spacing: 0)"),
-                      "categories are separate horizontal pages")
+        XCTAssertTrue(picker.contains("HStack(spacing: 0)"),
+                      "categories are separate horizontal pages on a stable track")
         XCTAssertTrue(picker.contains("updateSelectedCategory"),
                       "scrolling must highlight the currently visible category")
         XCTAssertTrue(picker.contains("emojiGesture"),
@@ -630,7 +630,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "emoji scrolling must stop above the bottom bar")
         XCTAssertTrue(picker.contains("ScrollView(.horizontal, showsIndicators: false)"),
                       "emoji scrolling is continuous and horizontal like the native keyboard")
-        XCTAssertTrue(picker.contains("LazyHStack(spacing: 0)"),
+        XCTAssertTrue(picker.contains("HStack(spacing: 0)"),
                       "each emoji category has its own horizontal page")
         XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
         XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete, onDeleteWord: onDeleteWord)"))

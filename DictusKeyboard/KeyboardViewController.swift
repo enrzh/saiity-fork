@@ -766,8 +766,19 @@ class KeyboardViewController: UIInputViewController,
     }
 
     private func computeKeyboardHeight() -> CGFloat {
+        computeKeyboardHeight(for: KeyboardState.shared.areaMode)
+    }
+
+    /// Resolves the native keyboard surface first, then adds the prediction lane
+    /// outside that surface for letter mode. UIKit reports the complete input view
+    /// height, so remove the lane belonging to the previously laid-out mode before
+    /// feeding the observed value back into the stability resolver.
+    private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         let nativeHeight = computeNativeKeyboardHeight()
-        let inputViewHeight = inputView?.bounds.height ?? 0
+        let previousMode = lastLayoutMode ?? mode
+        let previousAccessoryHeight = CGFloat(suggestionLaneHeight(for: previousMode))
+        let observedInputViewHeight = inputView?.bounds.height ?? 0
+        let inputViewHeight = max(0, observedInputViewHeight - previousAccessoryHeight)
         let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
             inputViewHeight: Double(inputViewHeight),
             controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil,
@@ -777,12 +788,7 @@ class KeyboardViewController: UIInputViewController,
         )
         previousInputViewHeight = resolution.observedInputViewHeight
         stableInputViewHeightPasses = resolution.stableInputViewPasses
-        return CGFloat(resolution.height)
-    }
-
-    /// Every mode uses the device-aware native keyboard height.
-    private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
-        computeKeyboardHeight()
+        return CGFloat(resolution.height) + CGFloat(suggestionLaneHeight(for: mode))
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -1071,11 +1077,15 @@ class KeyboardViewController: UIInputViewController,
         )
     }
 
-    private var currentSuggestionLaneHeight: Double {
+    private func suggestionLaneHeight(for mode: KeyboardAreaMode) -> Double {
         let enabled = AppGroup.defaults.object(forKey: SharedKeys.suggestionsEnabled) as? Bool ?? true
-        return enabled && KeyboardState.shared.areaMode == .letters
+        return enabled && mode == .letters
             ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight
             : 0
+    }
+
+    private var currentSuggestionLaneHeight: Double {
+        suggestionLaneHeight(for: KeyboardState.shared.areaMode)
     }
 
     private func layoutLetterKeyboard(surfaceHeight: CGFloat? = nil) {
