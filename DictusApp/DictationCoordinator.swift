@@ -260,11 +260,6 @@ class DictationCoordinator: ObservableObject {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                // Sync LiveActivityManager state — the intent already ended the activity
-                // but the manager doesn't know. Without this, currentActivity stays non-nil
-                // and ensureActivityAlive() is a no-op on next dictation (#50).
-                LiveActivityManager.shared.stopStandbyActivity()
-
                 // Stop any active recording first
                 if self.status == .recording {
                     self.cancelDictation()
@@ -273,6 +268,9 @@ class DictationCoordinator: ObservableObject {
                 if self.audioEngine.isEngineRunning {
                     self.audioEngine.deactivateSession()
                 }
+                // Keep the Live Activity visible as the control that can turn
+                // dictation back on. The service toggle intent updates its state.
+                LiveActivityManager.shared.updateServiceEnabled(false)
                 PersistentLog.log(.engineWarmUpFailed(context: "standby-power-off", error: "user stopped standby"))
             }
         }
@@ -297,7 +295,9 @@ class DictationCoordinator: ObservableObject {
                 } else {
                     if self.status == .recording { self.cancelDictation() }
                     if self.audioEngine.isEngineRunning { self.audioEngine.deactivateSession() }
-                    LiveActivityManager.shared.stopStandbyActivity()
+                    // Keep the Live Activity visible as the control that can turn
+                    // dictation back on. Disabling the service must not dismiss it.
+                    LiveActivityManager.shared.updateServiceEnabled(false)
                 }
             }
         }

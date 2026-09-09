@@ -804,6 +804,21 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         }
     }
 
+    func testPasteFrameSitsBesideLanguageFrameWithoutChangingActionGeometry() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            guard layout.showsLanguageIndicator else { continue }
+
+            XCTAssertFalse(layout.pasteFrame.isEmpty, "width=\(width)")
+            XCTAssertEqual(layout.pasteFrame.minY, layout.languageFrame.minY, "width=\(width)")
+            XCTAssertEqual(layout.pasteFrame.minX,
+                           layout.languageFrame.maxX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+                           "width=\(width)")
+            XCTAssertTrue(layout.surfaceFrame.contains(layout.pasteFrame), "width=\(width)")
+            XCTAssertFalse(layout.pasteFrame.intersects(layout.languageFrame), "width=\(width)")
+        }
+    }
+
     func testRailsHaveTopInsetAndDismissIsCompleteAtBottom() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
 

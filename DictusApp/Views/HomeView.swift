@@ -50,12 +50,17 @@ struct HomeView: View {
             }
         }
         .onChange(of: serviceEnabled) { _, enabled in
-            guard !enabled else { return }
-            LiveActivityManager.shared.stopStandbyActivity()
-            NotificationCenter.default.post(
-                name: Notification.Name("DictusStopStandbyRequested"),
-                object: nil
-            )
+            if enabled {
+                NotificationCenter.default.post(
+                    name: Notification.Name("DictusServiceToggleRequested"),
+                    object: nil
+                )
+            } else {
+                NotificationCenter.default.post(
+                    name: Notification.Name("DictusStopStandbyRequested"),
+                    object: nil
+                )
+            }
         }
         .onAppear {
             refreshMicrophonePermission()

@@ -261,6 +261,11 @@ class KeyboardState: ObservableObject {
     /// Combined action state consumed by the UIKit hit layer and SwiftUI label.
     @Published private(set) var appNeedsAppAction = false
 
+    /// True when the host field advertises iOS's one-time-code content type.
+    /// This only changes the local paste affordance; iOS remains responsible for
+    /// delivering SMS verification-code AutoFill suggestions.
+    @Published private(set) var isOneTimeCodeField = false
+
     /// Emits readiness changes for UIKit controls that cannot observe the
     /// SwiftUI object directly. The controller schedules its layout on the
     /// next main-queue turn because @Published emits from willSet.
@@ -304,6 +309,11 @@ class KeyboardState: ObservableObject {
     /// and the controller owns the hosting view. A strong reference would create
     /// a retain cycle: controller -> view -> state -> controller.
     weak var controller: UIInputViewController?
+
+    /// Opening a URL must use the currently visible controller. iOS can retain a
+    /// detached UIInputViewController, so a weak controller property alone is not
+    /// a reliable routing authority for the recovery button.
+    var openContainingApp: ((URL, @escaping (Bool) -> Void) -> Void)?
 
     /// The active model's actual input-language detection capability.
     /// Translation readiness is deliberately not inferred here.
@@ -371,11 +381,20 @@ class KeyboardState: ObservableObject {
     /// to open URLs. Neither SwiftUI's openURL nor the responder chain work
     /// reliably in keyboard extensions.
     func openURLFromExtension(_ url: URL, completion: @escaping (Bool) -> Void) {
+        if let openContainingApp {
+            openContainingApp(url, completion)
+            return
+        }
         guard let extensionContext = controller?.extensionContext else {
             completion(false)
             return
         }
         extensionContext.open(url, completionHandler: completion)
+    }
+
+    /// Refreshes the host-field metadata used by the keyboard UI.
+    func refreshHostInputTraits(from proxy: UITextDocumentProxy) {
+        isOneTimeCodeField = HostInputTraits.isOneTimeCodeField(for: proxy)
     }
 
     /// A failed attempt needs the app when its model or service must be brought
@@ -943,11 +962,13 @@ class KeyboardState: ObservableObject {
         let serviceEnabled = defaults.object(forKey: SharedKeys.serviceEnabled) == nil
             || defaults.bool(forKey: SharedKeys.serviceEnabled)
         let heartbeat = defaults.double(forKey: SharedKeys.appProcessHeartbeat)
+        let liveActivityUpdatedAt = defaults.double(forKey: SharedKeys.liveActivityUpdatedAt)
         let needsServiceRecovery = !DictationSessionLivenessPolicy.isActive(status ?? .idle)
             && DictationServiceLivenessPolicy.shouldOpenApp(
                 serviceEnabled: serviceEnabled,
                 appProcessHeartbeat: heartbeat > 0 ? heartbeat : nil,
-                liveActivityPresent: defaults.bool(forKey: SharedKeys.liveActivityPresent)
+                liveActivityPresent: defaults.bool(forKey: SharedKeys.liveActivityPresent),
+                liveActivityUpdatedAt: liveActivityUpdatedAt > 0 ? liveActivityUpdatedAt : nil
             )
         appNeedsServiceRecovery = needsServiceRecovery
         appNeedsAppAction = needsModelPreparation || needsServiceRecovery
@@ -1614,7 +1635,7 @@ class KeyboardState: ObservableObject {
 
     /// Use the extension context and fail closed when the handoff is unavailable.
     private func openDictusURL(_ url: URL) {
-        guard controller?.extensionContext != nil else {
+        guard openContainingApp != nil || controller?.extensionContext != nil else {
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardState",
                 instanceID: instanceID,

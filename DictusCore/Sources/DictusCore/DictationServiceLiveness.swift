@@ -10,15 +10,26 @@ public enum DictationServiceLivenessPolicy {
     /// Long enough for normal process suspension gaps, short enough to recover from
     /// a terminated app without leaving the keyboard on a dead microphone action.
     public static let maximumAppHeartbeatAge: TimeInterval = 45
+    /// ActivityKit can retain an activity after the owning process has died.
+    /// Require a recent confirmation before treating the flag as service liveness.
+    public static let maximumLiveActivityAge: TimeInterval = 120
 
     public static func shouldOpenApp(
         serviceEnabled: Bool,
         appProcessHeartbeat: TimeInterval?,
         liveActivityPresent: Bool,
+        liveActivityUpdatedAt: TimeInterval? = nil,
         now: TimeInterval = Date().timeIntervalSince1970
     ) -> Bool {
         guard serviceEnabled else { return true }
-        if liveActivityPresent { return false }
+        if liveActivityPresent,
+           let liveActivityUpdatedAt,
+           liveActivityUpdatedAt > 0 {
+            let activityAge = now - liveActivityUpdatedAt
+            if activityAge < 0 || activityAge <= maximumLiveActivityAge {
+                return false
+            }
+        }
         guard let appProcessHeartbeat, appProcessHeartbeat > 0 else { return true }
 
         let age = now - appProcessHeartbeat
@@ -39,6 +50,7 @@ public enum DictationServiceLivenessProbe {
     public static func recordLiveActivity(
         present: Bool,
         identifier: String? = nil,
+        at date: Date = Date(),
         into defaults: UserDefaults = AppGroup.defaults
     ) {
         defaults.set(present, forKey: SharedKeys.liveActivityPresent)
@@ -46,6 +58,11 @@ public enum DictationServiceLivenessProbe {
             defaults.set(identifier, forKey: SharedKeys.liveActivityID)
         } else if !present {
             defaults.removeObject(forKey: SharedKeys.liveActivityID)
+        }
+        if present {
+            defaults.set(date.timeIntervalSince1970, forKey: SharedKeys.liveActivityUpdatedAt)
+        } else {
+            defaults.removeObject(forKey: SharedKeys.liveActivityUpdatedAt)
         }
         defaults.synchronize()
     }

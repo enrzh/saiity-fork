@@ -464,6 +464,32 @@ class LiveActivityManager {
         }
     }
 
+    /// Updates the standby control without dismissing the Live Activity.
+    /// The activity remains the user's recovery control while dictation is disabled.
+    func updateServiceEnabled(_ enabled: Bool) {
+        AppGroup.defaults.set(enabled, forKey: SharedKeys.serviceEnabled)
+        AppGroup.defaults.synchronize()
+
+        guard let activity = currentActivity else {
+            if enabled { startStandbyActivity() }
+            return
+        }
+
+        let current = activity.content.state
+        let state = DictusLiveActivityAttributes.ContentState(
+            phase: current.phase,
+            recordingStartDate: current.recordingStartDate,
+            waveformLevels: current.waveformLevels,
+            transcriptionPreview: current.transcriptionPreview,
+            detectionMuted: current.detectionMuted,
+            serviceEnabled: enabled
+        )
+        Task {
+            await activity.update(.init(state: state, staleDate: nil))
+            DictationServiceLivenessProbe.recordLiveActivity(present: true, identifier: activity.id)
+        }
+    }
+
     // MARK: - Recording Mode
 
     /// Transition from standby to recording.

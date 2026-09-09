@@ -299,6 +299,18 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: VoiceOnlyKeyboardPolicy.controlSize)
         }
 
+        /// Explicit clipboard insertion sits beside the language menu and keeps
+        /// its own stable hit target without changing the action-rectangle API.
+        public var pasteFrame: CGRect {
+            let frame = CGRect(
+                x: languageFrame.maxX + visibleControlGap,
+                y: languageFrame.minY,
+                width: VoiceOnlyKeyboardPolicy.controlSize,
+                height: VoiceOnlyKeyboardPolicy.controlSize
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
         public var leftUtilityFrames: LeftUtilityFrames {
             guard leftRailWidth > 0 else { return LeftUtilityFrames(at: .zero, emoji: .zero, number: .zero) }
             let x = surfaceFrame.minX + visibleControlGap

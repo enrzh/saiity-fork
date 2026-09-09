@@ -10,6 +10,7 @@ struct KeyboardRootView: View {
     let routeWordDeletion: () -> Void
     let routeCursorMovement: (Int) -> Void
     let routeSuggestion: (Int) -> Void
+    let routePaste: () -> Void
     @ObservedObject private var state = KeyboardState.shared
     @ObservedObject private var suggestionState = SuggestionState.shared
     @AppStorage(SharedKeys.suggestionsEnabled, store: AppGroup.defaults) private var suggestionsEnabled = true
@@ -42,6 +43,10 @@ struct KeyboardRootView: View {
                 if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
+                    if !layout.pasteFrame.isEmpty {
+                        pasteButton
+                            .position(x: CGFloat(layout.pasteFrame.midX), y: CGFloat(layout.pasteFrame.midY))
+                    }
                 }
 
                 if state.areaMode == .keys || state.areaMode == .recording {
@@ -232,6 +237,21 @@ struct KeyboardRootView: View {
         default:
             return code
         }
+    }
+
+    private var pasteButton: some View {
+        Button(action: routePaste) {
+            Image(systemName: state.isOneTimeCodeField ? "number.square" : "doc.on.clipboard")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                       height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
+                .foregroundStyle(.primary)
+        }
+        .buttonStyle(.plain)
+        .background(appleControlSurface(Color.clear, in: Circle()))
+        .contentShape(Circle())
+        .accessibilityLabel(state.isOneTimeCodeField ? "Paste verification code" : "Paste from clipboard")
+        .accessibilityHint("Inserts the current clipboard text.")
     }
 
     @ViewBuilder

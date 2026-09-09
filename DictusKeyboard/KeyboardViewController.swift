@@ -208,7 +208,8 @@ class KeyboardViewController: UIInputViewController,
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
             routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
             routeCursorMovement: { [weak self] movement in self?.didMoveCursor(movement) },
-            routeSuggestion: { [weak self] index in self?.acceptSuggestion(at: index) }
+            routeSuggestion: { [weak self] index in self?.acceptSuggestion(at: index) },
+            routePaste: { [weak self] in self?.pasteFromClipboard() }
         )
         let hosting = UIHostingController(rootView: rootView)
         PersistentLog.log(.diagnosticProbe(
@@ -350,6 +351,14 @@ class KeyboardViewController: UIInputViewController,
         // so call sites in KeyboardRootView and KeyboardState can access textDocumentProxy.
         // Previously set from KeyboardRootView.onAppear, which held a strong ref → #134.
         KeyboardState.shared.controller = self
+        KeyboardState.shared.openContainingApp = { [weak self] url, completion in
+            guard let self, let extensionContext = self.extensionContext else {
+                completion(false)
+                return
+            }
+            extensionContext.open(url, completionHandler: completion)
+        }
+        KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy)
         KeyboardState.shared.onTranscriptionInserted = { [weak self] in
             self?.refreshSuggestions()
         }
@@ -592,6 +601,11 @@ class KeyboardViewController: UIInputViewController,
         // We are off screen from here on, whether or not we keep ownership below
         // (#260): a detached controller must not adopt an ownerless dictation.
         isAttached = false
+
+        if KeyboardState.shared.controller === self {
+            KeyboardState.shared.openContainingApp = nil
+            KeyboardState.shared.controller = nil
+        }
 
         // Restore system gesture recognizer delay (be a good citizen)
         restoreWindowGestureDelay()
@@ -1485,6 +1499,29 @@ class KeyboardViewController: UIInputViewController,
         }
         textDocumentProxy.insertText(text)
         refreshSuggestions()
+    }
+
+    /// Reads the general pasteboard only after an explicit user tap. The inserted
+    /// value is kept unchanged so OTPs and multilingual clipboard text are not
+    /// normalized by the keyboard.
+    private func pasteFromClipboard() {
+        let ownerAvailable = isAttached && isOnScreen
+            && KeyboardState.shared.activeControllerID == controllerID
+        guard ownerAvailable else {
+            HapticFeedback.actionRefused()
+            return
+        }
+        guard let value = UIPasteboard.general.string, !value.isEmpty else {
+            HapticFeedback.actionRefused()
+            KeyboardState.shared.presentStatusMessage(
+                "Clipboard is empty.",
+                reason: "clipboardEmpty",
+                timeoutReason: "clipboardEmpty-timeout"
+            )
+            return
+        }
+        routeProxyText(value)
+        HapticFeedback.keyTapped()
     }
 
     private func refreshSuggestions() {

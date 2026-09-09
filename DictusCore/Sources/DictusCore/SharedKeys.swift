@@ -171,6 +171,9 @@ public enum SharedKeys {
     public static let appProcessHeartbeat = "dictus.appProcessHeartbeat"
     /// Bool: whether DictusApp last confirmed that its Live Activity is present.
     public static let liveActivityPresent = "dictus.liveActivityPresent"
+    /// Double (timeIntervalSince1970): when Live Activity presence was last
+    /// confirmed. The presence flag can outlive the app process after a crash.
+    public static let liveActivityUpdatedAt = "dictus.liveActivityUpdatedAt"
     /// String: the last Live Activity identifier published by DictusApp, for logs.
     public static let liveActivityID = "dictus.liveActivityID"
 

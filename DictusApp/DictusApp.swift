@@ -141,9 +141,19 @@ struct DictusApp: App {
                 .environmentObject(coordinator)
                 .environmentObject(proStatus)
                 .environmentObject(subscriptionManager)
-                .overlay {
+            .overlay {
                     if #available(iOS 26.0, *) {
                         TranslationHost(coordinator: coordinator)
+                    }
+                }
+                .task {
+                    // Keep the cross-process availability signal fresh while the
+                    // app process remains alive, including during background audio.
+                    // iOS suspends this task when the process is suspended; the
+                    // keyboard then correctly falls back to the Live Activity signal.
+                    while !Task.isCancelled {
+                        DictationServiceLivenessProbe.recordAppHeartbeat()
+                        try? await Task.sleep(nanoseconds: 15_000_000_000)
                     }
                 }
                 .onOpenURL { url in

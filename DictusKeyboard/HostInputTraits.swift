@@ -27,6 +27,10 @@ enum HostInputTraits {
         )
     }
 
+    static func isOneTimeCodeField(for proxy: UITextDocumentProxy) -> Bool {
+        proxy.textContentType == .oneTimeCode
+    }
+
     private static func keyboardKind(_ type: UIKeyboardType?) -> HostFieldPolicy.KeyboardKind {
         switch type {
         case .URL: return .url

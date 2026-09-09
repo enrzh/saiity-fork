@@ -84,6 +84,13 @@ final class HostFieldPolicyTests: XCTestCase {
         }
     }
 
+    func testOneTimeCodeIsTreatedAsATokenField() {
+        let policy = evaluate(content: .oneTimeCode)
+        XCTAssertFalse(policy.autocorrectAllowed)
+        XCTAssertFalse(policy.suggestionsAllowed)
+        XCTAssertEqual(policy.reason, "textContentType.oneTimeCode")
+    }
+
     // MARK: - Secure entry
 
     func testSecureEntryDisablesEverything() {

@@ -43,6 +43,30 @@ final class DictationServiceLivenessTests: XCTestCase {
                 serviceEnabled: true,
                 appProcessHeartbeat: now - DictationServiceLivenessPolicy.maximumAppHeartbeatAge - 1,
                 liveActivityPresent: true,
+                liveActivityUpdatedAt: now - 1,
+                now: now
+            )
+        )
+    }
+
+    func testUnconfirmedLiveActivityDoesNotHideStaleService() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOpenApp(
+                serviceEnabled: true,
+                appProcessHeartbeat: now - DictationServiceLivenessPolicy.maximumAppHeartbeatAge - 1,
+                liveActivityPresent: true,
+                now: now
+            )
+        )
+    }
+
+    func testStaleLiveActivityRequiresApp() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOpenApp(
+                serviceEnabled: true,
+                appProcessHeartbeat: now - DictationServiceLivenessPolicy.maximumAppHeartbeatAge - 1,
+                liveActivityPresent: true,
+                liveActivityUpdatedAt: now - DictationServiceLivenessPolicy.maximumLiveActivityAge - 1,
                 now: now
             )
         )
@@ -70,15 +94,18 @@ final class DictationServiceLivenessTests: XCTestCase {
         DictationServiceLivenessProbe.recordLiveActivity(
             present: true,
             identifier: "activity-1",
+            at: date,
             into: defaults
         )
 
         XCTAssertEqual(defaults.double(forKey: SharedKeys.appProcessHeartbeat), now)
         XCTAssertTrue(defaults.bool(forKey: SharedKeys.liveActivityPresent))
+        XCTAssertEqual(defaults.double(forKey: SharedKeys.liveActivityUpdatedAt), now, accuracy: 0.001)
         XCTAssertEqual(defaults.string(forKey: SharedKeys.liveActivityID), "activity-1")
 
         DictationServiceLivenessProbe.recordLiveActivity(present: false, into: defaults)
         XCTAssertFalse(defaults.bool(forKey: SharedKeys.liveActivityPresent))
+        XCTAssertNil(defaults.object(forKey: SharedKeys.liveActivityUpdatedAt))
         XCTAssertNil(defaults.object(forKey: SharedKeys.liveActivityID))
     }
 }
