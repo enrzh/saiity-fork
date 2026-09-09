@@ -248,6 +248,17 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the shared highlight must remain readable in both appearances")
     }
 
+    func testAuxiliaryKeysHaveOneGestureOwnerAndCancelPendingHolds() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertFalse(root.contains(".simultaneousGesture(symbolPointerGesture"))
+        XCTAssertTrue(root.contains(".onChange(of: letterTouchActive)"))
+        XCTAssertTrue(root.contains(".onChange(of: symbolTouchActive)"))
+        XCTAssertFalse(root.contains(".nativeKeyboardKeySurface()"))
+        let buttons = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+        XCTAssertTrue(buttons.contains(".onChange(of: deleteTouchActive)"))
+        XCTAssertTrue(buttons.contains("timer.fireDate = Date().addingTimeInterval(KeyboardDeletion.repeatDelay)"))
+    }
+
     func testEmojiPointerUsesSharedGridGeometryAndReleaseContract() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
@@ -275,8 +286,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "skin-tone extras use the unified tap/hold gesture owner")
         XCTAssertFalse(picker.contains("emojiDragAxis"),
                        "horizontal scrolling owns drag; there is no second drag-select axis")
-        XCTAssertTrue(picker.contains(".simultaneousGesture(emojiGesture)"),
-                      "the cell gesture must coexist with the horizontal scroll gesture")
+        XCTAssertTrue(picker.contains(".exclusively(before: TapGesture())"),
+                      "a hold must suppress the base emoji tap")
+        XCTAssertTrue(picker.contains("LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)"),
+                      "scrolling must cancel a pending emoji hold")
         XCTAssertTrue(picker.contains("leftmostVisibleCategory"),
                       "category highlight follows the leftmost visible emoji")
         let insertStart = try XCTUnwrap(picker.range(of: "private func insertEmoji"))

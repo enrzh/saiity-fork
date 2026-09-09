@@ -16,6 +16,7 @@ public enum LayoutType: String, Codable, Sendable, CaseIterable {
     case azerty
     case qwerty
     case qwertz
+    case qwertzStandard
 
     /// Label shown wherever a layout is named in the UI (Settings picker, keyboard panel).
     ///
@@ -26,7 +27,8 @@ public enum LayoutType: String, Codable, Sendable, CaseIterable {
         switch self {
         case .azerty: return "AZERTY"
         case .qwerty: return "QWERTY"
-        case .qwertz: return "QWERTZ"
+        case .qwertz: return "QWERTZ Deutschland"
+        case .qwertzStandard: return "QWERTZ"
         }
     }
 
@@ -77,6 +79,9 @@ public enum QWERTYLayout {
 /// builds its `KeyDefinition`s from these arrays, which keeps the test measuring what
 /// actually renders instead of a copy.
 public enum QWERTZLayout {
+    /// Compact QWERTZ without dedicated umlaut keys; the legacy layout stays German.
+    public static let standardRows = [Array("QWERTZUIOP"), Array("ASDFGHJKL"), Array("YXCVBNM")]
+        .map { $0.map(String.init) }
     /// Unit width of the shift and delete keys flanking row 3 — the same 1.5 the other
     /// layouts use. Declared here, and read by the keyboard, so `rowUnitWidths` below is
     /// derived from the value the renderer uses rather than restating it.

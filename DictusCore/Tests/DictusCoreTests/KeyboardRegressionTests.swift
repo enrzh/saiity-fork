@@ -27,7 +27,9 @@ final class KeyboardRegressionTests: XCTestCase {
         let page = String(root[pageStart.lowerBound..<keyStart.lowerBound])
 
         XCTAssertFalse(page.contains(".simultaneousGesture(symbolDragGesture(frames: frames))"))
-        XCTAssertTrue(page.contains(".simultaneousGesture(symbolPointerGesture(frames: frames))"))
+        XCTAssertFalse(page.contains(".simultaneousGesture(symbolPointerGesture(frames: frames))"),
+                       "the grid must not commit a second action after a key-owned hold")
+        XCTAssertTrue(page.contains(".gesture(symbolVariantGesture("))
         XCTAssertTrue(page.contains("Button { commitSymbolFromTap(key) } label:"))
     }
 

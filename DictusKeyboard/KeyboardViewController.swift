@@ -1372,9 +1372,14 @@ class KeyboardViewController: UIInputViewController,
             deleteHoldTriggered = true
             deleteRepeatTimer?.invalidate()
             HapticFeedback.keyTapped()
-            deletePreviousWord()
+            routeProxyCommand(.delete)
+            let startedAt = Date()
             let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-                self?.deletePreviousWord()
+                if Date().timeIntervalSince(startedAt) >= 2 {
+                    self?.deletePreviousWord()
+                } else {
+                    self?.routeProxyCommand(.delete)
+                }
             }
             deleteRepeatTimer = timer
             RunLoop.main.add(timer, forMode: .common)

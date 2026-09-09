@@ -170,8 +170,16 @@ struct KeyboardPanelView: View {
 
             // One pill per layout, so a new LayoutType case surfaces here with no
             // further work — that is how QWERTZ (#151) arrived in this panel.
-            ForEach(LayoutType.allCases, id: \.self) { layout in
-                layoutPill(layout, for: entry)
+            Menu {
+                ForEach(LayoutType.allCases, id: \.self) { layout in
+                    Button(layout.displayName) { selectLayout(layout, for: entry) }
+                }
+            } label: {
+                Text((layouts[entry] ?? entry.defaultLayout).displayName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(minHeight: rowHeight)
             }
         }
         .padding(.horizontal, 16)

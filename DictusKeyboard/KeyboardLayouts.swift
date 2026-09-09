@@ -168,7 +168,7 @@ enum KeyboardLayouts {
     /// keyboard and the one the AOSP-derived keyboards build. The row data itself lives in
     /// `DictusCore.QWERTZLayout` so it can be covered by tests — the keyboard target has no
     /// test bundle.
-    static func qwertz(lang: SupportedLanguage = .active) -> KeyboardDefinition {
+    static func qwertz(lang: SupportedLanguage = .active, standard: Bool = false) -> KeyboardDefinition {
         return KeyboardDefinition(
             name: lang.displayName + (lang == .german ? "" : " (QWERTZ)"),
             locale: lang.rawValue,
@@ -176,8 +176,8 @@ enum KeyboardLayouts {
             returnName: lang.returnName,
             longPress: longPressData,
             layout: KeyboardDefinition.Layout(
-                normal: qwertzNormal(lang: lang, ),
-                shifted: qwertzShifted(lang: lang, ),
+                normal: standard ? qwertzPage(rows: QWERTZLayout.standardRows.map { $0.map { $0.lowercased() } }, lang: lang) : qwertzNormal(lang: lang),
+                shifted: standard ? qwertzPage(rows: QWERTZLayout.standardRows, lang: lang) : qwertzShifted(lang: lang),
                 symbols1: numbersPage(lang: lang, ),
                 symbols2: symbolsPage(lang: lang, )
             )
@@ -209,6 +209,7 @@ enum KeyboardLayouts {
         case .azerty: definition = azerty(lang: key.language, )
         case .qwerty: definition = qwerty(lang: key.language, )
         case .qwertz: definition = qwertz(lang: key.language, )
+        case .qwertzStandard: definition = qwertz(lang: key.language, standard: true)
         }
         cachedCurrentLayout = CachedCurrentLayout(key: key, definition: definition)
         return definition
@@ -316,11 +317,13 @@ enum KeyboardLayouts {
     private static func qwertzPage(rows: [[String]],
                                    lang: SupportedLanguage) -> [[KeyDefinition]] {
         let flankSize = CGSize(width: QWERTZLayout.flankKeyUnitWidth, height: 1)
+        let inset = KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1))
+        let homeRow = rows[1].map { key($0) }
         return withDigitRow([
             // Row 1: 11 keys = 11 units (…o p ü)
             rows[0].map { key($0) },
             // Row 2: 11 keys = 11 units (…k l ö ä)
-            rows[1].map { key($0) },
+            rows[1].count == 9 ? [inset] + homeRow + [inset] : homeRow,
             // Row 3: shift + 7 letters + delete = 10 units
             [KeyDefinition(type: .shift, size: flankSize)]
                 + rows[2].map { key($0) }

@@ -114,6 +114,9 @@ public enum KeyboardProximity {
             let letterRows = QWERTYLayout.lettersRows.prefix(3).map(letters)
             let offsets: [Double] = [0, 0.25, 0.75]
             return zip(letterRows, offsets).map { KeyRow(keys: $0, xOffset: $1) }
+        case .qwertzStandard:
+            return zip(QWERTZLayout.standardRows.map(letters), [0.0, 0.25, 0.75])
+                .map { KeyRow(keys: $0, xOffset: $1) }
         case .qwertz:
             // Rows 0 and 1 carry 11 keys and start flush with the row block: ü closes the
             // top row, ö and ä the home row. Row 2 keeps the same 0.75 offset the other

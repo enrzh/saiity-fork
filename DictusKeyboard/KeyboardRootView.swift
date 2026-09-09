@@ -136,6 +136,7 @@ struct KeyboardRootView: View {
                 onReturn: { routeProxyCommand(.returnKey) },
                 onSpace: { routeProxyCommand(.space) },
                 onTogglePage: { nextPage in symbolPage = nextPage },
+                onLetters: { state.presentArea(.letters) },
                 onClose: { state.closeArea() },
                 onBackToVoice: { state.closeArea() },
                 onEmoji: { state.presentArea(.emoji) },
@@ -445,6 +446,7 @@ private struct LetterKeyboardPageView: View {
     @State private var variantTouchOrigin: CGPoint?
     @State private var variantTouchCancelled = false
     @State private var letterCommitLocked = false
+    @GestureState private var letterTouchActive = false
     @AppStorage(SharedKeys.keyPopupsEnabled, store: AppGroup.defaults) private var keyPopupsEnabled = true
 
     private let edgeInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
@@ -505,6 +507,15 @@ private struct LetterKeyboardPageView: View {
             variantTouchCancelled = false
             letterCommitLocked = false
         }
+        .onChange(of: letterTouchActive) { _, active in
+            if !active {
+                variantHoldToken = nil
+                variantTouchOrigin = nil
+                variantTouchCancelled = false
+                variantSession = nil
+                letterCommitLocked = false
+            }
+        }
     }
 
     private var rows: [[KeyDefinition]] {
@@ -564,6 +575,11 @@ private struct LetterKeyboardPageView: View {
                     // have exactly one gesture owner: short release inserts the
                     // base key, long release commits one popup option.
                     letterKeyLabel(for: key)
+                        .background {
+                            if variantTouchOrigin.map({ frame.contains($0) }) == true {
+                                RoundedRectangle(cornerRadius: 13).fill(Color.primary.opacity(0.12)).padding(4)
+                            }
+                        }
                         .contentShape(Rectangle())
                         .gesture(letterVariantGesture(
                             key: key,
@@ -581,7 +597,7 @@ private struct LetterKeyboardPageView: View {
                     } label: {
                         letterKeyLabel(for: key)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SymbolGlowButtonStyle(isActive: false, reduceMotion: false, usesCapsuleHighlight: false))
                     .contentShape(Rectangle())
                     .accessibilityLabel(
                         key.type == .backspace
@@ -600,7 +616,6 @@ private struct LetterKeyboardPageView: View {
         // Caps Lock, and Delete on one visual grid; only their labels differ.
         letterGlyph(for: key)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .nativeKeyboardKeySurface()
     }
 
     @ViewBuilder
@@ -659,7 +674,6 @@ private struct LetterKeyboardPageView: View {
     }
 
     private func alternateVariants(for key: KeyDefinition) -> [String] {
-        guard keyPopupsEnabled else { return [] }
         guard case .input(let value, _) = key.type,
               value.count == 1,
               let accents = AccentedCharacters.accents(for: value),
@@ -675,6 +689,7 @@ private struct LetterKeyboardPageView: View {
 
     private func letterVariantGesture(key: KeyDefinition, variants: [String], source: CGRect, bounds: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("letterKeyboard"))
+            .updating($letterTouchActive) { _, active, _ in active = true }
             .onChanged { drag in
                 if variantTouchOrigin == nil {
                     variantTouchOrigin = drag.startLocation
@@ -795,6 +810,7 @@ private struct LiquidSymbolPageView: View {
     let onReturn: () -> Void
     let onSpace: () -> Void
     let onTogglePage: (KeyboardPage) -> Void
+    let onLetters: () -> Void
     let onClose: () -> Void
     let onBackToVoice: () -> Void
     let onEmoji: () -> Void
@@ -808,6 +824,7 @@ private struct LiquidSymbolPageView: View {
     @State private var activeKeyID: String?
     @State private var symbolDragAxis: DragAxis?
     @State private var symbolCommitLocked = false
+    @GestureState private var symbolTouchActive = false
     @State private var variantSession: KeyVariantSession?
     @State private var variantHoldToken: UUID?
     @State private var variantTouchOrigin: CGPoint?
@@ -851,7 +868,8 @@ private struct LiquidSymbolPageView: View {
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 .coordinateSpace(name: "symbolPage")
-                .simultaneousGesture(symbolPointerGesture(frames: frames))
+                // Each key owns its touch; a second grid drag used to race
+                // long-press selection and could delete again on release.
                 .accessibilityElement(children: .contain)
             }
             AuxiliaryBottomBar(
@@ -867,7 +885,8 @@ private struct LiquidSymbolPageView: View {
                 onSpaceCursorMoved: onSpaceCursorMoved,
                 onSpaceCursorEnded: onSpaceCursorEnded,
                 onReturn: onReturn,
-                backFrame: nil
+                backFrame: nil,
+                onLetters: onLetters
             )
             .frame(width: availableWidth, height: bottomBarHeight)
             Color.clear.frame(height: edgeInset)
@@ -879,6 +898,15 @@ private struct LiquidSymbolPageView: View {
             variantHoldToken = nil
             variantTouchOrigin = nil
             variantTouchCancelled = false
+        }
+        .onChange(of: symbolTouchActive) { _, active in
+            if !active {
+                variantHoldToken = nil
+                variantTouchOrigin = nil
+                variantTouchCancelled = false
+                variantSession = nil
+                symbolCommitLocked = false
+            }
         }
     }
 
@@ -913,7 +941,7 @@ private struct LiquidSymbolPageView: View {
               let bottomRow = rows.last else {
             return []
         }
-        let bottomRowHeight = min(standardBottomFrame.height, CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
+        let bottomRowHeight = standardBottomFrame.height
         let bottomFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.fixedEdgeCommandRowFrames(
             itemCount: bottomRow.count,
             rowFrame: CGRect(
@@ -923,7 +951,7 @@ private struct LiquidSymbolPageView: View {
                 height: bottomRowHeight
             ),
             spacing: keySpacing,
-            commandWidth: CGFloat(VoiceOnlyKeyboardPolicy.actionHitSize.width)
+            commandWidth: max(0, size.width - horizontalInset * 2) * 0.15
         )
         guard bottomFrames.count == bottomRow.count else {
             return zip(rows, standardFrames).flatMap { row, rowFrames in
@@ -952,12 +980,21 @@ private struct LiquidSymbolPageView: View {
             Color.clear
                 .accessibilityHidden(true)
         } else if case .delete = key.action {
-            KeyboardDeleteButton(onDelete: onDelete, onDeleteWord: onDeleteWord)
+            KeyboardDeleteButton(
+                onDelete: onDelete, onDeleteWord: onDeleteWord,
+                visualWidth: max(0, frame.width - 4), visualHeight: max(0, frame.height - 4),
+                hitWidth: frame.width, hitHeight: frame.height
+            )
                 .frame(width: frame.width, height: frame.height)
         } else {
             let variants = insertVariants(for: key)
             if variants.count > 1 {
                 keyContent(key, frame: frame)
+                    .background {
+                        if variantTouchOrigin.map({ frame.contains($0) }) == true {
+                            RoundedRectangle(cornerRadius: 13).fill(Color.primary.opacity(0.12)).padding(4)
+                        }
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .foregroundStyle(.primary)
                     .contentShape(Rectangle())
@@ -993,7 +1030,6 @@ private struct LiquidSymbolPageView: View {
     }
 
     private func insertVariants(for key: LiquidSymbolKey) -> [String] {
-        guard keyPopupsEnabled else { return [] }
         guard case .insert(let value) = key.action else { return [] }
         return SymbolKeyVariants.options(for: value)
     }
@@ -1012,6 +1048,7 @@ private struct LiquidSymbolPageView: View {
 
     private func symbolVariantGesture(key: LiquidSymbolKey, variants: [String], source: CGRect, bounds: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("symbolPage"))
+            .updating($symbolTouchActive) { _, active, _ in active = true }
             .onChanged { drag in
                 if variantTouchOrigin == nil {
                     variantTouchOrigin = drag.startLocation
@@ -1103,31 +1140,6 @@ private struct LiquidSymbolPageView: View {
         resetSymbolGestureLock()
     }
 
-    private func symbolPointerGesture(frames: [PositionedLiquidSymbolKey]) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                guard variantSession == nil else { return }
-                if symbolDragAxis == nil {
-                    symbolDragAxis = abs(value.translation.width) >= abs(value.translation.height)
-                        ? .horizontal : .vertical
-                }
-                guard symbolDragAxis == .horizontal else { return }
-                activeKeyID = key(at: value.location, in: frames)?.id
-            }
-            .onEnded { value in
-                let shouldCommit = symbolDragAxis == .horizontal && !symbolCommitLocked && variantSession == nil
-                symbolCommitLocked = true
-                let key = key(at: value.location, in: frames)
-                defer {
-                    symbolDragAxis = nil
-                    activeKeyID = nil
-                    resetSymbolGestureLock()
-                }
-                guard shouldCommit, let key else { return }
-                commit(key)
-            }
-    }
-
     private func commitSymbolFromTap(_ key: LiquidSymbolKey) {
         guard !symbolCommitLocked else { return }
         symbolCommitLocked = true
@@ -1147,7 +1159,7 @@ private struct LiquidSymbolPageView: View {
         case .togglePage:
             Text(key.label)
                 .font(.system(size: 14, weight: .medium))
-                .frame(width: commandVisualWidth(for: frame), height: 36)
+                .frame(width: commandVisualWidth(for: frame), height: max(0, frame.height - 4))
                 .keyboardGlass(in: Capsule())
         case .delete:
             Image(systemName: "delete.backward")
@@ -1158,12 +1170,11 @@ private struct LiquidSymbolPageView: View {
             Text(key.label)
                 .font(.system(size: 22, weight: .regular))
                 .frame(width: max(0, frame.width), height: max(0, frame.height))
-                .nativeKeyboardKeySurface()
         }
     }
 
     private func commandVisualWidth(for frame: CGRect) -> CGFloat {
-        min(80, max(44, frame.width - 8))
+        max(0, frame.width - 4)
     }
 
     private func commit(_ key: LiquidSymbolKey) {
@@ -1296,25 +1307,5 @@ private struct SymbolGlowButtonStyle: ButtonStyle {
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: pressed)
-    }
-}
-
-private struct NativeKeyboardKeySurface: ViewModifier {
-    private let cornerRadius: CGFloat = 6
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background(shape.fill(Color(uiColor: .secondarySystemBackground)))
-            .overlay {
-                shape.stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-            }
-            .shadow(color: .black.opacity(0.16), radius: 1, y: 1)
-    }
-}
-
-private extension View {
-    func nativeKeyboardKeySurface() -> some View {
-        modifier(NativeKeyboardKeySurface())
     }
 }

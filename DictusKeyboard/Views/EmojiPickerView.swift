@@ -347,12 +347,8 @@ private struct EmojiKey: View {
     let onTap: () -> Void
     let onLongPress: (CGRect) -> Void
 
-    @State private var isPressed = false
+    @GestureState private var isPressed = false
     @State private var localFrame: CGRect = .zero
-    @State private var holdToken: UUID?
-    @State private var touchOrigin: CGPoint?
-    @State private var touchCancelled = false
-    @State private var holdTriggered = false
 
     private var hasSkinTones: Bool {
         EmojiSkinToneVariants.options(for: item.emoji).count > 1
@@ -393,53 +389,26 @@ private struct EmojiKey: View {
                     }
                 }
             )
-            // Keep tap and skin-tone selection under one gesture owner. A
-            // simultaneous tap + long press can insert the base emoji before
-            // the variant popup is presented on keyboard hosts.
-            // The cell still needs the gesture for tap/hold selection, while the
-            // parent ScrollView must retain its horizontal pan recognizer.
-            .simultaneousGesture(emojiGesture)
+            // A bounded hold fails as soon as scrolling starts. No cell pan
+            // recognizer competes with the scroll view's horizontal pan.
+            .gesture(emojiGesture)
             .accessibilityLabel(item.emoji)
     }
 
     private var emojiGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { drag in
-                if touchOrigin == nil {
-                    touchOrigin = drag.startLocation
-                    guard hasSkinTones else { return }
-                    scheduleLongPress()
-                }
-                guard !touchCancelled, !holdTriggered else { return }
-                let distance = hypot(
-                    drag.location.x - (touchOrigin?.x ?? drag.startLocation.x),
-                    drag.location.y - (touchOrigin?.y ?? drag.startLocation.y)
-                )
-                if distance > 20 {
-                    holdToken = nil
-                    touchCancelled = true
-                }
-            }
-            .onEnded { _ in
-                let shouldInsert = !touchCancelled && !holdTriggered
-                holdToken = nil
-                touchOrigin = nil
-                touchCancelled = false
-                holdTriggered = false
-                if shouldInsert {
+        LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)
+            .updating($isPressed) { value, pressed, _ in pressed = value }
+            .exclusively(before: TapGesture())
+            .onEnded { value in
+                switch value {
+                case .first(true):
+                    if hasSkinTones { onLongPress(localFrame) } else { onTap() }
+                case .second:
                     onTap()
+                default:
+                    break
                 }
             }
-    }
-
-    private func scheduleLongPress() {
-        let token = UUID()
-        holdToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            guard holdToken == token, !touchCancelled, !holdTriggered else { return }
-            holdTriggered = true
-            onLongPress(localFrame)
-        }
     }
 }
 

@@ -18,6 +18,7 @@ struct AuxiliaryBottomBar: View {
     let onSpaceCursorEnded: () -> Void
     let onReturn: () -> Void
     let backFrame: CGRect?
+    var onLetters: (() -> Void)?
 
     var body: some View {
         let left = layout.leftUtilityFrames
@@ -27,12 +28,19 @@ struct AuxiliaryBottomBar: View {
             CGFloat(frame.midX - surface.minX)
         }
         ZStack(alignment: .topLeading) {
-            roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
-                .position(x: localX(left.emoji), y: 22)
+            if let onLetters {
+                roundControl(text: "ABC", label: "Open letter keyboard", action: onLetters)
+                    .position(x: localX(left.emoji), y: 22)
+                roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
+                    .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
+            } else {
+                roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
+                    .position(x: localX(left.emoji), y: 22)
+            }
             if showsSymbolsControl {
                 roundControl(text: "123", label: "Open symbols keyboard", action: onSymbols)
                     .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
-            } else if backFrame == nil || backFrame?.isEmpty == true {
+            } else if onLetters == nil && (backFrame == nil || backFrame?.isEmpty == true) {
                 roundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onVoice)
                     .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
             }
@@ -147,6 +155,8 @@ struct KeyboardDeleteButton: View {
 
     @State private var deleteRepeatTimer: Timer?
     @State private var deleteHoldTriggered = false
+    @GestureState private var deleteTouchActive = false
+    @State private var deleteStartedAt = Date.distantPast
 
     init(
         onDelete: @escaping () -> Void,
@@ -178,6 +188,9 @@ struct KeyboardDeleteButton: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onDelete() }
         .gesture(deleteGesture)
+        .onChange(of: deleteTouchActive) { _, active in
+            if !active { stopDeleteRepeat(); deleteHoldTriggered = false }
+        }
         .onDisappear {
             stopDeleteRepeat()
             deleteHoldTriggered = false
@@ -185,26 +198,20 @@ struct KeyboardDeleteButton: View {
     }
 
     private var deleteGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.35, maximumDistance: 20)
-            .sequenced(before: DragGesture(minimumDistance: 0))
+        DragGesture(minimumDistance: 0)
+            .updating($deleteTouchActive) { _, active, _ in active = true }
             .onChanged { value in
-                switch value {
-                case .first(true):
-                    startDeleteRepeat()
-                case .second(true, _):
-                    startDeleteRepeat()
-                default:
-                    break
+                guard abs(value.translation.width) < hitWidth,
+                      abs(value.translation.height) < hitHeight else {
+                    stopDeleteRepeat()
+                    return
                 }
+                startDeleteRepeat()
             }
             .onEnded { _ in
-                if deleteHoldTriggered {
-                    stopDeleteRepeat()
-                    deleteHoldTriggered = false
-                } else {
-                    HapticFeedback.keyTapped()
-                    onDelete()
-                }
+                // The initial deletion already happened on touch-down.
+                stopDeleteRepeat()
+                deleteHoldTriggered = false
             }
     }
 
@@ -215,10 +222,16 @@ struct KeyboardDeleteButton: View {
         // One confirmation is enough. Repeating haptics at the deletion rate makes
         // a long hold feel like input noise and can be mistaken for repeated taps.
         HapticFeedback.keyTapped()
-        onDeleteWord()
+        onDelete()
+        deleteStartedAt = Date()
         let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-            onDeleteWord()
+            if KeyboardDeletion.repeatsWords(after: Date().timeIntervalSince(deleteStartedAt)) {
+                onDeleteWord()
+            } else {
+                onDelete()
+            }
         }
+        timer.fireDate = Date().addingTimeInterval(KeyboardDeletion.repeatDelay)
         deleteRepeatTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }

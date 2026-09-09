@@ -2,6 +2,14 @@ import XCTest
 @testable import DictusCore
 
 final class KeyboardDeletionTests: XCTestCase {
+    func testHoldRepeatsCharactersBeforeAcceleratingToWords() {
+        XCTAssertEqual(KeyboardDeletion.repeatDelay, 0.5)
+        XCTAssertFalse(KeyboardDeletion.repeatsWords(after: 0))
+        XCTAssertFalse(KeyboardDeletion.repeatsWords(after: 0.5))
+        XCTAssertFalse(KeyboardDeletion.repeatsWords(after: 2.49))
+        XCTAssertTrue(KeyboardDeletion.repeatsWords(after: 2.5))
+        XCTAssertTrue(KeyboardDeletion.repeatsWords(after: 10))
+    }
     func testDeletesWordAndTrailingSeparator() {
         XCTAssertEqual(KeyboardDeletion.previousWordLength(in: "hello world"), 6)
         XCTAssertEqual(KeyboardDeletion.previousWordLength(in: "hello world "), 6)

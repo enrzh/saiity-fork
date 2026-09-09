@@ -44,8 +44,8 @@ final class LayoutTypeTests: XCTestCase {
         XCTAssertEqual(LayoutType.qwertz.rawValue, "qwertz")
     }
 
-    func testAllCasesCoversTheThreeLayouts() {
-        XCTAssertEqual(LayoutType.allCases, [.azerty, .qwerty, .qwertz])
+    func testAllCasesIncludesBothQwertzVariants() {
+        XCTAssertEqual(LayoutType.allCases, [.azerty, .qwerty, .qwertz, .qwertzStandard])
     }
 
     // MARK: - Round-trip through App Group defaults
@@ -81,6 +81,15 @@ final class LayoutTypeTests: XCTestCase {
     func testDisplayNames() {
         XCTAssertEqual(LayoutType.azerty.displayName, "AZERTY")
         XCTAssertEqual(LayoutType.qwerty.displayName, "QWERTY")
-        XCTAssertEqual(LayoutType.qwertz.displayName, "QWERTZ")
+        XCTAssertEqual(LayoutType.qwertz.displayName, "QWERTZ Deutschland")
+        XCTAssertEqual(LayoutType.qwertzStandard.displayName, "QWERTZ")
+    }
+
+    func testCompactQwertzKeepsUmlautsOffPrimaryRows() {
+        XCTAssertEqual(QWERTZLayout.standardRows.map { $0.count }, [10, 9, 7])
+        XCTAssertEqual(QWERTZLayout.standardRows[0].joined(), "QWERTZUIOP")
+        XCTAssertEqual(QWERTZLayout.standardRows[2].first, "Y")
+        XCTAssertTrue(QWERTZLayout.lettersRows[0].contains("Ü"))
+        XCTAssertFalse(QWERTZLayout.standardRows.flatMap { $0 }.contains("Ü"))
     }
 }

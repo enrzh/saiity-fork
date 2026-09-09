@@ -8,6 +8,12 @@ import Foundation
 /// in DictusCore makes the behavior identical for UIKit and SwiftUI and keeps it
 /// independently testable without constructing a text input proxy.
 public enum KeyboardDeletion {
+    public static let repeatDelay: TimeInterval = 0.5
+    public static let wordRepeatDelay: TimeInterval = 2.5
+
+    public static func repeatsWords(after heldDuration: TimeInterval) -> Bool {
+        heldDuration >= wordRepeatDelay
+    }
     /// Number of `deleteBackward()` calls needed to remove the previous word.
     ///
     /// `documentContextBeforeInput` is the only safe source of truth available to
