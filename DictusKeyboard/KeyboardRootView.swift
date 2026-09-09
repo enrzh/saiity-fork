@@ -33,14 +33,14 @@ struct KeyboardRootView: View {
                     frame: surfaceFrame
                 )
                     .position(x: surfaceFrame.midX, y: surfaceFrame.midY)
-                if (state.areaMode == .keys || state.areaMode == .letters || state.areaMode == .recording) && layout.showsLanguageIndicator {
+                if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator {
                     languageIndicator
                         .position(x: CGFloat(layout.languageFrame.midX), y: CGFloat(layout.languageFrame.midY))
                 }
 
                 if state.areaMode == .keys || state.areaMode == .recording {
                     if layout.leftRailWidth > 0 {
-                        utilityGlyph(systemName: "at")
+                        utilityGlyph(systemName: "keyboard")
                             .position(x: CGFloat(layout.leftUtilityFrames.at.midX), y: CGFloat(layout.leftUtilityFrames.at.midY))
                         utilityGlyph(systemName: "face.smiling")
                             .position(x: CGFloat(layout.leftUtilityFrames.emoji.midX), y: CGFloat(layout.leftUtilityFrames.emoji.midY))
@@ -60,32 +60,6 @@ struct KeyboardRootView: View {
                                 y: CGFloat(layout.dismissFrame.midY)
                             )
 
-                        if state.areaMode == .keys && !layout.keyboardModeFrame.isEmpty {
-                            utilityGlyph(systemName: "keyboard", width: VoiceOnlyKeyboardPolicy.actionHitSize.width, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, visualWidth: 80, visualHeight: 36, visualCornerRadius: 18)
-                                .position(
-                                    x: CGFloat(layout.keyboardModeFrame.midX),
-                                    y: CGFloat(layout.keyboardModeFrame.midY)
-                                )
-                        }
-                    }
-                }
-
-                if state.areaMode == .letters {
-                    if !layout.letterMicFrame.isEmpty {
-                        dictateButton(frame: layout.letterMicFrame)
-                            .frame(width: layout.letterMicFrame.width, height: layout.letterMicFrame.height)
-                            .position(
-                                x: dictateButtonLocalX(for: layout.letterMicFrame, in: layout),
-                                y: CGFloat(layout.letterMicFrame.midY - layout.surfaceFrame.minY)
-                            )
-                    }
-
-                    if layout.rightRailWidth > 0 {
-                        utilityGlyph(systemName: "keyboard.chevron.compact.down", width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.actionHitSize.height, usesInteractiveSurface: false)
-                            .position(
-                                x: CGFloat(layout.letterDismissFrame.midX),
-                                y: CGFloat(layout.letterDismissFrame.midY)
-                            )
                     }
                 }
             }
@@ -274,19 +248,22 @@ struct KeyboardRootView: View {
 
     private func dictateButton(frame: CGRect) -> some View {
         let capsuleHeight = frame.height
-        return VStack(spacing: 1) {
-            Image(systemName: dictationSymbol)
-                .font(.system(size: 20, weight: .semibold))
-                .symbolEffect(
-                    .pulse,
-                    isActive: state.dictationStatus == .recording && !reduceMotion
-                )
-            Text(dictationTitle)
-                .font(.caption2.weight(.semibold))
-                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal, 8)
+        return ZStack(alignment: .center) {
+            VStack(spacing: 1) {
+                Image(systemName: dictationSymbol)
+                    .font(.system(size: 20, weight: .semibold))
+                    .symbolEffect(
+                        .pulse,
+                        isActive: state.dictationStatus == .recording && !reduceMotion
+                    )
+                Text(dictationTitle)
+                    .font(.caption2.weight(.semibold))
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, 8)
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(.primary)
         .frame(width: frame.width, height: capsuleHeight)
@@ -451,6 +428,8 @@ private struct LetterKeyboardPageView: View {
     let onSpaceCursorEnded: () -> Void
 
     @State private var page: KeyboardPage = .normal
+    @State private var variantSession: KeyVariantSession?
+    @State private var letterCommitLocked = false
 
     private let edgeInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
     private let headerHeight: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.letterKeyboardHeaderHeight)
@@ -467,12 +446,23 @@ private struct LetterKeyboardPageView: View {
                 ZStack(alignment: .topLeading) {
                     ForEach(frames.indices, id: \.self) { index in
                         let positioned = frames[index]
-                        letterKey(positioned.key, frame: positioned.frame)
+                        letterKey(positioned.key, frame: positioned.frame, bounds: proxy.size)
                             .frame(width: positioned.frame.width, height: positioned.frame.height)
                             .position(x: positioned.frame.midX, y: positioned.frame.midY)
                     }
+                    if let session = variantSession {
+                        KeyVariantPopup(
+                            options: session.options,
+                            selectedIndex: session.selectedIndex,
+                            isEmoji: false
+                        )
+                        .frame(width: session.popupFrame.width, height: session.popupFrame.height)
+                        .position(x: session.popupFrame.midX, y: session.popupFrame.midY)
+                        .allowsHitTesting(false)
+                    }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
+                .coordinateSpace(name: "letterKeyboard")
             }
             AuxiliaryBottomBar(
                 layout: surfaceLayout,
@@ -486,7 +476,8 @@ private struct LetterKeyboardPageView: View {
                 onSpaceCursorBegan: onSpaceCursorBegan,
                 onSpaceCursorMoved: onSpaceCursorMoved,
                 onSpaceCursorEnded: onSpaceCursorEnded,
-                onReturn: onReturn
+                onReturn: onReturn,
+                backFrame: surfaceLayout.letterDismissFrame
             )
             .frame(width: availableWidth, height: bottomBarHeight)
             Color.clear.frame(height: edgeInset)
@@ -494,6 +485,8 @@ private struct LetterKeyboardPageView: View {
         .frame(width: availableWidth, height: availableHeight)
         .onChange(of: LayoutType.active) { _, _ in
             page = .normal
+            variantSession = nil
+            letterCommitLocked = false
         }
     }
 
@@ -529,35 +522,49 @@ private struct LetterKeyboardPageView: View {
     }
 
     @ViewBuilder
-    private func letterKey(_ key: KeyDefinition, frame: CGRect) -> some View {
+    private func letterKey(_ key: KeyDefinition, frame: CGRect, bounds: CGSize) -> some View {
+        let variants = alternateVariants(for: key)
         Group {
             switch key.type {
             case .spacer:
                 Color.clear.accessibilityHidden(true)
-            case .backspace:
-                Button(action: onDelete) {
-                    Image(systemName: "delete.backward")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .keyboardGlass(in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Delete backward")
             default:
                 Button {
-                    commit(key)
+                    guard !letterCommitLocked else { return }
+                    if case .backspace = key.type {
+                        onDelete()
+                    } else {
+                        commit(key)
+                    }
                 } label: {
-                    letterGlyph(for: key)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .keyboardGlass(in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    letterKeyLabel(for: key)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
-                .accessibilityLabel(key.accessibilityLabel(for: page) ?? "Keyboard key")
+                .accessibilityLabel(
+                    key.type == .backspace
+                        ? "Delete backward"
+                        : key.accessibilityLabel(for: page) ?? "Keyboard key"
+                )
+                .modifier(OptionalLongPressModifier(
+                    enabled: variants.count > 1,
+                    gesture: letterVariantGesture(variants: variants, source: frame, bounds: bounds)
+                ))
             }
         }
         .frame(width: frame.width, height: frame.height)
+    }
+
+    @ViewBuilder
+    private func letterKeyLabel(for key: KeyDefinition) -> some View {
+        if key.type.isSpecialKeyStyle {
+            letterGlyph(for: key)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .keyboardGlass(in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        } else {
+            letterGlyph(for: key)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     @ViewBuilder
@@ -599,6 +606,93 @@ private struct LetterKeyboardPageView: View {
             onInsert(" ")
         default:
             break
+        }
+    }
+
+    private func alternateVariants(for key: KeyDefinition) -> [String] {
+        guard case .input(let value, _) = key.type,
+              value.count == 1,
+              let accents = AccentedCharacters.accents(for: value),
+              !accents.isEmpty else {
+            return []
+        }
+
+        let transformedAccents = (page == .shifted || page == .capslock)
+            ? accents.map(KeyCaseTransform.uppercased)
+            : accents
+        return [value] + transformedAccents
+    }
+
+    private func letterVariantGesture(variants: [String], source: CGRect, bounds: CGSize) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.4)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("letterKeyboard")))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    if variantSession == nil {
+                        variantSession = makeLetterVariantSession(variants, source: source, in: bounds)
+                        letterCommitLocked = true
+                    }
+                case .second(true, let drag?):
+                    if variantSession == nil {
+                        variantSession = makeLetterVariantSession(variants, source: source, in: bounds)
+                        letterCommitLocked = true
+                    }
+                    guard var session = variantSession else { return }
+                    let index = KeyVariantPopup.selectedIndex(
+                        at: drag.location,
+                        popupFrame: session.popupFrame,
+                        optionCount: session.options.count
+                    )
+                    if session.selectedIndex != index {
+                        session.selectedIndex = index
+                        variantSession = session
+                        HapticFeedback.keyTapped()
+                    }
+                default:
+                    break
+                }
+            }
+            .onEnded { _ in
+                commitLetterVariantSession()
+            }
+    }
+
+    private func makeLetterVariantSession(_ options: [String], source: CGRect, in bounds: CGSize) -> KeyVariantSession {
+        HapticFeedback.keyTapped()
+        let popupFrame = KeyVariantPopup.frame(
+            for: source,
+            optionCount: options.count,
+            isEmoji: false,
+            in: bounds
+        )
+        return KeyVariantSession(
+            options: options,
+            sourceFrame: source,
+            popupFrame: popupFrame,
+            isEmoji: false,
+            selectedIndex: 0
+        )
+    }
+
+    private func commitLetterVariantSession() {
+        guard let session = variantSession,
+              session.options.indices.contains(session.selectedIndex) else {
+            variantSession = nil
+            resetLetterGestureLock()
+            return
+        }
+        onInsert(session.options[session.selectedIndex])
+        if page == .shifted {
+            page = .normal
+        }
+        variantSession = nil
+        resetLetterGestureLock()
+    }
+
+    private func resetLetterGestureLock() {
+        DispatchQueue.main.async {
+            letterCommitLocked = false
         }
     }
 }
@@ -684,7 +778,8 @@ private struct LiquidSymbolPageView: View {
                 onSpaceCursorBegan: onSpaceCursorBegan,
                 onSpaceCursorMoved: onSpaceCursorMoved,
                 onSpaceCursorEnded: onSpaceCursorEnded,
-                onReturn: onReturn
+                onReturn: onReturn,
+                backFrame: nil
             )
             .frame(width: availableWidth, height: bottomBarHeight)
             Color.clear.frame(height: edgeInset)
@@ -776,7 +871,11 @@ private struct LiquidSymbolPageView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .buttonStyle(SymbolGlowButtonStyle(isActive: isActive, reduceMotion: reduceMotion))
+            .buttonStyle(SymbolGlowButtonStyle(
+                isActive: isActive,
+                reduceMotion: reduceMotion,
+                usesCapsuleHighlight: key.isRoundCommand
+            ))
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Use the complete rectangular key frame. Rounded hit shapes leave the
@@ -922,12 +1021,12 @@ private struct LiquidSymbolPageView: View {
             Text(key.label)
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: commandVisualWidth(for: frame), height: 36)
-                .keyboardGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .keyboardGlass(in: Capsule())
         case .delete:
             Image(systemName: "delete.backward")
                 .font(.system(size: 16, weight: .semibold))
                 .frame(width: commandVisualWidth(for: frame), height: 36)
-                .keyboardGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .keyboardGlass(in: Capsule())
         case .insert, .close:
             Text(key.label)
                 .font(.system(size: 22, weight: .regular))
@@ -1008,6 +1107,15 @@ private struct LiquidSymbolKey: Identifiable {
         if case .togglePage = action { return true }
         return false
     }
+
+    var isRoundCommand: Bool {
+        switch action {
+        case .togglePage, .delete:
+            return true
+        case .insert, .close:
+            return false
+        }
+    }
 }
 
 private struct PositionedLiquidSymbolKey: Identifiable {
@@ -1032,19 +1140,30 @@ private struct OptionalLongPressModifier<G: Gesture>: ViewModifier {
 private struct SymbolGlowButtonStyle: ButtonStyle {
     let isActive: Bool
     let reduceMotion: Bool
+    let usesCapsuleHighlight: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed || isActive
         configuration.label
             .background {
                 if pressed {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-                        }
-                        .padding(4)
+                    if usesCapsuleHighlight {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.12))
+                            .overlay {
+                                Capsule()
+                                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                            }
+                            .padding(4)
+                    } else {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(Color.primary.opacity(0.12))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                            }
+                            .padding(4)
+                    }
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: pressed)

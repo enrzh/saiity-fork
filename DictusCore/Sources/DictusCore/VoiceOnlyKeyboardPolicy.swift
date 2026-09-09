@@ -327,14 +327,19 @@ public enum VoiceOnlyKeyboardPolicy {
                           width: rightRailWidth, height: bottomActionHitHeight)
         }
 
-        /// The letter keyboard keeps Enter and keyboard-dismiss in separate
-        /// native-style bottom-row slots. The voice surface still uses the
-        /// single wide dismiss slot above.
+        /// The letter keyboard keeps the back-to-dictation control immediately
+        /// left of Enter in the native-style bottom row.
         public var letterDismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
-            let frame = CGRect(
-                x: surfaceFrame.maxX - visibleControlGap - controlSize,
+            let returnFrame = CGRect(
+                x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
                 y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                width: actionHitSize.width,
+                height: actionHitSize.height
+            )
+            let frame = CGRect(
+                x: returnFrame.minX - railSpacing - controlSize,
+                y: returnFrame.minY,
                 width: controlSize,
                 height: bottomActionHitHeight
             )
@@ -344,24 +349,10 @@ public enum VoiceOnlyKeyboardPolicy {
         public var letterReturnFrame: CGRect {
             guard !letterDismissFrame.isEmpty else { return .zero }
             let frame = CGRect(
-                x: letterDismissFrame.minX - railSpacing - actionHitSize.width,
-                y: letterDismissFrame.minY,
+                x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
+                y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
                 width: actionHitSize.width,
                 height: actionHitSize.height
-            )
-            return surfaceFrame.contains(frame) ? frame : .zero
-        }
-
-        /// The explicit letter-keyboard switch sits immediately above the native
-        /// keyboard-dismiss control. Keeping this frame outside the delete/return
-        /// rail makes the page switch stable while every surface changes below it.
-        public var keyboardModeFrame: CGRect {
-            guard rightRailWidth > 0 else { return .zero }
-            let frame = CGRect(
-                x: dismissFrame.minX,
-                y: dismissFrame.minY - visibleControlGap - controlSize,
-                width: rightRailWidth,
-                height: controlSize
             )
             return surfaceFrame.contains(frame) ? frame : .zero
         }
@@ -389,18 +380,6 @@ public enum VoiceOnlyKeyboardPolicy {
             return surfaceFrame.contains(frame) ? frame : .zero
         }
 
-        /// Hit target for the compact dictation action shown above the letter grid.
-        public var letterMicFrame: CGRect {
-            let width = min(132, max(96, centerAreaWidth))
-            let frame = CGRect(
-                x: surfaceFrame.maxX - visibleControlGap - width,
-                y: surfaceFrame.minY,
-                width: width,
-                height: letterKeyboardHeaderHeight
-            )
-            return surfaceFrame.contains(frame) ? frame : .zero
-        }
-
         public var letterSpaceFrame: CGRect {
             let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
                 + visibleControlGap
@@ -410,7 +389,7 @@ public enum VoiceOnlyKeyboardPolicy {
 
             let leftMaxX = max(leftUtilityFrames.emoji.maxX, leftUtilityFrames.number.maxX)
             let x = leftMaxX + railSpacing
-            let width = letterReturnFrame.minX - railSpacing - x
+            let width = letterDismissFrame.minX - railSpacing - x
             guard width >= 44 else { return .zero }
             let frame = CGRect(
                 x: x,
@@ -511,8 +490,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 commandRects = []
             }
             let spaceRects = spaceFrame.isEmpty ? [] : [spaceFrame]
-            let pageSwitch = keyboardModeFrame.isEmpty ? [] : [keyboardModeFrame]
-            return utilities + commandRects + pageSwitch + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame] + spaceRects
+            return utilities + commandRects + (rightRailWidth > 0 ? [dismissFrame] : []) + [dictateFrame] + spaceRects
         }
     }
 

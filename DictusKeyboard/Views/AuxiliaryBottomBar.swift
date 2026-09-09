@@ -18,6 +18,7 @@ struct AuxiliaryBottomBar: View {
     let onSpaceCursorMoved: (Int) -> Void
     let onSpaceCursorEnded: () -> Void
     let onReturn: () -> Void
+    let backFrame: CGRect?
 
     var body: some View {
         let left = layout.leftUtilityFrames
@@ -29,14 +30,19 @@ struct AuxiliaryBottomBar: View {
         ZStack(alignment: .topLeading) {
             roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
                 .position(x: localX(left.emoji), y: 22)
-            Group {
-                if showsSymbolsControl {
-                    roundControl(text: "123", label: "Open symbols keyboard", action: onSymbols)
-                } else {
-                    roundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onVoice)
+            if let backFrame, !backFrame.isEmpty {
+                roundControl(systemName: "mic.fill", label: "Back to dictation board", action: onVoice)
+                    .position(x: localX(backFrame), y: 22)
+            } else {
+                Group {
+                    if showsSymbolsControl {
+                        roundControl(text: "123", label: "Open symbols keyboard", action: onSymbols)
+                    } else {
+                        roundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onVoice)
+                    }
                 }
+                    .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
             }
-                .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
             SpaceBarControl(
                 onTap: onSpace,
                 onCursorBegan: onSpaceCursorBegan,

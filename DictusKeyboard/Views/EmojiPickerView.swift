@@ -144,7 +144,10 @@ struct EmojiPickerView: View {
 
     private var emojiBottomBar: some View {
         let surface = surfaceLayout.surfaceFrame
-        let microphone = surfaceLayout.auxiliaryMicrophoneFrame
+        // Emoji's bottom bar has no second utility control, so the return-to-voice
+        // microphone occupies the leftmost accessory slot and gives the category
+        // strip the remaining width.
+        let microphone = surfaceLayout.auxiliaryControlFrames.first ?? .zero
         let delete = CGRect(
             x: surface.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.actionHitSize.width,
             y: 0,

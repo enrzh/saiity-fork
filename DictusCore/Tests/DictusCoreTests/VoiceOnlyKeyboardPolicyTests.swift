@@ -296,11 +296,11 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertFalse(controller.contains("setAuxiliaryUtilityVisuals"))
         XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
         XCTAssertFalse(rootView.contains("alternateAccessoryRow"))
-        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
+        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters"))
         XCTAssertTrue(rootView.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
         XCTAssertTrue(rootView.contains(".frame(width: surfaceFrame.width, height: surfaceFrame.height)"))
         XCTAssertFalse(rootView.contains("availableHeight: contentFrame.height"))
-        XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .emoji)"))
+        XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .emoji || mode == .letters)"))
         XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
         XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
@@ -711,8 +711,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
             let rectangles = layout.actionRectangles
 
-            let expectedCount = (layout.spaceFrame.isEmpty ? 7 : 8)
-                + (layout.keyboardModeFrame.isEmpty ? 0 : 1)
+            let expectedCount = layout.spaceFrame.isEmpty ? 7 : 8
             XCTAssertEqual(rectangles.count, expectedCount, "width=\(width)")
             XCTAssertTrue(rectangles.allSatisfy { $0.minX >= 0 && $0.maxX <= width && $0.minY >= 0 && $0.maxY <= VoiceOnlyKeyboardPolicy.surfaceHeight }, "width=\(width)")
             for (index, rectangle) in rectangles.enumerated() {

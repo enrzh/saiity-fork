@@ -80,7 +80,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(body.contains("if isAuxiliary {"),
                        "auxiliary mode must not assign substitute UIKit frames")
         let guardOffset = try XCTUnwrap(body.range(of: "guard !isAuxiliary else {")?.lowerBound)
-        let frameOffset = try XCTUnwrap(body.range(of: "atButton?.frame =")?.lowerBound)
+        let frameOffset = try XCTUnwrap(body.range(of: "keyboardModeButton?.frame =")?.lowerBound)
         let zOrderOffset = try XCTUnwrap(body.range(of: "inputView.bringSubviewToFront(controls)")?.lowerBound)
         XCTAssertLessThan(guardOffset, frameOffset)
         XCTAssertLessThan(guardOffset, zOrderOffset)
@@ -467,7 +467,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(layouts.contains("emojiKeyGlyph"))
         XCTAssertTrue(layouts.contains("KeyDefinition(type: .keyboardMode"))
         XCTAssertTrue(policy.contains("public var letterKeyboardFrame"))
-        XCTAssertTrue(policy.contains("public var letterMicFrame"))
+        XCTAssertFalse(policy.contains("public var letterMicFrame"),
+                       "letter mode must not reserve a dictation button")
     }
 
     func testRuntimeSurfaceUsesOneSharedLayoutContract() throws {
@@ -547,7 +548,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
 
-        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji"))
+        XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters"))
         XCTAssertTrue(controller.contains("guard !isAuxiliary else {"))
         XCTAssertTrue(root.contains("onSpaceCursorMoved: routeCursorMovement"))
         XCTAssertTrue(bar.contains("struct SpaceBarControl: View"))
@@ -641,11 +642,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("allowsHitTesting(false)"))
         XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
-        XCTAssertTrue(controller.contains("identifier: \"at-key\""))
+        XCTAssertTrue(controller.contains("identifier: \"letter-mode\""))
         XCTAssertTrue(controller.contains("identifier: \"emoji-picker\""))
         XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
         XCTAssertEqual(controller.components(separatedBy: "identifier: \"dismiss-keyboard\"").count - 1, 1)
-        XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 2)
+        XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 1)
         XCTAssertFalse(root.contains("openURL"))
         XCTAssertFalse(controller.contains("toggleEmojiPicker"))
         XCTAssertFalse(controller.contains("dictusTextDidChange"))
@@ -676,8 +677,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(controller.contains("nextInputModeButton"))
         XCTAssertFalse(root.contains("utilityGlyph(systemName: \"globe\")"))
         XCTAssertTrue(root.contains("state.areaMode.modeControlTitle"))
-        XCTAssertTrue(root.contains("state.areaMode == .letters"))
-        XCTAssertTrue(controller.contains("letterModeButton"))
+        XCTAssertTrue(root.contains("case .letters:"))
+        XCTAssertTrue(controller.contains("keyboardModeButton"))
+        XCTAssertFalse(root.contains("dictateButton(frame: layout.letterMicFrame)"),
+                       "letter mode must not render the dictation button")
+        XCTAssertFalse(controller.contains("micButton?.frame = layout.letterMicFrame"),
+                       "letter mode must not install the dictation hit target")
         XCTAssertTrue(root.contains("showsSymbolsControl: true"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
         XCTAssertTrue(root.contains("languageIndicatorTitle"))
@@ -689,7 +694,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onDelete: { routeProxyCommand(.delete) }"))
         XCTAssertFalse(root.contains("onDismiss: onDismiss"))
         XCTAssertFalse(controller.contains("hostingController?.view.isHidden = true"))
-        XCTAssertFalse(controller.contains("setVoiceActionControlsHidden(mode == .emoji)"))
+        XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .emoji || mode == .letters)"))
         XCTAssertTrue(root.contains("layout.leftUtilityFrames"))
         XCTAssertTrue(root.contains("layout.languageFrame"))
         XCTAssertTrue(controller.contains("dismissKeyboard()"))
@@ -870,7 +875,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             .deletingLastPathComponent()
         let root = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"), encoding: .utf8)
 
-        XCTAssertTrue(root.contains("if (state.areaMode == .keys || state.areaMode == .letters || state.areaMode == .recording) && layout.showsLanguageIndicator"),
+        XCTAssertTrue(root.contains("if (state.areaMode == .keys || state.areaMode == .recording) && layout.showsLanguageIndicator"),
                       "language indicator must not be rendered for emoji or panel modes")
     }
 

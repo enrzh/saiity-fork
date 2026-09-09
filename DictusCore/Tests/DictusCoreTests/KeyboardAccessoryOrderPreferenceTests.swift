@@ -68,7 +68,7 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
 
         XCTAssertTrue(bar.contains("let layout: VoiceOnlyKeyboardPolicy.Layout"))
         XCTAssertTrue(bar.contains("layout.auxiliaryMicrophoneFrame"))
-        XCTAssertTrue(picker.contains("surfaceLayout.auxiliaryMicrophoneFrame"))
+        XCTAssertTrue(picker.contains("surfaceLayout.auxiliaryControlFrames.first"))
         XCTAssertTrue(root.contains("controlOrder: KeyboardAccessoryOrder.current"))
     }
 
