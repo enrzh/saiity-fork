@@ -65,15 +65,45 @@ final class ModelRepoDownloader {
         /// Repo-relative paths that must exist on disk after the download —
         /// the final-verification tripwire (see Phase 4 in `download`).
         let requiredPaths: [String]
+        /// Optional remote directory prefix that is already represented by
+        /// `cacheDir` (Qwen's `f32/` or `int8/` folder).
+        let remotePathPrefixToStrip: String?
 
         /// Parakeet v3 repo. Matches FluidAudio's `Repo.parakeet.remotePath`,
         /// its file selection, and mirrors `AsrModels.modelsExist` verification.
-        static func parakeet() -> Configuration {
-            Configuration(
-                repoPath: Repo.parakeet.remotePath,
+        static func parakeet(version: AsrModelVersion = .v3) -> Configuration {
+            let repo: Repo
+            switch version {
+            case .v2:
+                repo = .parakeetV2
+            case .v3:
+                repo = .parakeet
+            }
+            return Configuration(
+                repoPath: repo.remotePath,
                 directoryPatterns: ModelNames.ASR.requiredModels.map { "\($0)/" }.sorted(),
                 includesRootMetadata: true,
-                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile]
+                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile],
+                remotePathPrefixToStrip: nil
+            )
+        }
+
+        /// One Qwen3-ASR precision variant. The downloader traverses only the
+        /// selected precision folder and writes its contents into the variant
+        /// cache directory expected by FluidAudio.
+        static func qwen3ASR(variant: Qwen3AsrVariant) -> Configuration {
+            let prefix = "\(variant.rawValue)/"
+            return Configuration(
+                repoPath: variant.repo.remotePath,
+                directoryPatterns: [prefix],
+                includesRootMetadata: false,
+                requiredPaths: [
+                    ModelNames.Qwen3ASR.audioEncoderFile,
+                    ModelNames.Qwen3ASR.decoderStatefulFile,
+                    ModelNames.Qwen3ASR.embeddingsFile,
+                    "vocab.json"
+                ],
+                remotePathPrefixToStrip: prefix
             )
         }
 
@@ -90,7 +120,7 @@ final class ModelRepoDownloader {
         /// Medium, and Turbo `_954MB` — Turbo's extra `TextDecoderContextPrefill.mlmodelc`
         /// is downloaded too but not universally required).
         static func whisperKit(variant: String) -> Configuration {
-            Configuration(
+            return Configuration(
                 repoPath: "argmaxinc/whisperkit-coreml",
                 directoryPatterns: ["\(variant)/"],
                 includesRootMetadata: false,
@@ -99,7 +129,8 @@ final class ModelRepoDownloader {
                     "\(variant)/AudioEncoder.mlmodelc",
                     "\(variant)/TextDecoder.mlmodelc",
                     "\(variant)/config.json"
-                ]
+                ],
+                remotePathPrefixToStrip: nil
             )
         }
     }
@@ -179,7 +210,10 @@ final class ModelRepoDownloader {
         for file in files {
             try Task.checkCancellation()
 
-            let destination = cacheDir.appendingPathComponent(file.path)
+            let localPath = configuration.remotePathPrefixToStrip.map {
+                String(file.path.dropFirst($0.count))
+            } ?? file.path
+            let destination = cacheDir.appendingPathComponent(localPath)
 
             // Skip complete files — this is what makes retry resumable.
             if FileManager.default.fileExists(atPath: destination.path) {

@@ -108,7 +108,6 @@ final internal class GiellaKeyboardView: UIView,
     private var longpressController: LongPressBehaviorProvider?
     private var currentlyLongpressedKey: KeyDefinition?
 
-    private let hapticFeedback = UIImpactFeedbackGenerator(style: .light)
     private var touchDownSignpostStates: [ObjectIdentifier: OSSignpostIntervalState] = [:]
 
     required init?(coder _: NSCoder) {
@@ -118,6 +117,7 @@ final internal class GiellaKeyboardView: UIView,
     private(set) lazy var longpressGestureRecognizer: UILongPressGestureRecognizer = {
         let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(GiellaKeyboardView.touchesFoundLongpress))
         recognizer.cancelsTouchesInView = false
+        recognizer.allowableMovement = 20
         // Ensure touchesBegan is delivered immediately to the view, without waiting
         // for the gesture recognizer to fail. This prevents iOS from delaying touch
         // delivery at screen edges where system gesture disambiguation can add ~100ms.
@@ -150,9 +150,6 @@ final internal class GiellaKeyboardView: UIView,
         collectionView.backgroundColor = .clear
 
         addGestureRecognizer(longpressGestureRecognizer)
-
-        // Pre-warm the local haptic generator so first touch has zero latency
-        hapticFeedback.prepare()
 
         isMultipleTouchEnabled = true
     }
@@ -270,6 +267,7 @@ final internal class GiellaKeyboardView: UIView,
     }
 
     private func showOverlay(forKeyAtIndexPath indexPath: IndexPath) {
+        guard KeyboardInteractionPreferences.keyPopupsEnabled else { return }
         guard let keyCell = collectionView.cellForItem(at: indexPath) as? KeyCell,
               let keyView = keyCell.keyView,
               ensureValidKeyView(at: indexPath) else {
@@ -372,7 +370,7 @@ final internal class GiellaKeyboardView: UIView,
     // MARK: - LongPressOverlayDelegate
 
     func longpress(didCreateOverlayContentView contentView: UIView) {
-        hapticFeedback.impactOccurred()
+        HapticFeedback.keyTapped()
 
         if overlays.first?.value.overlayContentView == nil {
             if let activeKey = activeKey {
@@ -532,9 +530,6 @@ final internal class GiellaKeyboardView: UIView,
                 let cell = collectionView.cellForItem(at: activeKey.indexPath) as? KeyCell,
                 activeKey.indexPath != oldValue?.indexPath {
                 cell.keyView?.active = true
-                if case .input = activeKey.key.type, !shouldUseiPadLayout {
-                    showOverlay(forKeyAtIndexPath: activeKey.indexPath)
-                }
             }
         }
     }
@@ -564,7 +559,6 @@ final internal class GiellaKeyboardView: UIView,
         // but the user should FEEL the tap immediately on finger contact.
         // The matching click is played in handleTouches below, as soon as the touch
         // resolves to a key — it needs the key to pick a category, the haptic does not (#286).
-        hapticFeedback.prepare()
         HapticFeedback.keyTapped()
         for touch in touches {
             if let state = touchDownSignpostStates[ObjectIdentifier(touch)] {
@@ -791,7 +785,8 @@ final internal class GiellaKeyboardView: UIView,
             currentlyLongpressedKey = key
             switch key.type {
             case let .input(string, _):
-                guard let longpressValues = longpressKeys(for: string),
+                guard KeyboardInteractionPreferences.keyPopupsEnabled,
+                    let longpressValues = longpressKeys(for: string),
                     longpressGestureRecognizer.state == .began else {
                         break
                 }
@@ -806,7 +801,8 @@ final internal class GiellaKeyboardView: UIView,
                 let location = longpressGestureRecognizer.location(in: collectionView)
                 longpressController.touchesBegan(location)
             case .keyboardMode:
-                if longpressGestureRecognizer.state == .began {
+                if KeyboardInteractionPreferences.keyPopupsEnabled,
+                    longpressGestureRecognizer.state == .began {
                     showKeyboardModeOverlay(longpressGestureRecognizer, key: key)
                 }
 
@@ -823,7 +819,8 @@ final internal class GiellaKeyboardView: UIView,
             case .backspace:
                 break
             case .returnkey(name: _):
-                if longpressGestureRecognizer.state == .began {
+                if KeyboardInteractionPreferences.keyPopupsEnabled,
+                    longpressGestureRecognizer.state == .began {
                     showKeyboardModeOverlay(longpressGestureRecognizer, key: key)
                 }
             default:

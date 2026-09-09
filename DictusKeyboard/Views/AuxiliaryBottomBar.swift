@@ -2,9 +2,8 @@
 import SwiftUI
 import DictusCore
 
-/// Shared bottom control row for the 123/symbols page:
-/// emoji, microphone, space, return — order of the first two follows
-/// `KeyboardAccessoryOrder` so Settings changes every page.
+/// Shared native-style bottom control row for auxiliary keyboard surfaces.
+/// Letter mode uses the same row for emoji, 123, space, back-to-dictation and return.
 struct AuxiliaryBottomBar: View {
     let layout: VoiceOnlyKeyboardPolicy.Layout
     let onEmoji: () -> Void
@@ -30,18 +29,16 @@ struct AuxiliaryBottomBar: View {
         ZStack(alignment: .topLeading) {
             roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
                 .position(x: localX(left.emoji), y: 22)
+            if showsSymbolsControl {
+                roundControl(text: "123", label: "Open symbols keyboard", action: onSymbols)
+                    .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
+            } else if backFrame == nil || backFrame?.isEmpty == true {
+                roundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onVoice)
+                    .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
+            }
             if let backFrame, !backFrame.isEmpty {
                 roundControl(systemName: "mic.fill", label: "Back to dictation board", action: onVoice)
                     .position(x: localX(backFrame), y: 22)
-            } else {
-                Group {
-                    if showsSymbolsControl {
-                        roundControl(text: "123", label: "Open symbols keyboard", action: onSymbols)
-                    } else {
-                        roundControl(systemName: "mic.fill", label: "Return to voice keyboard", action: onVoice)
-                    }
-                }
-                    .position(x: localX(layout.auxiliaryMicrophoneFrame), y: 22)
             }
             SpaceBarControl(
                 onTap: onSpace,
@@ -86,7 +83,9 @@ struct SpaceBarControl: View {
     }
 
     private var cursorGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // Global coordinates keep the gesture alive as the finger travels past
+        // the capsule's visual edge, matching the native keyboard trackpad.
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { drag in
                 if gestureStartDate == nil {
                     gestureStartDate = Date()
@@ -115,13 +114,14 @@ struct SpaceBarControl: View {
                     gestureStartDate = nil
                 }
                 if cursorTracking || wasHeld {
-                    // A stationary long press should behave like the native trackpad:
-                    // it enters cursor mode but does not insert a space on release.
+                    // A stationary long press enters cursor mode but does not
+                    // insert a space on release, matching the native keyboard.
                     if !cursorTracking {
                         onCursorBegan()
                     }
                     onCursorEnded()
                 } else {
+                    HapticFeedback.keyTapped()
                     onTap()
                 }
             }
@@ -131,51 +131,93 @@ struct SpaceBarControl: View {
         guard !cursorTracking else { return }
         cursorTracking = true
         lastCursorOffset = 0
+        HapticFeedback.trackpadActivated()
         onCursorBegan()
     }
 }
 
 struct KeyboardDeleteButton: View {
     let onDelete: () -> Void
+    let onDeleteWord: () -> Void
+    let visualWidth: CGFloat
+    let visualHeight: CGFloat
+    let visualCornerRadius: CGFloat
+    let hitWidth: CGFloat
+    let hitHeight: CGFloat
 
     @State private var deleteRepeatTimer: Timer?
-    @State private var deleteRepeatStarted = false
+    @State private var deleteHoldTriggered = false
+
+    init(
+        onDelete: @escaping () -> Void,
+        onDeleteWord: @escaping () -> Void,
+        visualWidth: CGFloat = 80,
+        visualHeight: CGFloat = 36,
+        visualCornerRadius: CGFloat = 18,
+        hitWidth: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.width,
+        hitHeight: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.height
+    ) {
+        self.onDelete = onDelete
+        self.onDeleteWord = onDeleteWord
+        self.visualWidth = visualWidth
+        self.visualHeight = visualHeight
+        self.visualCornerRadius = visualCornerRadius
+        self.hitWidth = hitWidth
+        self.hitHeight = hitHeight
+    }
 
     var body: some View {
-        Button {
-            if deleteRepeatStarted {
-                deleteRepeatStarted = false
-                return
-            }
-            onDelete()
-        } label: {
-            Image(systemName: "delete.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 80, height: 36)
-                .keyboardGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .frame(width: VoiceOnlyKeyboardPolicy.actionHitSize.width,
-                       height: VoiceOnlyKeyboardPolicy.actionHitSize.height)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        Image(systemName: "delete.backward")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: visualWidth, height: visualHeight)
+            .keyboardGlass(in: RoundedRectangle(cornerRadius: visualCornerRadius, style: .continuous))
+            .frame(width: hitWidth, height: hitHeight)
+            .contentShape(Rectangle())
         .accessibilityLabel("Delete backward")
-        .onLongPressGesture(minimumDuration: 0.35, pressing: { pressing in
-            if pressing {
-                startDeleteRepeat()
-            } else {
-                stopDeleteRepeat()
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onDelete() }
+        .gesture(deleteGesture)
+        .onDisappear {
+            stopDeleteRepeat()
+            deleteHoldTriggered = false
+        }
+    }
+
+    private var deleteGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.35, maximumDistance: 20)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    startDeleteRepeat()
+                case .second(true, _):
+                    startDeleteRepeat()
+                default:
+                    break
+                }
             }
-        }, perform: {})
-        .onDisappear { stopDeleteRepeat() }
+            .onEnded { _ in
+                if deleteHoldTriggered {
+                    stopDeleteRepeat()
+                    deleteHoldTriggered = false
+                } else {
+                    HapticFeedback.keyTapped()
+                    onDelete()
+                }
+            }
     }
 
     private func startDeleteRepeat() {
+        guard !deleteHoldTriggered else { return }
         stopDeleteRepeat()
-        deleteRepeatStarted = true
-        onDelete()
+        deleteHoldTriggered = true
+        // One confirmation is enough. Repeating haptics at the deletion rate makes
+        // a long hold feel like input noise and can be mistaken for repeated taps.
+        HapticFeedback.keyTapped()
+        onDeleteWord()
         let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-            onDelete()
+            onDeleteWord()
         }
         deleteRepeatTimer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -189,7 +231,10 @@ struct KeyboardDeleteButton: View {
 
 private extension AuxiliaryBottomBar {
     private func roundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            HapticFeedback.keyTapped()
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -206,7 +251,10 @@ private extension AuxiliaryBottomBar {
     }
 
     private func roundControl(text: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            HapticFeedback.keyTapped()
+            action()
+        } label: {
             Text(text)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -223,7 +271,10 @@ private extension AuxiliaryBottomBar {
     }
 
     private func wideControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            HapticFeedback.keyTapped()
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)

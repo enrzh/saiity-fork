@@ -194,13 +194,23 @@ class ModelManager: ObservableObject {
     /// restoration, app lifecycle handling). For v1, foreground download with visible
     /// progress is simpler and sufficient. Users will have the app open during download.
     func downloadModel(_ identifier: String) async throws {
-        let modelInfo = ModelInfo.forIdentifier(identifier)
-        if modelInfo?.engine == .parakeet {
-            try await downloadParakeetModel(identifier)
-            return
+        switch ModelInfo.forIdentifier(identifier)?.engine {
+        case .parakeet:
+            guard let version = parakeetVersion(for: identifier) else {
+                throw ModelManagerError.parakeetUnavailable
+            }
+            try await downloadParakeetModel(identifier, version: version)
+        case .qwen3ASR:
+            guard #available(iOS 18.0, *) else {
+                throw ModelManagerError.qwenUnavailable
+            }
+            guard let variant = Qwen3AsrEngine.variant(for: identifier) else {
+                throw ModelManagerError.qwenUnavailable
+            }
+            try await downloadQwenModel(identifier, variant: variant)
+        default:
+            try await downloadWhisperKitModel(identifier)
         }
-
-        try await downloadWhisperKitModel(identifier)
     }
 
     /// Download a WhisperKit model variant from HuggingFace.
@@ -372,7 +382,7 @@ class ModelManager: ObservableObject {
     ///
     /// Since Dictus now targets iOS 17, no availability guard is needed.
     /// FluidAudio is always available.
-    private func downloadParakeetModel(_ identifier: String) async throws {
+    private func downloadParakeetModel(_ identifier: String, version: AsrModelVersion) async throws {
         modelStates[identifier] = .downloading
         downloadProgress[identifier] = 0.0
         lastLoggedDeciles[identifier] = -1
@@ -388,8 +398,8 @@ class ModelManager: ObservableObject {
             // rejected 1.7.1(19) as "frozen at 4%"). ModelRepoDownloader downloads
             // the same files into the same cache directory using a delegate-based
             // downloadTask that does deliver byte callbacks.
-            let cacheDir = AsrModels.defaultCacheDirectory(for: .v3)
-            let downloader = ModelRepoDownloader(configuration: .parakeet())
+            let cacheDir = AsrModels.defaultCacheDirectory(for: version)
+            let downloader = ModelRepoDownloader(configuration: .parakeet(version: version))
             try await downloader.download(to: cacheDir, modelName: identifier) { [weak self] progress in
                 Task { @MainActor in
                     self?.updateDownloadProgress(progress, identifier: identifier)
@@ -460,6 +470,66 @@ class ModelManager: ObservableObject {
             // #235, tapping the card's "Retry" affordance retries in place; the
             // full reset lives in the overflow menu's "Delete partial download"
             // entry (cleanupFailedModel).
+            PersistentLog.log(.modelDownloadFailed(name: identifier, error: error.localizedDescription))
+            throw error
+        }
+    }
+
+    /// Download and prewarm one Qwen3-ASR precision variant.
+    @available(iOS 18.0, *)
+    private func downloadQwenModel(_ identifier: String, variant: Qwen3AsrVariant) async throws {
+        modelStates[identifier] = .downloading
+        downloadProgress[identifier] = 0.0
+        lastLoggedDeciles[identifier] = -1
+        let catalogSizeMB = Int((ModelInfo.forIdentifier(identifier)?.sizeBytes ?? 0) / 1_000_000)
+        PersistentLog.log(.modelDownloadStarted(name: identifier, sizeMB: catalogSizeMB))
+
+        do {
+            let cacheDir = Qwen3AsrModels.defaultCacheDirectory(variant: variant)
+            let downloader = ModelRepoDownloader(configuration: .qwen3ASR(variant: variant))
+            try await downloader.download(to: cacheDir, modelName: identifier) { [weak self] progress in
+                Task { @MainActor in
+                    self?.updateDownloadProgress(progress, identifier: identifier)
+                }
+            }
+
+            while isPrewarming {
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            isPrewarming = true
+            modelStates[identifier] = .prewarming
+            downloadProgress.removeValue(forKey: identifier)
+            downloadByteInfo.removeValue(forKey: identifier)
+            lastLoggedDeciles.removeValue(forKey: identifier)
+            PersistentLog.log(.modelPrewarmStarted(name: identifier))
+            defer { isPrewarming = false }
+
+            let prewarmStart = Date()
+            let availableBeforeMB = DeviceCapabilities.current().availableMemoryMB
+            let qwenEngine = Qwen3AsrEngine()
+            try await qwenEngine.prepare(modelIdentifier: identifier)
+            let prewarmDurationMs = Int(Date().timeIntervalSince(prewarmStart) * 1000)
+            let availableAfterMB = DeviceCapabilities.current().availableMemoryMB
+            let consumedMB = max(0, availableBeforeMB - availableAfterMB)
+
+            if !downloadedModels.contains(identifier) {
+                downloadedModels.append(identifier)
+            }
+            activeModel = identifier
+            modelStates[identifier] = .ready
+            persistState()
+
+            PersistentLog.log(.modelCompilationCompleted(name: identifier, durationMs: prewarmDurationMs))
+            PersistentLog.log(.modelPrewarmPeakMemory(modelName: identifier, peakMB: consumedMB))
+            PersistentLog.log(.modelDownloadCompleted(name: identifier))
+            PersistentLog.log(.modelSelected(name: identifier))
+            DictationCoordinator.shared.preloadActiveModel()
+        } catch {
+            modelStates[identifier] = .error(error.localizedDescription)
+            downloadProgress.removeValue(forKey: identifier)
+            downloadByteInfo.removeValue(forKey: identifier)
+            lastLoggedDeciles.removeValue(forKey: identifier)
             PersistentLog.log(.modelDownloadFailed(name: identifier, error: error.localizedDescription))
             throw error
         }
@@ -536,16 +606,25 @@ class ModelManager: ObservableObject {
             }
         }
 
-        // Remove FluidAudio/Parakeet cached models
-        // FluidAudio stores downloaded + compiled CoreML models in Application Support/FluidAudio/Models/{version}/
-        // Clean ALL known AsrModelVersion caches so this works for any current or future Parakeet model.
-        if engine == .parakeet {
-            for version: AsrModelVersion in [.v2, .v3] {
+        // Remove only the selected FluidAudio cache. Deleting every ASR cache
+        // made switching from v2/v3 or Qwen unexpectedly remove other choices.
+        switch engine {
+        case .parakeet:
+            if let version = parakeetVersion(for: identifier) {
                 let versionDir = AsrModels.defaultCacheDirectory(for: version)
                 if FileManager.default.fileExists(atPath: versionDir.path) {
                     try FileManager.default.removeItem(at: versionDir)
                 }
             }
+        case .qwen3ASR:
+            if #available(iOS 18.0, *), let variant = Qwen3AsrEngine.variant(for: identifier) {
+                let variantDir = Qwen3AsrModels.defaultCacheDirectory(variant: variant)
+                if FileManager.default.fileExists(atPath: variantDir.path) {
+                    try FileManager.default.removeItem(at: variantDir)
+                }
+            }
+        default:
+            break
         }
 
         downloadedModels.removeAll { $0 == identifier }
@@ -593,11 +672,20 @@ class ModelManager: ObservableObject {
             try? FileManager.default.removeItem(at: whisperKitDir)
         }
 
-        // Clean FluidAudio/Parakeet cached models (all versions)
-        if ModelInfo.allIncludingDeprecated.first(where: { $0.identifier == identifier })?.engine == .parakeet {
-            for version: AsrModelVersion in [.v2, .v3] {
+        let engine = ModelInfo.allIncludingDeprecated.first(where: { $0.identifier == identifier })?.engine
+        switch engine {
+        case .parakeet:
+            if let version = parakeetVersion(for: identifier) {
                 try? FileManager.default.removeItem(at: AsrModels.defaultCacheDirectory(for: version))
             }
+        case .qwen3ASR:
+            if #available(iOS 18.0, *), let variant = Qwen3AsrEngine.variant(for: identifier) {
+                try? FileManager.default.removeItem(
+                    at: Qwen3AsrModels.defaultCacheDirectory(variant: variant)
+                )
+            }
+        default:
+            break
         }
 
         PersistentLog.log(.modelCleanupPerformed(name: identifier, reason: "download-or-prewarm-failure"))
@@ -617,6 +705,14 @@ class ModelManager: ObservableObject {
 
     // MARK: - Private
 
+    private func parakeetVersion(for identifier: String) -> AsrModelVersion? {
+        switch identifier {
+        case "parakeet-tdt-0.6b-v2": return .v2
+        case "parakeet-tdt-0.6b-v3": return .v3
+        default: return nil
+        }
+    }
+
     /// Persists model state to App Group UserDefaults so the keyboard extension
     /// can read which model is active and whether transcription is available.
     private func persistState() {
@@ -626,6 +722,7 @@ class ModelManager: ObservableObject {
         defaults.set(activeModel, forKey: SharedKeys.activeModel)
         defaults.set(!downloadedModels.isEmpty, forKey: SharedKeys.modelReady)
         defaults.synchronize()
+        DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
     }
 }
 
@@ -634,6 +731,7 @@ enum ModelManagerError: Error, LocalizedError {
     case cannotDeleteLastModel
     case noContainer
     case parakeetUnavailable
+    case qwenUnavailable
     case prewarmTimeout(seconds: Int)
 
     var errorDescription: String? {
@@ -644,6 +742,8 @@ enum ModelManagerError: Error, LocalizedError {
             return "App Group container not available"
         case .parakeetUnavailable:
             return "Parakeet requires iOS 17+ or FluidAudio is not linked"
+        case .qwenUnavailable:
+            return "Qwen3-ASR requires iOS 18+ and FluidAudio"
         case .prewarmTimeout(let seconds):
             return "Model optimization did not complete within \(seconds)s"
         }

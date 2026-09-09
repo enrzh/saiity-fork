@@ -253,6 +253,13 @@ class KeyboardState: ObservableObject {
     /// another background keyboard dictation can start.
     @Published private(set) var appNeedsModelPreparation = false
 
+    /// Emits readiness changes for UIKit controls that cannot observe the
+    /// SwiftUI object directly. The controller schedules its layout on the
+    /// next main-queue turn because @Published emits from willSet.
+    var modelPreparationPublisher: AnyPublisher<Bool, Never> {
+        $appNeedsModelPreparation.eraseToAnyPublisher()
+    }
+
     /// Which controller owns the keyboard area, and whether an ownerless area is
     /// still reclaimable (#260). Single source of truth for the two published
     /// properties below, which are what every consumer actually reads.
@@ -434,6 +441,15 @@ class KeyboardState: ObservableObject {
             self?.scheduleWaveformRead()
         }
 
+        DarwinNotificationCenter.addObserver(
+            for: DarwinNotificationName.modelReadinessChanged
+        ) { [weak self] in
+            DispatchQueue.main.async {
+                self?.logProbe("receivedDarwinModelReadinessChanged")
+                self?.refreshFromDefaults()
+            }
+        }
+
     }
 
     deinit {
@@ -443,6 +459,7 @@ class KeyboardState: ObservableObject {
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.waveformUpdate)
+        DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.modelReadinessChanged)
     }
 
     // MARK: - Watchdog
@@ -607,6 +624,10 @@ class KeyboardState: ObservableObject {
 
     /// Press-and-hold began on the dictate control (UIKit overlay or SwiftUI fallback).
     func handleMicPressBegan() {
+        // Model state is written by the app process. Read it immediately before
+        // deciding whether this tap records or opens the app, so a missed Darwin
+        // delivery can never leave the button stuck on a stale label.
+        refreshFromDefaults()
         switch dictationStatus {
         case .idle, .ready:
             if appNeedsModelPreparation {
@@ -641,6 +662,7 @@ class KeyboardState: ObservableObject {
 
     /// Press-and-hold ended on the dictate control.
     func handleMicPressEnded() {
+        refreshFromDefaults()
         guard dictationStatus == .requested || dictationStatus == .recording else { return }
         requestStop()
     }
@@ -879,13 +901,32 @@ class KeyboardState: ObservableObject {
         defaults.synchronize()
         let rawLoadState = defaults.string(forKey: SharedKeys.modelLoadState)
             ?? ModelLoadState.idle.rawValue
-        let loadState = ModelLoadState(rawValue: rawLoadState) ?? .idle
+        var loadState = ModelLoadState(rawValue: rawLoadState) ?? .idle
+        let timestamp = defaults.double(forKey: SharedKeys.modelLoadStateTimestamp)
+        let loadStartedAt = timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+
+        // A previous app process can die between `.loading` and its terminal
+        // state. Clear that orphaned marker here so the keyboard recovers on its
+        // next appearance instead of presenting a dead "Open sAiity" control.
+        if loadState == .loading,
+           !KeyboardModelPreparationPolicy.isLoadingStateFresh(
+               modelLoadState: loadState,
+               modelLoadStartedAt: loadStartedAt
+           ) {
+            defaults.set(ModelLoadState.idle.rawValue, forKey: SharedKeys.modelLoadState)
+            defaults.removeObject(forKey: SharedKeys.modelLoadStateTimestamp)
+            defaults.synchronize()
+            loadState = .idle
+            DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
+            logProbe("staleModelLoadStateReset", details: "startedAt=\(timestamp)")
+        }
         let phase = defaults.string(forKey: SharedKeys.appScenePhase)
             .flatMap(AppScenePhaseMarker.init(rawValue:)) ?? .unknown
         appNeedsModelPreparation = KeyboardModelPreparationPolicy.shouldOpenApp(
             modelReady: defaults.bool(forKey: SharedKeys.modelReady),
             modelLoadState: loadState,
-            appPhase: phase
+            appPhase: phase,
+            modelLoadStartedAt: loadStartedAt
         )
     }
 
@@ -1527,7 +1568,15 @@ class KeyboardState: ObservableObject {
         defaults.synchronize()
         let rawState = defaults.string(forKey: SharedKeys.modelLoadState)
             ?? ModelLoadState.idle.rawValue
-        return rawState == ModelLoadState.loading.rawValue
+        guard let state = ModelLoadState(rawValue: rawState), state == .loading else {
+            return false
+        }
+        let timestamp = defaults.double(forKey: SharedKeys.modelLoadStateTimestamp)
+        let startedAt = timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+        return KeyboardModelPreparationPolicy.isLoadingStateFresh(
+            modelLoadState: state,
+            modelLoadStartedAt: startedAt
+        )
     }
 
     var dictationActionLabel: String {

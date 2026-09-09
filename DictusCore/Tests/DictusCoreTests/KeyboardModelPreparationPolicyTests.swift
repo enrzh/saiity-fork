@@ -13,11 +13,37 @@ final class KeyboardModelPreparationPolicyTests: XCTestCase {
     }
 
     func testLoadingModelOpensPreparationSurfaceEvenWhenPhaseIsActive() {
+        let now = Date(timeIntervalSince1970: 10_000)
         XCTAssertTrue(
             KeyboardModelPreparationPolicy.shouldOpenApp(
                 modelReady: true,
                 modelLoadState: .loading,
-                appPhase: .active
+                appPhase: .active,
+                modelLoadStartedAt: now.addingTimeInterval(-1),
+                now: now
+            )
+        )
+    }
+
+    func testMissingLoadingTimestampDoesNotLeaveTheKeyboardBlocked() {
+        XCTAssertFalse(
+            KeyboardModelPreparationPolicy.shouldOpenApp(
+                modelReady: true,
+                modelLoadState: .loading,
+                appPhase: .background
+            )
+        )
+    }
+
+    func testExpiredLoadingTimestampDoesNotLeaveTheKeyboardBlocked() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        XCTAssertFalse(
+            KeyboardModelPreparationPolicy.shouldOpenApp(
+                modelReady: true,
+                modelLoadState: .loading,
+                appPhase: .background,
+                modelLoadStartedAt: now.addingTimeInterval(-KeyboardModelPreparationPolicy.maximumLoadingAge - 1),
+                now: now
             )
         )
     }

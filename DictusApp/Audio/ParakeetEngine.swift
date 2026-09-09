@@ -4,7 +4,7 @@ import Foundation
 import DictusCore
 import FluidAudio
 
-/// Parakeet v3 speech-to-text engine using FluidAudio SDK.
+/// Parakeet TDT speech-to-text engine using FluidAudio SDK.
 ///
 /// WHY @available(iOS 17.0, *):
 /// FluidAudio's CoreML models require APIs only available on iOS 17+.
@@ -47,7 +47,7 @@ class ParakeetEngine: SpeechModelProtocol {
         )
     }
 
-    /// Load and initialize Parakeet v3 models from the local FluidAudio cache.
+    /// Load and initialize the selected Parakeet model from the local cache.
     ///
     /// WHY this never downloads (issue #252):
     /// This used to call `AsrModels.downloadAndLoad`, which loads locally when the files
@@ -62,12 +62,13 @@ class ParakeetEngine: SpeechModelProtocol {
     /// repo itself through `ModelRepoDownloader` and only then calls this method, which
     /// performs the Core ML compilation step.
     ///
-    /// - Parameter modelIdentifier: Ignored for Parakeet (only one model version: v3),
-    ///   apart from labelling the error and the diagnostic log.
+    /// - Parameter modelIdentifier: Catalog identifier used to select v2 or v3.
     func prepare(modelIdentifier: String) async throws {
         guard !isInitialized else { return }
 
-        guard let cacheDirectory = Self.installedModelCacheDirectory() else {
+        let version: AsrModelVersion = modelIdentifier == "parakeet-tdt-0.6b-v2" ? .v2 : .v3
+
+        guard let cacheDirectory = Self.installedModelCacheDirectory(version: version) else {
             let error = SpeechModelError.modelNotInstalled(identifier: modelIdentifier)
             PersistentLog.log(.diagnosticProbe(
                 component: "ParakeetLoad",
@@ -81,7 +82,7 @@ class ParakeetEngine: SpeechModelProtocol {
         do {
             // Compile the cached Parakeet v3 CoreML models. `load` reads the bundles the
             // guard above verified; it does not resolve anything over the network.
-            let models = try await AsrModels.load(from: cacheDirectory, version: .v3)
+            let models = try await AsrModels.load(from: cacheDirectory, version: version)
 
             // Initialize the ASR manager for transcription
             let manager = AsrManager(config: .default)
@@ -90,7 +91,7 @@ class ParakeetEngine: SpeechModelProtocol {
             self.asrManager = manager
             self.isInitialized = true
 
-            DictusLogger.app.info("ParakeetEngine: v3 models loaded and ready")
+            DictusLogger.app.info("ParakeetEngine: \(modelIdentifier) loaded and ready")
         } catch {
             isInitialized = false
             asrManager = nil

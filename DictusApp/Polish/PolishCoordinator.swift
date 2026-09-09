@@ -644,7 +644,7 @@ private struct OllamaPolishEngine: PolishEngineProtocol {
             "stream": false,
             "messages": [
                 ["role": "system", "content": AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)],
-                ["role": "user", "content": "Polish this text. Output only the polished version, nothing else.\n\nInput:\n\(raw)\n\nPolished output:\n"]
+                    ["role": "user", "content": PolishPromptEnvelope.userTurn(raw: raw)]
             ],
             "reasoning_effort": "none",
             "chat_template_kwargs": ["enable_thinking": false]

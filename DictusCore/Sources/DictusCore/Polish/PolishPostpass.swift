@@ -43,22 +43,40 @@ public enum PolishPostpass {
     /// and would mangle unknown scripts (e.g. CJK full-width punctuation).
     public static func decodeNewlines(_ polished: String) -> String {
         var out = polished
+        // Two adjacent markers are an intentional paragraph break from the
+        // input. Protect that distinction while collapsing raw newlines the
+        // model may have added around a marker.
+        let paragraphToken = "\u{E000}"
+        out = out.replacingOccurrences(
+            of: #"(?:<<NL>>){2,}"#,
+            with: paragraphToken,
+            options: [.regularExpression]
+        )
         out = out.replacingOccurrences(of: newlineMarker, with: "\n")
+        out = out.replacingOccurrences(
+            of: #"[ \t]*\n+[ \t]*(\u{E000})"#,
+            with: "$1",
+            options: [.regularExpression]
+        )
+        out = out.replacingOccurrences(
+            of: #"(\u{E000})[ \t]*\n+"#,
+            with: "$1",
+            options: [.regularExpression]
+        )
 
         // Collapse stray newlines (language-agnostic). Each "retour à la ligne"
         // encodes to exactly one marker, but the model adds its OWN paragraph
         // breaks around the marker when the text looks structured (a meeting
         // recap, an enumeration). After decode those stack into `\n\n\n\n`.
-        // Reduce any run of whitespace-separated newlines to a single `\n`, and
-        // trim the spaces hugging each break. We deliberately drop the
-        // single-vs-blank-line distinction — the verbal command does not carry
-        // it, and the model mangles blank lines unreliably anyway.
+        // Reduce raw runs of whitespace-separated newlines to a single `\n`, and
+        // trim the spaces hugging each break. Explicit paragraph markers are
+        // restored after this normalization, so intentional blank lines survive.
         out = out.replacingOccurrences(
             of: #"[ \t]*\n(?:[ \t]*\n)*[ \t]*"#,
             with: "\n",
             options: [.regularExpression]
         )
-        return out
+        return out.replacingOccurrences(of: paragraphToken, with: "\n\n")
     }
 
     /// Run on the engine's output. Restores newlines from markers and
@@ -102,43 +120,111 @@ public enum PolishPostpass {
                                     language: SupportedLanguage? = .english) -> String {
         let leadingNewlines = String(text.prefix { $0 == "\n" })
         let trailingNewlines = String(text.reversed().prefix { $0 == "\n" }.reversed())
-        var out = text
+        var out = String(text
             .dropFirst(leadingNewlines.count)
-            .dropLast(trailingNewlines.count)
+            .dropLast(trailingNewlines.count))
+        out = normalizeCleanupWhitespace(out)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !out.isEmpty else { return leadingNewlines + trailingNewlines }
-        if language != nil {
-            // Only remove unambiguous hesitation sounds. Words such as "er",
-            // "este", and "bah" are meaningful in some supported languages.
-            out = out.replacingOccurrences(
-                of: #"(?i)(^|[ \t,(])(?:uh+|um+|euh+|äh+|ähm+|hmm+|hum+|eeh|eh+|mmm+)(?=($|[ \t,!?;:.]))"#,
-                with: "$1", options: [.regularExpression]
-            )
-            out = out.replacingOccurrences(
-                of: #"(^|[ \t,(])呃(?=($|[ \t,!?;:.\p{Han}]))"#,
-                with: "$1", options: [.regularExpression]
-            )
-            for _ in 0..<2 {
-                out = out.replacingOccurrences(
-                    of: #"(?i)\b(i|a|an|the|to|of|and|or|but|that|this|je|le|la|de|que|ich|der|die|das|und|zu|el|un|una|y)\b[ \t]+\1\b"#,
-                    with: "$1", options: [.regularExpression]
-                )
-            }
-            // Resolve only the unambiguous date-style correction examples used by
-            // the polish contract.
-            out = out.replacingOccurrences(
-                of: #"(?i)^(.+?)[ \t]+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)),[ \t]*(?:actually|rather|i mean|enfin|plutôt|je veux dire|eigentlich|besser gesagt|ich meine|mejor|más bien|quiero decir|en realidad)[ \t]+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo))$"#,
-                with: "$1 $2", options: [.regularExpression]
-            )
+        if let language {
+            out = removeKnownFillers(out)
+            out = removeImmediateStutters(out)
+            out = resolveDateCorrection(out)
+            out = resolveProperNameCorrection(out)
+            // Apply this again to engine output. The pre-pass normally
+            // converted commands before the LLM call, but a backend can echo
+            // them verbatim.
+            out = VerbalPunctuationPrepass.apply(out, language: language)
         }
+        out = normalizeCleanupWhitespace(out)
         out = out.replacingOccurrences(
             of: #"[ \t]+([,.;:!?，。；：！？])"#, with: "$1", options: [.regularExpression]
         )
         out = out.trimmingCharacters(in: .whitespaces)
-        if let first = out.first, first.isLetter, first.isLowercase {
-            out.replaceSubrange(out.startIndex...out.startIndex, with: String(first).uppercased())
-        }
+        out = capitalizeLineStarts(out)
         return leadingNewlines + out + trailingNewlines
+    }
+
+    private static func normalizeCleanupWhitespace(_ text: String) -> String {
+        var out = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        // Normalize each line independently so indentation and list markers
+        // survive cleanup. A global whitespace collapse turns nested bullets
+        // into plain prose, which is a formatting loss rather than polish.
+        out = out.components(separatedBy: "\n").map { line in
+            let indentation = String(line.prefix { $0 == " " || $0 == "\t" })
+            let content = String(line.dropFirst(indentation.count))
+                .replacingOccurrences(of: #"[ \t]+"#, with: " ", options: [.regularExpression])
+                .replacingOccurrences(of: #"[ \t]+$"#, with: "", options: [.regularExpression])
+            return indentation + content
+        }.joined(separator: "\n")
+        return out.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: [.regularExpression])
+    }
+
+    private static func removeKnownFillers(_ text: String) -> String {
+        var out = text.replacingOccurrences(
+            of: #"(?i)(^|[ \t,(])(?:uh+|um+|euh+|äh+|ähm+|öhm+|hmm+|hum+|eeh|eh+|erm+|mmm+)(?=($|[ \t,!?;:.]))(?:[ \t]*[,;:])?[ \t]*"#,
+            with: "$1",
+            options: [.regularExpression]
+        )
+        out = out.replacingOccurrences(
+            of: #"(^|[ \t,(])呃(?=($|[ \t,!?;:.\p{Han}]))(?:[ \t]*[,;:])?[ \t]*"#,
+            with: "$1",
+            options: [.regularExpression]
+        )
+
+        // Discourse words are removed only when punctuation marks them as a
+        // parenthetical filler at the beginning of a sentence.
+        let discourse = #"(?:like|well|you know|basically|enfin|voilà|tu vois|tu sais|also|na ja|sozusagen|pues|este|o sea)"#
+        return out.replacingOccurrences(
+            of: "(?i)^(?:" + discourse + ")[ \\t]*[,;:][ \\t]*",
+            with: "",
+            options: [.regularExpression]
+        )
+    }
+
+    private static func removeImmediateStutters(_ text: String) -> String {
+        let meaningfulRepetitions = #"very|really|so|too|quite|much|many|more|less|again|bien|très"#
+        let pattern = "(?i)\\b(?!(?:" + meaningfulRepetitions + ")\\b)([\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*)[ \\t]+\\1\\b"
+        var out = text
+        while true {
+            let cleaned = out.replacingOccurrences(of: pattern, with: "$1", options: [.regularExpression])
+            guard cleaned != out else { return out }
+            out = cleaned
+        }
+    }
+
+    private static func resolveDateCorrection(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"(?i)^(.+?)[ \t]+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)),[ \t]*(?:actually|rather|i mean|enfin|plutôt|je veux dire|eigentlich|besser gesagt|ich meine|mejor|más bien|quiero decir|en realidad)[ \t]+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo))$"#,
+            with: "$1 $2",
+            options: [.regularExpression]
+        )
+    }
+
+    private static func resolveProperNameCorrection(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"\b([A-Z][\p{L}'’-]*)[ \t]*,[ \t]*(?:actually|I mean|rather)[ \t]+([A-Z][\p{L}'’-]*)\b"#,
+            with: "$2",
+            options: [.regularExpression]
+        )
+    }
+
+    private static func capitalizeLineStarts(_ text: String) -> String {
+        text.components(separatedBy: "\n").map { line in
+            let prefix: String
+            let content: String
+            if let match = line.range(of: #"^[ \t]*(?:[-*•]|[0-9]+[.)])[ \t]+"#, options: .regularExpression) {
+                prefix = String(line[match])
+                content = String(line[match.upperBound...])
+            } else {
+                prefix = ""
+                content = line
+            }
+            guard let first = content.first, first.isLetter, first.isLowercase else { return line }
+            return prefix + String(first).uppercased() + content.dropFirst()
+        }.joined(separator: "\n")
     }
 
 }

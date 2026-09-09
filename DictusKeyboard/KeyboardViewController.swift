@@ -39,7 +39,11 @@ class KeyboardViewController: UIInputViewController,
     private var lastShiftTapDate = Date.distantPast
     private var deleteRepeatTimer: Timer?
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
+    private var deleteHoldTriggered = false
+    private var deleteHoldResetWorkItem: DispatchWorkItem?
     private var areaModeCancellable: AnyCancellable?
+    private var modelPreparationCancellable: AnyCancellable?
+    private var micTouchActive = false
 
     private struct ThemeCacheKey: Equatable {
         let style: UIUserInterfaceStyle
@@ -201,6 +205,7 @@ class KeyboardViewController: UIInputViewController,
             controllerID: controllerID,
             routeText: { [weak self] text in self?.routeProxyText(text) },
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
+            routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
             routeCursorMovement: { [weak self] movement in self?.didMoveCursor(movement) }
         )
         let hosting = UIHostingController(rootView: rootView)
@@ -347,6 +352,8 @@ class KeyboardViewController: UIInputViewController,
         // keyboard controller is off-screen. Refresh before laying out the mic
         // action so the button does not keep a stale "Open sAiity" state.
         KeyboardState.shared.refreshFromDefaults()
+        HapticFeedback.refreshEnabledState()
+        HapticFeedback.warmUp()
         hasAppeared = true
         isAttached = true
         updateActionAvailability()
@@ -366,6 +373,8 @@ class KeyboardViewController: UIInputViewController,
         // visible controller is reactive. Assignment is idempotent — the previous
         // AnyCancellable is released on reassignment, which cancels its subscription.
         observeKeyboardAreaMode()
+        observeModelPreparationState()
+        micTouchActive = false
 
         // Force height recalculation when keyboard reappears (e.g., after app switch).
         // Without this, the inputView may retain a stale height from before the switch.
@@ -571,6 +580,9 @@ class KeyboardViewController: UIInputViewController,
         super.viewDidDisappear(animated)
         deleteRepeatTimer?.invalidate()
         deleteRepeatTimer = nil
+        deleteHoldResetWorkItem?.cancel()
+        deleteHoldResetWorkItem = nil
+        deleteHoldTriggered = false
 
         // We are off screen from here on, whether or not we keep ownership below
         // (#260): a detached controller must not adopt an ownerless dictation.
@@ -604,6 +616,9 @@ class KeyboardViewController: UIInputViewController,
         // viewWillAppear re-subscribes on reattach.
         areaModeCancellable?.cancel()
         areaModeCancellable = nil
+        modelPreparationCancellable?.cancel()
+        modelPreparationCancellable = nil
+        micTouchActive = false
 
         // Issue #142: skip registerControllerDisappearance during an active
         // dictation session. iOS calls viewDidDisappear on the keyboard right
@@ -688,6 +703,8 @@ class KeyboardViewController: UIInputViewController,
 
     deinit {
         deleteRepeatTimer?.invalidate()
+        deleteHoldResetWorkItem?.cancel()
+        deleteHoldTriggered = false
         // Issue #142 safety net, corrected by #260: viewDidDisappear skips
         // unregistration during an active dictation session to avoid a SwiftUI
         // race that produces a centred-toolbar artefact during cold-start
@@ -791,6 +808,18 @@ class KeyboardViewController: UIInputViewController,
             // to flash at the top then drop to center.
             .sink { [weak self] mode in
                 self?.applyAreaMode(mode)
+            }
+    }
+
+    /// Refresh the UIKit hit target and accessibility label as soon as the app
+    /// finishes preparing the model while this controller remains cached.
+    private func observeModelPreparationState() {
+        modelPreparationCancellable = KeyboardState.shared.modelPreparationPublisher
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.hasAppeared, self.isAttached else { return }
+                    self.layoutVoiceActionControls()
+                }
             }
     }
 
@@ -1108,11 +1137,18 @@ class KeyboardViewController: UIInputViewController,
             }
         }
         deleteButton = makeKeyboardActionButton(identifier: "delete-backward", label: "Delete backward") { [weak self] in
-            self?.routeProxyCommand(.delete)
+            guard let self else { return }
+            if self.deleteHoldTriggered {
+                self.deleteHoldTriggered = false
+                return
+            }
+            self.routeProxyCommand(.delete)
         }
         let deleteHold = UILongPressGestureRecognizer(target: self, action: #selector(handleDeleteHold(_:)))
         deleteHold.minimumPressDuration = 0.35
-        deleteHold.cancelsTouchesInView = false
+        // The long press owns a hold. Letting the UIButton receive the same touch-up
+        // races the hold repeat with a second single deletion.
+        deleteHold.cancelsTouchesInView = true
         deleteButton?.addGestureRecognizer(deleteHold)
         deleteHoldRecognizer = deleteHold
         returnButton = makeKeyboardActionButton(identifier: "return-key", label: "Insert return") { [weak self] in
@@ -1125,9 +1161,6 @@ class KeyboardViewController: UIInputViewController,
         micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
         micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         micButton?.addTarget(self, action: #selector(handleMicTap), for: .touchUpInside)
-        // A preparation tap is a regular button activation, not a recording
-        // hold. Keep a primary-action fallback because some iOS keyboard hosts
-        // deliver that event more reliably than touchDown to extension views.
         micButton?.addTarget(self, action: #selector(handleMicPrimaryAction), for: .primaryActionTriggered)
         (micButton as? DictationMicButton)?.onAccessibilityActivate = {
             let state = KeyboardState.shared
@@ -1147,6 +1180,8 @@ class KeyboardViewController: UIInputViewController,
         }
         let cursorGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleSpaceCursorGesture(_:)))
         cursorGesture.minimumPressDuration = 0.3
+        // Trackpad mode must remain active while the finger leaves the visible spacebar.
+        cursorGesture.allowableMovement = 10_000
         cursorGesture.cancelsTouchesInView = true
         spaceButton?.addGestureRecognizer(cursorGesture)
         let cursorController = LongPressCursorMovementController()
@@ -1286,26 +1321,30 @@ class KeyboardViewController: UIInputViewController,
     }
 
     @objc private func handleMicTouchDown() {
-        // Preparation is a tap-to-open action. Waiting for touch-up lets the
-        // keyboard host finish the control activation before NSExtensionContext
-        // hands the app URL to iOS.
+        KeyboardState.shared.refreshFromDefaults()
         guard !KeyboardState.shared.appNeedsModelPreparation else { return }
+        guard !micTouchActive else { return }
+        micTouchActive = true
         KeyboardState.shared.handleMicPressBegan()
     }
 
     @objc private func handleMicTouchUp() {
-        guard !KeyboardState.shared.appNeedsModelPreparation else { return }
+        guard micTouchActive else { return }
+        micTouchActive = false
         KeyboardState.shared.handleMicPressEnded()
     }
 
+    /// A preparation tap does not produce a recording touch lifecycle: the
+    /// keyboard must foreground sAiity and let the app warm the model first.
+    /// Keep this explicit touch-up path because some keyboard hosts omit the
+    /// primary action for transparent extension buttons.
     @objc private func handleMicTap() {
-        guard KeyboardState.shared.appNeedsModelPreparation else { return }
+        guard KeyboardState.shared.appNeedsModelPreparation || KeyboardState.shared.failedRequiresApp else { return }
         KeyboardState.shared.handleMicPressBegan()
     }
 
     @objc private func handleMicPrimaryAction() {
-        guard KeyboardState.shared.appNeedsModelPreparation else { return }
-        KeyboardState.shared.handleMicPressBegan()
+        handleMicTap()
     }
 
     /// Match the native keyboard's spacebar trackpad behavior. A short tap is
@@ -1329,15 +1368,33 @@ class KeyboardViewController: UIInputViewController,
     @objc private func handleDeleteHold(_ recognizer: UILongPressGestureRecognizer) {
         switch recognizer.state {
         case .began:
+            deleteHoldResetWorkItem?.cancel()
+            deleteHoldTriggered = true
             deleteRepeatTimer?.invalidate()
+            HapticFeedback.keyTapped()
+            deletePreviousWord()
             let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-                self?.routeProxyCommand(.delete)
+                self?.deletePreviousWord()
             }
             deleteRepeatTimer = timer
             RunLoop.main.add(timer, forMode: .common)
-        case .ended, .cancelled, .failed:
+        case .ended:
             deleteRepeatTimer?.invalidate()
             deleteRepeatTimer = nil
+            // UIKit may deliver the button's touch-up after the recognizer ended.
+            // Keep suppression alive for that delivery, then make the next tap clean.
+            let reset = DispatchWorkItem { [weak self] in
+                self?.deleteHoldTriggered = false
+                self?.deleteHoldResetWorkItem = nil
+            }
+            deleteHoldResetWorkItem = reset
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: reset)
+        case .cancelled, .failed:
+            deleteRepeatTimer?.invalidate()
+            deleteRepeatTimer = nil
+            deleteHoldTriggered = false
+            deleteHoldResetWorkItem?.cancel()
+            deleteHoldResetWorkItem = nil
         default:
             break
         }
@@ -1401,6 +1458,32 @@ class KeyboardViewController: UIInputViewController,
         )
     }
 
+    /// Delete the token immediately before the caret using the same policy as
+    /// every SwiftUI keyboard surface. The first ordinary tap remains a single
+    /// `deleteBackward()` through `KeyboardCommand.delete`.
+    func deletePreviousWord() {
+        let ownerAvailable = isAttached && isOnScreen
+            && KeyboardState.shared.activeControllerID == controllerID
+        guard ownerAvailable else {
+            DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "wordDeletionRejected",
+                details: "ownerAvailable=false"
+            ))
+            return
+        }
+
+        let length = KeyboardDeletion.previousWordLength(
+            in: textDocumentProxy.documentContextBeforeInput
+        )
+        guard length > 0 else { return }
+        for _ in 0..<length {
+            textDocumentProxy.deleteBackward()
+        }
+    }
+
     // MARK: - Vendored keyboard owner
 
     func didTriggerKey(_ key: KeyDefinition) {
@@ -1445,7 +1528,7 @@ class KeyboardViewController: UIInputViewController,
 
     func didTriggerHoldKey(_ key: KeyDefinition) {
         if case .backspace = key.type {
-            routeProxyCommand(.delete)
+            deletePreviousWord()
         }
     }
 

@@ -17,6 +17,7 @@ struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
     let onBackToVoice: () -> Void
     let onDelete: () -> Void
+    let onDeleteWord: () -> Void
     let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
     /// Actual available width passed from the parent GeometryReader.
     /// WHY a parameter: In keyboard extensions, UIHostingController may not give
@@ -30,6 +31,7 @@ struct EmojiPickerView: View {
     @State private var selectedCategoryID: String = "smileys"
     @State private var scrollRequest: EmojiScrollRequest?
     @State private var variantSession: KeyVariantSession?
+    @AppStorage(SharedKeys.keyPopupsEnabled, store: AppGroup.defaults) private var keyPopupsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let categories = EmojiStore.categories
@@ -190,7 +192,10 @@ struct EmojiPickerView: View {
     }
 
     private func glassRoundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            HapticFeedback.keyTapped()
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -207,7 +212,7 @@ struct EmojiPickerView: View {
     }
 
     private var glassDeleteControl: some View {
-        KeyboardDeleteButton(onDelete: onDelete)
+        KeyboardDeleteButton(onDelete: onDelete, onDeleteWord: onDeleteWord)
     }
 
     private func updateSelectedCategory(_ categoryID: String) {
@@ -228,6 +233,7 @@ struct EmojiPickerView: View {
     }
 
     private func presentEmojiVariants(item: EmojiGridItem, source: CGRect) {
+        guard keyPopupsEnabled else { return }
         let options = EmojiSkinToneVariants.options(for: item.emoji)
         guard options.count > 1 else { return }
         HapticFeedback.keyTapped()
@@ -343,6 +349,10 @@ private struct EmojiKey: View {
 
     @State private var isPressed = false
     @State private var localFrame: CGRect = .zero
+    @State private var holdToken: UUID?
+    @State private var touchOrigin: CGPoint?
+    @State private var touchCancelled = false
+    @State private var holdTriggered = false
 
     private var hasSkinTones: Bool {
         EmojiSkinToneVariants.options(for: item.emoji).count > 1
@@ -383,11 +393,53 @@ private struct EmojiKey: View {
                     }
                 }
             )
-            .onTapGesture(perform: onTap)
-            .modifier(OptionalEmojiLongPress(enabled: hasSkinTones) {
-                onLongPress(localFrame)
-            })
+            // Keep tap and skin-tone selection under one gesture owner. A
+            // simultaneous tap + long press can insert the base emoji before
+            // the variant popup is presented on keyboard hosts.
+            // The cell still needs the gesture for tap/hold selection, while the
+            // parent ScrollView must retain its horizontal pan recognizer.
+            .simultaneousGesture(emojiGesture)
             .accessibilityLabel(item.emoji)
+    }
+
+    private var emojiGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { drag in
+                if touchOrigin == nil {
+                    touchOrigin = drag.startLocation
+                    guard hasSkinTones else { return }
+                    scheduleLongPress()
+                }
+                guard !touchCancelled, !holdTriggered else { return }
+                let distance = hypot(
+                    drag.location.x - (touchOrigin?.x ?? drag.startLocation.x),
+                    drag.location.y - (touchOrigin?.y ?? drag.startLocation.y)
+                )
+                if distance > 20 {
+                    holdToken = nil
+                    touchCancelled = true
+                }
+            }
+            .onEnded { _ in
+                let shouldInsert = !touchCancelled && !holdTriggered
+                holdToken = nil
+                touchOrigin = nil
+                touchCancelled = false
+                holdTriggered = false
+                if shouldInsert {
+                    onTap()
+                }
+            }
+    }
+
+    private func scheduleLongPress() {
+        let token = UUID()
+        holdToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            guard holdToken == token, !touchCancelled, !holdTriggered else { return }
+            holdTriggered = true
+            onLongPress(localFrame)
+        }
     }
 }
 
@@ -409,21 +461,5 @@ private struct VisibleCategoryFramesKey: PreferenceKey {
 
     static func reduce(value: inout [String: VisibleEmojiFrame], nextValue: () -> [String: VisibleEmojiFrame]) {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
-    }
-}
-
-private struct OptionalEmojiLongPress: ViewModifier {
-    let enabled: Bool
-    let action: () -> Void
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.4)
-                    .onEnded { _ in action() }
-            )
-        } else {
-            content
-        }
     }
 }

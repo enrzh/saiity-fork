@@ -23,6 +23,10 @@ public enum SharedKeys {
     /// "ready" = active model is loaded in RAM and `transcribe()` calls will succeed.
     /// The keyboard reads this to refuse mic taps during load (issue #144).
     public static let modelLoadState = "dictus.modelLoadState"
+    /// Double (timeIntervalSince1970): when the current model load started.
+    /// A loading state without a fresh timestamp is treated as abandoned so a
+    /// crashed or suspended app cannot leave the keyboard on "Open sAiity" forever.
+    public static let modelLoadStateTimestamp = "dictus.modelLoadStateTimestamp"
 
     // Keyboard-App cross-process contracts (added for Plan 3.1)
     /// Legacy single global keyboard layout, stored as String ("azerty"/"qwerty"/"qwertz").
@@ -88,6 +92,8 @@ public enum SharedKeys {
     public static let translationReadiness = "dictus.translationReadiness"
     /// Whether haptic feedback is enabled, default true
     public static let hapticsEnabled = "dictus.hapticsEnabled"
+    /// Whether long-press alternate-character popups are enabled, default true
+    public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
     /// Whether the user has completed onboarding, default false
     public static let hasCompletedOnboarding = "dictus.hasCompletedOnboarding"
     /// Current onboarding step index (0-5). Persisted to UserDefaults so the user

@@ -23,12 +23,18 @@ public struct ModelLanguageSupport: Equatable, Sendable {
     /// summary in the detail view.
     public enum Coverage: Equatable, Sendable {
         /// Multilingual Whisper checkpoint: ≈99 languages, uneven quality.
-        /// All Whisper models Dictus ships are the multilingual variants
-        /// (no `.en` suffix), so they all share this coverage (#226 research).
+        /// Multilingual Whisper checkpoint: approximately 99 languages with
+        /// uneven quality across the long tail (#226 research).
         case whisperMultilingual
+        /// English-only Whisper checkpoint. It cannot auto-detect or decode
+        /// other languages reliably, but gives English users a smaller,
+        /// specialized model choice.
+        case whisperEnglishOnly
         /// Parakeet TDT v3: exactly the 25 European languages documented by
         /// NVIDIA. No Chinese or other non-European languages.
         case parakeetEuropean
+        /// Qwen3-ASR's documented 30-language set, including CJK languages.
+        case qwenMultilingual
     }
 
     /// A curated quality note attached to a highlighted language on a
@@ -188,6 +194,11 @@ extension ModelLanguageSupport {
         tierGroups: whisperTierGroups
     )
 
+    static let whisperEnglishOnly = ModelLanguageSupport(
+        coverage: .whisperEnglishOnly,
+        highlights: [Entry(code: "en")]
+    )
+
     /// High-accuracy multilingual Whisper (medium / large-v3 turbo):
     /// same ≈99-language coverage, meaningfully better Chinese quality.
     static let whisperHighAccuracy = ModelLanguageSupport(
@@ -213,6 +224,21 @@ extension ModelLanguageSupport {
             "lv", "lt", "mt", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk"
         ]
     )
+
+    static let parakeetV2 = ModelLanguageSupport(
+        coverage: .whisperEnglishOnly,
+        highlights: [Entry(code: "en")]
+    )
+
+    static let qwenMultilingual = ModelLanguageSupport(
+        coverage: .qwenMultilingual,
+        highlights: testedHighlights,
+        additionalCodes: [
+            "yue", "ja", "ko", "vi", "th", "id", "ms", "hi", "ar", "tr",
+            "ru", "pt", "it", "nl", "pl", "sv", "da", "fi", "cs", "fil",
+            "fa", "el", "hu", "mk", "ro"
+        ]
+    )
 }
 
 // MARK: - ModelInfo accessor
@@ -228,10 +254,26 @@ extension ModelInfo {
     /// the seven catalog entries.
     public var languageSupport: ModelLanguageSupport {
         switch identifier {
-        case "openai_whisper-medium", "openai_whisper-large-v3_turbo_954MB":
+        case "openai_whisper-medium",
+             "openai_whisper-large-v3_turbo_954MB",
+             "openai_whisper-large-v2_949MB",
+             "openai_whisper-large-v2_turbo_955MB",
+             "openai_whisper-large-v3_947MB",
+             "distil-whisper_distil-large-v3_594MB",
+             "distil-whisper_distil-large-v3_turbo_600MB",
+             "openai_whisper-large-v3-v20240930_626MB",
+             "openai_whisper-large-v3-v20240930_turbo_632MB":
             return .whisperHighAccuracy
+        case "openai_whisper-tiny.en",
+             "openai_whisper-base.en",
+             "openai_whisper-small.en":
+            return .whisperEnglishOnly
         case "parakeet-tdt-0.6b-v3":
             return .parakeetV3
+        case "parakeet-tdt-0.6b-v2":
+            return .parakeetV2
+        case "qwen3-asr-0.6b-f32", "qwen3-asr-0.6b-int8":
+            return .qwenMultilingual
         default:
             // tiny / base / small / small_216MB, plus any future Whisper
             // entry until it is explicitly classified above. Defaulting to
@@ -242,6 +284,8 @@ extension ModelInfo {
                 return .whisperSmallClass
             case .parakeet:
                 return .parakeetV3
+            case .qwen3ASR:
+                return .qwenMultilingual
             }
         }
     }

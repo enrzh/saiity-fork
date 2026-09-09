@@ -40,11 +40,13 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         let keyboardSectionSource = String(source[keyboardSection.lowerBound..<nextSection.lowerBound])
         XCTAssertTrue(keyboardSectionSource.contains("Picker"))
         XCTAssertTrue(keyboardSectionSource.contains("Label(\"Models\", systemImage:"))
+        XCTAssertTrue(source.contains("Toggle(\"Haptic feedback\", isOn: $hapticsEnabled)"))
+        XCTAssertTrue(source.contains("Toggle(\"Key popups\", isOn: $keyPopupsEnabled)"))
 
         for removedSetting in [
             "sounds", "soundFeedbackEnabled", "soundVolume", "keyboardLanguage",
             "keyboardLanguageSelection", "numberRowEnabled",
-            "hapticsEnabled", "autocorrectEnabled"
+            "autocorrectEnabled"
         ] {
             XCTAssertFalse(source.localizedCaseInsensitiveContains(removedSetting), "旧键盘设置仍出现在 SettingsView: \(removedSetting)")
         }

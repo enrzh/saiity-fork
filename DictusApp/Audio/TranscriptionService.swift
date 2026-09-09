@@ -160,57 +160,13 @@ class TranscriptionService {
             throw TranscriptionError.emptyAudio
         }
 
-        // Variant A — `.vad` only. Mirrors the change in SpeechModelProtocol.swift
-        // so the legacy fallback path stays consistent with the active engine path.
-        // See SpeechModelProtocol.swift for rationale — including WHY
-        // `detectLanguage` must be explicitly enabled in auto mode (WhisperKit
-        // defaults it to `!usePrefillPrompt`, which is false here, so a nil
-        // language alone would force the `<|en|>` prefill token).
-        let options = DecodingOptions(
-            task: .transcribe,
-            language: language,
-            temperature: 0.0,
-            usePrefillPrompt: true,
-            usePrefillCache: true,
-            detectLanguage: language == nil,
-            skipSpecialTokens: true,
-            chunkingStrategy: .vad
-        )
-
         do {
-            let results: [TranscriptionResult] = try await whisperKit.transcribe(
-                audioArray: audioSamples,
-                decodeOptions: options
+            let trimmed = try await WhisperKitTranscriptionSupport.transcribe(
+                whisperKit: whisperKit,
+                audioSamples: audioSamples,
+                language: language,
+                logComponent: "TranscriptionService"
             )
-
-            // Auto-detect observability (#226) — mirrors WhisperKitEngine.
-            if language == nil {
-                logAutoDetectedLanguage(results)
-            }
-
-            let totalSegments = results.reduce(0) { $0 + $1.segments.count }
-            let totalCharCount = results.reduce(0) { $0 + $1.text.count }
-            let lastSegmentEnd = results.flatMap { $0.segments }.map { $0.end }.max() ?? 0
-            let audioDurationSec = Float(audioSamples.count) / 16_000.0
-            PersistentLog.log(.diagnosticProbe(
-                component: "TranscriptionService",
-                instanceID: "transcribeLegacy",
-                action: "segmentsReturned",
-                details: "results=\(results.count) segments=\(totalSegments) chars=\(totalCharCount) audioSec=\(String(format: "%.2f", audioDurationSec)) lastSegmentEndSec=\(String(format: "%.2f", lastSegmentEnd))"
-            ))
-
-            // Join all segment texts into a single string.
-            // Whisper may produce multiple segments for longer audio.
-            let text = results.map { $0.text }.joined(separator: " ")
-
-            // Trim whitespace — Whisper sometimes adds leading/trailing spaces
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            guard !trimmed.isEmpty else {
-                PersistentLog.log(.transcriptionFailed(error: "Empty transcription result"))
-                throw TranscriptionError.transcriptionFailed("Empty transcription result")
-            }
-
             let durationMs = Int(Date().timeIntervalSince(transcriptionStart) * 1000)
             let wordCount = trimmed.split(separator: " ").count
             PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
@@ -223,19 +179,6 @@ class TranscriptionService {
             PersistentLog.log(.transcriptionFailed(error: error.localizedDescription))
             throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
-    }
-
-    /// Auto-detect observability (#226): surface what Whisper decided so
-    /// exported logs can validate auto mode (e.g. detected=zh for Mandarin).
-    /// Only called in auto mode — in follow/explicit the language is forced.
-    private func logAutoDetectedLanguage(_ results: [TranscriptionResult]) {
-        let detected = results.first?.language ?? "unknown"
-        PersistentLog.log(.diagnosticProbe(
-            component: "TranscriptionService",
-            instanceID: "languageDetection",
-            action: "detected",
-            details: "detected=\(detected)"
-        ))
     }
 
     /// Phase 37 instrumentation: emits `transcriptionPerformance` alongside the existing

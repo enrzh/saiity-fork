@@ -113,7 +113,8 @@ public struct ModelInfo: Identifiable {
     }
 
     /// Models available for new downloads. Includes every integrated runtime.
-    /// On iOS 17+, includes Parakeet models. On iOS 16, Parakeet is filtered out.
+    /// On iOS 17+, includes Parakeet models. Qwen3-ASR is additionally filtered
+    /// to iOS 18 because FluidAudio exposes its Core ML runtime from that OS.
     ///
     /// WHY runtime OS version check instead of #available:
     /// ModelInfo is in DictusCore (a framework), not the app target.
@@ -121,11 +122,15 @@ public struct ModelInfo: Identifiable {
     /// result at runtime, ensuring iOS 16 users never see Parakeet models
     /// they can't download or use.
     public static let all: [ModelInfo] = {
-        let isIOS17OrLater = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 17
+        let osMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let isIOS17OrLater = osMajor >= 17
+        let isIOS18OrLater = osMajor >= 18
         return redesignCatalog.filter { model in
             guard model.visibility == .available else { return false }
             // Hide Parakeet models on iOS 16
             if model.engine == .parakeet && !isIOS17OrLater { return false }
+            // Qwen3-ASR is annotated @available(iOS 18, *) by FluidAudio.
+            if model.engine == .qwen3ASR && !isIOS18OrLater { return false }
             return true
         }
     }()
@@ -144,6 +149,17 @@ public struct ModelInfo: Identifiable {
             visibility: .available
         ),
         ModelInfo(
+            identifier: "openai_whisper-tiny.en",
+            displayName: "Tiny (English)",
+            sizeLabel: "~40 MB",
+            sizeBytes: 40_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.35,
+            speedScore: 1.0,
+            description: "English-only and fast",
+            visibility: .available
+        ),
+        ModelInfo(
             identifier: "openai_whisper-base",
             displayName: "Base",
             sizeLabel: "~75 MB",
@@ -152,6 +168,17 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.4,
             speedScore: 0.9,
             description: "Fast but inaccurate",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-base.en",
+            displayName: "Base (English)",
+            sizeLabel: "~75 MB",
+            sizeBytes: 75_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.45,
+            speedScore: 0.9,
+            description: "English-only and balanced",
             visibility: .available
         ),
         // Speed scores recalibrated 2026-05-09 from measured RTF on iPhone 15 Pro Max
@@ -167,6 +194,17 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.6,
             speedScore: 0.95,
             description: "Accurate and balanced",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-small.en",
+            displayName: "Small (English)",
+            sizeLabel: "~250 MB",
+            sizeBytes: 250_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.62,
+            speedScore: 0.95,
+            description: "English-only and accurate",
             visibility: .available
         ),
         ModelInfo(
@@ -192,6 +230,17 @@ public struct ModelInfo: Identifiable {
             visibility: .available
         ),
         ModelInfo(
+            identifier: "parakeet-tdt-0.6b-v2",
+            displayName: "Parakeet v2",
+            sizeLabel: "~800 MB",
+            sizeBytes: 800_000_000,
+            engine: .parakeet,
+            accuracyScore: 0.82,
+            speedScore: 0.86,
+            description: "Fast and accurate, English only (NVIDIA)",
+            visibility: .available
+        ),
+        ModelInfo(
             identifier: "parakeet-tdt-0.6b-v3",
             displayName: "Parakeet v3",
             sizeLabel: "~800 MB",
@@ -200,6 +249,28 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.85,
             speedScore: 0.85,
             description: "Fast and accurate (NVIDIA)",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "qwen3-asr-0.6b-f32",
+            displayName: "Qwen3-ASR 0.6B",
+            sizeLabel: "~1.75 GB",
+            sizeBytes: 1_750_000_000,
+            engine: .qwen3ASR,
+            accuracyScore: 0.9,
+            speedScore: 0.7,
+            description: "Multilingual ASR, best Qwen speed and quality",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "qwen3-asr-0.6b-int8",
+            displayName: "Qwen3-ASR 0.6B Int8",
+            sizeLabel: "~900 MB",
+            sizeBytes: 900_000_000,
+            engine: .qwen3ASR,
+            accuracyScore: 0.9,
+            speedScore: 0.45,
+            description: "Multilingual ASR, lower storage footprint",
             visibility: .available
         ),
         // Phase 37 (issue #104): Whisper Turbo re-introduced using Argmax's
@@ -225,16 +296,90 @@ public struct ModelInfo: Identifiable {
             speedScore: 0.2,
             description: "Most accurate but slowest",
             visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v2_949MB",
+            displayName: "Large v2",
+            sizeLabel: "~949 MB",
+            sizeBytes: 949_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.87,
+            speedScore: 0.15,
+            description: "High accuracy, older generation",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v2_turbo_955MB",
+            displayName: "Large v2 Turbo",
+            sizeLabel: "~955 MB",
+            sizeBytes: 955_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.88,
+            speedScore: 0.25,
+            description: "High accuracy and faster",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v3_947MB",
+            displayName: "Large v3",
+            sizeLabel: "~947 MB",
+            sizeBytes: 947_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.93,
+            speedScore: 0.12,
+            description: "Highest accuracy",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "distil-whisper_distil-large-v3_594MB",
+            displayName: "Distil-Whisper Large v3",
+            sizeLabel: "~594 MB",
+            sizeBytes: 594_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.86,
+            speedScore: 0.50,
+            description: "High accuracy, compact",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "distil-whisper_distil-large-v3_turbo_600MB",
+            displayName: "Distil-Whisper Large v3 Turbo",
+            sizeLabel: "~600 MB",
+            sizeBytes: 600_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.87,
+            speedScore: 0.55,
+            description: "High accuracy, compact and fast",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v3-v20240930_626MB",
+            displayName: "Large v3 (2024)",
+            sizeLabel: "~626 MB",
+            sizeBytes: 626_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.92,
+            speedScore: 0.20,
+            description: "High accuracy, optimized",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v3-v20240930_turbo_632MB",
+            displayName: "Large v3 Turbo (2024)",
+            sizeLabel: "~632 MB",
+            sizeBytes: 632_000_000,
+            engine: .whisperKit,
+            accuracyScore: 0.91,
+            speedScore: 0.30,
+            description: "High accuracy, optimized and faster",
+            visibility: .available
         )
     ]
 
     /// All known models, using one authoritative metadata row per identifier.
     /// Older downloads remain resolvable because their identifiers stay in the
     /// current catalog; duplicate legacy rows could otherwise shadow current data.
-    public static let allIncludingDeprecated: [ModelInfo] = [
-        redesignCatalog[0], redesignCatalog[1], redesignCatalog[2],
-        redesignCatalog[3], redesignCatalog[4], redesignCatalog[5], redesignCatalog[6]
-    ]
+    public static let allIncludingDeprecated: [ModelInfo] = redesignCatalog
 
     /// Removes duplicate identifiers while preferring the last metadata entry.
     /// Reversing again preserves the original catalog order for the retained rows.
@@ -359,8 +504,19 @@ public struct ModelInfo: Identifiable {
             return Self.a12a13SupportedIdentifiers.contains(identifier) ? nil : .hardwareGeneration
         }
         switch identifier {
-        case "openai_whisper-large-v3_turbo_954MB":
+        case "openai_whisper-large-v3_turbo_954MB",
+             "openai_whisper-large-v2_949MB",
+             "openai_whisper-large-v2_turbo_955MB",
+             "openai_whisper-large-v3_947MB",
+             "distil-whisper_distil-large-v3_594MB",
+             "distil-whisper_distil-large-v3_turbo_600MB",
+             "openai_whisper-large-v3-v20240930_626MB",
+             "openai_whisper-large-v3-v20240930_turbo_632MB":
             return capabilities.physicalMemoryGB >= 6 ? nil : .insufficientMemory(requiredGB: 6)
+        case "qwen3-asr-0.6b-int8":
+            return capabilities.physicalMemoryGB >= 6 ? nil : .insufficientMemory(requiredGB: 6)
+        case "qwen3-asr-0.6b-f32":
+            return capabilities.physicalMemoryGB >= 8 ? nil : .insufficientMemory(requiredGB: 8)
         default:
             return nil
         }

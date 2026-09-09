@@ -7,6 +7,8 @@ struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SharedKeys.liveActivityEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var liveActivityEnabled = true
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
+    @AppStorage(SharedKeys.hapticsEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticsEnabled = true
+    @AppStorage(SharedKeys.keyPopupsEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyPopupsEnabled = true
     @AppStorage(SharedKeys.keyboardAccessoryOrder, store: UserDefaults(suiteName: AppGroup.identifier))
     private var keyboardAccessoryOrderRawValue = KeyboardAccessoryOrder.emojiFirst.rawValue
     @State private var keyboardLayout = KeyboardLayoutPreference.layout(for: .active)
@@ -40,6 +42,7 @@ struct SettingsView: View {
                         Text(order.displayName).tag(order)
                     }
                 }
+                Toggle("Key popups", isOn: $keyPopupsEnabled)
                 NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
                     Label("Models", systemImage: "square.stack.3d.up.fill")
                 }
@@ -58,6 +61,7 @@ struct SettingsView: View {
                     }
             }
             Section("Feedback") {
+                Toggle("Haptic feedback", isOn: $hapticsEnabled)
                 Button(action: openSystemSettings) {
                     Label("Microphone", systemImage: "mic.fill")
                     Spacer()

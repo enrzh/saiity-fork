@@ -35,10 +35,24 @@ public struct ASRCapability: Equatable, Sendable {
             case .explicit(let language):
                 return Self(supportsAutomaticInputLanguage: false, sourceLanguage: language)
             }
+        case .whisperEnglishOnly:
+            // The `.en` Whisper checkpoints are intentionally pinned to
+            // English: offering Auto or another selected language would make
+            // the settings UI promise behavior the model cannot provide.
+            return Self(supportsAutomaticInputLanguage: false, sourceLanguage: .english)
         case .parakeetEuropean:
             // FluidAudio currently ignores the source-language parameter. Do not
             // present the keyboard choice as a resolved runtime source.
             return Self(supportsAutomaticInputLanguage: false, sourceLanguage: nil)
+        case .qwenMultilingual:
+            switch mode {
+            case .autoDetect:
+                return Self(supportsAutomaticInputLanguage: true, sourceLanguage: nil)
+            case .followKeyboard:
+                return Self(supportsAutomaticInputLanguage: false, sourceLanguage: keyboardLanguage)
+            case .explicit(let language):
+                return Self(supportsAutomaticInputLanguage: false, sourceLanguage: language)
+            }
         }
     }
 }

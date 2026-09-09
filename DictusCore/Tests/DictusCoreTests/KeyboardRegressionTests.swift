@@ -40,8 +40,8 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(body.contains("Button { commitSymbolFromTap(key) } label:"))
         XCTAssertTrue(body.contains(".contentShape(Rectangle())"))
         XCTAssertTrue(body.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
-        XCTAssertTrue(body.contains("OptionalLongPressModifier"),
-                      "keys with native extras get a hold popup; tap still uses the button")
+        XCTAssertTrue(body.contains("symbolVariantGesture("),
+                      "keys with native extras get a hold popup through the same gesture owner")
     }
 
     func testEmojiTapCannotBeRejectedByAStaleDragAxis() throws {

@@ -16,17 +16,43 @@ final class ModelLanguageSupportTests: XCTestCase {
         "openai_whisper-small_216MB"
     ]
 
+    private let englishOnlyWhisperIDs = [
+        "openai_whisper-tiny.en",
+        "openai_whisper-base.en",
+        "openai_whisper-small.en"
+    ]
+
     private let highAccuracyWhisperIDs = [
         "openai_whisper-medium",
-        "openai_whisper-large-v3_turbo_954MB"
+        "openai_whisper-large-v3_turbo_954MB",
+        "openai_whisper-large-v2_949MB",
+        "openai_whisper-large-v2_turbo_955MB",
+        "openai_whisper-large-v3_947MB",
+        "distil-whisper_distil-large-v3_594MB",
+        "distil-whisper_distil-large-v3_turbo_600MB",
+        "openai_whisper-large-v3-v20240930_626MB",
+        "openai_whisper-large-v3-v20240930_turbo_632MB"
     ]
 
     // MARK: - Coverage classes
 
     func testEveryWhisperModelIsMultilingual() {
-        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit {
+        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit && !englishOnlyWhisperIDs.contains(model.identifier) {
             XCTAssertEqual(model.languageSupport.coverage, .whisperMultilingual,
                            "\(model.identifier) should report multilingual Whisper coverage")
+        }
+    }
+
+    func testEnglishOnlyWhisperModelsExposeOnlyEnglish() {
+        for id in englishOnlyWhisperIDs {
+            guard let model = ModelInfo.forIdentifier(id) else {
+                XCTFail("\(id) missing from catalog")
+                continue
+            }
+            XCTAssertEqual(model.languageSupport.coverage, .whisperEnglishOnly)
+            XCTAssertEqual(model.languageSupport.highlights.map(\.code), ["en"])
+            XCTAssertTrue(model.languageSupport.additionalCodes.isEmpty)
+            XCTAssertTrue(model.languageSupport.tierGroups.isEmpty)
         }
     }
 
@@ -41,6 +67,10 @@ final class ModelLanguageSupportTests: XCTestCase {
         // The four Dictus-tested languages must open the highlights list,
         // in fr/en/es/de order (#240 brief).
         for model in ModelInfo.allIncludingDeprecated {
+            if model.languageSupport.coverage == .whisperEnglishOnly {
+                XCTAssertEqual(model.languageSupport.highlights.map(\.code), ["en"])
+                continue
+            }
             let firstFour = model.languageSupport.highlights.prefix(4).map(\.code)
             XCTAssertEqual(Array(firstFour), testedCodes,
                            "\(model.identifier) must list the tested languages first")
@@ -115,7 +145,7 @@ final class ModelLanguageSupportTests: XCTestCase {
     func testWhisperModelsHaveNoAdditionalCodesList() {
         // Whisper's full list lives in tierGroups; additionalCodes stays
         // Parakeet-only.
-        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit {
+        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit && !englishOnlyWhisperIDs.contains(model.identifier) {
             XCTAssertTrue(model.languageSupport.additionalCodes.isEmpty,
                           "\(model.identifier) should not list additional codes")
         }
@@ -149,7 +179,7 @@ final class ModelLanguageSupportTests: XCTestCase {
         // Every Whisper model must carry the complete tokenizer language
         // set, grouped good -> fair -> limited, matching the golden copy
         // code-for-code (not just by count).
-        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit {
+        for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit && !englishOnlyWhisperIDs.contains(model.identifier) {
             let groups = model.languageSupport.tierGroups
             XCTAssertEqual(groups.map(\.tier), [.good, .fair, .limited],
                            "\(model.identifier) tiers out of order")

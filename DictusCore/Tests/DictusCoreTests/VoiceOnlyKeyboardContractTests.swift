@@ -271,12 +271,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "all categories share one continuous horizontal grid")
         XCTAssertTrue(picker.contains("updateSelectedCategory"),
                       "scrolling must highlight the currently visible category")
-        XCTAssertTrue(picker.contains("OptionalEmojiLongPress"),
-                      "skin-tone extras use a sequenced long-press, not a competing grid drag")
+        XCTAssertTrue(picker.contains("emojiGesture"),
+                      "skin-tone extras use the unified tap/hold gesture owner")
         XCTAssertFalse(picker.contains("emojiDragAxis"),
                        "horizontal scrolling owns drag; there is no second drag-select axis")
-        XCTAssertTrue(picker.contains("simultaneousGesture"),
-                      "long-press must not steal the horizontal scroll gesture")
+        XCTAssertTrue(picker.contains(".simultaneousGesture(emojiGesture)"),
+                      "the cell gesture must coexist with the horizontal scroll gesture")
         XCTAssertTrue(picker.contains("leftmostVisibleCategory"),
                       "category highlight follows the leftmost visible emoji")
         let insertStart = try XCTUnwrap(picker.range(of: "private func insertEmoji"))
@@ -559,6 +559,28 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                        "auxiliary pages must not cover the SwiftUI spacebar with UIKit")
     }
 
+    func testLetterKeyboardOwnsTheCompleteNativeBottomRow() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+
+        XCTAssertTrue(root.contains("showsSymbolsControl: true"),
+                      "letter mode must expose an explicit 123 control")
+        XCTAssertTrue(root.contains("onSpace: { routeProxyCommand(.space) }"),
+                      "letter mode must route its spacebar through the keyboard command")
+        XCTAssertTrue(root.contains("case .spacebar:\n            onSpace()"),
+                      "letter mode's space fallback must share the keyboard command route")
+        XCTAssertTrue(root.contains("case .backspace:"),
+                      "letter mode must render the layout's delete key")
+        XCTAssertTrue(root.contains("Image(systemName: \"delete.backward\")"),
+                      "letter mode's delete key must have a visible glyph")
+        XCTAssertTrue(root.contains("onDelete: { routeProxyCommand(.delete) }"),
+                      "letter mode's delete key must route to the text proxy")
+        XCTAssertTrue(bar.contains("roundControl(text: \"123\""),
+                      "the shared bottom row must render 123 as a real button")
+        XCTAssertTrue(bar.contains("HapticFeedback.keyTapped()"),
+                      "bottom-row actions must provide optional haptic feedback")
+    }
+
     func testBothAuxiliaryPagesKeepModeControlAvailableToReturnToNormal() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
@@ -593,7 +615,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(picker.contains("LazyHGrid(rows: gridRows, spacing: 0)"),
                       "all categories share one horizontal grid")
         XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete)"))
+        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete, onDeleteWord: onDeleteWord)"))
         XCTAssertTrue(picker.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("AuxiliaryBottomBar("))
     }

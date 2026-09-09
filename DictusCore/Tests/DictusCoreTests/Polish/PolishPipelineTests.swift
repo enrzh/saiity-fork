@@ -32,7 +32,7 @@ final class PolishPipelineTests: XCTestCase {
             mode: .natural
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, "First line here\nsecond line here\nthird line here")
+        XCTAssertEqual(result.engineOutput, "First line here\nSecond line here\nThird line here")
         XCTAssertTrue(result.engineOutput?.contains("\n") == true)
     }
 
@@ -226,6 +226,23 @@ final class PolishPipelineTests: XCTestCase {
         XCTAssertEqual(result.engineOutput, input)
     }
 
+    /// Auto polish must keep code-switched spans in place instead of applying
+    /// one dominant-language rewrite to the whole transcript.
+    func testTransformAutoPreservesMixedLanguageSpans() async {
+        let input = "Ich schicke dir the invoice tomorrow und 我晚上再确认。"
+        let result = await PolishPipeline.transform(
+            preprocessed: input,
+            engine: PassthroughPolishEngine(),
+            target: .english,
+            mode: .auto
+        )
+        XCTAssertEqual(result.outcome, .success)
+        XCTAssertEqual(result.engineOutput, input)
+        XCTAssertTrue(result.engineOutput?.contains("Ich schicke dir") == true)
+        XCTAssertTrue(result.engineOutput?.contains("the invoice tomorrow") == true)
+        XCTAssertTrue(result.engineOutput?.contains("我晚上再确认") == true)
+    }
+
     /// Newline markers still round-trip in auto mode (the marker encode/decode
     /// is language-agnostic and stays on).
     func testTransformAutoPreservesNewlines() async {
@@ -237,7 +254,7 @@ final class PolishPipelineTests: XCTestCase {
             mode: .auto
         )
         XCTAssertEqual(result.outcome, .success)
-        XCTAssertEqual(result.engineOutput, "First line of the message here\nsecond line of the message here")
+        XCTAssertEqual(result.engineOutput, "First line of the message here\nSecond line of the message here")
     }
 
     // MARK: - autoPreprocess() (#239 device-test fix: spoken commands in auto mode)

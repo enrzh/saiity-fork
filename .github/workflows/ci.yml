@@ -5,6 +5,7 @@ on:
     branches: [develop, main, saiity-fork]
   push:
     branches: [develop, main, saiity-fork]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -17,8 +18,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26.3
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: Select supported Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          else
+            echo "Xcode 26.3 is unavailable on this runner; using the preselected toolchain."
+            xcode-select -p
+          fi
       - name: Run core behavior and contract tests
         run: swift test --package-path DictusCore
 
@@ -45,8 +52,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26.3
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: Select supported Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          else
+            echo "Xcode 26.3 is unavailable on this runner; using the preselected toolchain."
+            xcode-select -p
+          fi
 
       - name: Show Xcode version
         run: xcodebuild -version

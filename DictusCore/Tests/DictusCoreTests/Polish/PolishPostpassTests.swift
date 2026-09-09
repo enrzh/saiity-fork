@@ -273,6 +273,21 @@ final class PolishPostpassTests: XCTestCase {
         XCTAssertEqual(PolishPostpass.cleanupFloor(input), "Very very important, actually this is the reason")
     }
 
+    func testCleanupFloorPreservesMarkdownAndNumberedListMarkers() {
+        let input = "- first item\n  * nested item\n  2. another item"
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor(input, language: nil),
+            "- First item\n  * Nested item\n  2. Another item"
+        )
+    }
+
+    func testStructureGuardrailRejectsDroppedLinesAndListMarkers() {
+        let raw = "- first\n- second"
+        XCTAssertFalse(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .auto))
+        XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "- First\n- Second", mode: .auto))
+        XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .repair))
+    }
+
     func testCleanupFloorLanguageNeutralPreservesLanguageSpecificLexicalPatterns() {
         let inputs = [
             "el el texto",

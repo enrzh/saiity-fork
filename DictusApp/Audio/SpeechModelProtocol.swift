@@ -134,51 +134,76 @@ class WhisperKitEngine: SpeechModelProtocol {
             throw TranscriptionError.notReady
         }
 
+        return try await WhisperKitTranscriptionSupport.transcribe(
+            whisperKit: whisperKit,
+            audioSamples: audioSamples,
+            language: language,
+            logComponent: "WhisperKitEngine"
+        )
+    }
+}
+
+/// Shared WhisperKit decode policy used by the active engine and compatibility
+/// fallback. Auto mode is segmented only when the detector finds multiple
+/// regions; ordinary recordings retain the original full-recording request.
+enum WhisperKitTranscriptionSupport {
+    private static let segmenter = SpeechRegionSegmenter()
+
+    static func transcribe(
+        whisperKit: WhisperKit,
+        audioSamples: [Float],
+        language: String?,
+        logComponent: String
+    ) async throws -> String {
         guard !audioSamples.isEmpty else {
             throw TranscriptionError.emptyAudio
         }
 
-        // Variant A — `.vad` only. Issue #168 audit found WhisperAX canonical
-        // defaults to chunkingStrategy = .vad. Earlier attempts on #163 combined
-        // .vad with threshold tweaks (noSpeechThreshold, logProbThreshold) which
-        // regressed long-form turbo. Testing .vad in isolation here.
-        //
-        // `language` is optional since #226: nil means the user chose Auto-detect
-        // and Whisper picks the language token itself instead of being forced.
-        //
-        // WHY `detectLanguage` must be explicit in auto mode:
-        // WhisperKit's `detectLanguage` defaults to `!usePrefillPrompt`
-        // (Configurations.swift), and Dictus passes `usePrefillPrompt: true` —
-        // so with `language: nil` alone, detection stays OFF and the prefill
-        // falls back to the `<|en|>` token. Device testing showed exactly that:
-        // French speech came out quasi-translated to English and Mandarin
-        // produced "[speaking in Chinese]" subtitle-style annotations.
-        // `detectLanguage: true` is designed to work together with the prefill
-        // (the detected token replaces the forced one). In follow/explicit
-        // modes the language is set and detection stays off, as before.
-        let options = DecodingOptions(
-            task: .transcribe,
-            language: language,
-            temperature: 0.0,
-            usePrefillPrompt: true,
-            usePrefillCache: true,
-            detectLanguage: language == nil,
-            skipSpecialTokens: true,
-            chunkingStrategy: .vad
-        )
+        let options = decodingOptions(language: language)
+        if language == nil {
+            let regions = segmenter.regions(in: audioSamples)
+            if regions.count > 1 {
+                let transcripts = try await SpeechRegionTranscriptionRunner.run(
+                    audioSamples: audioSamples,
+                    regions: regions
+                ) { index, slice, region in
+                    try Task.checkCancellation()
+                    let results: [TranscriptionResult] = try await whisperKit.transcribe(
+                        audioArray: Array(slice),
+                        decodeOptions: options
+                    )
+                    let text = results.map { $0.text }.joined(separator: " ")
+                    let detectedLanguage = results.first?.language
+                    PersistentLog.log(.diagnosticProbe(
+                        component: logComponent,
+                        instanceID: "autoRegion-\(index)",
+                        action: "decoded",
+                        details: "regionIndex=\(index) startSample=\(region.startSample) endSample=\(region.endSample) durationSec=\(String(format: "%.2f", region.durationSeconds())) detected=\(detectedLanguage ?? "unknown") chars=\(text.count)"
+                    ))
+                    return SpeechRegionTranscript(
+                        region: region,
+                        text: text,
+                        detectedLanguage: detectedLanguage
+                    )
+                }
+
+                let merged = SpeechTranscriptMerger.merge(transcripts)
+                guard !merged.isEmpty else {
+                    throw TranscriptionError.transcriptionFailed("Empty transcription result")
+                }
+                return merged
+            }
+        }
 
         let results: [TranscriptionResult] = try await whisperKit.transcribe(
             audioArray: audioSamples,
             decodeOptions: options
         )
 
-        // Auto-detect observability (#226): surface what Whisper decided so
-        // exported logs can validate the fix (e.g. detected=zh for Mandarin).
-        // Only logged in auto mode — in follow/explicit the language is forced.
         if language == nil {
             let detected = results.first?.language ?? "unknown"
             PersistentLog.log(.diagnosticProbe(
-                component: "WhisperKitEngine",
+                component: logComponent,
                 instanceID: "languageDetection",
                 action: "detected",
                 details: "detected=\(detected)"
@@ -190,7 +215,7 @@ class WhisperKitEngine: SpeechModelProtocol {
         let lastSegmentEnd = results.flatMap { $0.segments }.map { $0.end }.max() ?? 0
         let audioDurationSec = Float(audioSamples.count) / 16_000.0
         PersistentLog.log(.diagnosticProbe(
-            component: "WhisperKitEngine",
+            component: logComponent,
             instanceID: "transcribe",
             action: "segmentsReturned",
             details: "results=\(results.count) segments=\(totalSegments) chars=\(totalCharCount) audioSec=\(String(format: "%.2f", audioDurationSec)) lastSegmentEndSec=\(String(format: "%.2f", lastSegmentEnd))"
@@ -198,11 +223,22 @@ class WhisperKitEngine: SpeechModelProtocol {
 
         let text = results.map { $0.text }.joined(separator: " ")
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard !trimmed.isEmpty else {
             throw TranscriptionError.transcriptionFailed("Empty transcription result")
         }
-
         return trimmed
+    }
+
+    private static func decodingOptions(language: String?) -> DecodingOptions {
+        DecodingOptions(
+            task: .transcribe,
+            language: language,
+            temperature: 0.0,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            detectLanguage: language == nil,
+            skipSpecialTokens: true,
+            chunkingStrategy: .vad
+        )
     }
 }

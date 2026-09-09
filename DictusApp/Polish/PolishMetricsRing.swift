@@ -157,12 +157,14 @@ public actor PolishMetricsRing {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.withoutEscapingSlashes]
-        var rewritten = ""
+        var lines: [String] = []
+        lines.reserveCapacity(keep.count)
         for entry in keep {
             guard let data = try? encoder.encode(entry),
                   let json = String(data: data, encoding: .utf8) else { continue }
-            rewritten += json + "\n"
+            lines.append(json)
         }
+        let rewritten = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
         try? rewritten.write(to: url, atomically: true, encoding: .utf8)
     }
 

@@ -92,7 +92,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(symbolsLayout.contains("public static let numbers: [[Key]"))
         XCTAssertTrue(symbolsLayout.contains("public static let symbols: [[Key]"))
         XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
-        XCTAssertTrue(root.contains("onSpace: { onInsert(\" \") }"))
+        XCTAssertTrue(root.contains("onSpace: { routeProxyCommand(.space) }"))
         XCTAssertTrue(symbolsLayout.contains("bottomRow()"))
         XCTAssertFalse(symbolsLayout.contains("bottomRow(toggle:"))
         XCTAssertTrue(root.contains("onInsert: { text in routeProxyText(text) }"))
@@ -208,7 +208,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
 
         XCTAssertTrue(picker.contains("EmojiCategoryBar("))
         XCTAssertTrue(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete)"))
+        XCTAssertTrue(picker.contains("KeyboardDeleteButton(onDelete: onDelete, onDeleteWord: onDeleteWord)"))
         XCTAssertFalse(picker.contains("AuxiliaryBottomBar("),
                       "the emoji page keeps only microphone, categories, and delete")
         XCTAssertTrue(categories.contains(".frame(width: 44, height: 44)"))

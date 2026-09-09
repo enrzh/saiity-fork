@@ -61,6 +61,9 @@ final class LongPressCursorMovementController: NSObject, LongPressBehaviorProvid
             baselinePoint = point
             isActive = false
             accumulatedMovement = 0
+            // A new trackpad gesture must not inherit the previous gesture's
+            // rate-limit timestamp.
+            lastMoveTime = 0
         }
     }
 

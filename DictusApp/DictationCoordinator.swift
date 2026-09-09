@@ -6,6 +6,7 @@ import AVFoundation
 import UIKit
 import DictusCore
 import WhisperKit
+import FluidAudio
 import NaturalLanguage
 #if canImport(Translation)
 import Translation
@@ -1739,9 +1740,21 @@ class DictationCoordinator: ObservableObject {
     /// Must be called on the main actor (the class is @MainActor).
     func setModelLoadState(_ newState: ModelLoadState, reason: String) {
         let oldRaw = defaults.string(forKey: SharedKeys.modelLoadState) ?? ModelLoadState.idle.rawValue
-        guard oldRaw != newState.rawValue else { return }
+        // Refresh the timestamp even when a second warm-up enters the same
+        // `.loading` state. This gives the keyboard a bounded, truthful window
+        // instead of inheriting an old timestamp from a previous app process.
+        if newState == .loading {
+            defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.modelLoadStateTimestamp)
+        } else {
+            defaults.removeObject(forKey: SharedKeys.modelLoadStateTimestamp)
+        }
+        guard oldRaw != newState.rawValue else {
+            defaults.synchronize()
+            return
+        }
         defaults.set(newState.rawValue, forKey: SharedKeys.modelLoadState)
         defaults.synchronize()
+        DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
         PersistentLog.log(.modelLoadStateChanged(from: oldRaw, to: newState.rawValue, reason: reason))
         NotificationCenter.default.post(
             name: .dictusModelLoadStateChanged,
@@ -1801,6 +1814,12 @@ private extension DictationCoordinator {
             try await ensureParakeetReady(modelName: modelName)
         case .whisperKit:
             try await ensureWhisperKitEngineReady(modelName: modelName)
+        case .qwen3ASR:
+            if #available(iOS 18.0, *) {
+                try await ensureQwenReady(modelName: modelName)
+            } else {
+                try await ensureWhisperKitEngineReady(modelName: "openai_whisper-small")
+            }
         }
     }
 
@@ -1935,7 +1954,8 @@ private extension DictationCoordinator {
             // Fail fast, before any task is created, when the cache is absent or partial —
             // mirrors the WhisperKit guard above. `SharedKeys.modelReady` only reflects App
             // Group bookkeeping; this checks the bundles FluidAudio will actually read.
-            guard let cacheDirectory = ParakeetEngine.installedModelCacheDirectory() else {
+            let version: AsrModelVersion = modelName == "parakeet-tdt-0.6b-v2" ? .v2 : .v3
+            guard let cacheDirectory = ParakeetEngine.installedModelCacheDirectory(version: version) else {
                 let error = SpeechModelError.modelNotInstalled(identifier: modelName)
                 PersistentLog.log(.diagnosticProbe(
                     component: "ParakeetLoad",
@@ -1994,6 +2014,68 @@ private extension DictationCoordinator {
                 DictusLogger.app.warning("Parakeet not available on iOS 16 — falling back to WhisperKit small")
             }
             try await ensureWhisperKitEngineReady(modelName: "openai_whisper-small")
+        }
+    }
+
+    /// Initialize Qwen3-ASR from its local precision-specific cache (iOS 18+).
+    /// Like the Parakeet path, this method never downloads during dictation and
+    /// shares the coordinator's single initialization lock.
+    @available(iOS 18.0, *)
+    func ensureQwenReady(modelName: String) async throws {
+        if currentModelName == modelName, whisperKit == nil {
+            return
+        }
+
+        if let existingTask = initTask {
+            do {
+                try await existingTask.value
+            } catch {
+                throw SpeechModelError.engineLoadFailed(identifier: modelName, underlying: error)
+            }
+            return
+        }
+
+        guard let cacheDirectory = Qwen3AsrEngine.installedModelCacheDirectory(for: modelName) else {
+            let error = SpeechModelError.modelNotInstalled(identifier: modelName)
+            PersistentLog.log(.diagnosticProbe(
+                component: "Qwen3ASRLoad",
+                instanceID: modelName,
+                action: "localModelMissing",
+                details: error.diagnosticDescription
+            ))
+            throw error
+        }
+
+        PersistentLog.log(.diagnosticProbe(
+            component: "Qwen3ASRLoad",
+            instanceID: modelName,
+            action: "localModelResolved",
+            details: "folder=\(cacheDirectory.lastPathComponent) download=false"
+        ))
+
+        let task = Task<Void, Error> {
+            let qwenEngine = Qwen3AsrEngine()
+            try await qwenEngine.prepare(modelIdentifier: modelName)
+
+            self.whisperKit = nil
+            self.currentModelName = modelName
+            self.transcriptionService.prepare(engine: qwenEngine)
+        }
+        initTask = task
+
+        do {
+            try await task.value
+            initTask = nil
+        } catch {
+            initTask = nil
+            let wrapped = SpeechModelError.engineLoadFailed(identifier: modelName, underlying: error)
+            PersistentLog.log(.diagnosticProbe(
+                component: "Qwen3ASRLoad",
+                instanceID: modelName,
+                action: "loadFailed",
+                details: wrapped.diagnosticDescription
+            ))
+            throw wrapped
         }
     }
 }

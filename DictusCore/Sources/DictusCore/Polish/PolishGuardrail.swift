@@ -27,6 +27,29 @@ public enum PolishGuardrail {
         }
     }
 
+    /// Keeps list and line structure intact for light cleanup modes.
+    ///
+    /// A language model can produce a plausible paragraph while silently
+    /// dropping line breaks or list markers. That is a destructive change for
+    /// dictated notes, so the deterministic floor should win instead. Repair
+    /// mode is intentionally excluded because repair is allowed to rebuild
+    /// malformed structure.
+    public static func preservesStructure(raw: String,
+                                          polished: String,
+                                          mode: PolishMode) -> Bool {
+        guard mode != .repair else { return true }
+
+        let rawLines = raw.split(separator: "\n", omittingEmptySubsequences: false)
+        let polishedLines = polished.split(separator: "\n", omittingEmptySubsequences: false)
+        guard rawLines.count <= 1 || polishedLines.count >= rawLines.count else {
+            return false
+        }
+
+        let rawMarkers = listMarkerCount(in: rawLines)
+        guard rawMarkers > 0 else { return true }
+        return listMarkerCount(in: polishedLines) >= rawMarkers
+    }
+
     /// Returns `true` when the top language hypothesis of `polished` matches `target`
     /// with confidence ≥ 0.5. Short outputs (< 12 characters) and low-confidence
     /// detections pass through — `NLLanguageRecognizer` is unreliable on either.
@@ -67,5 +90,14 @@ public enum PolishGuardrail {
             return true
         }
         return top.key.rawValue == expectedCode
+    }
+
+    private static func listMarkerCount(in lines: [Substring]) -> Int {
+        lines.reduce(into: 0) { count, line in
+            let text = String(line)
+            if text.range(of: #"^[ \t]*(?:[-*•]|[0-9]+[.)])[ \t]+"#, options: .regularExpression) != nil {
+                count += 1
+            }
+        }
     }
 }

@@ -14,7 +14,8 @@ import Foundation
 /// entirely for this concern. Apple FM still handles the rest of Light:
 /// capitalisation, typographic spacing, accents, glossary spelling.
 ///
-/// Scope at round 1: French and English. Spanish/German added in step 7.
+    /// The supported Dictus languages all have rules here. Bare period words
+    /// remain excluded where they are also common nouns.
 ///
 /// Known false positives: literal references to punctuation ("ma virgule est
 /// cassée") become substitutions. Accepted — the dictation use case is
@@ -56,9 +57,8 @@ public enum VerbalPunctuationPrepass {
         switch language {
         case .french:  return frenchRules
         case .english: return englishRules
-        // Not yet implemented. When adding rules, do NOT include the bare
-        // period word ("punto" / "Punkt") — see the type doc-comment (#185).
-        case .spanish, .german: return []
+        case .spanish: return spanishRules
+        case .german: return germanRules
         }
     }
 
@@ -88,6 +88,36 @@ public enum VerbalPunctuationPrepass {
         (#"\bsemicolon\b"#, ";"),
         (#"\bcolon\b"#, ":"),
         (#"\bcomma\b"#, ",")
+    ]
+
+    /// Spanish formatting and punctuation commands. `punto` is deliberately
+    /// absent because it is also a normal noun; the multi-word forms remain
+    /// unambiguous.
+    private static let spanishRules: [(pattern: String, replacement: String)] = [
+        (#"\bnuevo párrafo\b|\bnuevo parrafo\b|\bsalto de párrafo\b|\bsalto de parrafo\b"#, "\n\n"),
+        (#"\bnueva línea\b|\bnueva linea\b|\bsalto de línea\b|\bsalto de linea\b"#, "\n"),
+        (#"\bviñeta\b|\bpunto de lista\b"#, "\n• "),
+        (#"\bsigno de interrogación\b|\bsigno de interrogacion\b"#, "?"),
+        (#"\bsigno de exclamación\b|\bsigno de exclamacion\b"#, "!"),
+        (#"\bpunto y coma\b"#, ";"),
+        (#"\bdos puntos\b"#, ":"),
+        (#"\bpuntos suspensivos\b"#, "…"),
+        (#"\bcoma\b"#, ",")
+    ]
+
+    /// German formatting and punctuation commands. The standalone `Punkt`
+    /// command is excluded for the same noun-versus-period ambiguity as
+    /// Spanish `punto`.
+    private static let germanRules: [(pattern: String, replacement: String)] = [
+        (#"\bneuer Absatz\b|\bAbsatzumbruch\b"#, "\n\n"),
+        (#"\bneue Zeile\b|\bZeilenumbruch\b"#, "\n"),
+        (#"\bAufzählungspunkt\b|\bAufzählung\b"#, "\n• "),
+        (#"\bFragezeichen\b"#, "?"),
+        (#"\bAusrufezeichen\b"#, "!"),
+        (#"\bSemikolon\b"#, ";"),
+        (#"\bDoppelpunkt\b"#, ":"),
+        (#"\bAuslassungspunkte\b"#, "…"),
+        (#"\bKomma\b"#, ",")
     ]
 
     // MARK: - Normalization

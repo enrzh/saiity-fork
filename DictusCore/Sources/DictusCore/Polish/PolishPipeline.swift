@@ -114,6 +114,10 @@ public enum PolishPipeline {
                 let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
+            guard PolishGuardrail.preservesStructure(raw: preprocessed, polished: polished, mode: mode) else {
+                let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+                return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
+            }
             guard languageGuardrailPasses(polished: polished, preprocessed: preprocessed,
                                           target: target, mode: mode) else {
                 let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
@@ -258,7 +262,7 @@ public enum PolishPipeline {
                             detected: SupportedLanguage,
                             target: SupportedLanguage) -> PolishMode {
         switch sttEngine {
-        case .whisperKit:
+        case .whisperKit, .qwen3ASR:
             return .natural
         case .parakeet:
             return detected == target ? .natural : .repair

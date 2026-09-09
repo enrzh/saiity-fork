@@ -39,6 +39,10 @@ public enum DarwinNotificationName {
     /// request as a cold start. Used to dismiss the Dynamic Island standby indicator
     /// so the UI no longer suggests "ready to dictate" when the engine is asleep.
     public static let warmStateReleased = "de.aiity.saiity.warmStateReleased" as CFString
+
+    /// Posted by DictusApp when the persisted model-on-disk or model-in-RAM state
+    /// changes. The keyboard re-reads both shared values after receiving it.
+    public static let modelReadinessChanged = "de.aiity.saiity.modelReadinessChanged" as CFString
 }
 
 /// Global callback registry for Darwin notifications.
