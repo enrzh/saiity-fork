@@ -69,6 +69,9 @@ struct SpaceBarControl: View {
 
     @State private var cursorTracking = false
     @State private var lastCursorOffset = 0
+    @State private var gestureStartDate: Date?
+
+    private let cursorHoldDuration: TimeInterval = 0.3
 
     var body: some View {
         Text("space")
@@ -83,15 +86,16 @@ struct SpaceBarControl: View {
     }
 
     private var cursorGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.3)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard case .second(true, let drag?) = value else { return }
-                if !cursorTracking {
-                    cursorTracking = true
-                    lastCursorOffset = 0
-                    onCursorBegan()
+        DragGesture(minimumDistance: 0)
+            .onChanged { drag in
+                if gestureStartDate == nil {
+                    gestureStartDate = Date()
                 }
+                guard let gestureStartDate,
+                      Date().timeIntervalSince(gestureStartDate) >= cursorHoldDuration else {
+                    return
+                }
+                beginCursorTrackingIfNeeded()
                 // One character per eight points keeps the control usable on both
                 // narrow phones and wider iPads without flooding the proxy.
                 let offset = Int((drag.translation.width / 8).rounded(.towardZero))
@@ -101,17 +105,33 @@ struct SpaceBarControl: View {
                     onCursorMoved(delta)
                 }
             }
-            .onEnded { value in
+            .onEnded { _ in
+                let wasHeld = gestureStartDate.map {
+                    Date().timeIntervalSince($0) >= cursorHoldDuration
+                } ?? false
                 defer {
                     cursorTracking = false
                     lastCursorOffset = 0
+                    gestureStartDate = nil
                 }
-                if case .second(true, _) = value {
+                if cursorTracking || wasHeld {
+                    // A stationary long press should behave like the native trackpad:
+                    // it enters cursor mode but does not insert a space on release.
+                    if !cursorTracking {
+                        onCursorBegan()
+                    }
                     onCursorEnded()
                 } else {
                     onTap()
                 }
             }
+    }
+
+    private func beginCursorTrackingIfNeeded() {
+        guard !cursorTracking else { return }
+        cursorTracking = true
+        lastCursorOffset = 0
+        onCursorBegan()
     }
 }
 

@@ -147,16 +147,25 @@ struct EmojiPickerView: View {
         // Emoji's bottom bar has no second utility control, so the return-to-voice
         // microphone occupies the leftmost accessory slot and gives the category
         // strip the remaining width.
-        let microphone = surfaceLayout.auxiliaryControlFrames.first ?? .zero
         let delete = CGRect(
             x: surface.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap - VoiceOnlyKeyboardPolicy.actionHitSize.width,
             y: 0,
             width: VoiceOnlyKeyboardPolicy.actionHitSize.width,
             height: VoiceOnlyKeyboardPolicy.actionHitSize.height
         )
-        let microphoneLocalX = CGFloat(microphone.midX - surface.minX)
+        // The return microphone is a page-local control, not part of the
+        // order-dependent voice accessory pair. Keeping it in the first 44pt
+        // slot removes the large gap when the 123-first preference is active.
+        let microphoneLocalX = CGFloat(
+            VoiceOnlyKeyboardPolicy.visibleControlGap
+                + VoiceOnlyKeyboardPolicy.controlSize / 2
+        )
         let deleteLocalX = CGFloat(delete.midX - surface.minX)
-        let categoryMinX = CGFloat(microphone.maxX - surface.minX + VoiceOnlyKeyboardPolicy.railSpacing)
+        let categoryMinX = CGFloat(
+            VoiceOnlyKeyboardPolicy.visibleControlGap
+                + VoiceOnlyKeyboardPolicy.controlSize
+                + VoiceOnlyKeyboardPolicy.railSpacing
+        )
         let categoryWidth = max(0, deleteLocalX - CGFloat(VoiceOnlyKeyboardPolicy.actionHitSize.width / 2 + VoiceOnlyKeyboardPolicy.railSpacing) - categoryMinX)
 
         return ZStack(alignment: .topLeading) {

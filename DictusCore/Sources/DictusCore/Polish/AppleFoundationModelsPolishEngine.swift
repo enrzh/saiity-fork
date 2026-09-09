@@ -74,14 +74,7 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         // acknowledgements ("I'll polish it for you") instead of the polished
         // text. The trailing "Polished output:" marker biases the model toward
         // continuing the transform rather than starting a chat reply.
-        let prompt = """
-        Polish this text. Output only the polished version, nothing else.
-
-        Input:
-        \(raw)
-
-        Polished output:
-        """
+        let prompt = PolishPromptEnvelope.userTurn(raw: raw)
         // The drop names the session it is dropping (#315). `respond()` suspends
         // for four to five seconds, and the captures on that issue show two
         // dictations chaining inside a single second — so the next recording's

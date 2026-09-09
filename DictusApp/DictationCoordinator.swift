@@ -165,11 +165,6 @@ class DictationCoordinator: ObservableObject {
     private var activeTranslationSession: Any?
 #endif
 
-    /// Timestamp of last waveform write to App Group.
-    /// Used to throttle writes to ~5Hz (every 200ms) to avoid overwhelming UserDefaults
-    /// with high-frequency updates from the audio engine's energy callback.
-    private var lastWaveformWriteDate = Date.distantPast
-
     /// Combine subscriptions forwarding UnifiedAudioEngine's published values to coordinator.
     private var energyCancellable: AnyCancellable?
     private var secondsCancellable: AnyCancellable?
@@ -1450,25 +1445,6 @@ class DictationCoordinator: ObservableObject {
                 self.startDictation()
             }
         }
-    }
-
-    /// Forward waveform energy data to App Group for the keyboard extension to display.
-    /// Throttled to ~5Hz (every 200ms) to avoid overwhelming UserDefaults.
-    private func forwardWaveformToAppGroup(energy: [Float]) {
-        guard status == .recording else { return }
-
-        let now = Date()
-        guard now.timeIntervalSince(lastWaveformWriteDate) >= 0.2 else { return }
-        lastWaveformWriteDate = now
-
-        let cappedEnergy = Array(energy.suffix(30))
-        if let data = try? JSONEncoder().encode(cappedEnergy) {
-            defaults.set(data, forKey: SharedKeys.waveformEnergy)
-        }
-        defaults.set(bufferSeconds, forKey: SharedKeys.recordingElapsedSeconds)
-        defaults.synchronize()
-
-        DarwinNotificationCenter.post(DarwinNotificationName.waveformUpdate)
     }
 
     /// Clear a dictation the previous process never finished (issue #261).

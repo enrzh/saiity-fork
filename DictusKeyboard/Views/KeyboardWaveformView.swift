@@ -18,6 +18,7 @@ final class KeyboardWaveformDriver: ObservableObject {
 
     private var status: DictationStatus = .idle
     private var energyLevels: [Float] = []
+    private var targetLevelCache: [Float] = Array(repeating: 0, count: 30)
     private var isVisible = false
     private var activePresenterID: String?
     private var displayLink: CADisplayLink?
@@ -56,7 +57,10 @@ final class KeyboardWaveformDriver: ObservableObject {
 
         let previousStatus = self.status
         self.status = status
-        self.energyLevels = energyLevels
+        if self.energyLevels != energyLevels {
+            self.energyLevels = energyLevels
+            targetLevelCache = interpolatedTargetLevels(from: energyLevels)
+        }
         self.isVisible = isVisible
         animation = resolvedAnimation(for: status)
 
@@ -133,6 +137,7 @@ final class KeyboardWaveformDriver: ObservableObject {
         guard displayLink == nil else { return }
 
         let link = CADisplayLink(target: self, selector: #selector(handleDisplayLink))
+        link.preferredFramesPerSecond = 30
         link.add(to: .main, forMode: .common)
         displayLink = link
 
@@ -258,7 +263,11 @@ final class KeyboardWaveformDriver: ObservableObject {
     }
 
     private func targetLevels() -> [Float] {
-        guard !energyLevels.isEmpty else {
+        targetLevelCache
+    }
+
+    private func interpolatedTargetLevels(from levels: [Float]) -> [Float] {
+        guard !levels.isEmpty else {
             return Array(repeating: 0, count: barCount)
         }
 
@@ -267,11 +276,11 @@ final class KeyboardWaveformDriver: ObservableObject {
 
         for index in 0..<barCount {
             let position = Float(index) / Float(max(barCount - 1, 1))
-            let arrayIndex = position * Float(energyLevels.count - 1)
+            let arrayIndex = position * Float(levels.count - 1)
             let lower = Int(arrayIndex)
-            let upper = min(lower + 1, energyLevels.count - 1)
+            let upper = min(lower + 1, levels.count - 1)
             let fraction = arrayIndex - Float(lower)
-            let value = energyLevels[lower] * (1 - fraction) + energyLevels[upper] * fraction
+            let value = levels[lower] * (1 - fraction) + levels[upper] * fraction
             let thresholded = value < 0.05 ? Float(0) : value
             result.append(min(max(thresholded, 0), 1))
         }

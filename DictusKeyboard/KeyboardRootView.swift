@@ -863,12 +863,7 @@ private struct LiquidSymbolPageView: View {
         } else {
             let variants = insertVariants(for: key)
             Button { commitSymbolFromTap(key) } label: {
-                ZStack {
-                    if isActive {
-                        symbolPointerHighlight
-                    }
-                    keyContent(key, frame: frame)
-                }
+                keyContent(key, frame: frame)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .buttonStyle(SymbolGlowButtonStyle(
@@ -1001,17 +996,6 @@ private struct LiquidSymbolPageView: View {
         DispatchQueue.main.async {
             symbolCommitLocked = false
         }
-    }
-
-    private var symbolPointerHighlight: some View {
-        RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .fill(Color.primary.opacity(0.12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-            }
-            .padding(4)
-            .allowsHitTesting(false)
     }
 
     @ViewBuilder

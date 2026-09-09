@@ -63,19 +63,10 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
         self.session = URLSession(configuration: configuration)
     }
 
-    /// Byte-identical to the Apple FM engine's user turn, which builds the same
-    /// string inline. Exposed as a function because #268's D2 sends these exact
-    /// bytes to a Core ML model outside this process, and a second hand-copy of
-    /// the framing would silently measure a different prompt.
+    /// Shared with the Apple FM engine so the harness cannot benchmark a
+    /// different user-turn envelope.
     static func userTurn(raw: String) -> String {
-        """
-        Polish this text. Output only the polished version, nothing else.
-
-        Input:
-        \(raw)
-
-        Polished output:
-        """
+        PolishPromptEnvelope.userTurn(raw: raw)
     }
 
     func polish(raw: String,

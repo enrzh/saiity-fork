@@ -553,6 +553,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onSpaceCursorMoved: routeCursorMovement"))
         XCTAssertTrue(bar.contains("struct SpaceBarControl: View"))
         XCTAssertTrue(bar.contains("onCursorMoved: onSpaceCursorMoved"))
+        XCTAssertTrue(bar.contains("DragGesture(minimumDistance: 0)"))
+        XCTAssertTrue(bar.contains("cursorHoldDuration"))
         XCTAssertFalse(controller.contains("spaceButton?.frame = layout.letterSpaceFrame"),
                        "auxiliary pages must not cover the SwiftUI spacebar with UIKit")
     }
