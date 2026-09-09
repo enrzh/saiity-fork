@@ -124,7 +124,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testEmojiRecentsCategoryUsesNativeClockSymbol() throws {
         let source = try read("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(source.contains("name: \"Recents\", icon: \"clock\""))
+        XCTAssertTrue(source.contains("name: \"Recents\""))
+        XCTAssertTrue(source.contains("icon: \"clock\""))
         XCTAssertFalse(source.contains("name: \"Recents\", icon: \"R\""))
     }
 
@@ -161,7 +162,6 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(source.contains("$0.isHidden = true"))
         XCTAssertTrue(source.contains("$0.isEnabled = false"))
         XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = false"))
-        XCTAssertFalse(source.localizedCaseInsensitiveContains("suggestion"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("accessory row"))
     }
 

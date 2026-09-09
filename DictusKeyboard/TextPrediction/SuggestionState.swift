@@ -350,6 +350,31 @@ class SuggestionState: ObservableObject {
         currentWord = ""
     }
 
+    /// Applies a visible suggestion directly to the host field.
+    /// The proxy is supplied by the current keyboard controller so this shared
+    /// state never retains a controller or a text document proxy.
+    func acceptSuggestion(at index: Int, proxy: UITextDocumentProxy) {
+        guard suggestions.indices.contains(index) else { return }
+        let suggestion = suggestions[index]
+
+        if mode == .undoAvailable, index == 0, let undo = pendingUndo {
+            let count = undo.correctedWord.count + (undo.insertedSpace ? 1 : 0)
+            for _ in 0..<count { proxy.deleteBackward() }
+            proxy.insertText(undo.originalWord)
+            pendingUndo = nil
+            clear()
+            return
+        }
+
+        if mode == .predictions {
+            proxy.insertText(suggestion)
+        } else {
+            for _ in currentWord { proxy.deleteBackward() }
+            proxy.insertText(suggestion)
+        }
+        clear()
+    }
+
     /// Updates the prediction engine's language.
     func setLanguage(_ lang: String) {
         engine.setLanguage(lang)

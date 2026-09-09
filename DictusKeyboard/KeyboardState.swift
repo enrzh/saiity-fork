@@ -253,11 +253,19 @@ class KeyboardState: ObservableObject {
     /// another background keyboard dictation can start.
     @Published private(set) var appNeedsModelPreparation = false
 
+    /// True when the service cannot be reached from the keyboard and DictusApp must
+    /// be foregrounded. This is separate from model preparation so a ready model is
+    /// not mistaken for a running app or Live Activity.
+    @Published private(set) var appNeedsServiceRecovery = false
+
+    /// Combined action state consumed by the UIKit hit layer and SwiftUI label.
+    @Published private(set) var appNeedsAppAction = false
+
     /// Emits readiness changes for UIKit controls that cannot observe the
     /// SwiftUI object directly. The controller schedules its layout on the
     /// next main-queue turn because @Published emits from willSet.
     var modelPreparationPublisher: AnyPublisher<Bool, Never> {
-        $appNeedsModelPreparation.eraseToAnyPublisher()
+        $appNeedsAppAction.eraseToAnyPublisher()
     }
 
     /// Which controller owns the keyboard area, and whether an ownerless area is
@@ -630,7 +638,7 @@ class KeyboardState: ObservableObject {
         refreshFromDefaults()
         switch dictationStatus {
         case .idle, .ready:
-            if appNeedsModelPreparation {
+            if appNeedsAppAction {
                 PersistentLog.log(.keyboardMicTapped)
                 deferRecordingForModelPreparation(reason: "app is not warm in background")
             } else {
@@ -922,12 +930,27 @@ class KeyboardState: ObservableObject {
         }
         let phase = defaults.string(forKey: SharedKeys.appScenePhase)
             .flatMap(AppScenePhaseMarker.init(rawValue:)) ?? .unknown
-        appNeedsModelPreparation = KeyboardModelPreparationPolicy.shouldOpenApp(
+        let needsModelPreparation = KeyboardModelPreparationPolicy.shouldOpenApp(
             modelReady: defaults.bool(forKey: SharedKeys.modelReady),
             modelLoadState: loadState,
             appPhase: phase,
             modelLoadStartedAt: loadStartedAt
         )
+        appNeedsModelPreparation = needsModelPreparation
+
+        let status = defaults.string(forKey: SharedKeys.dictationStatus)
+            .flatMap(DictationStatus.init(rawValue:))
+        let serviceEnabled = defaults.object(forKey: SharedKeys.serviceEnabled) == nil
+            || defaults.bool(forKey: SharedKeys.serviceEnabled)
+        let heartbeat = defaults.double(forKey: SharedKeys.appProcessHeartbeat)
+        let needsServiceRecovery = !DictationSessionLivenessPolicy.isActive(status ?? .idle)
+            && DictationServiceLivenessPolicy.shouldOpenApp(
+                serviceEnabled: serviceEnabled,
+                appProcessHeartbeat: heartbeat > 0 ? heartbeat : nil,
+                liveActivityPresent: defaults.bool(forKey: SharedKeys.liveActivityPresent)
+            )
+        appNeedsServiceRecovery = needsServiceRecovery
+        appNeedsAppAction = needsModelPreparation || needsServiceRecovery
     }
 
     @discardableResult
@@ -1580,7 +1603,7 @@ class KeyboardState: ObservableObject {
     }
 
     var dictationActionLabel: String {
-        appNeedsModelPreparation ? "Open sAiity to prepare dictation" : "Hold to dictate"
+        appNeedsAppAction ? "Open sAiity to prepare dictation" : "Hold to dictate"
     }
 
     /// Defer recording without leaving a requested state behind in the keyboard.

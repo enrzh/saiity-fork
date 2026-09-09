@@ -5,7 +5,7 @@ import ActivityKit
 import Foundation
 
 private enum DictusLiveActivityContentStateCodingKeys: String, CodingKey {
-    case phase, recordingStartDate, waveformLevels, transcriptionPreview, detectionMuted
+    case phase, recordingStartDate, waveformLevels, transcriptionPreview, detectionMuted, serviceEnabled
 }
 
 /// Attributes for the Dictus Live Activity displayed in the Dynamic Island.
@@ -69,18 +69,24 @@ public struct DictusLiveActivityAttributes: ActivityAttributes {
         /// the user toggles the microphone control.
         public var detectionMuted: Bool
 
+        /// Whether the dictation service and microphone are enabled.
+        /// This is the single standby toggle exposed by the Live Activity.
+        public var serviceEnabled: Bool
+
         public init(
             phase: Phase,
             recordingStartDate: Date? = nil,
             waveformLevels: [Float] = [],
             transcriptionPreview: String? = nil,
-            detectionMuted: Bool = false
+            detectionMuted: Bool = false,
+            serviceEnabled: Bool = true
         ) {
             self.phase = phase
             self.recordingStartDate = recordingStartDate
             self.waveformLevels = waveformLevels
             self.transcriptionPreview = transcriptionPreview
             self.detectionMuted = detectionMuted
+            self.serviceEnabled = serviceEnabled
         }
 
         public init(from decoder: Decoder) throws {
@@ -90,6 +96,7 @@ public struct DictusLiveActivityAttributes: ActivityAttributes {
             waveformLevels = try container.decodeIfPresent([Float].self, forKey: .waveformLevels) ?? []
             transcriptionPreview = try container.decodeIfPresent(String.self, forKey: .transcriptionPreview)
             detectionMuted = try container.decodeIfPresent(Bool.self, forKey: .detectionMuted) ?? false
+            serviceEnabled = try container.decodeIfPresent(Bool.self, forKey: .serviceEnabled) ?? true
         }
     }
 

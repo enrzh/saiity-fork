@@ -104,6 +104,19 @@ class LiveActivityManager {
     /// Current Live Activity instance. nil if no activity is running.
     private var currentActivity: Activity<DictusLiveActivityAttributes>?
 
+    /// Keep the keyboard's cross-process availability contract in step with the
+    /// ActivityKit reference. ActivityKit is not available to the keyboard target,
+    /// so every reference change must pass through these helpers.
+    private func setCurrentActivity(_ activity: Activity<DictusLiveActivityAttributes>) {
+        currentActivity = activity
+        DictationServiceLivenessProbe.recordLiveActivity(present: true, identifier: activity.id)
+    }
+
+    private func clearCurrentActivity() {
+        currentActivity = nil
+        DictationServiceLivenessProbe.recordLiveActivity(present: false)
+    }
+
     /// Tracks the current phase via a formal state machine with validated transitions.
     /// WHY: Even if DictationCoordinator guards its sinks, this provides a second
     /// barrier -- updateWaveform() is a no-op unless we're actually recording.
@@ -197,6 +210,7 @@ class LiveActivityManager {
     func endActivityForAudioInterruption() {
         guard let activity = currentActivity else {
             // No activity to end, but reset state in case it was leaked.
+            clearCurrentActivity()
             currentPhase = .idle
             syncStateMachine(to: .idle)
             return
@@ -206,7 +220,7 @@ class LiveActivityManager {
         autoDismissTask = nil
         cancelRecordingWatchdog()
 
-        currentActivity = nil
+        clearCurrentActivity()
         currentPhase = .idle
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "audioInterrupted"))
@@ -235,7 +249,7 @@ class LiveActivityManager {
         autoDismissTask = nil
         cancelRecordingWatchdog()
 
-        currentActivity = nil
+        clearCurrentActivity()
         currentPhase = .idle
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "warmStateReleased"))
@@ -328,6 +342,7 @@ class LiveActivityManager {
     @discardableResult
     func startStandbyActivity() -> StandbyStartOutcome {
         guard isEnabled else {
+            DictationServiceLivenessProbe.recordLiveActivity(present: false)
             DictusLogger.app.info("Live Activity disabled by user preference -- skipping")
             logStandbySkipped(reason: "disabledInApp", isEnabled: false,
                               activitiesEnabled: ActivityAuthorizationInfo().areActivitiesEnabled)
@@ -362,7 +377,7 @@ class LiveActivityManager {
            !Activity<DictusLiveActivityAttributes>.activities.contains(where: { $0.id == current.id }) {
             DictusLogger.app.info("currentActivity stale (killed by intent or force-quit) -- clearing")
             PersistentLog.log(.liveActivityFailed(context: "startStandby-staleRef", error: "activity \(current.id) gone from system"))
-            currentActivity = nil
+            clearCurrentActivity()
             currentPhase = .idle
             syncStateMachine(to: .idle)
         }
@@ -374,7 +389,7 @@ class LiveActivityManager {
         let systemActivities = adoptableSystemActivities()
         if currentActivity == nil, let existing = systemActivities.first {
             // Recover orphaned activity instead of creating a new one
-            currentActivity = existing
+            setCurrentActivity(existing)
             currentPhase = mapContentPhase(existing.content.state.phase)
             syncStateMachine(to: currentPhase)
             DictusLogger.app.info("Recovered orphaned Live Activity: \(existing.id, privacy: .public)")
@@ -411,7 +426,7 @@ class LiveActivityManager {
                 content: .init(state: state, staleDate: staleDate),
                 pushType: nil
             )
-            currentActivity = activity
+            setCurrentActivity(activity)
             currentPhase = .standby
             syncStateMachine(to: .standby)
             DictusLogger.app.info("Live Activity started in standby (id: \(activity.id, privacy: .public))")
@@ -427,12 +442,15 @@ class LiveActivityManager {
     /// Stop the standby Live Activity entirely.
     /// Called when user taps Power button in expanded Dynamic Island view.
     func stopStandbyActivity() {
-        guard let activity = currentActivity else { return }
+        guard let activity = currentActivity else {
+            DictationServiceLivenessProbe.recordLiveActivity(present: false)
+            return
+        }
 
         autoDismissTask?.cancel()
         autoDismissTask = nil
 
-        currentActivity = nil
+        clearCurrentActivity()
         currentPhase = .idle  // Update BEFORE async work to prevent races (#49)
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "powerButton"))
@@ -758,7 +776,7 @@ class LiveActivityManager {
         autoDismissTask = nil
         cancelRecordingWatchdog()
 
-        currentActivity = nil
+        clearCurrentActivity()
         currentPhase = .idle
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "\(context)-notLive-\(liveness.rawValue)"))
@@ -825,7 +843,7 @@ class LiveActivityManager {
         if let current = currentActivity,
            !Activity<DictusLiveActivityAttributes>.activities.contains(where: { $0.id == current.id }) {
             PersistentLog.log(.liveActivityFailed(context: "ensureAlive", error: "activity \(current.id) gone from system"))
-            currentActivity = nil
+            clearCurrentActivity()
             currentPhase = .idle
             syncStateMachine(to: .idle)
         }
@@ -990,7 +1008,7 @@ class LiveActivityManager {
                 DictusLogger.app.info("Cleaned up stale Live Activity: \(activity.id, privacy: .public)")
             }
             if currentSessionActivityID == nil {
-                currentActivity = nil
+                clearCurrentActivity()
                 currentPhase = .idle
                 syncStateMachine(to: .idle)
             }
@@ -1019,7 +1037,7 @@ class LiveActivityManager {
         // Give async tasks time to complete before the process is killed
         RunLoop.current.run(until: Date().addingTimeInterval(0.5))
 
-        currentActivity = nil
+        clearCurrentActivity()
         currentPhase = .idle
         syncStateMachine(to: .idle)
         PersistentLog.log(.liveActivityEnded(reason: "appTerminating"))

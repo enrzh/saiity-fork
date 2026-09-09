@@ -45,36 +45,9 @@ struct DictusLiveActivity: Widget {
     /// Compact leading: logo bars (static in standby, animated heights in recording)
     @ViewBuilder
     private func compactLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        switch context.state.phase {
-        case .standby:
-            // Static 3-bar logo at mini size
-            MiniLogoBars(levels: [0.43, 1.0, 0.64], animated: false)
-                .frame(width: 20, height: 14)
-        case .recording:
-            // Animated bars driven by waveform data
-            let levels = normalizedLevels(context.state.waveformLevels, count: 3)
-            MiniLogoBars(levels: levels, animated: true)
-                .frame(width: 20, height: 14)
-        case .transcribing:
-            // Pulsing bars at medium height
-            MiniLogoBars(levels: [0.4, 0.6, 0.4], animated: true)
-                .frame(width: 20, height: 14)
-        case .processing:
-            // A pronounced centre peak, echoing the localized peak the keyboard
-            // overlay sweeps in this stage (#267). Three bars cannot carry the
-            // sweep itself -- ActivityKit's update budget is ~1/s -- so the shape
-            // and the colour of the trailing label do the distinguishing here.
-            MiniLogoBars(levels: [0.25, 0.85, 0.25], animated: true)
-                .frame(width: 20, height: 14)
-        case .ready:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.sAiitySuccess)
-                .font(.system(size: 14))
-        case .failed:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color.sAiityRecording)
-                .font(.system(size: 14))
-        }
+        Text("sAI")
+            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
     }
 
     /// Compact trailing: "On" text in standby, timer in recording
@@ -142,19 +115,8 @@ struct DictusLiveActivity: Widget {
     @ViewBuilder
     private func expandedLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
         HStack(spacing: 8) {
-            // Logo bars
-            MiniLogoBars(
-                levels: context.state.phase == .recording
-                    ? normalizedLevels(context.state.waveformLevels, count: 3)
-                    : [0.43, 1.0, 0.64],
-                animated: context.state.phase == .recording
-                    || context.state.phase == .transcribing
-                    || context.state.phase == .processing
-            )
-            .frame(width: 24, height: 18)
-
             VStack(alignment: .leading, spacing: 2) {
-                Text("sAiity")
+                Text("sAI")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
 
@@ -195,9 +157,8 @@ struct DictusLiveActivity: Widget {
             Spacer(minLength: 0) // Push trailing elements to the right edge
             switch context.state.phase {
             case .standby:
-                // Power off button — ends Live Activity via LiveActivityIntent (no app open)
-                Button(intent: StopStandbyIntent()) {
-                    Image(systemName: "power")
+                Button(intent: StopStandbyIntent(toggleDetection: true)) {
+                    Image(systemName: context.state.serviceEnabled ? "power" : "power.circle")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white.opacity(0.8))
                         .frame(width: 44, height: 44)
@@ -206,16 +167,6 @@ struct DictusLiveActivity: Widget {
                 }
                 .buttonStyle(.plain)
 
-                // Record button
-                Button(intent: StopStandbyIntent(toggleDetection: true)) {
-                    Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(context.state.detectionMuted ? Color.secondary : Color.sAiityAccent)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
             case .recording:
                 // Stop button (left side)
                 if let stopURL = URL(string: "saiity://stop") {
@@ -272,17 +223,8 @@ struct DictusLiveActivity: Widget {
     @ViewBuilder
     private func lockScreenView(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
         HStack(spacing: 12) {
-            // Logo
-            MiniLogoBars(
-                levels: context.state.phase == .recording
-                    ? normalizedLevels(context.state.waveformLevels, count: 3)
-                    : [0.43, 1.0, 0.64],
-                animated: context.state.phase == .recording
-            )
-            .frame(width: 28, height: 20)
-
             VStack(alignment: .leading, spacing: 2) {
-                Text("sAiity")
+                Text("sAI")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
 
@@ -328,26 +270,15 @@ struct DictusLiveActivity: Widget {
             // Action buttons
             switch context.state.phase {
             case .standby:
-                HStack(spacing: 8) {
-                    Button(intent: StopStandbyIntent()) {
-                        Image(systemName: "power")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .frame(width: 48, height: 48)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    Button(intent: StopStandbyIntent(toggleDetection: true)) {
-                        Image(systemName: context.state.detectionMuted ? "mic.slash.fill" : "mic.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .frame(width: 48, height: 48)
-                            .background(context.state.detectionMuted ? Color.secondary : Color.sAiityAccent)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
+                Button(intent: StopStandbyIntent(toggleDetection: true)) {
+                    Image(systemName: context.state.serviceEnabled ? "power" : "power.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .frame(width: 48, height: 48)
+                        .background(context.state.serviceEnabled ? Color.white.opacity(0.1) : Color.secondary)
+                        .clipShape(Circle())
                 }
+                .buttonStyle(.plain)
             case .recording:
                 if let stopURL = URL(string: "saiity://stop") {
                     Link(destination: stopURL) {

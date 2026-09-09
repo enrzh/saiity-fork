@@ -45,13 +45,15 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func areaSurface(layout: VoiceOnlyKeyboardPolicy.Layout, contentFrame: CGRect)"))
     }
 
-    func testLegacySuggestionAndGlobeAccessoryWiringIsAbsent() throws {
+    func testSuggestionBarIsKeyboardModeOnlyAndGlobeAccessoryWiringIsAbsent() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let inputView = try source("DictusKeyboard/InputView.swift")
 
         for source in [root, controller, inputView] {
-            XCTAssertFalse(source.localizedCaseInsensitiveContains("suggestion"))
+            if source == root {
+                XCTAssertTrue(source.contains("SuggestionBarView"))
+            }
             XCTAssertFalse(source.localizedCaseInsensitiveContains("globe"))
             XCTAssertFalse(source.contains("alternateAccessoryRow"))
         }

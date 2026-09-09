@@ -67,8 +67,32 @@ final class Qwen3AsrEngine: SpeechModelProtocol {
         }
 
         do {
-            let text = try await manager.transcribe(audioSamples: audioSamples, language: language)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let segmenter = SpeechRegionSegmenter()
+            let regions = language == nil ? segmenter.regions(in: audioSamples) : []
+            let rawText: String
+            if regions.count > 1 {
+                let transcripts = try await SpeechRegionTranscriptionRunner.run(
+                    audioSamples: audioSamples,
+                    regions: regions
+                ) { index, slice, region in
+                    try Task.checkCancellation()
+                    let value = try await manager.transcribe(
+                        audioSamples: Array(slice),
+                        language: Optional<String>.none
+                    )
+                    PersistentLog.log(.diagnosticProbe(
+                        component: "Qwen3ASR",
+                        instanceID: "autoRegion-\(index)",
+                        action: "decoded",
+                        details: "regionIndex=\(index) startSample=\(region.startSample) endSample=\(region.endSample) durationSec=\(String(format: "%.2f", region.durationSeconds())) chars=\(value.count)"
+                    ))
+                    return SpeechRegionTranscript(region: region, text: value, detectedLanguage: nil)
+                }
+                rawText = SpeechTranscriptMerger.merge(transcripts)
+            } else {
+                rawText = try await manager.transcribe(audioSamples: audioSamples, language: language)
+            }
+            let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else {
                 throw TranscriptionError.transcriptionFailed("Empty Qwen3-ASR transcription result")
             }

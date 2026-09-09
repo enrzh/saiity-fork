@@ -11,8 +11,10 @@ struct CategoryInfo: Identifiable {
 }
 
 /// Full emoji picker matching the native iOS keyboard:
-/// - One continuous horizontal grid (recents, then every category in order)
-/// - Bottom bar: microphone, category bookmarks, delete
+/// - Recents is a dedicated page instead of being mixed into Smileys.
+/// - Every category owns a fixed-width page, so horizontal paging has a real
+///   scroll surface even when a category contains only a few items.
+/// - Bottom bar: microphone, category bookmarks, delete.
 struct EmojiPickerView: View {
     let onEmojiInsert: (String) -> Void
     let onBackToVoice: () -> Void
@@ -70,40 +72,37 @@ struct EmojiPickerView: View {
 
     // MARK: - Computed data
 
-    /// Recents, then every category, concatenated so scrolling past one section
-    /// continues into the next — the native iOS emoji keyboard layout.
-    private var allGridItems: [EmojiGridItem] {
-        var items: [EmojiGridItem] = []
+    private var pages: [EmojiPage] {
+        var result: [EmojiPage] = []
         if !recentEmojis.isEmpty {
-            items.append(contentsOf: recentEmojis.enumerated().map { i, emoji in
-                EmojiGridItem(id: "recents_\(i)", emoji: emoji, categoryID: "recents")
-            })
+            result.append(EmojiPage(
+                id: "recents",
+                name: "Recents",
+                icon: "clock",
+                items: recentEmojis.enumerated().map { index, emoji in
+                    EmojiGridItem(id: "recents_\(index)", emoji: emoji, categoryID: "recents")
+                }
+            ))
         }
-        for cat in categories {
-            items.append(contentsOf: cat.emojis.enumerated().map { i, emoji in
-                EmojiGridItem(id: "\(cat.id)_\(i)", emoji: emoji, categoryID: cat.id)
-            })
-        }
-        return items
+        result.append(contentsOf: categories.map { category in
+            EmojiPage(
+                id: category.id,
+                name: category.name,
+                icon: category.icon,
+                items: category.emojis.enumerated().map { index, emoji in
+                    EmojiGridItem(id: "\(category.id)_\(index)", emoji: emoji, categoryID: category.id)
+                }
+            )
+        })
+        return result
     }
 
     private var categoryAnchorIDs: [String: String] {
-        var anchors: [String: String] = [:]
-        for item in allGridItems where anchors[item.categoryID] == nil {
-            anchors[item.categoryID] = item.id
-        }
-        return anchors
+        Dictionary(uniqueKeysWithValues: pages.map { ($0.id, $0.id) })
     }
 
     private var sectionInfos: [CategoryInfo] {
-        var infos: [CategoryInfo] = []
-        if !recentEmojis.isEmpty {
-            infos.append(CategoryInfo(id: "recents", name: "Recents", icon: "clock"))
-        }
-        for cat in categories {
-            infos.append(CategoryInfo(id: cat.id, name: cat.name, icon: cat.icon))
-        }
-        return infos
+        pages.map { CategoryInfo(id: $0.id, name: $0.name, icon: $0.icon) }
     }
 
     // MARK: - Body
@@ -113,7 +112,7 @@ struct EmojiPickerView: View {
             VStack(spacing: 0) {
                 Color.clear.frame(height: edgeInset)
                 EmojiScrollCanvas(
-                    items: allGridItems,
+                    pages: pages,
                     availableWidth: availableWidth,
                     gridHeight: max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2),
                     emojiCellWidth: emojiCellWidth,
@@ -282,7 +281,7 @@ private struct EmojiScrollRequest: Equatable {
 }
 
 private struct EmojiScrollCanvas: View {
-    let items: [EmojiGridItem]
+    let pages: [EmojiPage]
     let availableWidth: CGFloat
     let gridHeight: CGFloat
     let emojiCellWidth: CGFloat
@@ -294,21 +293,40 @@ private struct EmojiScrollCanvas: View {
     let onVisibleCategory: (String) -> Void
     let onTap: (String) -> Void
     let onLongPress: (EmojiGridItem, CGRect) -> Void
+    private let rowSpacing: CGFloat = 1
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHGrid(rows: gridRows, spacing: 0) {
-                    ForEach(items) { item in
-                        EmojiKey(
-                            item: item,
-                            emojiCellWidth: emojiCellWidth,
-                            rowHeight: rowHeight,
-                            reduceMotion: reduceMotion,
-                            onTap: { onTap(item.emoji) },
-                            onLongPress: { frame in onLongPress(item, frame) }
+                LazyHStack(spacing: 0) {
+                    ForEach(pages) { page in
+                        let columns = columnsPerPage(for: page)
+                        let pageWidth = pageWidth(for: page, columns: columns)
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.fixed(emojiCellWidthForPage(page, columns: columns)), spacing: 0), count: columns),
+                            spacing: rowSpacing
+                        ) {
+                            ForEach(page.items) { item in
+                                EmojiKey(
+                                    item: item,
+                                    emojiCellWidth: emojiCellWidthForPage(page, columns: columns),
+                                    rowHeight: rowHeight,
+                                    reduceMotion: reduceMotion,
+                                    onTap: { onTap(item.emoji) },
+                                    onLongPress: { frame in onLongPress(item, frame) }
+                                )
+                            }
+                        }
+                        .frame(width: pageWidth, height: gridHeight, alignment: .topLeading)
+                        .id(page.id)
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: VisibleEmojiPagesKey.self,
+                                    value: [page.id: geometry.frame(in: .named("emojiViewport"))]
+                                )
+                            }
                         )
-                        .id(item.id)
                     }
                 }
                 .padding(.horizontal, gridHorizontalPadding)
@@ -316,8 +334,8 @@ private struct EmojiScrollCanvas: View {
             .coordinateSpace(name: "emojiViewport")
             .frame(width: availableWidth, height: gridHeight, alignment: .top)
             .clipped()
-            .onPreferenceChange(VisibleCategoryFramesKey.self) { frames in
-                guard let category = leftmostVisibleCategory(in: frames) else { return }
+            .onPreferenceChange(VisibleEmojiPagesKey.self) { frames in
+                guard let category = leftmostVisiblePage(in: frames) else { return }
                 onVisibleCategory(category)
             }
             .onChange(of: scrollRequest) { _, request in
@@ -331,11 +349,24 @@ private struct EmojiScrollCanvas: View {
         }
     }
 
-    private func leftmostVisibleCategory(in frames: [String: VisibleEmojiFrame]) -> String? {
-        frames.values
-            .filter { $0.frame.maxX > 1 && $0.frame.minX < availableWidth - 1 }
-            .min(by: { $0.frame.minX < $1.frame.minX })?
-            .categoryID
+    private func columnsPerPage(for page: EmojiPage) -> Int {
+        let itemCount = max(1, page.items.count)
+        return max(1, Int(ceil(Double(itemCount) / Double(max(1, gridRows.count)))))
+    }
+
+    private func emojiCellWidthForPage(_ page: EmojiPage, columns: Int) -> CGFloat {
+        max(44, (availableWidth - gridHorizontalPadding * 2) / CGFloat(max(1, columns)))
+    }
+
+    private func pageWidth(for page: EmojiPage, columns: Int) -> CGFloat {
+        max(availableWidth, CGFloat(columns) * emojiCellWidthForPage(page, columns: columns) + gridHorizontalPadding * 2)
+    }
+
+    private func leftmostVisiblePage(in frames: [String: CGRect]) -> String? {
+        frames
+            .filter { $0.value.maxX > gridHorizontalPadding && $0.value.minX < availableWidth - gridHorizontalPadding }
+            .min(by: { abs($0.value.minX - gridHorizontalPadding) < abs($1.value.minX - gridHorizontalPadding) })?
+            .key
     }
 }
 
@@ -355,52 +386,48 @@ private struct EmojiKey: View {
         EmojiSkinToneVariants.options(for: item.emoji).count > 1
     }
 
+    @ViewBuilder
     var body: some View {
-        Text(item.emoji)
-            .font(.system(size: 32))
-            .frame(minWidth: 44, minHeight: 44)
-            .frame(width: emojiCellWidth, height: rowHeight)
-            .background {
-                if isPressed {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-                        }
-                        .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
-                        .allowsHitTesting(false)
+        if hasSkinTones {
+            keyContent.simultaneousGesture(emojiGesture)
+        } else {
+            keyContent
+        }
+    }
+
+    private var keyContent: some View {
+        Button(action: onTap) {
+            Text(item.emoji)
+                .font(.system(size: 32))
+                .frame(minWidth: 44, minHeight: 44)
+                .frame(width: emojiCellWidth, height: rowHeight)
+                .background {
+                    if isPressed {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(Color.primary.opacity(0.12))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                            }
+                            .frame(width: min(emojiCellWidth, rowHeight) - 8, height: rowHeight - 8)
+                            .allowsHitTesting(false)
+                    }
                 }
-            }
-            .scaleEffect(reduceMotion ? 1 : isPressed ? 1.08 : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: isPressed)
-            .contentShape(Rectangle())
-            .background(
-                GeometryReader { geo in
-                    Color.clear.preference(
-                        key: VisibleCategoryFramesKey.self,
-                        value: [item.id: VisibleEmojiFrame(
-                            categoryID: item.categoryID,
-                            frame: geo.frame(in: .named("emojiViewport"))
-                        )]
-                    )
+                .scaleEffect(reduceMotion ? 1 : isPressed ? 1.08 : 1)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: isPressed)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            GeometryReader { geo in
+                Color.clear
                     .onAppear { localFrame = geo.frame(in: .named("emojiPicker")) }
                     .onChange(of: geo.frame(in: .named("emojiPicker"))) { _, frame in
                         localFrame = frame
                     }
-                }
-            )
-            // The hold recognizer is simultaneous so the parent ScrollView keeps
-            // ownership of horizontal drags. A cell must never install its own pan.
-            .onTapGesture {
-                if holdTriggered {
-                    holdTriggered = false
-                } else {
-                    onTap()
-                }
             }
-            .simultaneousGesture(emojiGesture)
-            .accessibilityLabel(item.emoji)
+        )
+        .accessibilityLabel(item.emoji)
     }
 
     private var emojiGesture: some Gesture {
@@ -422,15 +449,17 @@ private struct EmojiGridItem: Identifiable {
     let categoryID: String
 }
 
-private struct VisibleEmojiFrame: Equatable {
-    let categoryID: String
-    let frame: CGRect
-}
+private struct VisibleEmojiPagesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
 
-private struct VisibleCategoryFramesKey: PreferenceKey {
-    static var defaultValue: [String: VisibleEmojiFrame] = [:]
-
-    static func reduce(value: inout [String: VisibleEmojiFrame], nextValue: () -> [String: VisibleEmojiFrame]) {
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
+}
+
+private struct EmojiPage: Identifiable {
+    let id: String
+    let name: String
+    let icon: String
+    let items: [EmojiGridItem]
 }

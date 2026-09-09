@@ -17,7 +17,7 @@ import Foundation
 import DictusCore
 
 struct StopStandbyIntent: LiveActivityIntent {
-    @Parameter(title: "Toggle detection") var toggleDetection: Bool
+    @Parameter(title: "Toggle dictation") var toggleDetection: Bool
 
     init() {
         toggleDetection = false
@@ -27,14 +27,15 @@ struct StopStandbyIntent: LiveActivityIntent {
         self.toggleDetection = toggleDetection
     }
 
-    static var title: LocalizedStringResource = "Stop Standby"
-    static var description = IntentDescription("Turn off sAiity standby mode")
+    static var title: LocalizedStringResource = "Toggle dictation"
+    static var description = IntentDescription("Turn sAiity dictation and microphone access on or off")
 
     func perform() async throws -> some IntentResult {
         if toggleDetection {
             let defaults = UserDefaults(suiteName: AppGroup.identifier)
-            let muted = !(defaults?.bool(forKey: SharedKeys.detectionMuted) ?? false)
-            defaults?.set(muted, forKey: SharedKeys.detectionMuted)
+            let enabled = !(defaults?.object(forKey: SharedKeys.serviceEnabled) == nil
+                || defaults?.bool(forKey: SharedKeys.serviceEnabled) == true)
+            defaults?.set(enabled, forKey: SharedKeys.serviceEnabled)
             defaults?.synchronize()
 
             for activity in Activity<DictusLiveActivityAttributes>.activities {
@@ -44,9 +45,16 @@ struct StopStandbyIntent: LiveActivityIntent {
                     recordingStartDate: current.recordingStartDate,
                     waveformLevels: current.waveformLevels,
                     transcriptionPreview: current.transcriptionPreview,
-                    detectionMuted: muted
+                    detectionMuted: current.detectionMuted,
+                    serviceEnabled: enabled
                 )
                 await activity.update(.init(state: state, staleDate: nil))
+            }
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: Notification.Name("DictusServiceToggleRequested"),
+                    object: nil
+                )
             }
             return .result()
         }

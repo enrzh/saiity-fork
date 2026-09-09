@@ -155,7 +155,6 @@ struct KeyboardDeleteButton: View {
 
     @State private var deleteRepeatTimer: Timer?
     @State private var deleteHoldTriggered = false
-    @GestureState private var deleteTouchActive = false
     @State private var deleteStartedAt = Date.distantPast
 
     init(
@@ -177,42 +176,29 @@ struct KeyboardDeleteButton: View {
     }
 
     var body: some View {
-        Image(systemName: "delete.backward")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.primary)
-            .frame(width: visualWidth, height: visualHeight)
-            .keyboardGlass(in: RoundedRectangle(cornerRadius: visualCornerRadius, style: .continuous))
-            .frame(width: hitWidth, height: hitHeight)
-            .contentShape(Rectangle())
+        ZStack {
+            Image(systemName: "delete.backward")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: visualWidth, height: visualHeight)
+                .keyboardGlass(in: RoundedRectangle(cornerRadius: visualCornerRadius, style: .continuous))
+            ImmediateTouchButton(
+                onTouchDown: startDeleteRepeat,
+                onTouchUp: {
+                    stopDeleteRepeat()
+                    deleteHoldTriggered = false
+                }
+            )
+        }
+        .frame(width: hitWidth, height: hitHeight)
+        .contentShape(Rectangle())
         .accessibilityLabel("Delete backward")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onDelete() }
-        .gesture(deleteGesture)
-        .onChange(of: deleteTouchActive) { _, active in
-            if !active { stopDeleteRepeat(); deleteHoldTriggered = false }
-        }
         .onDisappear {
             stopDeleteRepeat()
             deleteHoldTriggered = false
         }
-    }
-
-    private var deleteGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .updating($deleteTouchActive) { _, active, _ in active = true }
-            .onChanged { value in
-                guard abs(value.translation.width) < hitWidth,
-                      abs(value.translation.height) < hitHeight else {
-                    stopDeleteRepeat()
-                    return
-                }
-                startDeleteRepeat()
-            }
-            .onEnded { _ in
-                // The initial deletion already happened on touch-down.
-                stopDeleteRepeat()
-                deleteHoldTriggered = false
-            }
     }
 
     private func startDeleteRepeat() {
@@ -239,6 +225,41 @@ struct KeyboardDeleteButton: View {
     private func stopDeleteRepeat() {
         deleteRepeatTimer?.invalidate()
         deleteRepeatTimer = nil
+    }
+}
+
+/// UIKit forwards touchDown synchronously, which avoids the delayed first
+/// deletion SwiftUI can introduce while resolving a drag gesture.
+private struct ImmediateTouchButton: UIViewRepresentable {
+    let onTouchDown: () -> Void
+    let onTouchUp: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTouchDown: onTouchDown, onTouchUp: onTouchUp) }
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .custom)
+        button.backgroundColor = .clear
+        button.addTarget(context.coordinator, action: #selector(Coordinator.touchDown), for: .touchDown)
+        button.addTarget(context.coordinator, action: #selector(Coordinator.touchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        return button
+    }
+
+    func updateUIView(_ uiView: UIButton, context: Context) {
+        context.coordinator.onTouchDown = onTouchDown
+        context.coordinator.onTouchUp = onTouchUp
+    }
+
+    final class Coordinator: NSObject {
+        var onTouchDown: () -> Void
+        var onTouchUp: () -> Void
+
+        init(onTouchDown: @escaping () -> Void, onTouchUp: @escaping () -> Void) {
+            self.onTouchDown = onTouchDown
+            self.onTouchUp = onTouchUp
+        }
+
+        @objc func touchDown() { onTouchDown() }
+        @objc func touchUp() { onTouchUp() }
     }
 }
 

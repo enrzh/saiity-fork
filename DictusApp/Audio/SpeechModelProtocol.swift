@@ -234,8 +234,11 @@ enum WhisperKitTranscriptionSupport {
             task: .transcribe,
             language: language,
             temperature: 0.0,
-            usePrefillPrompt: true,
-            usePrefillCache: true,
+            // An English prefill is useful for a fixed English decode but can
+            // anchor Whisper's first language token in Auto mode. Let every
+            // independently decoded region choose its own language.
+            usePrefillPrompt: language != nil,
+            usePrefillCache: language != nil,
             detectLanguage: language == nil,
             skipSpecialTokens: true,
             chunkingStrategy: .vad

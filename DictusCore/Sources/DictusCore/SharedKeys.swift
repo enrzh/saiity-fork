@@ -94,6 +94,8 @@ public enum SharedKeys {
     public static let hapticsEnabled = "dictus.hapticsEnabled"
     /// Whether long-press alternate-character popups are enabled, default true
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
+    /// Whether the keyboard-mode suggestion row is visible, default true.
+    public static let suggestionsEnabled = "dictus.suggestionsEnabled"
     /// Whether the user has completed onboarding, default false
     public static let hasCompletedOnboarding = "dictus.hasCompletedOnboarding"
     /// Current onboarding step index (0-5). Persisted to UserDefaults so the user
@@ -163,6 +165,14 @@ public enum SharedKeys {
     /// only meaningful together: the keys outlive the app process, so the age is what
     /// separates "the app is in the background right now" from a stale leftover.
     public static let appScenePhaseTimestamp = "dictus.appScenePhaseTimestamp"
+
+    // App and Live Activity availability
+    /// Double (timeIntervalSince1970): last heartbeat from the DictusApp process.
+    public static let appProcessHeartbeat = "dictus.appProcessHeartbeat"
+    /// Bool: whether DictusApp last confirmed that its Live Activity is present.
+    public static let liveActivityPresent = "dictus.liveActivityPresent"
+    /// String: the last Live Activity identifier published by DictusApp, for logs.
+    public static let liveActivityID = "dictus.liveActivityID"
 
     // MARK: - Sound Feedback
     /// Whether sound feedback is enabled for recording events, default true

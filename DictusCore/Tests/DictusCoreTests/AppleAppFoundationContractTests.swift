@@ -105,7 +105,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(home.contains("RoundedRectangle(cornerRadius: 12)"))
     }
 
-    func testServiceToggleUsesSharedServiceStateAndLiveActivityCarriesDetectionState() throws {
+    func testServiceToggleUsesSharedServiceStateAndLiveActivityCarriesServiceState() throws {
         let home = try source("DictusApp/Views/HomeView.swift")
         let attributes = try source("DictusCore/Sources/DictusCore/DictusLiveActivityAttributes.swift")
         let activity = try source("DictusWidgets/DictusLiveActivity.swift")
@@ -113,8 +113,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
 
         XCTAssertTrue(home.contains("SharedKeys.serviceEnabled"))
         XCTAssertTrue(home.contains("onChange(of: serviceEnabled)"))
-        XCTAssertTrue(attributes.contains("detectionMuted"))
-        XCTAssertTrue(activity.contains("context.state.detectionMuted"))
+        XCTAssertTrue(attributes.contains("serviceEnabled"))
+        XCTAssertTrue(activity.contains("context.state.serviceEnabled"))
         XCTAssertTrue(intent.contains("activity.update"))
     }
 

@@ -207,7 +207,8 @@ class KeyboardViewController: UIInputViewController,
             routeText: { [weak self] text in self?.routeProxyText(text) },
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
             routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
-            routeCursorMovement: { [weak self] movement in self?.didMoveCursor(movement) }
+            routeCursorMovement: { [weak self] movement in self?.didMoveCursor(movement) },
+            routeSuggestion: { [weak self] index in self?.acceptSuggestion(at: index) }
         )
         let hosting = UIHostingController(rootView: rootView)
         PersistentLog.log(.diagnosticProbe(
@@ -349,6 +350,9 @@ class KeyboardViewController: UIInputViewController,
         // so call sites in KeyboardRootView and KeyboardState can access textDocumentProxy.
         // Previously set from KeyboardRootView.onAppear, which held a strong ref → #134.
         KeyboardState.shared.controller = self
+        KeyboardState.shared.onTranscriptionInserted = { [weak self] in
+            self?.refreshSuggestions()
+        }
         // Model readiness and the app scene phase can change while this cached
         // keyboard controller is off-screen. Refresh before laying out the mic
         // action so the button does not keep a stale "Open sAiity" state.
@@ -1067,6 +1071,13 @@ class KeyboardViewController: UIInputViewController,
         )
     }
 
+    private var currentSuggestionLaneHeight: Double {
+        let enabled = AppGroup.defaults.object(forKey: SharedKeys.suggestionsEnabled) as? Bool ?? true
+        return enabled && KeyboardState.shared.areaMode == .letters
+            ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+            : 0
+    }
+
     private func layoutLetterKeyboard(surfaceHeight: CGFloat? = nil) {
         guard let inputView,
               let keyboard = giellaKeyboard,
@@ -1075,7 +1086,8 @@ class KeyboardViewController: UIInputViewController,
         let layout = VoiceOnlyKeyboardPolicy.layout(
             for: Double(inputView.bounds.width),
             surfaceHeight: Double(max(1, resolvedHeight)),
-            controlOrder: KeyboardAccessoryOrder.current
+            controlOrder: KeyboardAccessoryOrder.current,
+            topAccessoryHeight: currentSuggestionLaneHeight
         )
         let frame = layout.letterKeyboardFrame
         guard !frame.isEmpty else {
@@ -1312,7 +1324,7 @@ class KeyboardViewController: UIInputViewController,
         micButton?.frame = layout.dictateFrame
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
         micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
-        micButton?.accessibilityHint = KeyboardState.shared.appNeedsModelPreparation
+        micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction
             ? "Opens sAiity and prepares the dictation model."
             : "Double-tap to start or stop dictation."
         spaceButton?.frame = layout.spaceFrame
@@ -1329,7 +1341,7 @@ class KeyboardViewController: UIInputViewController,
 
     @objc private func handleMicTouchDown() {
         KeyboardState.shared.refreshFromDefaults()
-        guard !KeyboardState.shared.appNeedsModelPreparation else { return }
+        guard !KeyboardState.shared.appNeedsAppAction else { return }
         guard !micTouchActive else { return }
         micTouchActive = true
         KeyboardState.shared.handleMicPressBegan()
@@ -1346,7 +1358,7 @@ class KeyboardViewController: UIInputViewController,
     /// Keep this explicit touch-up path because some keyboard hosts omit the
     /// primary action for transparent extension buttons.
     @objc private func handleMicTap() {
-        guard KeyboardState.shared.appNeedsModelPreparation || KeyboardState.shared.failedRequiresApp else { return }
+        guard KeyboardState.shared.appNeedsAppAction || KeyboardState.shared.failedRequiresApp else { return }
         KeyboardState.shared.handleMicPressBegan()
     }
 
@@ -1462,6 +1474,21 @@ class KeyboardViewController: UIInputViewController,
             return
         }
         textDocumentProxy.insertText(text)
+        refreshSuggestions()
+    }
+
+    private func refreshSuggestions() {
+        guard AppGroup.defaults.object(forKey: SharedKeys.suggestionsEnabled) as? Bool ?? true else {
+            SuggestionState.shared.clear()
+            return
+        }
+        SuggestionState.shared.updateAsync(context: textDocumentProxy.documentContextBeforeInput)
+    }
+
+    private func acceptSuggestion(at index: Int) {
+        guard AppGroup.defaults.object(forKey: SharedKeys.suggestionsEnabled) as? Bool ?? true else { return }
+        SuggestionState.shared.acceptSuggestion(at: index, proxy: textDocumentProxy)
+        refreshSuggestions()
     }
 
     static func routeProxyCommand(
@@ -1518,10 +1545,12 @@ class KeyboardViewController: UIInputViewController,
             }
         case .backspace:
             routeProxyCommand(.delete)
+            refreshSuggestions()
         case .returnkey:
             routeProxyCommand(.returnKey)
         case .spacebar:
             routeProxyCommand(.space)
+            refreshSuggestions()
         case .symbols:
             presentArea(.panel)
         case .shift:

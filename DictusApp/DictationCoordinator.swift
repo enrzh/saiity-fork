@@ -277,6 +277,31 @@ class DictationCoordinator: ObservableObject {
             }
         }
 
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("DictusServiceToggleRequested"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                let enabled = self.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
+                    || self.defaults.bool(forKey: SharedKeys.serviceEnabled)
+                if enabled {
+                    do {
+                        try self.audioEngine.configureAudioSession()
+                        try self.audioEngine.warmUp()
+                        LiveActivityManager.shared.startStandbyActivity()
+                    } catch {
+                        self.handleError("Microphone access could not be enabled.", disposition: .requiresApp)
+                    }
+                } else {
+                    if self.status == .recording { self.cancelDictation() }
+                    if self.audioEngine.isEngineRunning { self.audioEngine.deactivateSession() }
+                    LiveActivityManager.shared.stopStandbyActivity()
+                }
+            }
+        }
+
         // Cancel any in-flight dictation when the audio session is interrupted
         // (phone call, Siri, etc.) or media services are reset. UnifiedAudioEngine
         // already tore down the engine; we just need to clean up the dictation

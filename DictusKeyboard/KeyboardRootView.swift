@@ -9,7 +9,10 @@ struct KeyboardRootView: View {
     let routeCommand: (KeyboardCommand) -> Void
     let routeWordDeletion: () -> Void
     let routeCursorMovement: (Int) -> Void
+    let routeSuggestion: (Int) -> Void
     @ObservedObject private var state = KeyboardState.shared
+    @ObservedObject private var suggestionState = SuggestionState.shared
+    @AppStorage(SharedKeys.suggestionsEnabled, store: AppGroup.defaults) private var suggestionsEnabled = true
     @State private var symbolPage: KeyboardPage = .symbols1
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,10 +21,12 @@ struct KeyboardRootView: View {
     var body: some View {
         GeometryReader { proxy in
             let surfaceHeight = max(proxy.size.height, 1)
+            let suggestionsVisible = suggestionsEnabled && state.areaMode == .letters
             let layout = VoiceOnlyKeyboardPolicy.layout(
                 for: proxy.size.width,
                 surfaceHeight: Double(surfaceHeight),
-                controlOrder: KeyboardAccessoryOrder.current
+                controlOrder: KeyboardAccessoryOrder.current,
+                topAccessoryHeight: suggestionsVisible ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight : 0
             )
             let surfaceFrame = layout.surfaceFrame
             ZStack(alignment: .topLeading) {
@@ -62,6 +67,18 @@ struct KeyboardRootView: View {
                             )
 
                     }
+                }
+
+                if suggestionsVisible {
+                    SuggestionBarView(
+                        suggestions: suggestionState.suggestions,
+                        mode: suggestionState.mode,
+                        onTap: routeSuggestion
+                    )
+                    .frame(width: max(0, proxy.size.width - 24), height: 36)
+                    .position(x: proxy.size.width / 2, y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2)
+                    .zIndex(2)
+                    .accessibilityIdentifier("keyboard-suggestion-bar")
                 }
             }
             .frame(
@@ -278,9 +295,16 @@ struct KeyboardRootView: View {
         }
         .foregroundStyle(.primary)
         .frame(width: frame.width, height: capsuleHeight)
-        // Intentional white primary control: it is the strongest voice action on both themes;
-        // its semantic black foreground keeps the label readable in light and dark mode.
-        .background(Capsule().fill(Color.white))
+        // Intentional white liquid-glass primary control: it is the strongest voice
+        // action on both themes while retaining the depth and highlight of the other
+        // controls. Its semantic black foreground keeps the label readable.
+        .background(
+            appleControlSurface(
+                Color.clear,
+                in: Capsule()
+            )
+        )
+        .background(Capsule().fill(Color.white.opacity(0.86)))
         .clipShape(Capsule())
         .contentShape(Capsule())
         .foregroundStyle(.black)
@@ -314,7 +338,7 @@ struct KeyboardRootView: View {
     private var dictationTitle: String {
         switch state.dictationStatus {
         case .idle, .ready:
-            return state.appNeedsModelPreparation ? "Open sAiity" : "Hold to dictate"
+            return state.appNeedsAppAction ? "Open sAiity" : "Hold to dictate"
         case .requested: return "Getting ready..."
         case .recording: return "Listening..."
         case .transcribing: return "Transcribing..."
@@ -329,7 +353,7 @@ struct KeyboardRootView: View {
         case .requested, .transcribing, .processing: return "ellipsis"
         case .failed: return "mic.fill"
         case .idle, .ready:
-            return state.appNeedsModelPreparation ? "arrow.up.right.square.fill" : "mic.fill"
+            return state.appNeedsAppAction ? "arrow.up.right.square.fill" : "mic.fill"
         }
     }
 

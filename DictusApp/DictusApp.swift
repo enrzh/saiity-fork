@@ -110,6 +110,9 @@ struct DictusApp: App {
         if defaults?.object(forKey: SharedKeys.serviceEnabled) == nil {
             defaults?.set(true, forKey: SharedKeys.serviceEnabled)
         }
+        // Publish a process heartbeat so the keyboard can distinguish a normal
+        // backgrounded app from an app that is no longer available.
+        DictationServiceLivenessProbe.recordAppHeartbeat()
         // Cleanup is the product default. Preserve an explicit off choice from
         // an earlier install by migrating only when the preference is absent.
         if defaults?.object(forKey: SharedKeys.polishEnabled) == nil {
@@ -153,6 +156,7 @@ struct DictusApp: App {
                     // written from the same callback that logs the lifecycle line
                     // below, which is what lets the two be compared at all.
                     AppScenePhaseProbe.record(phase.sceneMarker)
+                    DictationServiceLivenessProbe.recordAppHeartbeat()
 
                     switch phase {
                     case .active:

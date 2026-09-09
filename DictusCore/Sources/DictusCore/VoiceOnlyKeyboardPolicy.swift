@@ -220,6 +220,8 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let statusHeight: Double = 20
     public static let contentSpacing: Double = 6
     public static let topInset: Double = 8
+    /// Height reserved above the glass surface for keyboard-mode suggestions.
+    public static let suggestionLaneHeight: Double = 36
 
     public static func primaryControlWidth(availableWidth: Double, centerAreaWidth: Double) -> Double {
         let clusterVisible = availableWidth - horizontalPadding * 2 >= controlSize * 2 + 124
@@ -242,6 +244,7 @@ public enum VoiceOnlyKeyboardPolicy {
         public let dismissBottom: Double
         public let contentHeight: Double
         public let surfaceHeight: Double
+        public let topAccessoryHeight: Double
         public let centerX: Double
         public let leftBottomCenterX: Double
         public let rightBottomCenterX: Double
@@ -253,9 +256,9 @@ public enum VoiceOnlyKeyboardPolicy {
         public var surfaceInset: Double { horizontalInset }
 
         public var surfaceFrame: CGRect {
-            CGRect(x: horizontalInset, y: verticalPadding,
+            CGRect(x: horizontalInset, y: verticalPadding + topAccessoryHeight,
                    width: max(0, surfaceWidth - horizontalInset * 2),
-                   height: max(0, surfaceHeight - verticalPadding * 2))
+                   height: max(0, surfaceHeight - verticalPadding * 2 - topAccessoryHeight))
         }
 
         public var bottomAuxiliaryControlFrame: CGRect {
@@ -496,7 +499,8 @@ public enum VoiceOnlyKeyboardPolicy {
     public static func layout(
         for availableWidth: Double,
         surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight,
-        controlOrder: KeyboardAccessoryOrder = .emojiFirst
+        controlOrder: KeyboardAccessoryOrder = .emojiFirst,
+        topAccessoryHeight: Double = 0
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
@@ -529,6 +533,7 @@ public enum VoiceOnlyKeyboardPolicy {
             dismissBottom: resolvedSurfaceHeight - verticalPadding - visibleControlGap,
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
+            topAccessoryHeight: max(0, topAccessoryHeight),
             centerX: horizontalInset + (availableWidth - horizontalInset * 2) / 2,
             leftBottomCenterX: resolvedLeftRailWidth > 0
                 ? horizontalInset + visibleControlGap + controlSize / 2

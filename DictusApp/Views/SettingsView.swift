@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @AppStorage(SharedKeys.hapticsEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticsEnabled = true
     @AppStorage(SharedKeys.keyPopupsEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyPopupsEnabled = true
+    @AppStorage(SharedKeys.suggestionsEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var suggestionsEnabled = true
     @AppStorage(SharedKeys.keyboardAccessoryOrder, store: UserDefaults(suiteName: AppGroup.identifier))
     private var keyboardAccessoryOrderRawValue = KeyboardAccessoryOrder.emojiFirst.rawValue
     @State private var keyboardLayout = KeyboardLayoutPreference.layout(for: .active)
@@ -43,6 +44,8 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Key popups", isOn: $keyPopupsEnabled)
+                Toggle("Keyboard suggestions", isOn: $suggestionsEnabled)
+                    .accessibilityHint("Shows word suggestions above the keyboard-mode keys.")
                 NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
                     Label("Models", systemImage: "square.stack.3d.up.fill")
                 }
