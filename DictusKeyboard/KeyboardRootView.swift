@@ -560,9 +560,9 @@ private struct LetterKeyboardPageView: View {
                 KeyboardDeleteButton(
                     onDelete: onDelete,
                     onDeleteWord: onDeleteWord,
-                    visualWidth: max(0, frame.width - 2),
-                    visualHeight: max(0, frame.height - 2),
-                    visualCornerRadius: 6,
+                    visualWidth: max(0, frame.width - 4),
+                    visualHeight: max(0, frame.height - 4),
+                    visualCornerRadius: 18,
                     hitWidth: frame.width,
                     hitHeight: frame.height
                 )
@@ -574,7 +574,7 @@ private struct LetterKeyboardPageView: View {
                     // base letter and the selected accent. Variant keys therefore
                     // have exactly one gesture owner: short release inserts the
                     // base key, long release commits one popup option.
-                    letterKeyLabel(for: key)
+                    letterKeyLabel(for: key, frame: frame)
                         .background {
                             if variantTouchOrigin.map({ frame.contains($0) }) == true {
                                 RoundedRectangle(cornerRadius: 13).fill(Color.primary.opacity(0.12)).padding(4)
@@ -595,7 +595,7 @@ private struct LetterKeyboardPageView: View {
                     Button {
                         commitTap(key)
                     } label: {
-                        letterKeyLabel(for: key)
+                        letterKeyLabel(for: key, frame: frame)
                     }
                     .buttonStyle(SymbolGlowButtonStyle(isActive: false, reduceMotion: false, usesCapsuleHighlight: false))
                     .contentShape(Rectangle())
@@ -611,11 +611,18 @@ private struct LetterKeyboardPageView: View {
     }
 
     @ViewBuilder
-    private func letterKeyLabel(for key: KeyDefinition) -> some View {
+    private func letterKeyLabel(for key: KeyDefinition, frame: CGRect) -> some View {
         // Every real key gets the same stable face. Native iOS keeps text keys,
         // Caps Lock, and Delete on one visual grid; only their labels differ.
-        letterGlyph(for: key)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if case .shift = key.type {
+            letterGlyph(for: key)
+                .frame(width: max(0, frame.width - 4), height: max(0, frame.height - 4))
+                .keyboardGlass(in: Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            letterGlyph(for: key)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     @ViewBuilder

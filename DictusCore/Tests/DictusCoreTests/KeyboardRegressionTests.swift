@@ -70,14 +70,14 @@ final class KeyboardRegressionTests: XCTestCase {
                        accuracy: 0.001)
     }
 
-    func testSurfaceFallbackIsTenPercentTaller() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.10, accuracy: 0.001)
+    func testSurfaceFallbackMatchesNativeHeight() {
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.0, accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight,
                        VoiceOnlyKeyboardPolicy.nativePortraitReferenceHeight
                         * VoiceOnlyKeyboardPolicy.surfaceHeightScale,
                        accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight,
-                       216 * 1.10,
+                       216,
                        accuracy: 0.001)
     }
 

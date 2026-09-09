@@ -111,7 +111,8 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Native compact iPhone portrait height before the sAiity scale.
     public static let nativePortraitReferenceHeight: Double = 216
     /// Extra dictation-board height on top of the native keyboard.
-    public static let surfaceHeightScale: Double = 1.10
+    /// Keep the extension at the same height as the native iOS keyboard.
+    public static let surfaceHeightScale: Double = 1.0
     /// Shared portrait fallback and the scale applied to device-native heights
     /// at runtime by the keyboard extension.
     public static let surfaceHeight: Double = nativePortraitReferenceHeight * surfaceHeightScale
@@ -162,9 +163,7 @@ public enum VoiceOnlyKeyboardPolicy {
             ? max(0, stableInputViewPasses) + 1
             : 1
         let isStable = stablePasses >= 2
-        // Never shrink below the requested fallback. UIKit often reports the
-        // unscaled native keyboard height; adopting it undoes the 10% taller
-        // dictation board.
+        // Never shrink below the requested native fallback height.
         let resolvedHeight = isStable ? max(inputViewHeight, fallback) : fallback
         return SurfaceHeightResolution(
             height: resolvedHeight,

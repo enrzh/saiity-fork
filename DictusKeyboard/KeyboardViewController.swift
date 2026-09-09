@@ -38,6 +38,7 @@ class KeyboardViewController: UIInputViewController,
     private var giellaBottomConstraint: NSLayoutConstraint?
     private var lastShiftTapDate = Date.distantPast
     private var deleteRepeatTimer: Timer?
+    private var deleteTouchDownTriggered = false
     private var deleteHoldRecognizer: UILongPressGestureRecognizer?
     private var deleteHoldTriggered = false
     private var deleteHoldResetWorkItem: DispatchWorkItem?
@@ -80,7 +81,7 @@ class KeyboardViewController: UIInputViewController,
     private var stableInputViewHeightPasses = 0
 
     /// Height constraint for the SwiftUI hosting view (toolbar + recording overlay).
-    /// The voice surface uses the native input height scaled by `surfaceHeightScale`.
+    /// The voice surface uses the native input height.
     private var hostingHeightConstraint: NSLayoutConstraint?
 
     /// Layout ownership: SwiftUI owns symbol/emoji content; UIKit owns the
@@ -534,7 +535,7 @@ class KeyboardViewController: UIInputViewController,
     }
 
     /// Swap hosting view's bottom anchor between idle and expanded positions.
-    /// - Idle: hosting fills the scaled voice surface.
+    /// - Idle: hosting fills the native-height voice surface.
     /// - Expanded: hosting.bottom = kbInputView.bottom (fills the full
     ///   keyboard area, used when the recording overlay or emoji picker is
     ///   shown and the keyboard view is hidden).
@@ -750,8 +751,7 @@ class KeyboardViewController: UIInputViewController,
 
     // MARK: - Keyboard Height
 
-    /// Match the native keyboard's device-aware input height, then apply the
-    /// shared sAiity scale so the dictation board is 10% taller than stock.
+    /// Match the native keyboard's device-aware input height.
     private func computeNativeKeyboardHeight() -> CGFloat {
         let deviceContext = DeviceContext.current
         let nativeHeight = KeyboardHeightProvider.height(
@@ -767,7 +767,7 @@ class KeyboardViewController: UIInputViewController,
         let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
             inputViewHeight: Double(inputViewHeight),
             controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil,
-            fallbackHeight: Double(nativeHeight) * 1.10,
+            fallbackHeight: Double(nativeHeight),
             previousInputViewHeight: previousInputViewHeight,
             stableInputViewPasses: stableInputViewHeightPasses
         )
@@ -776,7 +776,7 @@ class KeyboardViewController: UIInputViewController,
         return CGFloat(resolution.height)
     }
 
-    /// Every mode uses the scaled device-aware keyboard height.
+    /// Every mode uses the device-aware native keyboard height.
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         computeKeyboardHeight()
     }
@@ -1140,15 +1140,22 @@ class KeyboardViewController: UIInputViewController,
             guard let self else { return }
             if self.deleteHoldTriggered {
                 self.deleteHoldTriggered = false
+                self.deleteTouchDownTriggered = false
+                return
+            }
+            if self.deleteTouchDownTriggered {
+                self.deleteTouchDownTriggered = false
                 return
             }
             self.routeProxyCommand(.delete)
         }
+        deleteButton?.addTarget(self, action: #selector(handleDeleteTouchDown), for: .touchDown)
         let deleteHold = UILongPressGestureRecognizer(target: self, action: #selector(handleDeleteHold(_:)))
         deleteHold.minimumPressDuration = 0.35
         // The long press owns a hold. Letting the UIButton receive the same touch-up
         // races the hold repeat with a second single deletion.
         deleteHold.cancelsTouchesInView = true
+        deleteHold.delaysTouchesBegan = false
         deleteButton?.addGestureRecognizer(deleteHold)
         deleteHoldRecognizer = deleteHold
         returnButton = makeKeyboardActionButton(identifier: "return-key", label: "Insert return") { [weak self] in
@@ -1371,8 +1378,6 @@ class KeyboardViewController: UIInputViewController,
             deleteHoldResetWorkItem?.cancel()
             deleteHoldTriggered = true
             deleteRepeatTimer?.invalidate()
-            HapticFeedback.keyTapped()
-            routeProxyCommand(.delete)
             let startedAt = Date()
             let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
                 if Date().timeIntervalSince(startedAt) >= 2 {
@@ -1383,6 +1388,7 @@ class KeyboardViewController: UIInputViewController,
             }
             deleteRepeatTimer = timer
             RunLoop.main.add(timer, forMode: .common)
+            timer.fireDate = Date().addingTimeInterval(KeyboardDeletion.repeatDelay)
         case .ended:
             deleteRepeatTimer?.invalidate()
             deleteRepeatTimer = nil
@@ -1398,11 +1404,19 @@ class KeyboardViewController: UIInputViewController,
             deleteRepeatTimer?.invalidate()
             deleteRepeatTimer = nil
             deleteHoldTriggered = false
+            deleteTouchDownTriggered = false
             deleteHoldResetWorkItem?.cancel()
             deleteHoldResetWorkItem = nil
         default:
             break
         }
+    }
+
+    @objc private func handleDeleteTouchDown() {
+        guard !deleteTouchDownTriggered else { return }
+        deleteTouchDownTriggered = true
+        HapticFeedback.keyTapped()
+        routeProxyCommand(.delete)
     }
 
     private func closeNumberPanel() {

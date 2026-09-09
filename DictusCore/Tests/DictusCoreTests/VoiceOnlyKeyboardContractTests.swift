@@ -286,8 +286,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "skin-tone extras use the unified tap/hold gesture owner")
         XCTAssertFalse(picker.contains("emojiDragAxis"),
                        "horizontal scrolling owns drag; there is no second drag-select axis")
-        XCTAssertTrue(picker.contains(".exclusively(before: TapGesture())"),
-                      "a hold must suppress the base emoji tap")
+        XCTAssertTrue(picker.contains(".onTapGesture"),
+                      "emoji taps must remain independent from the scroll-compatible hold recognizer")
+        XCTAssertTrue(picker.contains("holdTriggered"),
+                      "a completed hold must suppress the base emoji tap")
+        XCTAssertTrue(picker.contains(".simultaneousGesture(emojiGesture)"),
+                      "the hold recognizer must not take ownership of horizontal scrolling")
         XCTAssertTrue(picker.contains("LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)"),
                       "scrolling must cancel a pending emoji hold")
         XCTAssertTrue(picker.contains("leftmostVisibleCategory"),

@@ -231,8 +231,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
     func testVoiceOnlySurfaceDoesNotUseLegacyKeyGrid() {
         XCTAssertFalse(VoiceOnlyKeyboardPolicy.usesLegacyKeyGrid)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.10)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216 * 1.10)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.0)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.contentHeight, VoiceOnlyKeyboardPolicy.surfaceHeight)
     }
 
@@ -485,7 +485,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.primaryControlSize, 54)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.railSpacing, 4)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216 * 1.10)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
         XCTAssertLessThanOrEqual(
             VoiceOnlyKeyboardPolicy.layout(for: 390).rightRailBottom,
             VoiceOnlyKeyboardPolicy.layout(for: 390).dismissTop
@@ -700,7 +700,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     }
 
     func testTaskTwoSurfaceAndBottomActionContractsRemainStable() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216 * 1.10)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.bottomActionHitHeight, 44)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.actionHitSize, CGSize(width: 88, height: 44))
         XCTAssertEqual(KeyboardCommand.at.proxyAction, .insertText("@"))
@@ -846,7 +846,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     }
 
     func testResolvedSurfaceHeightNeverAdoptsAShorterObservedHeight() {
-        let fallback = 216 * 1.10
+        let fallback: Double = 216
         let first = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
             inputViewHeight: 216,
             controllerViewHeight: 844,
@@ -860,7 +860,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             stableInputViewPasses: first.stableInputViewPasses
         )
         XCTAssertEqual(stable.height, fallback, accuracy: 0.001)
-        XCTAssertGreaterThan(stable.height, 216)
+        XCTAssertEqual(stable.height, 216, accuracy: 0.001)
     }
 
     func testResolvedSurfaceHeightUsesFallbackUntilInputViewGeometryIsStable() {

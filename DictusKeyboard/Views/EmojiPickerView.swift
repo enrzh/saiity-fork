@@ -349,6 +349,7 @@ private struct EmojiKey: View {
 
     @GestureState private var isPressed = false
     @State private var localFrame: CGRect = .zero
+    @State private var holdTriggered = false
 
     private var hasSkinTones: Bool {
         EmojiSkinToneVariants.options(for: item.emoji).count > 1
@@ -389,25 +390,26 @@ private struct EmojiKey: View {
                     }
                 }
             )
-            // A bounded hold fails as soon as scrolling starts. No cell pan
-            // recognizer competes with the scroll view's horizontal pan.
-            .gesture(emojiGesture)
+            // The hold recognizer is simultaneous so the parent ScrollView keeps
+            // ownership of horizontal drags. A cell must never install its own pan.
+            .onTapGesture {
+                if holdTriggered {
+                    holdTriggered = false
+                } else {
+                    onTap()
+                }
+            }
+            .simultaneousGesture(emojiGesture)
             .accessibilityLabel(item.emoji)
     }
 
     private var emojiGesture: some Gesture {
         LongPressGesture(minimumDuration: 0.4, maximumDistance: 10)
             .updating($isPressed) { value, pressed, _ in pressed = value }
-            .exclusively(before: TapGesture())
-            .onEnded { value in
-                switch value {
-                case .first(true):
-                    if hasSkinTones { onLongPress(localFrame) } else { onTap() }
-                case .second:
-                    onTap()
-                default:
-                    break
-                }
+            .onEnded { _ in
+                guard hasSkinTones else { return }
+                holdTriggered = true
+                onLongPress(localFrame)
             }
     }
 }

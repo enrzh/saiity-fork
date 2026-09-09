@@ -69,9 +69,9 @@ final class DictationHandoffRegressionTests: XCTestCase {
         XCTAssertTrue(commandBody.contains("isAttached && isOnScreen"))
     }
 
-    func testRuntimeKeyboardFallbackAppliesTheTenPercentSurfaceIncrease() throws {
+    func testRuntimeKeyboardFallbackUsesNativeSurfaceHeight() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
-        XCTAssertTrue(controller.contains("fallbackHeight: Double(nativeHeight) * 1.10"),
-                      "the policy fallback must be applied to the actual UIKit runtime path")
+        XCTAssertTrue(controller.contains("fallbackHeight: Double(nativeHeight)"),
+                      "the native height must be applied to the actual UIKit runtime path")
     }
 }
