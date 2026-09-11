@@ -18,10 +18,8 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                greeting
-                Section("Readiness") {
-                    readinessSection
-                }
+                dashboardHeader
+                readinessPanel
 
                 if let result = coordinator.lastResult, !result.isEmpty {
                     recentActivity(result: result)
@@ -75,65 +73,94 @@ struct HomeView: View {
         }
     }
 
-    private var greeting: some View {
+    private var dashboardHeader: some View {
         let readiness = currentReadiness
-        return HStack(alignment: .center, spacing: 12) {
-            Image(systemName: readiness.symbol)
-                .font(.title2.weight(.medium))
-                .foregroundStyle(readiness.action == .start ? Color.accentColor : .secondary)
-                .frame(width: 34, height: 34)
-                .background(.thinMaterial, in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
+        return HStack(alignment: .center, spacing: 14) {
+            DictusLogo(height: 54)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("sAiity")
+                    .font(.title2.weight(.bold))
                 Text(greetingTitle)
-                    .font(.title2.weight(.semibold))
-                Text(readinessSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(readinessColor(readiness))
+                        .frame(width: 7, height: 7)
+                    Text(readiness.title)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
             }
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var readinessSection: some View {
+    private var readinessPanel: some View {
         let readiness = currentReadiness
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: readiness.symbol)
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(readiness.title)
-                        .font(.body.weight(.semibold))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(readinessColor(readiness))
+                    .frame(width: 42, height: 42)
+                    .background(readinessColor(readiness).opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Ready when you are")
+                        .font(.headline)
                     Text(readinessSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            .accessibilityElement(children: .combine)
-
-            if readiness.action == .openSettings {
-                Button { openSystemSettings() } label: {
-                    Label("Open Settings", systemImage: "arrow.up.right")
-                }
-                .buttonStyle(.bordered)
-            } else if readiness.action == .requestMicrophone {
-                Button { requestMicrophoneAccess() } label: {
-                    Label("Allow microphone", systemImage: "mic.badge.plus")
-                }
-                .buttonStyle(.bordered)
             }
 
-            if readiness.action == .retry {
-                Button { coordinator.startDictation() } label: {
-                    Label("Try again", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.borderedProminent)
-            } else if readiness.action == .start {
-                newDictationButton
-            }
+            readinessAction
         }
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var readinessAction: some View {
+        let readiness = currentReadiness
+        if readiness.action == .openSettings {
+            Button { openSystemSettings() } label: {
+                Label("Open Settings", systemImage: "arrow.up.right")
+                    .frame(maxWidth: .infinity, minHeight: 48)
+            }
+            .buttonStyle(.bordered)
+        } else if readiness.action == .requestMicrophone {
+            Button { requestMicrophoneAccess() } label: {
+                Label("Allow microphone", systemImage: "mic.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 48)
+            }
+            .buttonStyle(.bordered)
+        } else if readiness.action == .retry {
+            Button { coordinator.startDictation() } label: {
+                Label("Try again", systemImage: "arrow.clockwise")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 50)
+            }
+            .buttonStyle(.borderedProminent)
+        } else if readiness.action == .start {
+            newDictationButton
+        }
+    }
+
+    private func readinessColor(_ readiness: DictationReadiness) -> Color {
+        switch readiness.action {
+        case .start: return .dictusSuccess
+        case .retry, .openSettings: return .dictusRecording
+        case .requestMicrophone: return .dictusAccent
+        case .none: return .secondary
+        }
     }
 
     private var newDictationButton: some View {
@@ -142,30 +169,44 @@ struct HomeView: View {
         } label: {
             Label("Start dictation", systemImage: "waveform")
                 .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 56)
+                .frame(maxWidth: .infinity, minHeight: 52)
         }
         .buttonStyle(.borderedProminent)
         .tint(.accentColor)
         .controlSize(.large)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .accessibilityIdentifier("home.newDictation")
     }
 
     private func recentActivity(result: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recent dictation")
-                .font(.headline)
+            HStack {
+                Label("Recent dictation", systemImage: "waveform")
+                    .font(.headline)
+                Spacer()
+                Button { copy(result) } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+            }
             Text(result)
                 .font(.body)
-                .lineLimit(4)
-            Button("Copy") { copy(result) }
-                .buttonStyle(.bordered)
-            Text(showCopiedFeedback ? "Copied" : "")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(!showCopiedFeedback)
-                .frame(minHeight: 20, alignment: .leading)
+                .lineLimit(5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if showCopiedFeedback {
+                Label("Copied", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            }
         }
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.recentActivity")
     }

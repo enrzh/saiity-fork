@@ -76,8 +76,6 @@ struct SpaceBarControl: View {
     @State private var lastCursorOffset = 0
     @State private var gestureStartDate: Date?
 
-    private let cursorHoldDuration: TimeInterval = 0.3
-
     var body: some View {
         Text("space")
             .font(.system(size: 14, weight: .semibold))
@@ -99,7 +97,7 @@ struct SpaceBarControl: View {
                     gestureStartDate = Date()
                 }
                 guard let gestureStartDate,
-                      Date().timeIntervalSince(gestureStartDate) >= cursorHoldDuration else {
+                      Date().timeIntervalSince(gestureStartDate) >= KeyboardDeletion.cursorHoldDuration else {
                     return
                 }
                 beginCursorTrackingIfNeeded()
@@ -114,7 +112,7 @@ struct SpaceBarControl: View {
             }
             .onEnded { _ in
                 let wasHeld = gestureStartDate.map {
-                    Date().timeIntervalSince($0) >= cursorHoldDuration
+                    Date().timeIntervalSince($0) >= KeyboardDeletion.cursorHoldDuration
                 } ?? false
                 defer {
                     cursorTracking = false
@@ -210,10 +208,11 @@ struct KeyboardDeleteButton: View {
         HapticFeedback.keyTapped()
         onDelete()
         deleteStartedAt = Date()
-        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-            if KeyboardDeletion.repeatsWords(after: Date().timeIntervalSince(deleteStartedAt)) {
+        let timer = Timer(timeInterval: KeyboardDeletion.repeatInterval, repeats: true) { _ in
+            switch KeyboardDeletion.repeatAction(after: Date().timeIntervalSince(deleteStartedAt)) {
+            case .word:
                 onDeleteWord()
-            } else {
+            case .character:
                 onDelete()
             }
         }
@@ -260,6 +259,112 @@ private struct ImmediateTouchButton: UIViewRepresentable {
 
         @objc func touchDown() { onTouchDown() }
         @objc func touchUp() { onTouchUp() }
+    }
+}
+
+/// Lightweight UIKit touch routing for ordinary keyboard keys.
+/// SwiftUI buttons wait for their gesture resolver before invoking the action;
+/// this adapter prepares feedback on contact and delivers the action directly
+/// from UIKit's touch-up-inside event.
+struct ImmediateKeyButton: UIViewRepresentable {
+    let onTouchDown: () -> Void
+    let onTouchUp: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onTouchDown: onTouchDown, onTouchUp: onTouchUp)
+    }
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = ImmediateKeyControl(type: .custom)
+        button.backgroundColor = .clear
+        // Consecutive fingers overlap during fast typing. Exclusive touch drops
+        // the second key while the first finger is still down.
+        button.isExclusiveTouch = false
+        button.addTarget(context.coordinator, action: #selector(Coordinator.touchDown), for: .touchDown)
+        button.addTarget(context.coordinator, action: #selector(Coordinator.touchUp), for: .touchUpInside)
+        return button
+    }
+
+    func updateUIView(_ uiView: UIButton, context: Context) {
+        context.coordinator.onTouchDown = onTouchDown
+        context.coordinator.onTouchUp = onTouchUp
+    }
+
+    final class Coordinator: NSObject {
+        var onTouchDown: () -> Void
+        var onTouchUp: () -> Void
+
+        init(onTouchDown: @escaping () -> Void, onTouchUp: @escaping () -> Void) {
+            self.onTouchDown = onTouchDown
+            self.onTouchUp = onTouchUp
+        }
+
+        @objc func touchDown() { onTouchDown() }
+        @objc func touchUp() { onTouchUp() }
+    }
+}
+
+private final class ImmediateKeyControl: UIButton {
+    override var isHighlighted: Bool {
+        didSet {
+            backgroundColor = isHighlighted
+                ? UIColor.label.withAlphaComponent(0.12)
+                : .clear
+            layer.borderWidth = isHighlighted ? 1 : 0
+            layer.borderColor = isHighlighted
+                ? UIColor.label.withAlphaComponent(0.16).cgColor
+                : nil
+            layer.cornerRadius = 13
+        }
+    }
+}
+
+/// A single UIKit tracking owner delivers accent-key input without waiting for
+/// SwiftUI's drag recognizer. Movement continues outside the original key.
+struct ImmediateVariantKey: UIViewRepresentable {
+    let onBegan: (CGPoint) -> Void
+    let onMoved: (CGPoint) -> Void
+    let onEnded: (Bool) -> Void
+
+    func makeUIView(context: Context) -> TrackingKey { TrackingKey() }
+
+    func updateUIView(_ view: TrackingKey, context: Context) {
+        view.onBegan = onBegan
+        view.onMoved = onMoved
+        view.onEnded = onEnded
+    }
+
+    final class TrackingKey: UIControl {
+        var onBegan: ((CGPoint) -> Void)?
+        var onMoved: ((CGPoint) -> Void)?
+        var onEnded: ((Bool) -> Void)?
+        private var activeMove: ((CGPoint) -> Void)?
+        private var activeEnd: ((Bool) -> Void)?
+
+        override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+            activeMove = onMoved
+            activeEnd = onEnded
+            backgroundColor = UIColor.label.withAlphaComponent(0.12)
+            layer.cornerRadius = 13
+            onBegan?(touch.location(in: self))
+            return true
+        }
+
+        override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+            activeMove?(touch.location(in: self))
+            return true
+        }
+
+        override func endTracking(_ touch: UITouch?, with event: UIEvent?) { finish(cancelled: false) }
+        override func cancelTracking(with event: UIEvent?) { finish(cancelled: true) }
+
+        private func finish(cancelled: Bool) {
+            let completion = activeEnd
+            activeEnd = nil
+            activeMove = nil
+            backgroundColor = .clear
+            completion?(cancelled)
+        }
     }
 }
 

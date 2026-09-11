@@ -3,23 +3,22 @@ import Foundation
 import DictusCore
 
 /// Manages recently used emojis, persisted via App Group UserDefaults.
-/// Cap at 30 emojis to keep the "Recents" section manageable.
+/// The caller supplies the page capacity so recents never spill into a second
+/// vertical page when the keyboard width changes.
 enum RecentEmojis {
     private static let key = "recentEmojis"
-    private static let maxCount = 30
 
-    static func load() -> [String] {
-        AppGroup.defaults.stringArray(forKey: key) ?? []
+    static func load(limit: Int) -> [String] {
+        Array((AppGroup.defaults.stringArray(forKey: key) ?? []).prefix(max(0, limit)))
     }
 
-    static func add(_ emoji: String) {
-        var recents = load()
+    static func add(_ emoji: String, limit: Int) {
+        var recents = AppGroup.defaults.stringArray(forKey: key) ?? []
         // Remove duplicate if already present, then prepend
         recents.removeAll { $0 == emoji }
         recents.insert(emoji, at: 0)
-        // Cap to max count
-        if recents.count > maxCount {
-            recents = Array(recents.prefix(maxCount))
+        if recents.count > limit {
+            recents = Array(recents.prefix(max(0, limit)))
         }
         AppGroup.defaults.set(recents, forKey: key)
     }

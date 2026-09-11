@@ -76,7 +76,7 @@ jobs:
           path: |
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
             ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-${{ hashFiles('Dictus.xcodeproj/project.pbxproj', 'DictusCore/Package.swift') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Dictus.xcodeproj/project.pbxproj', 'DictusCore/Package.swift', 'scripts/patch-fluidaudio-swift5.sh') }}
           restore-keys: |
             spm-${{ runner.os }}-
 
@@ -89,6 +89,12 @@ jobs:
 
       - name: Apply FluidAudio compatibility patch
         run: bash scripts/patch-fluidaudio-swift5.sh build/DerivedData
+
+      - name: Verify FluidAudio compatibility patch
+        run: |
+          checkout=$(find build/DerivedData -path '*/SourcePackages/checkouts/FluidAudio/Package.swift' -print -quit)
+          test -n "$checkout"
+          grep -q 'swiftLanguageModes: \[.v5\]' "$checkout"
 
       - name: Build DictusApp (and embedded Keyboard, Widgets, Core)
         run: |

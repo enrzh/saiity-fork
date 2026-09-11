@@ -40,7 +40,7 @@ final class KeyboardRegressionTests: XCTestCase {
         let body = String(root[start.lowerBound..<end.lowerBound])
 
         XCTAssertTrue(body.contains("Button { commitSymbolFromTap(key) } label:"))
-        XCTAssertTrue(body.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(body.contains(".contentShape(Rectangle().inset(by: -2))"))
         XCTAssertTrue(body.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
         XCTAssertTrue(body.contains("symbolVariantGesture("),
                       "keys with native extras get a hold popup through the same gesture owner")
@@ -70,14 +70,14 @@ final class KeyboardRegressionTests: XCTestCase {
                        accuracy: 0.001)
     }
 
-    func testSurfaceFallbackMatchesNativeHeight() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.0, accuracy: 0.001)
+    func testSurfaceFallbackRestoresExtendedHeight() {
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.10, accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight,
                        VoiceOnlyKeyboardPolicy.nativePortraitReferenceHeight
                         * VoiceOnlyKeyboardPolicy.surfaceHeightScale,
                        accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight,
-                       216,
+                       237.6,
                        accuracy: 0.001)
     }
 
@@ -90,10 +90,11 @@ final class KeyboardRegressionTests: XCTestCase {
     }
 
     func testDictateControlStartsAndStopsFromBothUIKitAndSwiftUI() throws {
-        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let state = try source("DictusKeyboard/KeyboardState.swift")
-        XCTAssertTrue(root.contains("state.handleMicPressBegan()"))
-        XCTAssertTrue(root.contains("state.handleMicPressEnded()"))
+        XCTAssertTrue(controller.contains("handleMicPressBegan()"))
+        XCTAssertTrue(controller.contains("handleMicPressEnded()"))
+        XCTAssertFalse(controller.contains("micButton?.isEnabled = false"), "relayout must not disable the active mic")
         XCTAssertTrue(state.contains("func handleMicPressBegan()"))
         XCTAssertTrue(state.contains("func handleMicPressEnded()"))
     }

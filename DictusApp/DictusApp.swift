@@ -176,6 +176,11 @@ struct DictusApp: App {
                     case .background:
                         PersistentLog.log(.appDidEnterBackground)
 
+                        // A configured-but-idle audio session keeps the microphone
+                        // indicator alive. Release it at the scene boundary while
+                        // preserving pending and active dictations.
+                        coordinator.deactivateAudioIfIdle()
+
                         // A cold start parked waiting for `.active` gets its last
                         // chance here (#311), because `.active` is not coming — the
                         // user swiped back before the app settled. Called from this

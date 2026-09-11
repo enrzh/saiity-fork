@@ -348,16 +348,11 @@ enum KeyboardLayouts {
     // MARK: - Bottom Rows
 
     private static func letterBottomRow(lang: SupportedLanguage) -> [KeyDefinition] {
-        let first = KeyboardAccessoryOrder.current == .emojiFirst
-            ? KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1))
-            : KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1))
-        let second = KeyboardAccessoryOrder.current == .emojiFirst
-            ? KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1))
-            : KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1))
-
+        // Keep this fixed to the native order. The old preference is intentionally
+        // no longer exposed or read, so every keyboard launch has the same controls.
         return [
-            first,
-            second,
+            KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1)),
+            KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1)),
             KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 5.0, height: 1)),
             KeyDefinition(type: .returnkey(name: lang.returnName), size: CGSize(width: 1.8, height: 1)),
             KeyDefinition(type: .keyboardMode, size: CGSize(width: 0.8, height: 1))

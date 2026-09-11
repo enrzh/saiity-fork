@@ -98,11 +98,12 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testHomeUsesOneReadinessSummaryAndExplicitCopyFeedback() throws {
         let home = try String(contentsOf: repository.appending(path: "DictusApp/Views/HomeView.swift"), encoding: .utf8)
 
-        XCTAssertTrue(home.contains("Section(\"Readiness\")"))
+        XCTAssertTrue(home.contains("readinessPanel"))
         XCTAssertTrue(home.contains("Label(\"Start dictation\""))
-        XCTAssertTrue(home.contains("Button(\"Copy\""))
-        XCTAssertTrue(home.contains("Text(showCopiedFeedback ? \"Copied\""))
-        XCTAssertFalse(home.contains("RoundedRectangle(cornerRadius: 12)"))
+        XCTAssertTrue(home.contains("copy(result)"))
+        XCTAssertTrue(home.contains("showCopiedFeedback"))
+        XCTAssertTrue(home.contains("Label(\"Copied\""))
+        XCTAssertTrue(home.contains("background(.regularMaterial"))
     }
 
     func testServiceToggleUsesSharedServiceStateAndLiveActivityCarriesServiceState() throws {
@@ -269,18 +270,21 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testSettingsTaskFourUsesGroupedNativeSectionsAndShippedDestinations() throws {
         let settings = try source("DictusApp/Views/SettingsView.swift")
 
-        let sections = ["Dictation", "Keyboard", "Translation & Cleanup", "Feedback", "Privacy", "Support"]
-        XCTAssertEqual(sections.filter { settings.contains("Section(\"\($0)\")") }, sections)
+        for panel in ["Dictation", "Keyboard", "Activity", "Feedback", "Support"] {
+            XCTAssertTrue(settings.contains("settingsPanel(\"\(panel)\""), "Missing settings panel: \(panel)")
+        }
+        XCTAssertTrue(settings.contains("Automatic dictation cleanup"))
+        XCTAssertTrue(settings.contains("Privacy Policy"))
         XCTAssertTrue(settings.contains("NavigationLink { ModelManagerView"))
         XCTAssertFalse(settings.contains("NavigationLink { SoundSettingsView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DebugLogView()"))
         XCTAssertTrue(settings.contains("NavigationLink { DiagnosticDetailView"))
         XCTAssertTrue(settings.contains("Toggle("))
-        XCTAssertTrue(settings.contains("Picker(selection: keyboardAccessoryOrderBinding, label: Text(\"Control order\"))"))
+        XCTAssertFalse(settings.contains("Control order"))
         XCTAssertFalse(settings.contains("transcriptionLanguage"))
         XCTAssertTrue(settings.contains("Keyboard layout"))
         XCTAssertTrue(settings.contains("ForEach(LayoutType.allCases"))
-        XCTAssertFalse(settings.contains("RoundedRectangle"))
+        XCTAssertTrue(settings.contains("background(.regularMaterial"))
     }
 
     func testSecondaryScreensConfirmDestructiveActionsAndReportCopyOrExport() throws {
@@ -359,7 +363,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let settings = try source("DictusApp/Views/SettingsView.swift")
 
         XCTAssertFalse(settings.contains(".safeAreaInset"))
-        XCTAssertTrue(settings.contains(".contentMargins(.bottom, 88, for: .scrollContent)"))
+        XCTAssertTrue(settings.contains(".padding(.bottom, 28)"))
     }
 
     func testModelDeletionIsOnlyExposedThroughConfirmedMenu() throws {
@@ -392,15 +396,59 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(overlay.contains("Preparing"))
         XCTAssertTrue(overlay.contains("Optimizing"))
         XCTAssertTrue(overlay.contains("Loading"))
+        XCTAssertTrue(overlay.contains("Start dictation in sAiity, then return to your app when finished."),
+                      "preparation must explain that recording starts in the foreground app")
+        XCTAssertTrue(overlay.contains("Start dictation here. After finishing, return to your app to insert the text."),
+                      "the overlay must retain the explicit prepare-only flow")
+        XCTAssertFalse(overlay.contains("Return to your app and tap the microphone again."),
+                       "idle audio cannot cold-start background dictation")
         XCTAssertTrue(overlay.contains(".accessibilityAddTraits(.isModal)"))
+    }
+
+    func testKeyboardLivenessPassesSharedAudioReadinessToThePolicy() throws {
+        let state = try source("DictusKeyboard/KeyboardState.swift")
+        let keys = try source("DictusCore/Sources/DictusCore/SharedKeys.swift")
+        let audio = try source("DictusApp/Audio/UnifiedAudioEngine.swift")
+        let keyboard = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+
+        XCTAssertTrue(keys.contains("keyboardAudioReady"))
+        XCTAssertTrue(state.contains("audioReady: defaults.bool(forKey: SharedKeys.keyboardAudioReady)"))
+        XCTAssertTrue(audio.contains("AppGroup.defaults.set(isHealthy, forKey: SharedKeys.keyboardAudioReady)"))
+        XCTAssertTrue(keyboard.contains("saiity://dictate?source=keyboard&intent=prepare"),
+                      "unavailable audio must open the foreground preparation flow")
+        XCTAssertTrue(keyboard.contains("openDictusForRecovery()"),
+                      "cold recovery must use the keyboard state handoff owner")
+        XCTAssertTrue(root.contains("Link(destination: preparationURL)"),
+                      "cold handoff must be an interactive public SwiftUI Link")
+        XCTAssertTrue(root.contains("Button(action: routeDismiss)"),
+                      "dismiss must remain a direct SwiftUI action")
+    }
+
+    func testAccessoryRelayoutKeepsTheActiveMicFrameAndUsesTheSharedTopLane() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let policy = try source("DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift")
+
+        XCTAssertTrue(controller.contains("if !micTouchActive {"),
+                      "relayout must not move a mic button during an active touch")
+        XCTAssertTrue(controller.contains("topAccessoryHeight: currentSuggestionLaneHeight"))
+        XCTAssertTrue(root.contains("topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight"))
+        XCTAssertTrue(policy.contains("public static let suggestionLaneHeight: Double = 44"))
     }
 
     func testKeyboardEmojiAndCategoryTargetsKeepFortyFourPointHitAreas() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
-        XCTAssertTrue(picker.contains("private var rowHeight: CGFloat { 44 }"))
-        XCTAssertTrue(picker.contains("frame(width: emojiCellWidth, height: rowHeight)"))
+        XCTAssertTrue(picker.contains("private let rowHeight: CGFloat = 44") ||
+                      picker.contains("private var rowHeight: CGFloat { 44 }"))
+        XCTAssertTrue(picker.contains("UICollectionView"),
+                      "emoji interaction must be owned by native collection cells")
+        XCTAssertFalse(picker.contains("TabView("))
+        XCTAssertFalse(picker.contains("ScrollView(.vertical"))
+        XCTAssertTrue(picker.contains("fourRows") || picker.contains("rows: 4") || picker.contains("rowCount = 4"),
+                      "emoji pages must have four rows")
         XCTAssertTrue(picker.contains("private let categoryBarHeight: CGFloat = 44"))
         XCTAssertFalse(picker.contains("Search Emoji"))
         XCTAssertTrue(categories.contains(".frame(height: 44)"))

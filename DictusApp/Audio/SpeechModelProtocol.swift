@@ -22,6 +22,11 @@ protocol SpeechModelProtocol {
     /// - Parameter modelIdentifier: The catalog identifier (e.g., "openai_whisper-small").
     func prepare(modelIdentifier: String) async throws
 
+    /// Release model objects and compiled runtime state while retaining downloaded files.
+    /// This is used after a memory warning and must never be called during preparation
+    /// or an active transcription.
+    func releaseLoadedModel()
+
     /// Transcribe audio samples to text.
     /// - Parameters:
     ///   - audioSamples: Float32 audio samples at 16 kHz mono.
@@ -98,6 +103,11 @@ class WhisperKitEngine: SpeechModelProtocol {
     /// the coordinator passes its WhisperKit instance to the engine.
     func setWhisperKit(_ kit: WhisperKit) {
         self.whisperKit = kit
+    }
+
+    func releaseLoadedModel() {
+        whisperKit = nil
+        loadedModelName = nil
     }
 
     func prepare(modelIdentifier: String) async throws {

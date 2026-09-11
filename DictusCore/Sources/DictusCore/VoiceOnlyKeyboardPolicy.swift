@@ -111,8 +111,9 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Native compact iPhone portrait height before the sAiity scale.
     public static let nativePortraitReferenceHeight: Double = 216
     /// Extra dictation-board height on top of the native keyboard.
-    /// Keep the extension at the same height as the native iOS keyboard.
-    public static let surfaceHeightScale: Double = 1.0
+    /// The extended surface keeps the larger, more comfortable dictation layout
+    /// used before the native-height experiment.
+    public static let surfaceHeightScale: Double = 1.10
     /// Shared portrait fallback and the scale applied to device-native heights
     /// at runtime by the keyboard extension.
     public static let surfaceHeight: Double = nativePortraitReferenceHeight * surfaceHeightScale
@@ -221,7 +222,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let contentSpacing: Double = 6
     public static let topInset: Double = 8
     /// Height reserved above the glass surface for keyboard-mode suggestions.
-    public static let suggestionLaneHeight: Double = 36
+    public static let suggestionLaneHeight: Double = 44
 
     public static func primaryControlWidth(availableWidth: Double, centerAreaWidth: Double) -> Double {
         let clusterVisible = availableWidth - horizontalPadding * 2 >= controlSize * 2 + 124
@@ -261,6 +262,7 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: max(0, surfaceHeight - verticalPadding * 2 - topAccessoryHeight))
         }
 
+
         public var bottomAuxiliaryControlFrame: CGRect {
             CGRect(x: surfaceFrame.minX, y: surfaceFrame.maxY - visibleControlGap - controlSize,
                    width: surfaceFrame.width, height: controlSize)
@@ -297,6 +299,30 @@ public enum VoiceOnlyKeyboardPolicy {
                    y: surfaceFrame.minY + VoiceOnlyKeyboardPolicy.topInset,
                    width: VoiceOnlyKeyboardPolicy.languageVisualWidth,
                    height: VoiceOnlyKeyboardPolicy.controlSize)
+        }
+
+        public var accessoryMicrophoneFrame: CGRect {
+            CGRect(x: max(0, surfaceWidth - 88), y: 0, width: 80,
+                   height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        }
+
+        public var accessoryDismissFrame: CGRect {
+            CGRect(x: max(0, surfaceWidth - 52), y: 0, width: 44,
+                   height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        }
+
+        public var boardKeyboardFrame: CGRect { languageFrame }
+
+        public var boardReturnFrame: CGRect { dismissFrame }
+
+        public var boardDeleteFrame: CGRect {
+            // Same third-row command frame as the symbols grid, in root coordinates.
+            let gridHeight = max(0, surfaceFrame.height - visibleControlGap * 2 - controlSize)
+            let rowHeight = max(1, (gridHeight - 12) / 3)
+            let width = max(0, surfaceFrame.width - horizontalPadding * 2) * 0.15
+            return CGRect(x: surfaceFrame.maxX - horizontalPadding - width,
+                          y: surfaceFrame.minY + visibleControlGap + 2 * (rowHeight + 6),
+                          width: width, height: rowHeight)
         }
 
         /// Explicit clipboard insertion sits beside the language menu and keeps

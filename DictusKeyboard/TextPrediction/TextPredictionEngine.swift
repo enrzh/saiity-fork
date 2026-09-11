@@ -1,6 +1,7 @@
 // DictusKeyboard/TextPrediction/TextPredictionEngine.swift
 // Core prediction logic: word completions, spell-checking, and accent suggestions.
 import UIKit
+import NaturalLanguage
 import DictusCore
 
 /// Provides word completions, spell-checking, and accent suggestions for the keyboard.
@@ -51,8 +52,47 @@ class TextPredictionEngine {
     /// We only keep one language's frequency data in memory at a time
     /// to stay within the keyboard extension's ~50MB memory budget.
     func setLanguage(_ lang: String) {
+        guard language != lang else { return }
         language = lang
         loadDictionaries(for: lang)
+    }
+
+    /// Uses the most recent text when it is confidently identifiable. The
+    /// active keyboard language remains the fallback for short or mixed input.
+    func setLanguage(forRecentText text: String) {
+        let recentText = String(text.suffix(240))
+        guard recentText.count >= 24,
+              recentText.split(whereSeparator: { $0.isWhitespace }).count >= 4 else {
+            return
+        }
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(recentText)
+        let hypotheses = recognizer.languageHypotheses(withMaximum: 2)
+            .sorted { $0.value > $1.value }
+        guard let top = hypotheses.first else {
+            return
+        }
+        let secondProbability = hypotheses.dropFirst().first?.value ?? 0
+        guard top.value >= 0.70,
+              top.value - secondProbability >= 0.15,
+              let language = Self.supportedLanguageCode(for: top.key.rawValue),
+              UITextChecker.availableLanguages.contains(where: { $0.hasPrefix(language) }) else {
+            // Mixed-language and low-confidence context keeps the current
+            // dictionary instead of thrashing back to the selected language.
+            return
+        }
+        setLanguage(language)
+    }
+
+    private static func supportedLanguageCode(for identifier: String) -> String? {
+        switch identifier.lowercased() {
+        case "de": return SupportedLanguage.german.rawValue
+        case "en": return SupportedLanguage.english.rawValue
+        case "es": return SupportedLanguage.spanish.rawValue
+        case "fr": return SupportedLanguage.french.rawValue
+        default: return nil
+        }
     }
 
     /// Loads both dictionaries for `lang` and runs the work that can only happen

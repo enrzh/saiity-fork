@@ -19,9 +19,10 @@ public enum DictationServiceLivenessPolicy {
         appProcessHeartbeat: TimeInterval?,
         liveActivityPresent: Bool,
         liveActivityUpdatedAt: TimeInterval? = nil,
+        audioReady: Bool = true,
         now: TimeInterval = Date().timeIntervalSince1970
     ) -> Bool {
-        guard serviceEnabled else { return true }
+        guard serviceEnabled, audioReady else { return true }
         if liveActivityPresent,
            let liveActivityUpdatedAt,
            liveActivityUpdatedAt > 0 {

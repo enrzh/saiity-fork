@@ -166,7 +166,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
             "the long-press overlay may own a hit shape only while a variant popup is visible"
         )
         XCTAssertTrue(
-            symbolPage.contains(".contentShape(Rectangle())"),
+            symbolPage.contains(".contentShape(Rectangle().inset(by: -2))"),
             "symbol keys must keep the complete rectangular edge hit target"
         )
     }

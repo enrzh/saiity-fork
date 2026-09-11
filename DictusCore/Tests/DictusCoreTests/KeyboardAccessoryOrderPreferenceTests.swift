@@ -16,20 +16,20 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         super.tearDown()
     }
 
-    func testMissingAndInvalidValuesFallBackToEmojiFirst() {
-        XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .emojiFirst)
+    func testMissingAndInvalidValuesUseTheFixedNativeOrder() {
+        XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .numberFirst)
 
         defaults.set("unsupported", forKey: SharedKeys.keyboardAccessoryOrder)
 
-        XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .emojiFirst)
+        XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .numberFirst)
     }
 
-    func testEachOrderPersistsThroughTheSharedKey() {
+    func testLegacyOrderPersistenceCannotChangeTheRenderedOrder() {
         for order in KeyboardAccessoryOrder.allCases {
             order.persist(to: defaults)
 
             XCTAssertEqual(defaults.string(forKey: SharedKeys.keyboardAccessoryOrder), order.rawValue)
-            XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), order)
+            XCTAssertEqual(KeyboardAccessoryOrder.load(from: defaults), .numberFirst)
         }
     }
 
@@ -38,8 +38,8 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         XCTAssertEqual(KeyboardAccessoryOrder.numberFirst.displayName, "123, Emoji")
     }
 
-    func testCurrentReadsTheAppGroupDefaultsOrderAndDefaultsToEmojiFirst() {
-        XCTAssertEqual(KeyboardAccessoryOrder.current, .emojiFirst)
+    func testCurrentAlwaysUsesTheNativeNumberFirstOrder() {
+        XCTAssertEqual(KeyboardAccessoryOrder.current, .numberFirst)
 
         defaults.set(KeyboardAccessoryOrder.numberFirst.rawValue,
                      forKey: SharedKeys.keyboardAccessoryOrder)

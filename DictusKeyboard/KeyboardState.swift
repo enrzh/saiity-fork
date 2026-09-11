@@ -260,6 +260,7 @@ class KeyboardState: ObservableObject {
 
     /// Combined action state consumed by the UIKit hit layer and SwiftUI label.
     @Published private(set) var appNeedsAppAction = false
+    @Published var accessoryDictationActive = false
 
     /// True when the host field advertises iOS's one-time-code content type.
     /// This only changes the local paste affordance; iOS remains responsible for
@@ -406,6 +407,8 @@ class KeyboardState: ObservableObject {
 
     /// Open the app without creating another recording request.
     func openDictusForRecovery() {
+        guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 0.75 else { return }
+        lastModelPreparationOpenDate = Date()
         guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else { return }
         openDictusURL(url)
     }
@@ -968,7 +971,8 @@ class KeyboardState: ObservableObject {
                 serviceEnabled: serviceEnabled,
                 appProcessHeartbeat: heartbeat > 0 ? heartbeat : nil,
                 liveActivityPresent: defaults.bool(forKey: SharedKeys.liveActivityPresent),
-                liveActivityUpdatedAt: liveActivityUpdatedAt > 0 ? liveActivityUpdatedAt : nil
+                liveActivityUpdatedAt: liveActivityUpdatedAt > 0 ? liveActivityUpdatedAt : nil,
+                audioReady: defaults.bool(forKey: SharedKeys.keyboardAudioReady)
             )
         appNeedsServiceRecovery = needsServiceRecovery
         appNeedsAppAction = needsModelPreparation || needsServiceRecovery
@@ -1646,17 +1650,14 @@ class KeyboardState: ObservableObject {
             return
         }
         openURLFromExtension(url) { [weak self] succeeded in
-            guard !succeeded else { return }
-            guard DictationFailureAction.recoveryTransition(
-                for: DictationErrorChannel.currentDisposition, urlOpened: false
-            ) == .retainFailed else { return }
-            self?.presentStatusMessage("Unable to open sAiity. Try again.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
-            PersistentLog.log(.diagnosticProbe(
-                component: "KeyboardState",
-                instanceID: self?.instanceID ?? "unknown",
-                action: "extensionURLFailedClosed",
-                details: "extensionContext.open returned false"
-            ))
+            DispatchQueue.main.async {
+                guard let self, !succeeded else { return }
+                self.presentStatusMessage("iOS could not open sAiity. Open it from the Home Screen to start dictation.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
+                PersistentLog.log(.diagnosticProbe(
+                    component: "KeyboardState", instanceID: self.instanceID,
+                    action: "extensionURLFailedClosed", details: "extensionContext.open returned false"
+                ))
+            }
         }
     }
 

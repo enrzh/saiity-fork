@@ -169,6 +169,8 @@ public enum SharedKeys {
     // App and Live Activity availability
     /// Double (timeIntervalSince1970): last heartbeat from the DictusApp process.
     public static let appProcessHeartbeat = "dictus.appProcessHeartbeat"
+    /// True only while the app owns a running audio engine; Live Activity is not audio readiness.
+    public static let keyboardAudioReady = "dictus.keyboardAudioReady"
     /// Bool: whether DictusApp last confirmed that its Live Activity is present.
     public static let liveActivityPresent = "dictus.liveActivityPresent"
     /// Double (timeIntervalSince1970): when Live Activity presence was last

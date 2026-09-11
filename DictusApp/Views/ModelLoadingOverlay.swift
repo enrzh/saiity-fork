@@ -190,7 +190,7 @@ struct ModelLoadingOverlay: View {
                 .foregroundStyle(.primary)
 
             if activeContext.isPrepareOnly {
-                Text("Return to your app and tap the microphone again.")
+                Text("Start dictation in sAiity, then return to your app when finished.")
                     .font(.dictusCaption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -213,9 +213,35 @@ struct ModelLoadingOverlay: View {
                      : "Please stay on this page — do not leave the app.")
                     .font(.dictusCaption)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 48)
+                     .multilineTextAlignment(.center)
+                     .padding(.horizontal, 48)
             }
+            if activeContext.isPrepareOnly {
+                preparationSteps
+                    .padding(.top, 8)
+            }
+        }
+    }
+
+    private var preparationSteps: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            preparationStep("1", "Keep sAiity open while the model loads.")
+            preparationStep("2", "Wait until the model says Ready.")
+            preparationStep("3", "Start dictation here. After finishing, return to your app to insert the text.")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 28)
+    }
+
+    private func preparationStep(_ number: String, _ text: LocalizedStringKey) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(number)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(.tint)
+                .frame(width: 18, alignment: .leading)
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -226,7 +252,7 @@ struct ModelLoadingOverlay: View {
         case .modelSelection:
             return "This preparation may take a moment and is usually not needed for every dictation."
         case .keyboardColdStart:
-            return "Your model needs to be prepared before this dictation. This is usually an exceptional step."
+            return "Prepare the model here. A Live Activity keeps controls available, but does not keep the microphone running."
         }
     }
 

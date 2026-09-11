@@ -126,6 +126,15 @@ class UnifiedAudioEngine: ObservableObject {
     /// COMPUTED from engine.isRunning — always accurate, fixes #38.
     var isEngineRunning: Bool { engine.isRunning }
 
+    /// Explicit resource lifecycle used by coordinator teardown and diagnostics.
+    var lifecycleState: AudioLifecycleState {
+        AudioLifecyclePolicy.state(
+            engineRunning: engine.isRunning,
+            sessionConfigured: sessionConfigured,
+            isRecording: isRecording
+        )
+    }
+
     /// Whether the engine is in a healthy state for warm-start recording.
     ///
     /// WHY both gates: `engine.isRunning` returns true even after an interruption
@@ -216,11 +225,9 @@ class UnifiedAudioEngine: ObservableObject {
     /// or future re-instantiation.
     private var notificationObservers: [NSObjectProtocol] = []
 
-    /// Pending idle-release work item (issue #106 Phase B). Armed whenever the
-    /// engine *enters* the warm-idle state — end of a recording (`collectSamples`)
-    /// or a successful `warmUp()` — and cancelled at the start of any new
-    /// recording. If it ever fires, `releaseWarmState()` tears down the engine +
-    /// session so the device stops paying for `UIBackgroundModes:audio`.
+    /// Pending idle-release work item (issue #106 Phase B). Kept as a defensive
+    /// backstop for callers that explicitly use `warmUp()`. Normal dictation no
+    /// longer enters a warm-idle state after capture; it deactivates immediately.
     private var idleReleaseWorkItem: DispatchWorkItem?
 
     /// Time at which the engine entered the warm-idle state: a recording ended
@@ -236,22 +243,13 @@ class UnifiedAudioEngine: ObservableObject {
     /// rather than assuming the post-dictation one.
     private var armedIdleReleaseInterval: TimeInterval = UnifiedAudioEngine.idleReleaseInterval
 
-    /// Idle window after which the warm engine + session are released, when the
-    /// warm state followed a real dictation. Hardcoded for this iteration; a
-    /// user-facing setting will land as a follow-up (issue #106 out-of-scope).
-    /// 10 minutes balances UX (warm starts feel instant within a normal
-    /// "back-and-forth dictation session") against battery drain (3.3%/h
-    /// baseline drops to ~0%/h after release).
+    /// Defensive idle window for explicit warm-up callers. Normal dictation does
+    /// not wait for this timer because the microphone is released after capture.
     private static let idleReleaseInterval: TimeInterval = 10 * 60
 
-    /// Idle window applied when the engine was warmed WITHOUT a preceding
-    /// dictation: launch pre-load, `didBecomeActive` re-warm, explicit `warmUp()`.
-    ///
-    /// WHY a separate constant that currently holds the same value: #256 leaves
-    /// open whether a user who merely opened the app deserves a shorter window
-    /// than one who just dictated. That is a product call, not an implementation
-    /// one, so this ships with the conservative answer (identical windows) and a
-    /// single line to change if the maintainer decides otherwise.
+    /// Defensive idle window for explicit warm-up callers that did not follow a
+    /// recording. It remains separate so compatibility callers can tune it
+    /// independently without changing the normal capture lifecycle.
     private static let warmUpIdleReleaseInterval: TimeInterval = idleReleaseInterval
 
     /// Sample gating flag read from the audio thread.
@@ -298,7 +296,14 @@ class UnifiedAudioEngine: ObservableObject {
     // MARK: - Init / Deinit
 
     init() {
+        publishKeyboardAudioReadiness()
         registerInterruptionObservers()
+    }
+
+    private func publishKeyboardAudioReadiness() {
+        AppGroup.defaults.set(isHealthy, forKey: SharedKeys.keyboardAudioReady)
+        AppGroup.defaults.synchronize()
+        DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
     }
 
     deinit {
@@ -402,6 +407,7 @@ class UnifiedAudioEngine: ObservableObject {
             // and re-asks ownership when the interruption ends.
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
+            publishKeyboardAudioReadiness()
 
             PersistentLog.log(.audioInterruptionBegan(reason: reason))
             logHapticsAllowance(context: "interruptionBegan")
@@ -426,11 +432,11 @@ class UnifiedAudioEngine: ObservableObject {
             // dismissed (Phase A correctly tears it down on .began). The combination
             // is the worst of both: audio resources held + no Dictus UX visible.
             //
-            // Instead, leave the engine cold and rely on the natural re-warm paths:
+            // Instead, leave the engine cold and rely on the natural start paths:
             //  - if user reopens the app, DictationCoordinator's didBecomeActive
-            //    observer calls warmUp.
+            //    observer prepares the model without touching the microphone.
             //  - if user taps the keyboard mic, the cold-start dictation path
-            //    starts the engine fresh.
+            //    configures the session and starts the engine fresh.
             // Either way, the warm-state contract matches reality and the orange
             // mic only appears when the user actually wants to record (issue #106).
             PersistentLog.log(.audioInterruptionEnded(shouldResume: shouldResume, restored: false))
@@ -475,6 +481,7 @@ class UnifiedAudioEngine: ObservableObject {
         endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        publishKeyboardAudioReadiness()
         // Bump generation BEFORE replacing the engine so any in-flight tap callbacks
         // from the old engine see a stale generation and bail out instead of writing
         // into shared audio-thread state and racing with the new engine's tap.
@@ -657,6 +664,10 @@ class UnifiedAudioEngine: ObservableObject {
     ///
     /// - Returns: Audio samples ready for transcription. Engine keeps running.
     func collectSamples() -> [Float] {
+        collectSamples(armingIdleRelease: true)
+    }
+
+    private func collectSamples(armingIdleRelease: Bool) -> [Float] {
         isRecording = false
         isRecordingFlag = false
         endWaveformSession()
@@ -674,10 +685,26 @@ class UnifiedAudioEngine: ObservableObject {
         bufferEnergy = []
         bufferSeconds = 0
 
-        // Arm the idle-release timer (issue #106 Phase B). If the user starts a
-        // new recording or warms up before the timer fires, it gets cancelled.
-        scheduleIdleRelease(after: Self.idleReleaseInterval)
+        if armingIdleRelease {
+            // Arm the idle-release timer (issue #106 Phase B). If the user starts a
+            // new recording or warms up before the timer fires, it gets cancelled.
+            scheduleIdleRelease(after: Self.idleReleaseInterval)
+        }
 
+        return samples
+    }
+
+    /// Collect recorded samples and immediately release all microphone resources.
+    ///
+    /// The caller must hold a background execution assertion before invoking this
+    /// method if transcription continues while the app is backgrounded. Capture
+    /// and transcription have different lifetimes: the former owns the microphone,
+    /// while the latter only needs the already-copied sample buffer.
+    func collectSamplesAndDeactivate() -> [Float] {
+        // Deactivation immediately cancels idle release, so do not schedule a
+        // timer for a state that will not exist after this method returns.
+        let samples = collectSamples(armingIdleRelease: false)
+        deactivateSession()
         return samples
     }
 
@@ -693,6 +720,7 @@ class UnifiedAudioEngine: ObservableObject {
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        publishKeyboardAudioReadiness()
 
         let samples = audioSamples
         audioSamples = []
@@ -716,14 +744,39 @@ class UnifiedAudioEngine: ObservableObject {
         endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        publishKeyboardAudioReadiness()
         audioSamples = []
         PersistentLog.log(.audioEngineStopped)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        sessionConfigured = false
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+            sessionConfigured = false
+            PersistentLog.log(.diagnosticProbe(
+                component: "UnifiedAudioEngine",
+                instanceID: "audioSession",
+                action: "deactivated",
+                details: "engineRunning=\(engine.isRunning) isRecording=\(isRecording)"
+            ))
+        } catch {
+            // Keep the configured flag true when iOS refuses deactivation. That
+            // preserves a retry path instead of claiming the microphone is off.
+            PersistentLog.log(.audioSessionFailed(
+                error: "deactivate: \(error.localizedDescription)"
+            ))
+        }
         logHapticsAllowance(context: "deactivateSession")
 
         bufferEnergy = []
         bufferSeconds = 0
+    }
+
+    /// Release the microphone when no dictation is actively capturing.
+    /// Safe to call repeatedly from lifecycle and service-off paths.
+    func deactivateIfIdle() {
+        guard AudioLifecyclePolicy.canDeactivate(lifecycleState) else { return }
+        deactivateSession()
     }
 
     /// Force restart the engine (stop + removeTap + reconfigure + start).
@@ -732,6 +785,7 @@ class UnifiedAudioEngine: ObservableObject {
         cancelIdleRelease()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        publishKeyboardAudioReadiness()
         sessionConfigured = false
         PersistentLog.log(.audioEngineStopped)
 
@@ -841,6 +895,7 @@ class UnifiedAudioEngine: ObservableObject {
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        publishKeyboardAudioReadiness()
 
         // Bump generation so any in-flight tap callback bails out before mutating
         // shared audio-thread state (matches the mediaServicesWereReset pattern).
@@ -1003,6 +1058,7 @@ class UnifiedAudioEngine: ObservableObject {
         // .ended interruption resume) ends up healthy without each caller having
         // to remember to flip the flag.
         isInterrupted = false
+        publishKeyboardAudioReadiness()
 
         // Re-assert the system-haptics allowance now that the session is truly
         // carrying input. `configureAudioSession()` sets it before the engine

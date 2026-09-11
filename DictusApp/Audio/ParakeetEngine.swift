@@ -101,6 +101,11 @@ class ParakeetEngine: SpeechModelProtocol {
         }
     }
 
+    func releaseLoadedModel() {
+        asrManager = nil
+        isInitialized = false
+    }
+
     /// Transcribe audio samples using Parakeet v3.
     ///
     /// - Parameters:

@@ -247,8 +247,8 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
     func testVoiceOnlySurfaceDoesNotUseLegacyKeyGrid() {
         XCTAssertFalse(VoiceOnlyKeyboardPolicy.usesLegacyKeyGrid)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.0)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeightScale, 1.10)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 237.6, accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.contentHeight, VoiceOnlyKeyboardPolicy.surfaceHeight)
     }
 
@@ -310,14 +310,14 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         )
 
         XCTAssertFalse(controller.contains("setAuxiliaryUtilityVisuals"))
-        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = true"))
         XCTAssertFalse(rootView.contains("alternateAccessoryRow"))
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters"))
         XCTAssertTrue(rootView.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
         XCTAssertTrue(rootView.contains(".frame(width: surfaceFrame.width, height: surfaceFrame.height)"))
         XCTAssertFalse(rootView.contains("availableHeight: contentFrame.height"))
         XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .emoji || mode == .letters)"))
-        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = true"))
         XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
 
@@ -501,7 +501,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.primaryControlSize, 54)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.railSpacing, 4)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.controlEdgeInset, 12)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 237.6, accuracy: 0.001)
         XCTAssertLessThanOrEqual(
             VoiceOnlyKeyboardPolicy.layout(for: 390).rightRailBottom,
             VoiceOnlyKeyboardPolicy.layout(for: 390).dismissTop
@@ -716,7 +716,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     }
 
     func testTaskTwoSurfaceAndBottomActionContractsRemainStable() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 216)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.surfaceHeight, 237.6, accuracy: 0.001)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.bottomActionHitHeight, 44)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.actionHitSize, CGSize(width: 88, height: 44))
         XCTAssertEqual(KeyboardCommand.at.proxyAction, .insertText("@"))
@@ -781,6 +781,19 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
         XCTAssertEqual(deletes, 1)
         XCTAssertEqual(inserts, ["\n", "@", " "])
+    }
+
+    func testKeyboardDeletionUsesOneSharedTimingPolicy() {
+        XCTAssertEqual(
+            KeyboardDeletion.repeatAction(after: KeyboardDeletion.wordRepeatDelay - 0.001),
+            .character
+        )
+        XCTAssertEqual(
+            KeyboardDeletion.repeatAction(after: KeyboardDeletion.wordRepeatDelay),
+            .word
+        )
+        XCTAssertEqual(KeyboardDeletion.repeatInterval, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(KeyboardDeletion.cursorHoldDuration, 0.3, accuracy: 0.0001)
     }
 
     func testVoiceVisualAndUIKitRectsShareAbsoluteSurfaceGeometry() {

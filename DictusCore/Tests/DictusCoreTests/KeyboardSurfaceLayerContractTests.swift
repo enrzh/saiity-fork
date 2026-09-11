@@ -67,9 +67,12 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(emoji.contains("keyboardGlassEffect()"))
         XCTAssertFalse(categories.contains("glassEffect"))
         XCTAssertTrue(emoji.contains("availableHeight - headerHeight - bottomBarHeight - edgeInset * 2"))
-        XCTAssertTrue(emoji.contains("ScrollView(.horizontal"))
-        XCTAssertTrue(emoji.contains("HStack(spacing: 0)"),
-                      "the horizontal page track must have a stable extent")
+        XCTAssertTrue(emoji.contains("UICollectionView"),
+                      "emoji categories must use the native paged collection surface")
+        XCTAssertFalse(emoji.contains("TabView("), "nested SwiftUI paging must be removed")
+        XCTAssertFalse(emoji.contains("ScrollView(.vertical"), "nested vertical scrolling must be removed")
+        XCTAssertTrue(emoji.contains("fourRows") || emoji.contains("rows: 4") || emoji.contains("rowCount = 4"),
+                      "the native emoji surface must reserve four rows")
     }
 
     func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
@@ -152,18 +155,17 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testUIKitOverlayOnlyReceivesTouchesOnVoiceModes() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
+        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = true"))
         XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
 
     func testAuxiliaryUIKitControlsAreHiddenDisabledAndNonInteractive() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("controls.isHidden = isAuxiliary"))
-        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = !isAuxiliary"))
-        XCTAssertTrue(source.contains("$0.isHidden = true"))
-        XCTAssertTrue(source.contains("$0.isEnabled = false"))
-        XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = false"))
+        XCTAssertTrue(source.contains("controls.isHidden = false"))
+        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = true"))
+        XCTAssertTrue(source.contains("$0.isEnabled = !$0.isHidden"))
+        XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("accessory row"))
     }
 

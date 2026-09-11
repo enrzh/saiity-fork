@@ -11,12 +11,14 @@ public enum KeyboardAccessoryOrder: String, CaseIterable, Codable {
         }
     }
 
-    public static var current: Self { load(from: AppGroup.defaults) }
+    /// The accessory rail follows the native order: 123, then emoji.
+    /// The old preference is intentionally ignored; keeping one order avoids
+    /// symbol-page controls changing position between launches.
+    public static var current: Self { .numberFirst }
 
     public static func load(from defaults: UserDefaults) -> Self {
-        guard let rawValue = defaults.string(forKey: SharedKeys.keyboardAccessoryOrder),
-              let order = Self(rawValue: rawValue) else { return .emojiFirst }
-        return order
+        _ = defaults
+        return .numberFirst
     }
 
     public func persist(to defaults: UserDefaults = AppGroup.defaults) {

@@ -51,18 +51,9 @@ struct EmojiPickerView: View {
         max(1, Int((availableWidth - gridHorizontalPadding * 2) / minimumEmojiTargetWidth))
     }
 
-    /// Number of complete rows that fit above the bottom bar.
-    private var rowCount: Int {
-        let gridSpace = availableHeight - headerHeight - bottomBarHeight - edgeInset * 2
-        let rowWithSpacing: CGFloat = rowHeight + rowSpacing
-        return max(1, Int(gridSpace / rowWithSpacing))
-    }
-
     /// Height per emoji row, computed to fill available space evenly.
-    private var rowHeight: CGFloat { 44 }
-
-    private var gridRows: [GridItem] {
-        Array(repeating: GridItem(.fixed(rowHeight), spacing: rowSpacing), count: rowCount)
+    private var rowHeight: CGFloat {
+        max(1, (max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2) - rowSpacing * 3) / 4)
     }
 
     /// Dynamic cell width based on the shared computed column count.
@@ -70,39 +61,51 @@ struct EmojiPickerView: View {
         max(0, availableWidth - gridHorizontalPadding * 2) / CGFloat(emojiColumnCount)
     }
 
+    private var recentPageCapacity: Int { emojiColumnCount * 4 }
+
     // MARK: - Computed data
 
     private var pages: [EmojiPage] {
         var result: [EmojiPage] = []
-        if !recentEmojis.isEmpty {
-            result.append(EmojiPage(
-                id: "recents",
-                name: "Recents",
-                icon: "clock",
-                items: recentEmojis.enumerated().map { index, emoji in
-                    EmojiGridItem(id: "recents_\(index)", emoji: emoji, categoryID: "recents")
-                }
-            ))
+        result.append(EmojiPage(
+            id: "recents",
+            name: "Recents",
+            icon: "clock",
+            categoryID: "recents",
+            items: recentEmojis.enumerated().map { index, emoji in
+                EmojiGridItem(id: "recents_\(index)", emoji: emoji, categoryID: "recents")
+            }
+        ))
+        let capacity = max(1, emojiColumnCount * 4)
+        for category in categories {
+            let items = category.emojis.enumerated().map { index, emoji in
+                EmojiGridItem(id: "\(category.id)_\(index)", emoji: emoji, categoryID: category.id)
+            }
+            for pageIndex in stride(from: 0, to: items.count, by: capacity) {
+                let end = min(pageIndex + capacity, items.count)
+                result.append(EmojiPage(
+                    id: pageIndex == 0 ? category.id : "\(category.id)_page_\(pageIndex / capacity)",
+                    name: category.name,
+                    icon: category.icon,
+                    categoryID: category.id,
+                    items: Array(items[pageIndex..<end])
+                ))
+            }
         }
-        result.append(contentsOf: categories.map { category in
-            EmojiPage(
-                id: category.id,
-                name: category.name,
-                icon: category.icon,
-                items: category.emojis.enumerated().map { index, emoji in
-                    EmojiGridItem(id: "\(category.id)_\(index)", emoji: emoji, categoryID: category.id)
-                }
-            )
-        })
         return result
     }
 
     private var categoryAnchorIDs: [String: String] {
-        Dictionary(uniqueKeysWithValues: pages.map { ($0.id, $0.id) })
+        var anchors: [String: String] = [:]
+        for page in pages where anchors[page.categoryID] == nil {
+            anchors[page.categoryID] = page.id
+        }
+        return anchors
     }
 
     private var sectionInfos: [CategoryInfo] {
-        pages.map { CategoryInfo(id: $0.id, name: $0.name, icon: $0.icon) }
+        [CategoryInfo(id: "recents", name: "Recents", icon: "clock")] +
+            categories.map { CategoryInfo(id: $0.id, name: $0.name, icon: $0.icon) }
     }
 
     // MARK: - Body
@@ -117,7 +120,6 @@ struct EmojiPickerView: View {
                     gridHeight: max(0, availableHeight - headerHeight - bottomBarHeight - edgeInset * 2),
                     emojiCellWidth: emojiCellWidth,
                     rowHeight: rowHeight,
-                    gridRows: gridRows,
                     gridHorizontalPadding: gridHorizontalPadding,
                     reduceMotion: reduceMotion,
                     scrollRequest: scrollRequest,
@@ -136,10 +138,9 @@ struct EmojiPickerView: View {
         .frame(width: availableWidth, height: availableHeight)
         .coordinateSpace(name: "emojiPicker")
         .onAppear {
-            recentEmojis = RecentEmojis.load()
-            if !recentEmojis.isEmpty {
-                selectedCategoryID = "recents"
-            }
+            recentEmojis = RecentEmojis.load(limit: recentPageCapacity)
+            selectedCategoryID = "recents"
+            scrollRequest = EmojiScrollRequest(id: "recents")
         }
     }
 
@@ -223,7 +224,7 @@ struct EmojiPickerView: View {
     private func insertEmoji(_ emoji: String) {
         HapticFeedback.keyTapped()
         onEmojiInsert(emoji)
-        RecentEmojis.add(emoji)
+        RecentEmojis.add(emoji, limit: recentPageCapacity)
     }
 
     private func commitEmojiFromTap(_ emoji: String) {
@@ -286,7 +287,6 @@ private struct EmojiScrollCanvas: View {
     let gridHeight: CGFloat
     let emojiCellWidth: CGFloat
     let rowHeight: CGFloat
-    let gridRows: [GridItem]
     let gridHorizontalPadding: CGFloat
     let reduceMotion: Bool
     let scrollRequest: EmojiScrollRequest?
@@ -294,84 +294,62 @@ private struct EmojiScrollCanvas: View {
     let onTap: (String) -> Void
     let onLongPress: (EmojiGridItem, CGRect) -> Void
     private let rowSpacing: CGFloat = 1
+    @State private var selectedPageID: String? = "recents"
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                // Keep the page track eager and stable. LazyHStack can stop
-                // extending a horizontal keyboard track after its initially
-                // realized pages, which makes a swipe appear to hit an invisible
-                // end. The emoji cells remain lazy inside each page.
-                HStack(spacing: 0) {
-                    ForEach(pages) { page in
-                        let columns = columnsPerPage(for: page)
-                        let pageWidth = pageWidth(for: page, columns: columns)
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.fixed(emojiCellWidthForPage(page, columns: columns)), spacing: 0), count: columns),
-                            spacing: rowSpacing
-                        ) {
-                            ForEach(page.items) { item in
-                                EmojiKey(
-                                    item: item,
-                                    emojiCellWidth: emojiCellWidthForPage(page, columns: columns),
-                                    rowHeight: rowHeight,
-                                    reduceMotion: reduceMotion,
-                                    onTap: { onTap(item.emoji) },
-                                    onLongPress: { frame in onLongPress(item, frame) }
-                                )
-                            }
-                        }
-                        .frame(width: pageWidth, height: gridHeight, alignment: .topLeading)
-                        .id(page.id)
-                        .background(
-                            GeometryReader { geometry in
-                                Color.clear.preference(
-                                    key: VisibleEmojiPagesKey.self,
-                                    value: [page.id: geometry.frame(in: .named("emojiViewport"))]
-                                )
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, gridHorizontalPadding)
+        TabView(selection: $selectedPageID) {
+            ForEach(pages) { page in
+                pageGrid(page)
+                    .frame(width: availableWidth, height: gridHeight)
+                    .tag(Optional(page.id))
             }
-            .coordinateSpace(name: "emojiViewport")
-            .frame(width: availableWidth, height: gridHeight, alignment: .top)
-            .clipped()
-            .onPreferenceChange(VisibleEmojiPagesKey.self) { frames in
-                guard let category = leftmostVisiblePage(in: frames) else { return }
-                onVisibleCategory(category)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(width: availableWidth, height: gridHeight)
+        .onAppear {
+            if let page = pages.first(where: { $0.id == selectedPageID }) ?? pages.first {
+                selectedPageID = page.id
+                onVisibleCategory(page.categoryID)
             }
-            .onChange(of: scrollRequest) { _, request in
-                guard let request else { return }
-                var transaction = Transaction()
-                transaction.disablesAnimations = reduceMotion
-                withTransaction(transaction) {
-                    proxy.scrollTo(request.id, anchor: .leading)
-                }
+        }
+        .onChange(of: selectedPageID) { _, id in
+            guard let id, pages.contains(where: { $0.id == id }) else { return }
+            if let page = pages.first(where: { $0.id == id }) {
+                onVisibleCategory(page.categoryID)
+            }
+        }
+        .onChange(of: scrollRequest) { _, request in
+            guard let request, pages.contains(where: { $0.id == request.id }) else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = reduceMotion
+            withTransaction(transaction) {
+                selectedPageID = request.id
             }
         }
     }
 
-    private func columnsPerPage(for page: EmojiPage) -> Int {
-        let itemCount = max(1, page.items.count)
-        return max(1, Int(ceil(Double(itemCount) / Double(max(1, gridRows.count)))))
+    private func pageGrid(_ page: EmojiPage) -> some View {
+        let columns = max(1, Int((availableWidth - gridHorizontalPadding * 2) / max(1, emojiCellWidth)))
+        let cellWidth = max(1, (availableWidth - gridHorizontalPadding * 2) / CGFloat(columns))
+        return LazyVGrid(
+                columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: 0), count: columns),
+                spacing: rowSpacing
+            ) {
+                ForEach(page.items) { item in
+                    EmojiKey(
+                        item: item,
+                        emojiCellWidth: cellWidth,
+                        rowHeight: rowHeight,
+                        reduceMotion: reduceMotion,
+                        onTap: { onTap(item.emoji) },
+                        onLongPress: { frame in onLongPress(item, frame) }
+                    )
+                }
+            }
+            .padding(.horizontal, gridHorizontalPadding)
+        .frame(width: availableWidth, height: gridHeight, alignment: .topLeading)
     }
 
-    private func emojiCellWidthForPage(_ page: EmojiPage, columns: Int) -> CGFloat {
-        max(44, (availableWidth - gridHorizontalPadding * 2) / CGFloat(max(1, columns)))
-    }
-
-    private func pageWidth(for page: EmojiPage, columns: Int) -> CGFloat {
-        max(availableWidth, CGFloat(columns) * emojiCellWidthForPage(page, columns: columns) + gridHorizontalPadding * 2)
-    }
-
-    private func leftmostVisiblePage(in frames: [String: CGRect]) -> String? {
-        frames
-            .filter { $0.value.maxX > gridHorizontalPadding && $0.value.minX < availableWidth - gridHorizontalPadding }
-            .min(by: { abs($0.value.minX - gridHorizontalPadding) < abs($1.value.minX - gridHorizontalPadding) })?
-            .key
-    }
 }
 
 private struct EmojiKey: View {
@@ -400,10 +378,17 @@ private struct EmojiKey: View {
     }
 
     private var keyContent: some View {
-        Button(action: onTap) {
+        Button {
+            // A long press opens the variant popup. The button release that
+            // follows must not insert the base emoji a second time.
+            if holdTriggered {
+                holdTriggered = false
+                return
+            }
+            onTap()
+        } label: {
             Text(item.emoji)
-                .font(.system(size: 32))
-                .frame(minWidth: 44, minHeight: 44)
+                .font(.system(size: min(32, max(18, rowHeight * 0.72))))
                 .frame(width: emojiCellWidth, height: rowHeight)
                 .background {
                     if isPressed {
@@ -465,5 +450,6 @@ private struct EmojiPage: Identifiable {
     let id: String
     let name: String
     let icon: String
+    let categoryID: String
     let items: [EmojiGridItem]
 }

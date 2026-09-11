@@ -9,10 +9,23 @@ import Foundation
 /// independently testable without constructing a text input proxy.
 public enum KeyboardDeletion {
     public static let repeatDelay: TimeInterval = 0.5
+    public static let repeatInterval: TimeInterval = 0.1
     public static let wordRepeatDelay: TimeInterval = 2.5
+    public static let cursorHoldDuration: TimeInterval = 0.3
+    public static let holdRecognitionDuration: TimeInterval = 0.35
+    public static let touchUpSuppressionDuration: TimeInterval = 0.12
+
+    public enum RepeatAction: Equatable, Sendable {
+        case character
+        case word
+    }
 
     public static func repeatsWords(after heldDuration: TimeInterval) -> Bool {
         heldDuration >= wordRepeatDelay
+    }
+
+    public static func repeatAction(after heldDuration: TimeInterval) -> RepeatAction {
+        repeatsWords(after: heldDuration) ? .word : .character
     }
     /// Number of `deleteBackward()` calls needed to remove the previous word.
     ///

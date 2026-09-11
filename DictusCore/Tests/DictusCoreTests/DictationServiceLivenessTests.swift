@@ -4,6 +4,29 @@ import XCTest
 final class DictationServiceLivenessTests: XCTestCase {
     private let now: TimeInterval = 10_000
 
+    func testLiveActivityAndFreshProcessCannotPromiseColdAudioStart() {
+        XCTAssertTrue(DictationServiceLivenessPolicy.shouldOpenApp(
+            serviceEnabled: true, appProcessHeartbeat: now,
+            liveActivityPresent: true, liveActivityUpdatedAt: now,
+            audioReady: false, now: now
+        ))
+        XCTAssertFalse(DictationServiceLivenessPolicy.shouldOpenApp(
+            serviceEnabled: true, appProcessHeartbeat: now,
+            liveActivityPresent: true, liveActivityUpdatedAt: now,
+            audioReady: true, now: now
+        ))
+    }
+
+    func testLegacyCallersKeepAudioReadyDefault() {
+        XCTAssertFalse(DictationServiceLivenessPolicy.shouldOpenApp(
+            serviceEnabled: true,
+            appProcessHeartbeat: now,
+            liveActivityPresent: true,
+            liveActivityUpdatedAt: now,
+            now: now
+        ))
+    }
+
     func testDisabledServiceAlwaysRequiresApp() {
         XCTAssertTrue(
             DictationServiceLivenessPolicy.shouldOpenApp(

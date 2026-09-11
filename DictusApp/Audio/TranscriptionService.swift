@@ -45,6 +45,12 @@ class TranscriptionService {
     /// we need to reinitialize WhisperKit for a different model.
     private var loadedModelFolder: String?
 
+    /// Whether a model object is retained by either the compatibility path or
+    /// the active engine path.
+    var hasLoadedModel: Bool {
+        whisperKit != nil || activeEngine?.isReady == true
+    }
+
     /// Inject or re-use a WhisperKit instance (backward-compatible path).
     ///
     /// WHY keep this method:
@@ -63,6 +69,15 @@ class TranscriptionService {
     /// the transition to multi-engine support.
     func prepare(engine: SpeechModelProtocol) {
         self.activeEngine = engine
+    }
+
+    /// Release the active runtime while leaving downloaded model files untouched.
+    /// The coordinator guards this call against active transcription and model init.
+    func releaseLoadedModel() {
+        activeEngine?.releaseLoadedModel()
+        activeEngine = nil
+        whisperKit = nil
+        loadedModelFolder = nil
     }
 
     /// Prepare TranscriptionService with a specific model at a given path.

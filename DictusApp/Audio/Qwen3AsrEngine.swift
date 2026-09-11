@@ -58,6 +58,11 @@ final class Qwen3AsrEngine: SpeechModelProtocol {
         }
     }
 
+    func releaseLoadedModel() {
+        manager = nil
+        loadedModelName = nil
+    }
+
     func transcribe(audioSamples: [Float], language: String?) async throws -> String {
         guard let manager else {
             throw TranscriptionError.notReady

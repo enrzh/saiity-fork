@@ -21,12 +21,17 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertEqual(SharedKeys.hasCompletedOnboarding, "dictus.hasCompletedOnboarding")
     }
 
+    func testKeyboardAudioReadinessKeyExists() {
+        XCTAssertEqual(SharedKeys.keyboardAudioReady, "dictus.keyboardAudioReady")
+    }
+
     func testNewKeysAreUnique() {
         let newKeys = [
             SharedKeys.language,
             SharedKeys.hapticsEnabled,
             SharedKeys.keyPopupsEnabled,
             SharedKeys.hasCompletedOnboarding,
+            SharedKeys.keyboardAudioReady,
         ]
         XCTAssertEqual(newKeys.count, Set(newKeys).count, "SharedKeys must be unique")
     }
@@ -36,6 +41,7 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertTrue(SharedKeys.hapticsEnabled.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.keyPopupsEnabled.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.hasCompletedOnboarding.hasPrefix("dictus."))
+        XCTAssertTrue(SharedKeys.keyboardAudioReady.hasPrefix("dictus."))
     }
 
     func testKeyPopupsDefaultToEnabled() {

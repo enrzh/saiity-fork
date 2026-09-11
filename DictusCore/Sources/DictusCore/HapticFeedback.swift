@@ -47,6 +47,11 @@ public enum HapticFeedback {
     /// for pickers and the native cursor — distinct from impact feedback,
     /// specifically designed for discrete selection changes.
     private static let selectionGenerator = UISelectionFeedbackGenerator()
+    /// Ignore duplicate callbacks from overlapping UIKit/SwiftUI hit layers.
+    /// Native keyboard taps are distinct, but never arrive as two ticks within
+    /// the same few milliseconds.
+    private static var lastSelectionTick = Date.distantPast
+    private static let minimumSelectionInterval: TimeInterval = 0.028
     #endif
 
     // MARK: - Cached enabled state
@@ -151,8 +156,7 @@ public enum HapticFeedback {
     public static func keyTapped() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        selectionGenerator.selectionChanged()
-        selectionGenerator.prepare()
+        emitSelectionTick()
         #endif
     }
 
@@ -180,12 +184,21 @@ public enum HapticFeedback {
     /// Selection tick feedback for each character of cursor movement during trackpad drag.
     /// Uses UISelectionFeedbackGenerator — the same subtle "tick" Apple uses for pickers
     /// and the native cursor. This is the #1 factor for perceived trackpad fluidity.
-    /// Pre-arms the generator immediately after firing for zero-latency on the next tick.
+    /// Ticks are rate-limited together with key taps so fast cursor drags do not
+    /// become a continuous buzz.
     public static func cursorMoved() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        selectionGenerator.selectionChanged()
-        selectionGenerator.prepare()
+        emitSelectionTick()
         #endif
     }
+
+    #if canImport(UIKit) && !os(macOS)
+    private static func emitSelectionTick() {
+        let now = Date()
+        guard now.timeIntervalSince(lastSelectionTick) >= minimumSelectionInterval else { return }
+        lastSelectionTick = now
+        selectionGenerator.selectionChanged()
+    }
+    #endif
 }

@@ -50,6 +50,14 @@ class DictationCoordinator: ObservableObject {
     /// Used by DictusApp to detect "warm but engine-dead" state after Power button stop.
     var isEngineRunning: Bool { audioEngine.isEngineRunning }
 
+    /// Release audio resources when the coordinator is not in an active dictation.
+    /// A pending/recording session must survive a scene transition so a cold start
+    /// can finish or an existing background recording can continue.
+    func deactivateAudioIfIdle() {
+        guard !DictationSessionLivenessPolicy.isActive(status) else { return }
+        audioEngine.deactivateIfIdle()
+    }
+
     /// Timeout watchdog for whichever post-recording stage is running.
     ///
     /// WHY one timer for two stages (#267): they are mutually exclusive and the
@@ -65,6 +73,7 @@ class DictationCoordinator: ObservableObject {
     private var whisperKit: WhisperKit?
     private var currentModelName: String?
     private var dictationTask: Task<Void, Never>?
+    private var memoryWarningObserver: NSObjectProtocol?
 
     /// Fires ~1.5s into a recording to prewarm the Apple FM polish model (#141).
     /// Held so it can be cancelled if the user stops before it fires. See
@@ -218,16 +227,9 @@ class DictationCoordinator: ObservableObject {
             thermalState: snapshot.thermalState.logLabel
         ))
 
-        // Pre-load WhisperKit + audio session eagerly on app launch.
-        // WHY: The first recording via URL scheme takes 4-5s if we load lazily.
-        // By loading in init(), the model is ready when the keyboard triggers dictation.
-        //
-        // WHY configure audio session BEFORE the Task:
-        // iOS forbids AVAudioSession.setActive(true) from background. The async Task
-        // may not run until after the app is backgrounded. By configuring synchronously
-        // in init(), we guarantee the session is active while still in the foreground.
-        try? audioEngine.configureAudioSession()
-
+        // Pre-load the speech model eagerly on app launch, but keep the microphone
+        // cold. Model preparation does not need AVAudioSession and activating it here
+        // makes iOS show the microphone indicator while the app is merely idle.
         Task {
             let modelReady = defaults.bool(forKey: SharedKeys.modelReady)
             guard modelReady else {
@@ -238,12 +240,10 @@ class DictationCoordinator: ObservableObject {
             self.setModelLoadState(.loading, reason: "init-preload")
             do {
                 try await ensureEngineReady()
-                PersistentLog.log(.engineWarmUpAttempt(context: "init-preload"))
-                try audioEngine.warmUp()
                 PersistentLog.log(.appWhisperKitLoaded(modelName: self.currentModelName ?? "unknown"))
                 self.setModelLoadState(.ready, reason: "init-preload-success")
             } catch {
-                PersistentLog.log(.engineWarmUpFailed(context: "init-preload", error: error.localizedDescription))
+                PersistentLog.log(.engineWarmUpFailed(context: "init-preload-model", error: error.localizedDescription))
                 self.setModelLoadState(.idle, reason: "init-preload-failed")
             }
         }
@@ -260,14 +260,14 @@ class DictationCoordinator: ObservableObject {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                // Stop any active recording first
-                if self.status == .recording {
+                // Stop any active dictation first, including transcription or
+                // processing stages that may still own a background assertion.
+                if DictationSessionLivenessPolicy.isActive(self.status) {
                     self.cancelDictation()
                 }
-                // Kill the audio engine — removes the orange mic indicator
-                if self.audioEngine.isEngineRunning {
-                    self.audioEngine.deactivateSession()
-                }
+                // Kill any configured audio session — removes the orange mic
+                // indicator even when the engine was already stopped.
+                self.audioEngine.deactivateIfIdle()
                 // Keep the Live Activity visible as the control that can turn
                 // dictation back on. The service toggle intent updates its state.
                 LiveActivityManager.shared.updateServiceEnabled(false)
@@ -285,16 +285,16 @@ class DictationCoordinator: ObservableObject {
                 let enabled = self.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
                     || self.defaults.bool(forKey: SharedKeys.serviceEnabled)
                 if enabled {
-                    do {
-                        try self.audioEngine.configureAudioSession()
-                        try self.audioEngine.warmUp()
-                        LiveActivityManager.shared.startStandbyActivity()
-                    } catch {
-                        self.handleError("Microphone access could not be enabled.", disposition: .requiresApp)
-                    }
+                    // Enabling the service controls availability, not microphone
+                    // ownership. Keep the model/activity ready without opening
+                    // AVAudioSession until the user actually dictates.
+                    self.preloadActiveModel()
+                    LiveActivityManager.shared.startStandbyActivity()
                 } else {
-                    if self.status == .recording { self.cancelDictation() }
-                    if self.audioEngine.isEngineRunning { self.audioEngine.deactivateSession() }
+                    if DictationSessionLivenessPolicy.isActive(self.status) {
+                        self.cancelDictation()
+                    }
+                    self.audioEngine.deactivateIfIdle()
                     // Keep the Live Activity visible as the control that can turn
                     // dictation back on. Disabling the service must not dismiss it.
                     LiveActivityManager.shared.updateServiceEnabled(false)
@@ -317,10 +317,21 @@ class DictationCoordinator: ObservableObject {
             }
         }
 
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.releaseLoadedModelIfSafe(reason: "memory-warning")
+            }
+        }
+
         // WHY observe didBecomeActive (not willEnterForeground):
-        // willEnterForeground fires while the audio session is still interrupted.
-        // didBecomeActive fires AFTER the app is fully active and the audio session
-        // interruption has ended — the audio engine can safely start at this point.
+        // willEnterForeground fires while the app is still transitioning.
+        // didBecomeActive is the first point where foreground-only model preparation
+        // and any pending URL cold-start retry are safe to perform.
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -341,14 +352,11 @@ class DictationCoordinator: ObservableObject {
                     context: "didBecomeActive"
                 ))
 
-                // Wall-clock backstop for Phase B's idle-release timer (issue #106).
-                // If iOS suspended the main queue while we were backgrounded, the
-                // asyncAfter scheduled in scheduleIdleRelease may fire late. On
-                // foreground transition we have a reliable runloop again — this
-                // call releases the warm state if the idle interval already
-                // expired during the suspension. Must happen BEFORE warmUp below,
-                // otherwise we'd warm an engine that should be released.
+                // Wall-clock backstop for older warm-state sessions (issue #106).
+                // Then remove any remaining idle session immediately. Neither path
+                // touches a pending or active dictation.
                 self.audioEngine.enforceIdleReleaseIfDue()
+                self.deactivateAudioIfIdle()
 
                 // Recover DI if it was lost (Activity.request fails from background on cold start).
                 // Must happen BEFORE pendingColdStartDictation so transitionToRecording finds an activity.
@@ -373,27 +381,26 @@ class DictationCoordinator: ObservableObject {
                     return
                 }
 
-                guard !self.audioEngine.isEngineRunning else {
-                    PersistentLog.log(.engineWarmUpSuccess(context: "didBecomeActive-already-running"))
-                    return
-                }
                 let modelReady = self.defaults.bool(forKey: SharedKeys.modelReady)
                 guard modelReady else {
-                    PersistentLog.log(.engineWarmUpFailed(context: "didBecomeActive", error: "modelReady=false"))
+                    return
+                }
+
+                let activeModel = self.defaults.string(forKey: SharedKeys.activeModel)
+                    ?? ModelInfo.sAiityDefaultIdentifier
+                guard self.currentModelName != activeModel else {
+                    self.setModelLoadState(.ready, reason: "didBecomeActive-model-already-loaded")
                     return
                 }
 
                 do {
-                    try self.audioEngine.configureAudioSession()
-                    PersistentLog.log(.engineWarmUpAttempt(context: "didBecomeActive"))
-                    self.setModelLoadState(.loading, reason: "didBecomeActive-warmup")
+                    self.setModelLoadState(.loading, reason: "didBecomeActive-model-preload")
                     try await self.ensureEngineReady()
-                    try self.audioEngine.warmUp()
-                    PersistentLog.log(.engineWarmUpSuccess(context: "didBecomeActive"))
-                    self.setModelLoadState(.ready, reason: "didBecomeActive-success")
+                    PersistentLog.log(.appWhisperKitLoaded(modelName: self.currentModelName ?? "unknown"))
+                    self.setModelLoadState(.ready, reason: "didBecomeActive-model-preload-success")
                 } catch {
-                    PersistentLog.log(.engineWarmUpFailed(context: "didBecomeActive", error: error.localizedDescription))
-                    self.setModelLoadState(.idle, reason: "didBecomeActive-failed")
+                    PersistentLog.log(.engineWarmUpFailed(context: "didBecomeActive-model-preload", error: error.localizedDescription))
+                    self.setModelLoadState(.idle, reason: "didBecomeActive-model-preload-failed")
                 }
             }
         }
@@ -650,7 +657,8 @@ class DictationCoordinator: ObservableObject {
     private func captureLanguageRequest() {
         let loaded = DictationLanguageRequest.load(from: defaults)
         let mode = loaded.modeForNextDictation(defaultingTo: TranscriptionLanguageMode.active)
-        let modelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
+        let requestedModelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
+        let modelIdentifier = resolveRuntimeModelIdentifier(requestedModelIdentifier)
         let capability = ASRCapability.forModelIdentifier(
             modelIdentifier, mode: mode, keyboardLanguage: SupportedLanguage.active
         )
@@ -699,8 +707,9 @@ class DictationCoordinator: ObservableObject {
     /// Called when user taps the stop button.
     /// Stops recording and starts transcription using the already-loaded model.
     ///
-    /// Single path: collectSamples() (keeps engine alive) → transcribe → done.
-    /// No more branching between AudioRecorder and RawAudioCapture.
+    /// Single path: collectSamplesAndDeactivate() → transcribe → done.
+    /// Capture and transcription have separate lifetimes; the microphone is not
+    /// kept open while the already-copied samples are being processed.
 
     /// Minimum audio duration required for transcription (in seconds).
     /// WHY 0.5s: WhisperKit handles clips ≥0.5s reliably for short words (oui, non, ok).
@@ -753,7 +762,7 @@ class DictationCoordinator: ObservableObject {
                 }
             }
             do {
-                let samples = audioEngine.collectSamples()
+                let samples = audioEngine.collectSamplesAndDeactivate()
 
                 guard !samples.isEmpty else {
                     guard mayReport(session, "empty recording") else { return }
@@ -1297,8 +1306,9 @@ class DictationCoordinator: ObservableObject {
         endTranscriptionAssertion(reason: "cancelled")
         stopStageWatchdog()
 
-        // Discard samples but keep engine alive for next recording
-        _ = audioEngine.collectSamples()
+        // Discard samples and release the microphone immediately. The next
+        // recording can configure a fresh session on demand.
+        _ = audioEngine.collectSamplesAndDeactivate()
 
         // Reset all state
         bufferEnergy = []
@@ -1420,6 +1430,7 @@ class DictationCoordinator: ObservableObject {
         bufferEnergy = []
         bufferSeconds = 0
         cleanupRecordingKeys()
+        audioEngine.deactivateIfIdle()
 
         // updateStatus(.failed) handles both the App Group write and the Darwin
         // statusChanged post — no manual duplication needed (issue #106 review).
@@ -1544,6 +1555,34 @@ class DictationCoordinator: ObservableObject {
         // The Darwin notification can arrive after this cleanup runs, and unbinding
         // here makes a valid result look unrelated to the visible keyboard.
         defaults.synchronize()
+    }
+
+    /// Drop compiled speech-model objects under memory pressure while preserving
+    /// the downloaded files and the user's selected model. Active work always wins.
+    private func releaseLoadedModelIfSafe(reason: String) {
+        guard !DictationSessionLivenessPolicy.isActive(status),
+              !isTranscribingInFlight,
+              initTask == nil else {
+            PersistentLog.log(.diagnosticProbe(
+                component: "DictationCoordinator",
+                instanceID: "modelMemory",
+                action: "releaseSkipped",
+                details: "reason=\(reason) status=\(status.rawValue) transcribing=\(isTranscribingInFlight) initializing=\(initTask != nil)"
+            ))
+            return
+        }
+        guard transcriptionService.hasLoadedModel || whisperKit != nil || currentModelName != nil else { return }
+
+        transcriptionService.releaseLoadedModel()
+        whisperKit = nil
+        currentModelName = nil
+        setModelLoadState(.idle, reason: "model-released-\(reason)")
+        PersistentLog.log(.diagnosticProbe(
+            component: "DictationCoordinator",
+            instanceID: "modelMemory",
+            action: "released",
+            details: "reason=\(reason)"
+        ))
     }
 
     /// Reads the list of downloaded model identifiers from App Group UserDefaults.
@@ -1671,7 +1710,7 @@ class DictationCoordinator: ObservableObject {
             if #available(iOS 14.0, *) {
                 DictusLogger.app.fault("Invariant violation: entering .idle while engine is recording — forcing teardown")
             }
-            _ = audioEngine.collectSamples()
+            _ = audioEngine.collectSamplesAndDeactivate()
             Task { await LiveActivityManager.shared.returnToStandby() }
             LiveActivityManager.shared.startRecordingWatchdog()
         }
@@ -1740,6 +1779,14 @@ class DictationCoordinator: ObservableObject {
     /// until the next dictation starts, so a user who reads it on one surface and then
     /// opens the other is told the same thing twice rather than something else.
     private func handleError(_ message: String, disposition: DictationFailureDisposition = .recoverableRetry) {
+        // Errors can arrive during requested/recording or after capture has
+        // stopped. In both cases no microphone resource should survive the
+        // terminal state.
+        if audioEngine.isRecording {
+            audioEngine.deactivateSession()
+        } else {
+            audioEngine.deactivateIfIdle()
+        }
         DictationErrorChannel.record(message, disposition: disposition)
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)
@@ -1827,9 +1874,18 @@ private extension DictationCoordinator {
     ///
     /// Falls back to the active model from App Group, then to the new-install default.
     func ensureEngineReady(preferredModel: String? = nil) async throws {
-        let modelName = preferredModel
+        let requestedModelName = preferredModel
             ?? defaults.string(forKey: SharedKeys.activeModel)
             ?? ModelInfo.sAiityDefaultIdentifier
+        let modelName = resolveRuntimeModelIdentifier(requestedModelName)
+        if modelName != requestedModelName {
+            PersistentLog.log(.diagnosticProbe(
+                component: "DictationCoordinator",
+                instanceID: "modelRuntime",
+                action: "fallbackSelected",
+                details: "requested=\(requestedModelName) resolved=\(modelName)"
+            ))
+        }
 
         let modelInfo = ModelInfo.forIdentifier(modelName)
         let engine = modelInfo?.engine ?? .whisperKit
@@ -1846,6 +1902,19 @@ private extension DictationCoordinator {
                 try await ensureWhisperKitEngineReady(modelName: "openai_whisper-small")
             }
         }
+    }
+
+    /// Resolve a selected catalog row to a locally installed model that this
+    /// device and OS can load. The selected row remains persisted; the fallback
+    /// is a runtime decision and can be retried after the user installs the row.
+    func resolveRuntimeModelIdentifier(_ requestedIdentifier: String) -> String {
+        let resolution = ModelInfo.runtimeResolution(
+            for: requestedIdentifier,
+            installedIdentifiers: Set(readDownloadedModels()),
+            osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: DeviceCapabilities.current()
+        )
+        return resolution.resolvedIdentifier ?? requestedIdentifier
     }
 
     /// Initialize WhisperKit with the preferred model if not already loaded.

@@ -125,73 +125,10 @@ class SuggestionState: ObservableObject {
             return
         }
 
-        // If text ends with space or newline, no partial word to complete.
-        // Don't clear predictions — they were set by handleSpace()/updatePredictions().
-        if let lastChar = context.last, lastChar.isWhitespace || lastChar.isNewline {
-            if mode != .predictions {
-                clear()
-            }
-            return
-        }
-
-        _ = beginSuggestionRequest()
-
-        // Extract the last word using substring enumeration
-        let partial = extractLastWord(from: context)
-        guard !partial.isEmpty else {
-            clear()
-            return
-        }
-
-        currentWord = partial
-
-        // Guard: skip spell correction for tokens containing digits (#74)
-        let containsDigit = partial.unicodeScalars.contains {
-            CharacterSet.decimalDigits.contains($0)
-        }
-        if containsDigit {
-            // Show completions only (no corrections) for numeric tokens
-            let completions = engine.suggestions(for: partial)
-            suggestions = completions.isEmpty ? [] : completions
-            mode = completions.isEmpty ? .idle : .completions
-            return
-        }
-
-        // Extract previous word for n-gram context boosting
-        let previousWord = extractPreviousWord(from: context, currentWord: partial)
-
-        // Check spell correction first (mirrors what handleSpace will do)
-        if autocorrectEnabled,
-           !rejectedWords.contains(partial.lowercased()),
-           let result = engine.spellCheck(
-               partial,
-               previousWord: previousWord,
-               isAtSentenceStart: ProperNounGuard.isAtSentenceStart(context: context, word: partial)
-           ),
-           result.correction.lowercased() != partial.lowercased() {
-            // Standard mobile layout: [original | correction (bold) | alternative],
-            // with a learned word claiming the third slot when it extends what
-            // was typed (#346). Slot 1 stays the corrector's — see the comment
-            // on `correctionsRow`.
-            suggestions = LearnedWordCompletions.correctionsRow(
-                typedWord: partial,
-                correction: result.correction,
-                alternative: result.alternatives.first,
-                learnedWords: UserDictionary.shared.learnedWordsByLastUsed
-            )
-            mode = .corrections
-            return
-        }
-
-        // No correction — show word completions
-        let completions = engine.suggestions(for: partial)
-        if completions.isEmpty {
-            suggestions = []
-            mode = .idle
-        } else {
-            suggestions = completions
-            mode = .completions
-        }
+        // Only the proxy read and policy check stay synchronous. The whole
+        // prediction pipeline, including language detection and dictionary loads,
+        // runs through the coalescing background path.
+        updateAsync(context: context)
     }
 
     /// Async suggestion update: takes pre-read context string (read on main thread),
@@ -231,6 +168,8 @@ class SuggestionState: ObservableObject {
 
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
+
+            self.engine.setLanguage(forRecentText: context)
 
             let partial = self.extractLastWord(from: context)
             guard !partial.isEmpty else {
@@ -327,7 +266,7 @@ class SuggestionState: ObservableObject {
     /// Delegates spell-checking to the engine.
     /// Returns the best correction and alternatives for a misspelled word, or nil if correct.
     func performSpellCheck(_ word: String) -> (correction: String, alternatives: [String])? {
-        return engine.spellCheck(word)
+        suggestionQueue.sync { engine.spellCheck(word) }
     }
 
     /// Spell check with optional previous word context for n-gram boosting.
@@ -339,7 +278,9 @@ class SuggestionState: ObservableObject {
         previousWord: String?,
         isAtSentenceStart: Bool = true
     ) -> (correction: String, alternatives: [String])? {
-        return engine.spellCheck(word, previousWord: previousWord, isAtSentenceStart: isAtSentenceStart)
+        suggestionQueue.sync {
+            engine.spellCheck(word, previousWord: previousWord, isAtSentenceStart: isAtSentenceStart)
+        }
     }
 
     /// Resets the suggestion state to idle.
@@ -377,19 +318,21 @@ class SuggestionState: ObservableObject {
 
     /// Updates the prediction engine's language.
     func setLanguage(_ lang: String) {
-        engine.setLanguage(lang)
+        suggestionQueue.async { [weak self] in
+            self?.engine.setLanguage(lang)
+        }
     }
 
     /// Whether the active language's dictionary does not know this word (#287).
     /// The word-boundary learning site asks before recording anything.
     func isUnknownToDictionary(_ word: String) -> Bool {
-        engine.isUnknownToDictionary(word)
+        suggestionQueue.sync { engine.isUnknownToDictionary(word) }
     }
 
     /// Attempts the user dictionary's one-shot prune (#287). Call from a moment
     /// with a dictionary already mounted and no load pending — see the engine.
     func pruneUserDictionaryIfPossible(trigger: String) {
-        engine.pruneUserDictionaryIfPossible(trigger: trigger)
+        suggestionQueue.sync { engine.pruneUserDictionaryIfPossible(trigger: trigger) }
     }
 
     // MARK: - N-gram Predictions
@@ -416,6 +359,8 @@ class SuggestionState: ObservableObject {
 
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
+
+            self.engine.setLanguage(forRecentText: context)
 
             // Extract last 1-2 complete words from context
             let words = self.extractLastWords(from: context, count: 2)
