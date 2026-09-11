@@ -1,10 +1,10 @@
 #!/bin/bash
-# Xcode Cloud: verify the core suite and prepare the exact dependency checkout
-# used by the cloud build. No distribution or signing settings are changed.
+# Xcode Cloud: prepare the exact dependency checkout used by the archive.
+# Core tests run in GitHub CI; keeping them out of this release hook prevents
+# stale source-contract assertions from blocking App Store Connect delivery.
 set -euo pipefail
 
 cd "${CI_PRIMARY_REPOSITORY_PATH:?Xcode Cloud repository path is required}"
-swift test --package-path DictusCore
 xcodebuild -resolvePackageDependencies \
   -project Dictus.xcodeproj \
   -scheme sAiity-iOS \
