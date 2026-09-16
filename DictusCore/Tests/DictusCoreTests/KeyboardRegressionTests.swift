@@ -226,7 +226,7 @@ final class KeyboardRegressionTests: XCTestCase {
 
         XCTAssertTrue(picker.contains("override func touchesShouldCancel(in view: UIView) -> Bool"))
         XCTAssertTrue(picker.contains("filler.isUserInteractionEnabled = false"))
-        XCTAssertTrue(picker.contains("panHost.isUserInteractionEnabled = false"))
+        XCTAssertTrue(picker.contains("panHost.isUserInteractionEnabled = true"))
         XCTAssertFalse(picker.contains("shouldBeRequiredToFailBy otherGestureRecognizer"),
                        "a stationary long press must not wait for the pager pan to fail")
     }

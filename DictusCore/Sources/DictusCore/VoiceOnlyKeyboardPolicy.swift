@@ -340,6 +340,8 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let floatingEmojiCategoryBarHeight: Double = 30
     public static let floatingEmojiCategoryBarGap: Double = 4
     public static let floatingEmojiCategoryBarWidthInset: Double = 16
+    /// Same as `railSpacing` so ABC, 123, and emoji delete share `boardDeleteFrame`.
+    public static let chromeCommandRowGap: Double = railSpacing
     /// Extra height added to the native keyboard window. Larger than the visual
     /// lane so shrinking the bar enlarges the glass surface and the keys inside it.
     public static let keyboardWindowAccessoryHeight: Double = 44
@@ -506,14 +508,19 @@ public enum VoiceOnlyKeyboardPolicy {
             let space = chromeWideSpaceFrame
             let delete = boardDeleteFrame
             guard !space.isEmpty, !delete.isEmpty else { return .zero }
+            let maxX = min(space.maxX, delete.minX - railSpacing)
+            let available = max(0, maxX - space.minX)
             let width = min(
                 max(0, space.width - floatingEmojiCategoryBarWidthInset),
+                available,
                 max(0, surfaceFrame.width - visibleControlGap * 2)
             )
             let height = floatingEmojiCategoryBarHeight
             guard width > 0, height > 0 else { return .zero }
+            let centered = space.midX - width / 2
+            let x = min(max(space.minX, centered), maxX - width)
             let frame = CGRect(
-                x: space.midX - width / 2,
+                x: x,
                 y: delete.maxY - height,
                 width: width,
                 height: height

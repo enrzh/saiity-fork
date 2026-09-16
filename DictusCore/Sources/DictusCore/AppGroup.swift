@@ -2,7 +2,8 @@
 import Foundation
 
 public enum AppGroup {
-    public static let identifier = "group.de.aiity.saiity.ios"
+    /// Must match `com.apple.security.application-groups` in DictusApp / DictusKeyboard / DictusWidgets entitlements.
+    public static let identifier = "group.de.aiity.saiity.ios.beta"
 
     /// Shared UserDefaults for cross-process data.
     /// Force-unwrap justified: if this fails, the App Group entitlement

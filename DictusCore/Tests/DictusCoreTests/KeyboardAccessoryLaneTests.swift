@@ -119,6 +119,34 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         }
     }
 
+    func testLetterGridHeightPinsDeleteToTheBoardDeleteFrame() {
+        for width in [320.0, 375, 390, 430] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: width,
+                surfaceHeight: 280,
+                topAccessoryHeight: 44
+            )
+            let gridHeight = layout.surfaceFrame.height
+                - VoiceOnlyKeyboardPolicy.chromeCommandRowGap
+                - 44
+                - VoiceOnlyKeyboardPolicy.chromeBottomInset
+            XCTAssertEqual(
+                gridHeight,
+                layout.boardDeleteFrame.maxY - layout.surfaceFrame.minY,
+                accuracy: 0.001
+            )
+            XCTAssertEqual(
+                layout.floatingEmojiCategoryFrame.maxY,
+                layout.boardDeleteFrame.maxY,
+                accuracy: 0.001
+            )
+            XCTAssertLessThan(
+                layout.floatingEmojiCategoryFrame.maxX + 1,
+                layout.boardDeleteFrame.minX
+            )
+        }
+    }
+
     func testCommandVisualSizeStaysPinnedToDictationDelete() {
         for width in [320.0, 375, 390, 430, 768] {
             let short = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 260, topAccessoryHeight: 44)

@@ -33,6 +33,16 @@ public enum EmojiNavigation {
         return (itemCount + pageCapacity - 1) / pageCapacity
     }
 
+    /// Recents always occupies page 0, including when it has no glyphs.
+    public static func collectionPageCount(standardItemCount: Int, pageCapacity: Int) -> Int {
+        1 + pageCount(itemCount: standardItemCount, pageCapacity: pageCapacity)
+    }
+
+    public static func pageContentOffsetX(pageIndex: Int, pageWidth: Double) -> Double {
+        guard pageIndex > 0, pageWidth > 0 else { return 0 }
+        return Double(pageIndex) * pageWidth
+    }
+
     /// Returns the first page containing an item from each category.
     public static func anchorPageIDs(for pages: [EmojiNavigationPage]) -> [String: String] {
         var anchors: [String: String] = [:]

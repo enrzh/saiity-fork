@@ -5,7 +5,7 @@ import Foundation
 let source = try String(contentsOfFile: "DictusKeyboard/Views/EmojiPickerView.swift", encoding: .utf8)
 let categoryBar = try String(contentsOfFile: "DictusKeyboard/Views/EmojiCategoryBar.swift", encoding: .utf8)
 assert(source.contains("filler.isUserInteractionEnabled = false"), "empty recents fillers must not steal the pager pan")
-assert(source.contains("panHost.isUserInteractionEnabled = false"), "empty recents page forwards pans to the collection view")
+assert(source.contains("panHost.isUserInteractionEnabled = true"), "empty recents page hosts pans so the collection view can page")
 assert(source.contains("EmojiCategoryBar("), "category bookmarks float over the emoji grid")
 assert(source.contains("boardDeleteFrame"), "emoji delete uses the shared command frame")
 assert(source.contains("EmojiNavigation.landingCategoryID"), "empty recents uses the shared landing policy")

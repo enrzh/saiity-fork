@@ -40,6 +40,9 @@ final class EmojiNavigationTests: XCTestCase {
         XCTAssertEqual(EmojiNavigation.pageCount(itemCount: 32, pageCapacity: 32), 1)
         XCTAssertEqual(EmojiNavigation.pageCount(itemCount: 33, pageCapacity: 32), 2)
         XCTAssertEqual(EmojiNavigation.pageCount(itemCount: 65, pageCapacity: 32), 3)
+        XCTAssertEqual(EmojiNavigation.collectionPageCount(standardItemCount: 65, pageCapacity: 32), 4)
+        XCTAssertEqual(EmojiNavigation.pageContentOffsetX(pageIndex: 3, pageWidth: 390), 1170)
+        XCTAssertEqual(EmojiNavigation.pageContentOffsetX(pageIndex: 0, pageWidth: 390), 0)
     }
 
     func testFlagsCategoryAnchorsToItsLastIncompletePage() {

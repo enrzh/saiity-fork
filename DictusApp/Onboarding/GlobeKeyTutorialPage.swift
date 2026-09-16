@@ -151,8 +151,8 @@ struct GlobeKeyTutorialPage: View {
             fullAccessHandshake: handshake,
             handshakeDate: date > 0 ? Date(timeIntervalSince1970: date) : nil
         )
-        if status.fullAccessVerified || !storedVerified {
-            fullAccessVerified = status.fullAccessVerified
+        if handshake {
+            fullAccessVerified = true
         }
     }
 

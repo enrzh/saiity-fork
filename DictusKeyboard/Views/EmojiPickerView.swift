@@ -65,7 +65,7 @@ struct EmojiPickerView: View {
     private let minimumEmojiTargetWidth: CGFloat = 44
     private let edgeInset: CGFloat = VoiceOnlyKeyboardPolicy.keyGridInset
     private let chromeBottomInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
-    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
+    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
 
     /// The delete control is a fixed overlay. Let the collection view use the
     /// full surface so the last emoji columns have the same geometry as native
@@ -360,7 +360,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         view.backgroundColor = .clear
         view.isOpaque = false
         view.clipsToBounds = true
-        view.isPagingEnabled = false
+        view.isPagingEnabled = true
         view.isMultipleTouchEnabled = true
         view.isScrollEnabled = true
         view.panGestureRecognizer.minimumNumberOfTouches = 1
@@ -376,7 +376,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         view.panGestureRecognizer.delaysTouchesBegan = false
         view.panGestureRecognizer.delaysTouchesEnded = false
         view.panGestureRecognizer.cancelsTouchesInView = true
-        view.decelerationRate = .normal
+        view.decelerationRate = .fast
         view.contentInsetAdjustmentBehavior = .never
         view.showsHorizontalScrollIndicator = false
         hideTopEdgeEffect(on: view)
@@ -428,8 +428,8 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
             onTap: onTap
         )
         uiView.onEmojiInsert = onTap
-        uiView.isPagingEnabled = false
-        uiView.decelerationRate = .normal
+        uiView.isPagingEnabled = true
+        uiView.decelerationRate = .fast
         hideTopEdgeEffect(on: uiView)
         let size = CGSize(width: availableWidth, height: gridHeight)
         if let flowLayout = uiView.collectionViewLayout as? UICollectionViewFlowLayout,
@@ -542,7 +542,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         }
 
         func scroll(to request: EmojiScrollRequest?, in collectionView: UICollectionView, animated: Bool) {
-            guard let request, request != lastScrollRequest else { return }
+            guard let request else { return }
             let navigationPages = pages.map {
                 EmojiNavigationPage(
                     id: $0.id,
@@ -563,22 +563,24 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
                 return
             case .pending:
                 pendingScrollRequest = request
-                // SwiftUI can update this representable before reloadData or
-                // before its first layout pass. Do not consume the request;
-                // layoutSubviews retries it when both become ready.
                 return
             case .ready(let index):
                 targetIndex = index
+            }
+            let pageWidth = max(collectionView.bounds.width, 1)
+            let expectedX = CGFloat(EmojiNavigation.pageContentOffsetX(
+                pageIndex: targetIndex,
+                pageWidth: Double(pageWidth)
+            ))
+            if request == lastScrollRequest,
+               abs(collectionView.contentOffset.x - expectedX) < 1 {
+                return
             }
             (collectionView as? EmojiPagerCollectionView)?.cancelVariantSelection()
             pendingScrollRequest = nil
             lastScrollRequest = request
             selectedIndex = targetIndex
-            collectionView.scrollToItem(
-                at: IndexPath(item: targetIndex, section: 0),
-                at: .centeredHorizontally,
-                animated: animated
-            )
+            collectionView.setContentOffset(CGPoint(x: expectedX, y: 0), animated: animated)
             notifyVisiblePage(targetIndex)
         }
 
@@ -633,6 +635,11 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
             let offset = view.contentOffset
             view.reloadData()
             view.layoutIfNeeded()
+            if let request = lastScrollRequest, abs(offset.x) < 1 {
+                lastScrollRequest = nil
+                scroll(to: request, in: view, animated: false)
+                return
+            }
             view.setContentOffset(offset, animated: false)
             notifyVisiblePage(pageIndex(for: view))
         }
@@ -892,6 +899,16 @@ private final class EmojiPageCell: UICollectionViewCell {
         grid = nil
     }
 
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let hit = super.hitTest(point, with: event) else { return nil }
+        var candidate: UIView? = hit
+        while let view = candidate, view !== self {
+            if view is EmojiKeyButton { return hit }
+            candidate = view.superview
+        }
+        return nil
+    }
+
     func configure(
         page: EmojiPage,
         columns: Int,
@@ -907,7 +924,7 @@ private final class EmojiPageCell: UICollectionViewCell {
 
         let panHost = UIView()
         panHost.backgroundColor = .clear
-        panHost.isUserInteractionEnabled = false
+        panHost.isUserInteractionEnabled = true
         panHost.isAccessibilityElement = false
         panHost.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(panHost)

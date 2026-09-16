@@ -1427,23 +1427,19 @@ class KeyboardViewController: UIInputViewController,
         let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad
         let voiceBoardMode = mode == .keys || mode == .recording
         let uikitOwnsVoiceChrome = voiceBoardMode && KeyboardInteractionPreferences.liquidGlassEnabled
-        // Only actual buttons receive touches; the container passes through to
-        // the SwiftUI pages. Never disable a held button during relayout.
         controls.isHidden = false
         controls.isUserInteractionEnabled = true
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
+        micButton?.frame = .zero
+        micButton?.isHidden = true
+        micButton?.isEnabled = false
+        micButton?.isUserInteractionEnabled = false
         keyboardModeButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         emojiButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         numberButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
-        micButton?.isHidden = true
-        micButton?.isUserInteractionEnabled = false
-        micButton?.isEnabled = false
         spaceButton?.isHidden = !uikitOwnsVoiceChrome || layout.spaceFrame.isEmpty
         returnButton?.isHidden = !uikitOwnsVoiceChrome || !rightRailVisible
-        // Keep a UIKit-owned dismiss target in the top lane. The SwiftUI button
-        // remains the visual fallback, but this direct target is reliable when a
-        // host delays or drops SwiftUI taps at the keyboard edge.
         dismissButton?.isHidden = false
         voiceBoardButton?.isHidden = !isAuxiliary
         pasteButton?.isHidden = isEmoji
@@ -1452,7 +1448,7 @@ class KeyboardViewController: UIInputViewController,
         hostingController?.view.isUserInteractionEnabled = true
         hostingController?.view.layer.zPosition = 0
         controls.layer.zPosition = 100
-        [keyboardModeButton, emojiButton, numberButton, micButton, spaceButton, returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton, boardDeleteButton]
+        [keyboardModeButton, emojiButton, numberButton, spaceButton, returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton, boardDeleteButton]
             .compactMap { $0 }
             .forEach {
                 $0.isEnabled = !$0.isHidden
@@ -1461,10 +1457,6 @@ class KeyboardViewController: UIInputViewController,
         keyboardModeButton?.frame = layout.chromeLettersFrame
         emojiButton?.frame = layout.chromeEmojiFrame
         numberButton?.frame = layout.chromeNumbersFrame
-        micButton?.frame = .zero
-        micButton?.isHidden = true
-        micButton?.isUserInteractionEnabled = false
-        micButton?.isEnabled = false
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
         micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
         micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction

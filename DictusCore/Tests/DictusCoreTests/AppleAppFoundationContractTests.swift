@@ -30,7 +30,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(availability.contains("AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessHandshakeDate)"))
         XCTAssertFalse(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
         XCTAssertTrue(availability.contains("ensureFullAccessProbe()"))
-        XCTAssertTrue(availability.contains("fullAccessVerified = status.fullAccessVerified"))
+        XCTAssertTrue(availability.contains("if handshake {"))
+        XCTAssertTrue(availability.contains("fullAccessVerified = true"))
         XCTAssertTrue(availability.contains("keyboardInstalled: inputModeInstalled"))
     }
 
@@ -297,7 +298,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(tutorial.contains("Full Access required"))
         XCTAssertTrue(tutorial.contains("Open Settings"))
         XCTAssertTrue(tutorial.contains("AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
-        XCTAssertFalse(tutorial.contains("fullAccessVerified = true"))
+        XCTAssertTrue(tutorial.contains("if handshake {\n            fullAccessVerified = true"))
+        XCTAssertFalse(tutorial.contains("fullAccessVerified = status.fullAccessVerified"))
     }
 
     func testGlobeTutorialKeepsModifiersInsideItsViewBody() throws {
@@ -523,8 +525,9 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(audio.contains("AppGroup.defaults.set(isHealthy, forKey: SharedKeys.keyboardAudioReady)"))
         XCTAssertTrue(keyboard.contains("openDictusForRecovery()"),
                       "the visible recovery target must use the same URL handoff as the Link")
-        XCTAssertTrue(root.contains("Link(destination: preparationURL)"),
-                      "SwiftUI remains the accessibility/fallback recovery surface")
+        XCTAssertTrue(root.contains("ImmediateKeyButton("))
+        XCTAssertTrue(root.contains("highlightSize: CGSize(width: frame.width, height: frame.height)"))
+        XCTAssertFalse(root.contains("Link(destination: preparationURL)"))
         XCTAssertTrue(root.contains("SuggestionBarIconButton("))
         XCTAssertTrue(root.contains("action: routeDismiss"))
         let app = try source("DictusApp/DictusApp.swift")

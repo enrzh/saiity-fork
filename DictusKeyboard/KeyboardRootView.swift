@@ -398,25 +398,20 @@ struct KeyboardRootView: View {
     }
 
     private func dictateButton(frame: CGRect) -> some View {
-        Group {
-            if state.appNeedsAppAction {
-                // Let the user activate the public Link directly. Some keyboard
-                // hosts still refuse opening; keep the manual fallback visible.
-                Link(destination: preparationURL) {
-                    dictationControlVisual(frame: frame)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open sAiity to prepare dictation")
-            } else {
-                ZStack {
-                    dictationControlVisual(frame: frame)
-                    ImmediateKeyButton(
-                        onTouchDown: { state.handleMicPressBegan() },
-                        onTouchUp: { state.handleMicPressEnded() }
-                    )
-                }
-            }
+        ZStack {
+            dictationControlVisual(frame: frame)
+                .allowsHitTesting(false)
+            ImmediateKeyButton(
+                onTouchDown: { state.handleMicPressBegan() },
+                onTouchUp: { state.handleMicPressEnded() },
+                highlightCornerRadius: frame.height / 2,
+                highlightSize: CGSize(width: frame.width, height: frame.height)
+            )
+            .frame(width: frame.width, height: frame.height)
         }
+        .frame(width: frame.width, height: frame.height)
+        .contentShape(Capsule())
+        .accessibilityLabel(state.appNeedsAppAction ? "Open sAiity to prepare dictation" : state.dictationActionLabel)
     }
 
     private func dictationControlVisual(frame: CGRect) -> some View {
@@ -532,9 +527,6 @@ struct KeyboardRootView: View {
                 .frame(width: frame.width, height: frame.height, alignment: .topLeading)
         }
         .frame(width: frame.width, height: frame.height)
-        // Keep the SwiftUI surface hittable. UIKit chrome sits above it and
-        // consumes overlapping controls; missed hit frames (especially the
-        // dictation capsule) must still reach ImmediateKeyButton.
     }
 
     private var voiceBoardUsesUIKitHits: Bool {
@@ -753,7 +745,7 @@ private struct LetterKeyboardPageView: View {
 
     private let bottomBarHeight: CGFloat = 44
     private let chromeBottomInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
-    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
+    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
 
     var body: some View {
         let _ = (onBackToVoice, showsSymbolsControl)
@@ -892,6 +884,22 @@ private struct LetterKeyboardPageView: View {
                 spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing),
                 commandWidth: surfaceLayout.boardDeleteFrame.width
             )
+        }
+        let deleteFrame = CGRect(
+            x: surfaceLayout.boardDeleteFrame.minX - surfaceLayout.surfaceFrame.minX,
+            y: surfaceLayout.boardDeleteFrame.minY - surfaceLayout.surfaceFrame.minY,
+            width: surfaceLayout.boardDeleteFrame.width,
+            height: surfaceLayout.boardDeleteFrame.height
+        )
+        if let lastRow = frames.indices.last, currentRows.indices.contains(lastRow) {
+            frames[lastRow] = frames[lastRow].map {
+                CGRect(x: $0.minX, y: deleteFrame.minY, width: $0.width, height: deleteFrame.height)
+            }
+            for (index, key) in currentRows[lastRow].enumerated() {
+                if case .backspace = key.type, frames[lastRow].indices.contains(index) {
+                    frames[lastRow][index] = deleteFrame
+                }
+            }
         }
         return zip(currentRows.indices, zip(currentRows, frames)).flatMap { rowIndex, rowAndFrames in
             let (row, rowFrames) = rowAndFrames
@@ -1550,7 +1558,7 @@ private struct LiquidSymbolPageView: View {
 
     private let bottomBarHeight: CGFloat = 44
     private let chromeBottomInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
-    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.visibleControlGap)
+    private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
 
     var body: some View {
         let _ = (onClose, onBackToVoice)
@@ -1674,6 +1682,22 @@ private struct LiquidSymbolPageView: View {
                 spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing),
                 commandWidth: surfaceLayout.boardDeleteFrame.width
             )
+        }
+        let deleteFrame = CGRect(
+            x: surfaceLayout.boardDeleteFrame.minX - surfaceLayout.surfaceFrame.minX,
+            y: surfaceLayout.boardDeleteFrame.minY - surfaceLayout.surfaceFrame.minY,
+            width: surfaceLayout.boardDeleteFrame.width,
+            height: surfaceLayout.boardDeleteFrame.height
+        )
+        if let lastRow = frames.indices.last, rows.indices.contains(lastRow) {
+            frames[lastRow] = frames[lastRow].map {
+                CGRect(x: $0.minX, y: deleteFrame.minY, width: $0.width, height: deleteFrame.height)
+            }
+            for (index, key) in rows[lastRow].enumerated() {
+                if case .delete = key.action, frames[lastRow].indices.contains(index) {
+                    frames[lastRow][index] = deleteFrame
+                }
+            }
         }
         return zip(rows, frames).flatMap { row, rowFrames in
             zip(row, rowFrames).map { PositionedLiquidSymbolKey(key: $0, frame: $1) }

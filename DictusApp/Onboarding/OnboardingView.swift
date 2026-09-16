@@ -88,9 +88,14 @@ struct AvailabilityPage: View {
     }
     private var modelReady: Bool { modelManager.downloadedModels.contains(recommendedModel) && modelManager.modelStates[recommendedModel] == .ready }
     private var keyboardStatus: KeyboardSetupStatus {
-        KeyboardSetupStatus(
+        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
+            verified: AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified),
+            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
+            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
+        )
+        return KeyboardSetupStatus(
             keyboardInstalled: keyboardInstalled,
-            fullAccessHandshake: fullAccessVerified,
+            fullAccessHandshake: handshake,
             handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
     }
@@ -196,8 +201,8 @@ struct AvailabilityPage: View {
         )
         let installed = status.keyboardDetected
         keyboardInstalled = installed
-        if status.fullAccessVerified || !storedVerified {
-            fullAccessVerified = status.fullAccessVerified
+        if handshake {
+            fullAccessVerified = true
         }
         let announcement: String
         if status.fullAccessVerified {

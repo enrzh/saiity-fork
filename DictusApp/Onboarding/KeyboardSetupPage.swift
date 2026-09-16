@@ -197,7 +197,9 @@ struct KeyboardSetupPage: View {
             handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
         keyboardDetected = status.keyboardDetected
-        fullAccessHandshake = status.fullAccessHandshake
+        if handshake {
+            fullAccessHandshake = true
+        }
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"

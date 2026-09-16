@@ -127,6 +127,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("micButton?.frame = .zero"))
         XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = false"))
         XCTAssertTrue(root.contains("ImmediateKeyButton("))
+        XCTAssertTrue(root.contains("highlightSize: CGSize(width: frame.width, height: frame.height)"))
+        XCTAssertTrue(root.contains(".frame(width: frame.width, height: frame.height)"))
+        XCTAssertFalse(root.contains("Link(destination:"))
         XCTAssertTrue(root.contains("onTouchDown: { state.handleMicPressBegan() }"))
         XCTAssertTrue(root.contains("onTouchUp: { state.handleMicPressEnded() }"))
         XCTAssertFalse(root.contains("HoldToSpeakButton("))
@@ -350,9 +353,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the coordinator must detect page changes without rebuilding emoji signatures")
         XCTAssertTrue(picker.contains("private func reloadIfIdle"))
         XCTAssertTrue(picker.contains("context.coordinator.reloadWhenIdle(uiView)"))
-        XCTAssertTrue(picker.contains("isPagingEnabled = false"),
-                      "emoji pages must be free-scroll so the user can stop between page widths")
-        XCTAssertTrue(picker.contains("decelerationRate = .normal"))
+        XCTAssertTrue(picker.contains("isPagingEnabled = true"),
+                      "empty recents and later categories page horizontally")
+        XCTAssertTrue(picker.contains("decelerationRate = .fast"))
         XCTAssertFalse(picker.contains("scrollViewWillEndDragging"),
                        "free-scroll must not snap to a page on release")
     }

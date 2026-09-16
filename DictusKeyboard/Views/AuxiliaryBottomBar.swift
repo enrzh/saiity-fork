@@ -590,7 +590,12 @@ struct ImmediateKeyButton: UIViewRepresentable {
 
 private final class ImmediateKeyControl: UIControl {
     var highlightCornerRadius: CGFloat = 13
-    var highlightSize: CGSize? { didSet { setNeedsLayout() } }
+    var highlightSize: CGSize? {
+        didSet {
+            setNeedsLayout()
+            invalidateIntrinsicContentSize()
+        }
+    }
     private let highlightLayer = CALayer()
     var hitExpansion: CGFloat = 6
     var adaptiveTouchScopeID: String? {
@@ -703,6 +708,10 @@ private final class ImmediateKeyControl: UIControl {
                                       y: bounds.midY - size.height / 2,
                                       width: size.width, height: size.height)
         CATransaction.commit()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        highlightSize ?? super.intrinsicContentSize
     }
 }
 
