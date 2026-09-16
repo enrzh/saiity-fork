@@ -169,6 +169,8 @@ struct KeyboardSetupPage: View {
     /// Checks installation through the public active-input-mode list. Full Access
     /// comes only from the keyboard extension's real `hasFullAccess` handshake.
     private func checkKeyboardInstalled() {
+        ensureFullAccessProbe()
+        AppGroup.defaults.synchronize()
         let modes = UITextInputMode.activeInputModes
         PersistentLog.log(.onboardingKeyboardCheckStarted(modeCount: modes.count))
 
@@ -178,7 +180,11 @@ struct KeyboardSetupPage: View {
         // The extension's handshake is the only real Full Access signal. iOS
         // can temporarily omit a third-party keyboard from activeInputModes
         // while it refreshes Settings, so do not erase a valid handshake here.
-        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
+            verified: AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified),
+            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
+            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
+        )
         if let identifier {
             PersistentLog.log(.onboardingKeyboardDetected(identifier: identifier))
         } else {
@@ -204,7 +210,14 @@ struct KeyboardSetupPage: View {
     }
 
     private func openSettings() {
+        AppGroup.defaults.set(UUID().uuidString, forKey: SharedKeys.onboardingFullAccessProbe)
+        AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+
+    private func ensureFullAccessProbe() {
+        guard AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe) == nil else { return }
+        AppGroup.defaults.set(UUID().uuidString, forKey: SharedKeys.onboardingFullAccessProbe)
     }
 }

@@ -37,11 +37,13 @@ public enum VoiceOnlyKeyboardPolicy {
             in size: CGSize,
             spacing: CGFloat,
             inset: CGFloat,
-            rowSpacing: CGFloat? = nil
+            rowSpacing: CGFloat? = nil,
+            maxRowHeight: CGFloat? = nil
         ) -> [[CGRect]] {
             guard !rows.isEmpty else { return [] }
             let resolvedRowSpacing = rowSpacing ?? spacing
-            let rowHeight = max(1, (size.height - resolvedRowSpacing * CGFloat(rows.count - 1)) / CGFloat(rows.count))
+            let natural = max(1, (size.height - resolvedRowSpacing * CGFloat(rows.count - 1)) / CGFloat(rows.count))
+            let rowHeight = min(natural, maxRowHeight ?? natural)
             return rows.enumerated().map { rowIndex, row in
                 guard !row.isEmpty,
                       row.allSatisfy({ $0 >= 0 }) else { return [] }
@@ -61,6 +63,82 @@ public enum VoiceOnlyKeyboardPolicy {
                     return frame
                 }
             }
+        }
+
+        /// Last-row height of ABC / 123 / #+=. Caps, #+= and Delete pin to the
+        /// dictation-board delete hit height whenever the remaining letter rows
+        /// still have a usable target.
+        public static func letterAlignedLastRowHeight(
+            in height: CGFloat,
+            rowSpacing: CGFloat
+        ) -> CGFloat {
+            let commandHeight = VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+            let minimumUpperRows = CGFloat(36 * 2)
+            let maxPinned = max(1, height - rowSpacing * 2 - minimumUpperRows)
+            return min(commandHeight, maxPinned)
+        }
+
+        /// Pins the last character row (shift/delete) to a shared height so ABC,
+        /// 123 and #+= do not resize the delete key.
+        public static func framesWithPinnedLastRow(
+            for rows: [[CGFloat]],
+            in size: CGSize,
+            spacing: CGFloat,
+            inset: CGFloat,
+            rowSpacing: CGFloat? = nil,
+            lastRowHeight: CGFloat,
+            maxRowHeight: CGFloat? = nil
+        ) -> [[CGRect]] {
+            guard !rows.isEmpty else { return [] }
+            let resolvedRowSpacing = rowSpacing ?? spacing
+            let pinnedHeight = min(max(1, lastRowHeight), max(1, size.height))
+            if rows.count == 1 {
+                let frames = frames(
+                    for: rows,
+                    in: CGSize(width: size.width, height: pinnedHeight),
+                    spacing: spacing,
+                    inset: inset,
+                    rowSpacing: resolvedRowSpacing,
+                    maxRowHeight: maxRowHeight
+                )
+                let y = max(0, size.height - pinnedHeight)
+                return frames.map { row in
+                    row.map { CGRect(x: $0.minX, y: y, width: $0.width, height: pinnedHeight) }
+                }
+            }
+
+            let upperRows = Array(rows.dropLast())
+            let upperCount = max(1, upperRows.count)
+            let naturalUpper = max(
+                1,
+                (size.height - pinnedHeight - resolvedRowSpacing * CGFloat(upperCount))
+                    / CGFloat(upperCount)
+            )
+            let upperRowHeight = min(naturalUpper, maxRowHeight ?? naturalUpper)
+            let packedUpper = upperRowHeight * CGFloat(upperRows.count)
+                + resolvedRowSpacing * CGFloat(max(0, upperRows.count - 1))
+            let originY = max(0, size.height - pinnedHeight - resolvedRowSpacing - packedUpper)
+            let upperFrames = frames(
+                for: upperRows,
+                in: CGSize(width: size.width, height: packedUpper),
+                spacing: spacing,
+                inset: inset,
+                rowSpacing: resolvedRowSpacing,
+                maxRowHeight: upperRowHeight
+            ).map { row in
+                row.map { CGRect(x: $0.minX, y: $0.minY + originY, width: $0.width, height: $0.height) }
+            }
+            let lastY = originY + packedUpper + resolvedRowSpacing
+            let lastFrames = frames(
+                for: [rows[rows.count - 1]],
+                in: CGSize(width: size.width, height: pinnedHeight),
+                spacing: spacing,
+                inset: inset,
+                rowSpacing: resolvedRowSpacing
+            ).map { row in
+                row.map { CGRect(x: $0.minX, y: lastY, width: $0.width, height: pinnedHeight) }
+            }
+            return upperFrames + lastFrames
         }
 
         /// Builds a symbol row whose first and last commands keep a native-sized
@@ -108,12 +186,17 @@ public enum VoiceOnlyKeyboardPolicy {
     }
 
     public static let usesLegacyKeyGrid = false
-    /// Native compact iPhone portrait height before the sAiity scale.
+    /// Native compact iPhone portrait height before width expansion scaling.
     public static let nativePortraitReferenceHeight: Double = 216
-    /// Extra dictation-board height on top of the native keyboard.
-    /// The extended surface keeps the larger, more comfortable dictation layout
-    /// used before the native-height experiment.
-    public static let surfaceHeightScale: Double = 1.10
+    /// Reference keyboard width on a standard compact iPhone (logical points).
+    public static let nativePortraitReferenceWidth: Double = 390
+    /// Inset glass content width at the reference width before full-bleed expansion.
+    public static var insetSurfaceContentWidthAtReference: Double {
+        nativePortraitReferenceWidth - horizontalPadding * 2
+    }
+    /// Small breathing-room extension above the native keyboard height.
+    /// Keep the suggestion lane separate; this scales only the Liquid Glass surface.
+    public static let surfaceHeightScale: Double = 1.0
     /// Shared portrait fallback and the scale applied to device-native heights
     /// at runtime by the keyboard extension.
     public static let surfaceHeight: Double = nativePortraitReferenceHeight * surfaceHeightScale
@@ -184,8 +267,23 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let symbolBottomControlBudget: Double = symbolBottomControlLaneHeight + symbolBottomControlBottomInset
     public static let actionHitSize = CGSize(width: 88, height: 44)
     public static let bottomActionHitHeight: CGFloat = 44
-    public static let utilityVisualSize: Double = 36
-    public static let languageVisualWidth: Double = 58
+    /// Inset from the command hit rectangle to the glass face. Shared by the
+    /// dictation-board delete key, Caps, #+=, and the 123/ABC/emoji chrome.
+    public static let commandVisualInset: CGFloat = 8
+    /// Inner padding of the emoji category well inside the compact suggestion lane.
+    public static let emojiCategoryHorizontalInset: CGFloat = 4
+    public static let emojiCategoryVerticalInset: CGFloat = 2
+    /// Letter and symbol key plates use the compact system-keyboard radius.
+    public static let keyCornerRadius: CGFloat = 8
+    public static let utilityVisualSize: Double = 40
+    /// Glass face inside a command hit target. Matches dictation-board delete.
+    public static func commandVisualSize(for hit: CGSize) -> CGSize {
+        CGSize(
+            width: max(0, hit.width - commandVisualInset),
+            height: max(0, hit.height - commandVisualInset)
+        )
+    }
+    public static let languageVisualWidth: Double = 46
     public static let rightRailControlCount: Int = 2
     public static let leftRailControlCount: Int = 3
     public static let minimumCenterAreaWidth: Double = 76
@@ -196,9 +294,18 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Capsule under the microphone on the voice page.
     public static let spacebarHeight: Double = 44
     public static let railSpacing: Double = 4
-    public static let horizontalPadding: Double = 6
+    public static let horizontalPadding: Double = 8
     public static let controlEdgeInset: Double = 12
     public static let visibleControlGap: Double = 8
+    /// Padding between the bottom chrome row and the glass surface edge (native keyboard breathing room).
+    public static let chromeBottomInset: Double = 6
+    /// Native portrait reference geometry shared by letter, number and symbol
+    /// pages. Keeping these values in one place prevents an older compact grid
+    /// from reappearing through a secondary layout path.
+    public static let keyGridInset: CGFloat = 6.5
+    public static let keySpacing: CGFloat = 6
+    public static let keyRowSpacing: CGFloat = 11
+    public static let letterKeyHeight: CGFloat = 45
     /// The letter keyboard keeps a compact action header above its four key rows.
     /// This leaves the dictation action visible without covering the top letter row.
     public static let letterKeyboardHeaderHeight: Double = 44
@@ -221,8 +328,61 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let statusHeight: Double = 20
     public static let contentSpacing: Double = 6
     public static let topInset: Double = 8
-    /// Height reserved above the glass surface for keyboard-mode suggestions.
-    public static let suggestionLaneHeight: Double = 44
+    /// Visual height of the compact suggestion / accessory lane.
+    public static let suggestionLaneHeight: Double = 36
+    /// Hit size of dismiss, paste, and dictation-board controls in that lane.
+    public static let accessoryControlSize: Double = 36
+    public static let accessoryEdgeInset: Double = 8
+    /// Inset for circular suggestion-lane icons inside the 36pt lane.
+    public static let suggestionLaneControlInset: CGFloat = 4
+    /// The emoji category control floats above the bottom spacebar instead of
+    /// competing with the keyboard host's suggestion lane.
+    public static let floatingEmojiCategoryBarHeight: Double = 30
+    public static let floatingEmojiCategoryBarGap: Double = 4
+    public static let floatingEmojiCategoryBarWidthInset: Double = 16
+    /// Extra height added to the native keyboard window. Larger than the visual
+    /// lane so shrinking the bar enlarges the glass surface and the keys inside it.
+    public static let keyboardWindowAccessoryHeight: Double = 44
+
+    /// Horizontal growth from full-bleed width vs the previous inset glass surface at the same width.
+    public static func horizontalExpansionScale(for availableWidth: Double) -> Double {
+        let width = max(1, availableWidth)
+        let railsFit = width >= Double(leftRailControlCount) * controlSize
+            + actionHitSize.width + controlSize
+        let centerMinimumFitsWithInset = width >= Double(leftRailControlCount) * controlSize
+            + actionHitSize.width + controlSize + horizontalPadding * 2
+        guard railsFit, centerMinimumFitsWithInset else { return 1 }
+        let previousSurface = width - horizontalPadding * 2
+        guard previousSurface > 0 else { return 1 }
+        return width / previousSurface
+    }
+
+    /// Applies the same expansion factor to the reference portrait keyboard height.
+    public static func scaledSurfaceHeight(for availableWidth: Double) -> Double {
+        nativePortraitReferenceHeight
+            * horizontalExpansionScale(for: availableWidth)
+            * surfaceHeightScale
+    }
+
+    public struct ScaledKeyGeometry: Equatable {
+        public let keyGridInset: CGFloat
+        public let keySpacing: CGFloat
+        public let keyRowSpacing: CGFloat
+        public let letterKeyHeight: CGFloat
+    }
+
+    public static func scaledKeyGeometry(for availableWidth: Double) -> ScaledKeyGeometry {
+        // Match the supplied native portrait reference: approximately 35pt
+        // faces at 420pt width, 6pt horizontal and 11pt vertical gaps. Width
+        // adapts through the row weights; spacing must not grow with it.
+        // Keep compact landscape surfaces usable without stretching the keys.
+        return ScaledKeyGeometry(
+            keyGridInset: keyGridInset,
+            keySpacing: keySpacing,
+            keyRowSpacing: keyRowSpacing,
+            letterKeyHeight: letterKeyHeight
+        )
+    }
 
     public static func primaryControlWidth(availableWidth: Double, centerAreaWidth: Double) -> Double {
         let clusterVisible = availableWidth - horizontalPadding * 2 >= controlSize * 2 + 124
@@ -262,9 +422,8 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: max(0, surfaceHeight - verticalPadding * 2 - topAccessoryHeight))
         }
 
-
         public var bottomAuxiliaryControlFrame: CGRect {
-            CGRect(x: surfaceFrame.minX, y: surfaceFrame.maxY - visibleControlGap - controlSize,
+            CGRect(x: surfaceFrame.minX, y: surfaceFrame.maxY - chromeBottomInset - controlSize,
                    width: surfaceFrame.width, height: controlSize)
         }
 
@@ -302,27 +461,97 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var accessoryMicrophoneFrame: CGRect {
-            CGRect(x: max(0, surfaceWidth - 88), y: 0, width: 80,
+            CGRect(x: max(0, surfaceWidth - 72), y: 0, width: 64,
                    height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
         }
 
         public var accessoryDismissFrame: CGRect {
-            CGRect(x: max(0, surfaceWidth - 52), y: 0, width: 44,
-                   height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+            CGRect(
+                x: max(0, surfaceWidth - accessoryEdgeInset - accessoryControlSize),
+                y: 0,
+                width: accessoryControlSize,
+                height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+            )
         }
 
-        public var boardKeyboardFrame: CGRect { languageFrame }
+        /// Return-to-dictation-board control immediately left of keyboard-down.
+        public var accessoryDictationBoardFrame: CGRect {
+            CGRect(
+                x: max(0, accessoryDismissFrame.minX - railSpacing - accessoryControlSize),
+                y: 0,
+                width: accessoryControlSize,
+                height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+            )
+        }
+
+        /// Emoji category scrubber in the suggestion lane, between the language
+        /// chip and the dictation-board control. UIKit owns this hit target
+        /// because keyboard hosts often drop SwiftUI taps in the top lane.
+        public var accessoryEmojiCategoryFrame: CGRect {
+            let minX = accessoryEdgeInset + languageVisualWidth + railSpacing
+            let maxX = accessoryDictationBoardFrame.minX - railSpacing
+            let width = max(0, maxX - minX)
+            return CGRect(
+                x: minX,
+                y: 0,
+                width: width,
+                height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+            )
+        }
+
+        /// Category bookmarks float over the emoji grid in the delete row.
+        /// Width is slightly smaller than the spacebar. The bottom edge matches
+        /// `boardDeleteFrame` so ABC ↔ emoji ↔ 123 does not jump that control.
+        public var floatingEmojiCategoryFrame: CGRect {
+            let space = chromeWideSpaceFrame
+            let delete = boardDeleteFrame
+            guard !space.isEmpty, !delete.isEmpty else { return .zero }
+            let width = min(
+                max(0, space.width - floatingEmojiCategoryBarWidthInset),
+                max(0, surfaceFrame.width - visibleControlGap * 2)
+            )
+            let height = floatingEmojiCategoryBarHeight
+            guard width > 0, height > 0 else { return .zero }
+            let frame = CGRect(
+                x: space.midX - width / 2,
+                y: delete.maxY - height,
+                width: width,
+                height: height
+            )
+            return surfaceFrame.intersection(frame)
+        }
+
+        /// The board's keyboard glyph occupies the top slot of the same left rail
+        /// as Emoji and 123. Keeping all three frames on one x-axis makes the
+        /// accessory controls stable when the board changes state.
+        public var boardKeyboardFrame: CGRect {
+            CGRect(
+                x: surfaceFrame.minX + visibleControlGap,
+                y: surfaceFrame.minY + visibleControlGap,
+                width: controlSize,
+                height: controlSize
+            )
+        }
 
         public var boardReturnFrame: CGRect { dismissFrame }
 
+        /// All large command keys use the dictation board's compact glass face,
+        /// independent of the height available to the surrounding character row.
+        public var commandKeyVisualSize: CGSize {
+            VoiceOnlyKeyboardPolicy.commandVisualSize(for: boardDeleteFrame.size)
+        }
+
         public var boardDeleteFrame: CGRect {
-            // Same third-row command frame as the symbols grid, in root coordinates.
-            let gridHeight = max(0, surfaceFrame.height - visibleControlGap * 2 - controlSize)
-            let rowHeight = max(1, (gridHeight - 12) / 3)
+            // Keep delete directly above the bottom-right Enter action. The
+            // previous calculation derived its height from the whole surface,
+            // which made the button grow to 52pt on the extended board and
+            // overlap Enter.
             let width = max(0, surfaceFrame.width - horizontalPadding * 2) * 0.15
-            return CGRect(x: surfaceFrame.maxX - horizontalPadding - width,
-                          y: surfaceFrame.minY + visibleControlGap + 2 * (rowHeight + 6),
-                          width: width, height: rowHeight)
+            let returnFrame = boardReturnFrame
+            let height = bottomActionHitHeight
+            return CGRect(x: returnFrame.maxX - width,
+                          y: returnFrame.minY - railSpacing - height,
+                          width: width, height: height)
         }
 
         /// Explicit clipboard insertion sits beside the language menu and keeps
@@ -341,8 +570,8 @@ public enum VoiceOnlyKeyboardPolicy {
             guard leftRailWidth > 0 else { return LeftUtilityFrames(at: .zero, emoji: .zero, number: .zero) }
             let x = surfaceFrame.minX + visibleControlGap
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
-            let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
-            let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - visibleControlGap - size.height, width: size.width, height: size.height)
+            let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - chromeBottomInset - size.height, width: size.width, height: size.height)
+            let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - chromeBottomInset - size.height, width: size.width, height: size.height)
             return LeftUtilityFrames(
                 at: CGRect(x: x, y: emojiFrame.minY - railSpacing - size.height, width: size.width, height: size.height),
                 emoji: controlOrder == .emojiFirst ? emojiFrame : numberFrame,
@@ -363,7 +592,7 @@ public enum VoiceOnlyKeyboardPolicy {
         public var dismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
             return CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth,
-                          y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                          y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
                           width: rightRailWidth, height: bottomActionHitHeight)
         }
 
@@ -373,7 +602,7 @@ public enum VoiceOnlyKeyboardPolicy {
             guard rightRailWidth > 0 else { return .zero }
             let returnFrame = CGRect(
                 x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
-                y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
                 width: actionHitSize.width,
                 height: actionHitSize.height
             )
@@ -390,11 +619,115 @@ public enum VoiceOnlyKeyboardPolicy {
             guard !letterDismissFrame.isEmpty else { return .zero }
             let frame = CGRect(
                 x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
-                y: surfaceFrame.maxY - visibleControlGap - bottomActionHitHeight,
+                y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
                 width: actionHitSize.width,
                 height: actionHitSize.height
             )
             return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// Unified native-style chrome on the voice board: 123, ABC, space, emoji, return.
+        /// ABC and 123 pages reuse the compact 123/ABC slot, then emoji, space, and return.
+        public var chromeNumbersFrame: CGRect {
+            guard leftRailWidth > 0 else { return .zero }
+            let frame = CGRect(
+                x: surfaceFrame.minX + visibleControlGap,
+                y: spaceLaneMinY,
+                width: controlSize,
+                height: spacebarHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        public var chromeLettersFrame: CGRect {
+            let numbers = chromeNumbersFrame
+            guard !numbers.isEmpty else { return .zero }
+            let frame = CGRect(
+                x: numbers.maxX + railSpacing,
+                y: numbers.minY,
+                width: controlSize,
+                height: spacebarHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// Union of the two compact left slots. Voice keeps 123 and ABC there;
+        /// ABC/123 pages put compact 123/ABC in the first slot and emoji in the second.
+        public var chromeWideLettersFrame: CGRect {
+            let numbers = chromeNumbersFrame
+            let letters = chromeLettersFrame
+            guard !numbers.isEmpty, !letters.isEmpty else { return letters }
+            return numbers.union(letters)
+        }
+
+        /// Voice page places emoji immediately left of return.
+        public var chromeEmojiFrame: CGRect {
+            let right = chromeReturnFrame
+            guard !right.isEmpty, leftRailWidth > 0 else { return .zero }
+            let frame = CGRect(
+                x: right.minX - railSpacing - controlSize,
+                y: spaceLaneMinY,
+                width: controlSize,
+                height: spacebarHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        public var chromeReturnFrame: CGRect { letterReturnFrame.isEmpty ? dismissFrame : letterReturnFrame }
+
+        public var chromeSpaceFrame: CGRect {
+            let left = chromeLettersFrame
+            let right = chromeEmojiFrame
+            guard !left.isEmpty, !right.isEmpty else { return .zero }
+            let x = left.maxX + railSpacing
+            let width = right.minX - railSpacing - x
+            guard width >= 44 else { return .zero }
+            let frame = CGRect(x: x, y: spaceLaneMinY, width: width, height: spacebarHeight)
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// ABC/123 and emoji pages hide the right-of-space emoji control and give
+        /// that width to the spacebar.
+        public var chromeWideSpaceFrame: CGRect {
+            let space = chromeSpaceFrame
+            let emoji = chromeEmojiFrame
+            guard !space.isEmpty, !emoji.isEmpty else { return space }
+            return CGRect(
+                x: space.minX,
+                y: space.minY,
+                width: emoji.maxX - space.minX,
+                height: space.height
+            )
+        }
+
+        /// The symbols page puts its return-to-dictation control between the
+        /// spacebar and the wide Enter key, matching the ABC page's right-side
+        /// control slot.
+        public var symbolDictationFrame: CGRect {
+            guard rightRailWidth > 0 else { return .zero }
+            let frame = CGRect(
+                x: dismissFrame.minX - railSpacing - controlSize,
+                y: dismissFrame.minY,
+                width: controlSize,
+                height: bottomActionHitHeight
+            )
+            return surfaceFrame.contains(frame) ? frame : .zero
+        }
+
+        /// Reserve the symbol-page dictation slot without changing the shared
+        /// voice/letter spacebar geometry.
+        public var symbolSpaceFrame: CGRect {
+            let voiceFrame = symbolDictationFrame
+            guard !spaceFrame.isEmpty, !voiceFrame.isEmpty else { return spaceFrame }
+            let maxX = voiceFrame.minX - railSpacing
+            let frame = CGRect(
+                x: spaceFrame.minX,
+                y: spaceFrame.minY,
+                width: max(0, maxX - spaceFrame.minX),
+                height: spaceFrame.height
+            )
+            guard frame.width >= 44, surfaceFrame.contains(frame) else { return spaceFrame }
+            return frame
         }
 
         public var micCenterArea: CGRect {
@@ -420,31 +753,16 @@ public enum VoiceOnlyKeyboardPolicy {
             return surfaceFrame.contains(frame) ? frame : .zero
         }
 
-        public var letterSpaceFrame: CGRect {
-            let clusterHeight = VoiceOnlyKeyboardPolicy.primaryControlSize
-                + visibleControlGap
-                + VoiceOnlyKeyboardPolicy.spacebarHeight
-            guard surfaceFrame.height >= clusterHeight,
-                  !letterReturnFrame.isEmpty else { return .zero }
-
-            let leftMaxX = max(leftUtilityFrames.emoji.maxX, leftUtilityFrames.number.maxX)
-            let x = leftMaxX + railSpacing
-            let width = letterDismissFrame.minX - railSpacing - x
-            guard width >= 44 else { return .zero }
-            let frame = CGRect(
-                x: x,
-                y: spaceLaneMinY,
-                width: width,
-                height: VoiceOnlyKeyboardPolicy.spacebarHeight
-            )
-            return surfaceFrame.contains(frame) ? frame : .zero
-        }
+        public var letterSpaceFrame: CGRect { chromeSpaceFrame }
 
         /// Bottom-bar Y shared with emoji / 123 / dismiss so the voice space key
         /// lines up with the auxiliary pages.
         var spaceLaneMinY: Double {
-            surfaceFrame.maxY - visibleControlGap - VoiceOnlyKeyboardPolicy.spacebarHeight
+            surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.chromeBottomInset - VoiceOnlyKeyboardPolicy.spacebarHeight
         }
+
+        /// Origin of the auxiliary SwiftUI bottom bar inside the surface.
+        public var chromeBottomBarOriginY: Double { spaceLaneMinY }
 
         /// The hold-to-dictate capsule keeps one frame while its content changes.
         /// It is vertically centered in the board above the shared bottom space bar.
@@ -473,16 +791,8 @@ public enum VoiceOnlyKeyboardPolicy {
                 + visibleControlGap
                 + VoiceOnlyKeyboardPolicy.spacebarHeight
             guard surfaceFrame.height >= clusterHeight else { return .zero }
-            let y = spaceLaneMinY
-            let height = VoiceOnlyKeyboardPolicy.spacebarHeight
             if leftRailWidth > 0 && rightRailWidth > 0 {
-                let leftMaxX = max(leftUtilityFrames.emoji.maxX, leftUtilityFrames.number.maxX)
-                let x = leftMaxX + railSpacing
-                let width = dismissFrame.minX - railSpacing - x
-                guard width >= 44 else { return .zero }
-                let frame = CGRect(x: x, y: y, width: width, height: height)
-                guard surfaceFrame.contains(frame) else { return .zero }
-                return frame
+                return chromeSpaceFrame
             }
             let width = VoiceOnlyKeyboardPolicy.primaryControlWidth(
                 availableWidth: surfaceWidth,
@@ -490,9 +800,9 @@ public enum VoiceOnlyKeyboardPolicy {
             )
             let frame = CGRect(
                 x: centerX - width / 2,
-                y: y,
+                y: spaceLaneMinY,
                 width: width,
-                height: height
+                height: VoiceOnlyKeyboardPolicy.spacebarHeight
             )
             guard surfaceFrame.contains(frame) else { return .zero }
             return frame
@@ -567,8 +877,8 @@ public enum VoiceOnlyKeyboardPolicy {
             rightRailHeight: rightRailHeight,
             rightRailTop: verticalPadding + visibleControlGap,
             rightRailBottom: verticalPadding + visibleControlGap + rightRailHeight,
-            dismissTop: resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight,
-            dismissBottom: resolvedSurfaceHeight - verticalPadding - visibleControlGap,
+            dismissTop: resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight,
+            dismissBottom: resolvedSurfaceHeight - verticalPadding - chromeBottomInset,
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
             topAccessoryHeight: max(0, topAccessoryHeight),
@@ -581,10 +891,10 @@ public enum VoiceOnlyKeyboardPolicy {
                     - visibleControlGap - railWidth / 2
                 : 0,
             leftBottomCenterY: hasRails
-                ? resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight / 2
+                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight / 2
                 : 0,
             rightBottomCenterY: hasRails
-                ? resolvedSurfaceHeight - verticalPadding - visibleControlGap - bottomActionHitHeight / 2
+                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight / 2
                 : 0,
             showsLanguageIndicator: hasRails,
             controlOrder: controlOrder
@@ -596,8 +906,6 @@ public enum VoiceOnlyKeyboardPolicy {
             + actionHitSize.width + controlSize
         guard railsFit else { return min(horizontalPadding, availableWidth / 2) }
 
-        let centerMinimumFitsWithInset = availableWidth >= Double(leftRailControlCount) * controlSize
-            + actionHitSize.width + controlSize + horizontalPadding * 2
-        return centerMinimumFitsWithInset ? horizontalPadding : 0
+        return 0
     }
 }

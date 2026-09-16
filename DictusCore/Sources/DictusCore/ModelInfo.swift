@@ -18,8 +18,20 @@ public struct KeyboardSetupStatus: Equatable, Sendable {
     }
 
     public static func isDictusKeyboardIdentifier(_ identifier: String?) -> Bool {
-        guard let identifier else { return false }
-        return identifier.hasPrefix(dictusKeyboardIdentifierPrefix)
+        guard let identifier, !identifier.isEmpty else { return false }
+        if identifier.hasPrefix(dictusKeyboardIdentifierPrefix) { return true }
+        let lowered = identifier.lowercased()
+        return lowered.contains("saiity") && lowered.contains("keyboard")
+    }
+
+    /// The extension's `hasFullAccess` bit is the handshake. A setup probe is
+    /// recorded for diagnostics and must not clear a true bit after one switch.
+    public static func isCurrentFullAccessHandshake(
+        verified: Bool,
+        probe _: String?,
+        acknowledgedProbe _: String?
+    ) -> Bool {
+        verified
     }
 
     /// A handshake can only be written by the sAiity keyboard extension itself.
@@ -37,6 +49,8 @@ public struct KeyboardSetupStatus: Equatable, Sendable {
 public enum CatalogVisibility {
     case available
     case deprecated
+    /// Artifact metadata only; excluded from app selection and runtime lookup.
+    case evaluationOnly
 }
 
 /// Metadata for a supported WhisperKit model variant.
@@ -59,10 +73,10 @@ public struct ModelInfo: Identifiable {
     /// Speech-to-text engine this model uses (WhisperKit or Parakeet).
     public let engine: SpeechEngine
 
-    /// Accuracy score from 0.0 (worst) to 1.0 (best), used for gauge display.
+    /// Editorial accuracy gauge (0...1), not measured WER or a cross-engine benchmark.
     public let accuracyScore: Double
 
-    /// Speed score from 0.0 (slowest) to 1.0 (fastest), used for gauge display.
+    /// Relative speed gauge (0...1); only explicitly cited measurements are device evidence.
     public let speedScore: Double
 
     /// Short English description for the model selection UI.
@@ -112,26 +126,20 @@ public struct ModelInfo: Identifiable {
         return selection
     }
 
-    /// Models available for new downloads. Includes every integrated runtime.
-    /// On iOS 17+, includes Parakeet models. Qwen3-ASR is additionally filtered
-    /// to iOS 18 because FluidAudio exposes its Core ML runtime from that OS.
-    ///
-    /// WHY runtime OS version check instead of #available:
-    /// ModelInfo is in DictusCore (a framework), not the app target.
-    /// Static properties can't use @available. ProcessInfo gives the same
-    /// result at runtime, ensuring iOS 16 users never see Parakeet models
-    /// they can't download or use.
+    /// Models available for new downloads: Tiny, Base, Medium, Large v3, and
+    /// Large v3 Turbo. The full `redesignCatalog` stays resolvable so already
+    /// downloaded Parakeet/Qwen/preview rows still appear under Installed.
+    public static let downloadableIdentifiers: Set<String> = [
+        "openai_whisper-tiny",
+        "openai_whisper-base",
+        "openai_whisper-medium",
+        "openai_whisper-large-v3_947MB",
+        "openai_whisper-large-v3_turbo_954MB"
+    ]
+
     public static let all: [ModelInfo] = {
-        let osMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
-        let isIOS17OrLater = osMajor >= 17
-        let isIOS18OrLater = osMajor >= 18
-        return redesignCatalog.filter { model in
-            guard model.visibility == .available else { return false }
-            // Hide Parakeet models on iOS 16
-            if model.engine == .parakeet && !isIOS17OrLater { return false }
-            // Qwen3-ASR is annotated @available(iOS 18, *) by FluidAudio.
-            if model.engine == .qwen3ASR && !isIOS18OrLater { return false }
-            return true
+        redesignCatalog.filter { model in
+            model.visibility == .available && downloadableIdentifiers.contains(model.identifier)
         }
     }()
 
@@ -140,8 +148,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-tiny",
             displayName: "Tiny",
-            sizeLabel: "~40 MB",
-            sizeBytes: 40_000_000,
+            sizeLabel: "~77 MB",
+            sizeBytes: 76_635_397,
             engine: .whisperKit,
             accuracyScore: 0.3,
             speedScore: 1.0,
@@ -151,8 +159,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-tiny.en",
             displayName: "Tiny (English)",
-            sizeLabel: "~40 MB",
-            sizeBytes: 40_000_000,
+            sizeLabel: "~153 MB",
+            sizeBytes: 152_992_804,
             engine: .whisperKit,
             accuracyScore: 0.35,
             speedScore: 1.0,
@@ -162,8 +170,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-base",
             displayName: "Base",
-            sizeLabel: "~75 MB",
-            sizeBytes: 75_000_000,
+            sizeLabel: "~147 MB",
+            sizeBytes: 146_719_453,
             engine: .whisperKit,
             accuracyScore: 0.4,
             speedScore: 0.9,
@@ -173,8 +181,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-base.en",
             displayName: "Base (English)",
-            sizeLabel: "~75 MB",
-            sizeBytes: 75_000_000,
+            sizeLabel: "~147 MB",
+            sizeBytes: 146_719_453,
             engine: .whisperKit,
             accuracyScore: 0.45,
             speedScore: 0.9,
@@ -188,8 +196,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-small",
             displayName: "Small",
-            sizeLabel: "~250 MB",
-            sizeBytes: 250_000_000,
+            sizeLabel: "~487 MB",
+            sizeBytes: 486_487_465,
             engine: .whisperKit,
             accuracyScore: 0.6,
             speedScore: 0.95,
@@ -199,8 +207,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-small.en",
             displayName: "Small (English)",
-            sizeLabel: "~250 MB",
-            sizeBytes: 250_000_000,
+            sizeLabel: "~487 MB",
+            sizeBytes: 486_487_465,
             engine: .whisperKit,
             accuracyScore: 0.62,
             speedScore: 0.95,
@@ -221,8 +229,8 @@ public struct ModelInfo: Identifiable {
         ModelInfo(
             identifier: "openai_whisper-medium",
             displayName: "Medium",
-            sizeLabel: "~750 MB",
-            sizeBytes: 750_000_000,
+            sizeLabel: "~1.53 GB",
+            sizeBytes: 1_529_654_233,
             engine: .whisperKit,
             accuracyScore: 0.8,
             speedScore: 0.55,
@@ -231,7 +239,7 @@ public struct ModelInfo: Identifiable {
         ),
         ModelInfo(
             identifier: "parakeet-tdt-0.6b-v2",
-            displayName: "Parakeet v2",
+            displayName: "NVIDIA Parakeet v2",
             sizeLabel: "~800 MB",
             sizeBytes: 800_000_000,
             engine: .parakeet,
@@ -242,7 +250,7 @@ public struct ModelInfo: Identifiable {
         ),
         ModelInfo(
             identifier: "parakeet-tdt-0.6b-v3",
-            displayName: "Parakeet v3",
+            displayName: "NVIDIA Parakeet v3",
             sizeLabel: "~800 MB",
             sizeBytes: 800_000_000,
             engine: .parakeet,
@@ -259,7 +267,7 @@ public struct ModelInfo: Identifiable {
             engine: .qwen3ASR,
             accuracyScore: 0.9,
             speedScore: 0.7,
-            description: "Multilingual ASR, best Qwen speed and quality",
+            description: "Experimental multilingual ASR; device compatibility is not yet verified",
             visibility: .available
         ),
         ModelInfo(
@@ -270,7 +278,7 @@ public struct ModelInfo: Identifiable {
             engine: .qwen3ASR,
             accuracyScore: 0.9,
             speedScore: 0.45,
-            description: "Multilingual ASR, lower storage footprint",
+            description: "Experimental multilingual ASR with lower storage; device compatibility is not yet verified",
             visibility: .available
         ),
         // Phase 37 (issue #104): Whisper Turbo re-introduced using Argmax's
@@ -373,19 +381,69 @@ public struct ModelInfo: Identifiable {
             speedScore: 0.30,
             description: "High accuracy, optimized and faster",
             visibility: .available
+        ),
+        // Verified against the Argmax repository tree, 2026-09-12.
+        // Preview exports use the existing sequential WhisperKit pipeline.
+        ModelInfo(
+            identifier: "openai_whisper-small.en_217MB",
+            displayName: "Small English · Compact",
+            sizeLabel: "~218 MB", sizeBytes: 217_878_408,
+            engine: .whisperKit, accuracyScore: 0.6, speedScore: 0.9,
+            description: "Quantized English-only model. Preview export; evaluate on your device.",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-medium.en",
+            displayName: "Medium English",
+            sizeLabel: "~1.53 GB", sizeBytes: 1_529_674_079,
+            engine: .whisperKit, accuracyScore: 0.8, speedScore: 0.5,
+            description: "English-only medium model. Larger download; preview on iPhone.",
+            visibility: .available
+        ),
+        ModelInfo(
+            identifier: "openai_whisper-large-v3-v20240930_547MB",
+            displayName: "Large v3 Turbo · Compact",
+            sizeLabel: "~550 MB", sizeBytes: 549_554_198,
+            engine: .whisperKit, accuracyScore: 0.8, speedScore: 0.5,
+            description: "More compressed multilingual Turbo export. Preview; accuracy may differ.",
+            visibility: .available
         )
     ]
+
+    /// Preview exports have the expected WhisperKit bundle layout, but are not
+    /// explicitly listed in Argmax's iPhone support matrix (checked 2026-09-12).
+    /// Neither this flag nor a passing local RAM gate proves device compatibility.
+    public var isExperimental: Bool {
+        switch identifier {
+        case "openai_whisper-small.en_217MB",
+             "openai_whisper-medium.en",
+             "openai_whisper-large-v3-v20240930_547MB",
+             "qwen3-asr-0.6b-f32",
+             "qwen3-asr-0.6b-int8":
+            return true
+        default:
+            return false
+        }
+    }
 
     /// All known models, using one authoritative metadata row per identifier.
     /// Older downloads remain resolvable because their identifiers stay in the
     /// current catalog; duplicate legacy rows could otherwise shadow current data.
-    public static let allIncludingDeprecated: [ModelInfo] = redesignCatalog
+    public static let allIncludingDeprecated: [ModelInfo] = redesignCatalog.filter {
+        $0.visibility != .evaluationOnly
+    }
+
+    /// Research access only. Never feed these rows into model selection.
+    public static let evaluationCandidates: [ModelInfo] = redesignCatalog.filter {
+        $0.visibility == .evaluationOnly
+    }
 
     /// Removes duplicate identifiers while preferring the last metadata entry.
     /// Reversing again preserves the original catalog order for the retained rows.
     public static func installedRows(from models: [ModelInfo]) -> [ModelInfo] {
         var seen = Set<String>()
         return models.reversed()
+            .filter { $0.visibility != .evaluationOnly }
             .filter { seen.insert($0.identifier).inserted }
             .reversed()
     }
@@ -431,8 +489,8 @@ public struct ModelInfo: Identifiable {
             return "openai_whisper-base"
         }
         return capabilities.physicalMemoryGB >= 6
-            ? "parakeet-tdt-0.6b-v3"
-            : "openai_whisper-small"
+            ? "openai_whisper-medium"
+            : "openai_whisper-base"
     }
 
     public static func recommendedIdentifier() -> String {
@@ -504,7 +562,8 @@ public struct ModelInfo: Identifiable {
             return Self.a12a13SupportedIdentifiers.contains(identifier) ? nil : .hardwareGeneration
         }
         switch identifier {
-        case "openai_whisper-large-v3_turbo_954MB",
+        case "openai_whisper-medium.en", "openai_whisper-large-v3-v20240930_547MB",
+             "openai_whisper-large-v3_turbo_954MB",
              "openai_whisper-large-v2_949MB",
              "openai_whisper-large-v2_turbo_955MB",
              "openai_whisper-large-v3_947MB",
@@ -547,10 +606,11 @@ public struct ModelInfo: Identifiable {
     /// the exception is scoped to the model this device is actually told to use.
     ///
     /// WHY the exception is guarded on `.deprecated` rather than matching the
-    /// identifier alone: `all` also drops Parakeet on iOS 16 through a runtime OS
-    /// check, while `recommendedIdentifier(for:)` returns Parakeet on any >= 6 GB
-    /// device regardless of OS. A bare identifier match would smuggle Parakeet back
-    /// onto iOS 16. This exception must undo deprecation and nothing else.
+    /// identifier alone: a recommended model may still be dropped from `all`
+    /// when it is `.deprecated`. A bare identifier match is enough now that
+    /// downloadable rows are a fixed Whisper set, but keeping the deprecation
+    /// guard avoids resurrecting a hidden compatibility row that is not the
+    /// recommendation.
     ///
     /// Starts from `all` so compatibility entries never duplicate current UI rows.
     public static func available(on capabilities: DeviceCapabilities) -> [ModelInfo] {

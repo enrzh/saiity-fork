@@ -1,5 +1,6 @@
 // DictusKeyboard/Views/KeyVariantPopup.swift
 import SwiftUI
+import DictusCore
 
 /// Native-style long-press bubble of alternate characters or emoji skin tones.
 struct KeyVariantPopup: View {
@@ -17,7 +18,7 @@ struct KeyVariantPopup: View {
                     .background {
                         if index == selectedIndex {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.primary.opacity(0.18))
+                                .fill(Color.accentColor.opacity(0.38))
                         }
                     }
                 if let onSelect {
@@ -30,9 +31,19 @@ struct KeyVariantPopup: View {
         }
         .padding(6)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
-                .shadow(color: Color.black.opacity(0.22), radius: 10, y: 4)
+            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+            if KeyboardInteractionPreferences.liquidGlassEnabled {
+                Color.clear
+                    .keyboardGlass(in: shape, interactive: false)
+            } else {
+                shape
+                    .fill(Color(uiColor: .tertiarySystemFill))
+            }
+        }
+        // Selection changes arrive for every movement sample. Keep the popup
+        // visually stable instead of animating/rebuilding during the drag.
+        .transaction { transaction in
+            transaction.animation = nil
         }
         .accessibilityElement(children: .contain)
     }
@@ -79,4 +90,137 @@ struct KeyVariantSession {
     let popupFrame: CGRect
     let isEmoji: Bool
     var selectedIndex: Int
+}
+
+/// Native-style press preview that sits above a key until release or a hold menu.
+struct KeyPreviewPopup: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 28, weight: .regular))
+            .frame(width: Self.width, height: Self.height)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+                if KeyboardInteractionPreferences.liquidGlassEnabled {
+                    Color.clear
+                        .keyboardGlass(in: shape, interactive: false)
+                } else {
+                    shape
+                        .fill(Color(uiColor: .tertiarySystemFill))
+                }
+            }
+            .transaction { transaction in
+                transaction.animation = nil
+            }
+            .accessibilityHidden(true)
+    }
+
+    static let width: CGFloat = 44
+    static let height: CGFloat = 56
+
+    static func frame(for source: CGRect, in bounds: CGSize) -> CGRect {
+        let size = CGSize(width: max(width, source.width + 6), height: height)
+        var x = source.midX - size.width / 2
+        x = min(max(4, x), max(4, bounds.width - size.width - 4))
+        let y = source.minY - size.height - 4
+        _ = bounds
+        return CGRect(x: x, y: y, width: size.width, height: size.height)
+    }
+}
+
+struct KeyPreviewSession {
+    let text: String
+    let sourceFrame: CGRect
+    let popupFrame: CGRect
+}
+
+/// Hosts either the balloon popup or the zoom-out popout for a pressed key.
+struct KeyPressPreviewHost: View {
+    @Binding var session: KeyPreviewSession?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if let preview = session {
+            previewView(preview)
+                .frame(width: preview.popupFrame.width, height: preview.popupFrame.height)
+                .position(x: preview.popupFrame.midX, y: preview.popupFrame.midY)
+                .allowsHitTesting(false)
+                .zIndex(20)
+        }
+    }
+
+    @ViewBuilder
+    private func previewView(_ preview: KeyPreviewSession) -> some View {
+        switch KeyPopupMode.active {
+        case .off:
+            EmptyView()
+        case .popup:
+            KeyPreviewPopup(text: preview.text)
+        case .popout:
+            KeyPopoutPreview(
+                text: preview.text,
+                reduceMotion: reduceMotion
+            )
+            .onAppear {
+                let token = preview.text
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+                    if session?.text == token {
+                        session = nil
+                    }
+                }
+            }
+        }
+    }
+
+    static func frame(for source: CGRect, in bounds: CGSize) -> CGRect {
+        switch KeyPopupMode.active {
+        case .off:
+            return .zero
+        case .popup:
+            return KeyPreviewPopup.frame(for: source, in: bounds)
+        case .popout:
+            return KeyPopoutPreview.frame(for: source, in: bounds)
+        }
+    }
+}
+
+/// Enlarges out of the pressed key and fades away.
+struct KeyPopoutPreview: View {
+    let text: String
+    var reduceMotion: Bool = false
+    @State private var expanded = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 28, weight: .regular))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                let shape = RoundedRectangle(
+                    cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius,
+                    style: .continuous
+                )
+                if KeyboardInteractionPreferences.liquidGlassEnabled {
+                    Color.clear
+                        .keyboardGlass(in: shape, interactive: false)
+                } else {
+                    shape
+                        .fill(Color(uiColor: .tertiarySystemFill))
+                }
+            }
+            .scaleEffect(expanded && !reduceMotion ? 1.55 : 1)
+            .opacity(expanded ? 0 : 1)
+            .onAppear {
+                withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.32)) {
+                    expanded = true
+                }
+            }
+            .accessibilityHidden(true)
+    }
+
+    static func frame(for source: CGRect, in bounds: CGSize) -> CGRect {
+        // Stay on the pressed key; scaleEffect enlarges out of that face.
+        _ = bounds
+        return source
+    }
 }

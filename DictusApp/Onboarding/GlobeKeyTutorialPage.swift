@@ -13,6 +13,7 @@ struct GlobeKeyTutorialPage: View {
     /// goes through DictationCoordinator. If we don't reset the coordinator before
     /// completing onboarding, HomeView will show the "last transcription card"
     /// from this test dictation — which is not the desired landing screen.
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var coordinator: DictationCoordinator
 
     @State private var dictusKeyboardActive = false
@@ -27,14 +28,14 @@ struct GlobeKeyTutorialPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Label(dictusKeyboardActive ? "Dictate a short phrase" : "Switch to sAiity", systemImage: dictusKeyboardActive ? "mic" : "globe")
-                .font(.title2.weight(.semibold))
+            SaiityPageHeader(eyebrow: "TAKE IT FOR A SPIN", title: "Your first words.",
+                             subtitle: "Try the real keyboard below. We’ll confirm when your dictation arrives.")
             Text(dictusKeyboardActive ? "Tap the microphone in the sAiity keyboard. Your words should appear below." : "Tap and hold the globe key, then choose sAiity.")
                 .font(.body).foregroundStyle(.secondary)
             KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
                 .frame(minHeight: 150, maxHeight: 260)
-                .padding(14)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                .padding(20)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
                 .accessibilityLabel("Dictation result")
             if firstDictationVerified {
                 OnboardingSuccessView(onComplete: finishOnboarding)
@@ -58,7 +59,14 @@ struct GlobeKeyTutorialPage: View {
             }
         }
         .padding(.vertical, 20)
-        .onAppear { observeTranscriptionReady() }
+        .onAppear {
+            coordinator.enableKeyboardSession()
+            observeTranscriptionReady()
+            refreshFullAccess()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshFullAccess() }
+        }
         .onDisappear {
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
@@ -130,13 +138,22 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func refreshFullAccess() {
-        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        AppGroup.defaults.synchronize()
+        let storedVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
+            verified: storedVerified,
+            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
+            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
+        )
         let date = AppGroup.defaults.double(forKey: SharedKeys.onboardingFullAccessHandshakeDate)
-        fullAccessVerified = KeyboardSetupStatus(
+        let status = KeyboardSetupStatus(
             keyboardInstalled: dictusKeyboardActive,
             fullAccessHandshake: handshake,
             handshakeDate: date > 0 ? Date(timeIntervalSince1970: date) : nil
-        ).fullAccessVerified
+        )
+        if status.fullAccessVerified || !storedVerified {
+            fullAccessVerified = status.fullAccessVerified
+        }
     }
 
     private func openSettings() {

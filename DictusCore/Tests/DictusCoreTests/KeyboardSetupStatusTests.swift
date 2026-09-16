@@ -40,6 +40,9 @@ final class KeyboardSetupStatusTests: XCTestCase {
         XCTAssertTrue(
             KeyboardSetupStatus.isDictusKeyboardIdentifier("de.aiity.saiity.ios.keyboard")
         )
+        XCTAssertTrue(
+            KeyboardSetupStatus.isDictusKeyboardIdentifier("de.aiity.saiity.ios.beta.keyboard")
+        )
         XCTAssertFalse(
             KeyboardSetupStatus.isDictusKeyboardIdentifier("com.apple.keyboards.en_US")
         )
@@ -47,5 +50,36 @@ final class KeyboardSetupStatusTests: XCTestCase {
             KeyboardSetupStatus.isDictusKeyboardIdentifier("com.example.de.aiity.saiity.ios.fake")
         )
         XCTAssertFalse(KeyboardSetupStatus.isDictusKeyboardIdentifier(nil))
+    }
+
+    func testFullAccessHandshakeTrustsTheExtensionVerifiedBit() {
+        XCTAssertTrue(
+            KeyboardSetupStatus.isCurrentFullAccessHandshake(
+                verified: true,
+                probe: "current",
+                acknowledgedProbe: "current"
+            )
+        )
+        XCTAssertTrue(
+            KeyboardSetupStatus.isCurrentFullAccessHandshake(
+                verified: true,
+                probe: "current",
+                acknowledgedProbe: "old"
+            )
+        )
+        XCTAssertTrue(
+            KeyboardSetupStatus.isCurrentFullAccessHandshake(
+                verified: true,
+                probe: nil,
+                acknowledgedProbe: nil
+            )
+        )
+        XCTAssertFalse(
+            KeyboardSetupStatus.isCurrentFullAccessHandshake(
+                verified: false,
+                probe: "current",
+                acknowledgedProbe: "current"
+            )
+        )
     }
 }

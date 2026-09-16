@@ -19,7 +19,7 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                Color(.systemGroupedBackground).ignoresSafeArea()
                 ScrollView {
                     stageContent.frame(maxWidth: 560).frame(maxWidth: .infinity)
                         .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 24)
@@ -74,6 +74,7 @@ struct OnboardingView: View {
 struct AvailabilityPage: View {
     let onNext: () -> Void
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var coordinator: DictationCoordinator
     @StateObject private var modelManager = ModelManager()
     @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
     @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
@@ -99,8 +100,8 @@ struct AvailabilityPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Label("Make sAiity available", systemImage: "checklist").font(.title2.weight(.semibold))
-            Text("Complete the essentials once. Voice processing stays on this iPhone.").font(.body).foregroundStyle(.secondary)
+            SaiityPageHeader(eyebrow: "CONNECT YOUR KEYBOARD", title: "Three small steps.\nA lot less typing.",
+                             subtitle: "Connect the keyboard, grant Full Access and install your first voice model.")
             checklistRow("Add sAiity keyboard", detail: keyboardInstalled ? "Installed" : "Open Keyboard Settings to add it", done: keyboardInstalled, action: openSettings)
             checklistRow("Allow Full Access", detail: fullAccessDetail, done: keyboardStatus.fullAccessVerified, action: openSettings)
             VStack(alignment: .leading, spacing: 10) {
@@ -126,8 +127,12 @@ struct AvailabilityPage: View {
             }
         }
         .onAppear {
+            ensureFullAccessProbe()
             refreshKeyboard()
             refreshModel()
+            if modelReady {
+                coordinator.enableKeyboardSession()
+            }
             DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
                 DispatchQueue.main.async {
                     refreshKeyboard()
@@ -155,19 +160,45 @@ struct AvailabilityPage: View {
 
     private var modelStatus: String { if modelReady { return "Ready" }; if modelManager.modelStates[recommendedModel] == .prewarming { return "Preparing" }; if isDownloading { return "Downloading" }; return "Required for offline dictation" }
     private func checklistRow(_ title: String, detail: String, done: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { HStack(alignment: .top, spacing: 12) { Image(systemName: done ? "checkmark.circle.fill" : "circle").foregroundStyle(done ? .green : .secondary); VStack(alignment: .leading, spacing: 3) { Text(title).font(.body.weight(.medium)); Text(detail).font(.caption).foregroundStyle(.secondary) }; Spacer(); if !done { Image(systemName: "chevron.right").foregroundStyle(.tertiary) } }.contentShape(Rectangle()) }.buttonStyle(.plain).accessibilityValue(done ? "Complete" : detail)
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .font(.title2).foregroundStyle(done ? Color.accentColor : .secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.headline)
+                    Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if !done { Image(systemName: "arrow.up.right").foregroundStyle(.tertiary) }
+            }
+            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+            .contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityValue(done ? "Complete" : detail)
     }
     private func refreshKeyboard() {
-        let inputModeInstalled = UITextInputMode.activeInputModes.contains {
+        AppGroup.defaults.synchronize()
+        let modes = UITextInputMode.activeInputModes
+        let inputModeInstalled = modes.contains {
             KeyboardSetupStatus.isDictusKeyboardIdentifier($0.value(forKey: "identifier") as? String)
         }
-        // The extension is the only component that can read `hasFullAccess`.
-        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let storedVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
+        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
+            verified: storedVerified,
+            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
+            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
+        )
         let handshakeDate = AppGroup.defaults.object(forKey: SharedKeys.onboardingFullAccessHandshakeDate) as? Double
-        let status = KeyboardSetupStatus(keyboardInstalled: inputModeInstalled, fullAccessHandshake: handshake, handshakeDate: handshakeDate.map(Date.init(timeIntervalSince1970:)))
+        let status = KeyboardSetupStatus(
+            keyboardInstalled: inputModeInstalled,
+            fullAccessHandshake: handshake,
+            handshakeDate: handshakeDate.map(Date.init(timeIntervalSince1970:))
+        )
         let installed = status.keyboardDetected
         keyboardInstalled = installed
-        fullAccessVerified = status.fullAccessVerified
+        if status.fullAccessVerified || !storedVerified {
+            fullAccessVerified = status.fullAccessVerified
+        }
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"
@@ -179,7 +210,34 @@ struct AvailabilityPage: View {
         UIAccessibility.post(notification: .announcement, argument: announcement)
     }
     private func refreshModel() { if modelManager.downloadedModels.contains(recommendedModel) { modelManager.modelStates[recommendedModel] = .ready } }
-    private func startDownload() { guard !isDownloading else { return }; isDownloading = true; errorMessage = nil; preparingModelID = recommendedModel; Task { do { try await modelManager.downloadModel(recommendedModel); isDownloading = false } catch { isDownloading = false; preparingModelID = nil; errorMessage = "Could not install the voice model. Try again." } } }
-    private func openSettings() { guard let url = URL(string: UIApplication.openSettingsURLString) else { return }; UIApplication.shared.open(url) }
+    private func startDownload() {
+        guard !isDownloading else { return }
+        isDownloading = true
+        errorMessage = nil
+        preparingModelID = recommendedModel
+        Task {
+            do {
+                try await modelManager.downloadModel(recommendedModel)
+                isDownloading = false
+                coordinator.enableKeyboardSession()
+            } catch {
+                isDownloading = false
+                preparingModelID = nil
+                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                errorMessage = detail.isEmpty
+                    ? "Could not install the voice model. Try again."
+                    : detail
+            }
+        }
+    }
+    private func openSettings() {
+        ensureFullAccessProbe()
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+    private func ensureFullAccessProbe() {
+        guard AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe) == nil else { return }
+        AppGroup.defaults.set(UUID().uuidString, forKey: SharedKeys.onboardingFullAccessProbe)
+    }
     private struct PreparingItem: Identifiable { let id: String }
 }
