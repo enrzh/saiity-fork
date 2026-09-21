@@ -34,6 +34,29 @@ final class OllamaHTTPContractTests: XCTestCase {
 
     func testReadsSuccessfulMessageContent() throws {
         let data = Data(#"{"choices":[{"message":{"content":"  Clean text  "}}]}"#.utf8)
-        XCTAssertEqual(try OllamaHTTPContract.responseText(data: data, statusCode: 200), "  Clean text  ")
+        XCTAssertEqual(try OllamaHTTPContract.responseText(data: data, statusCode: 200), "Clean text")
+    }
+
+    func testRejectsTruncatedOrFilteredResponsesEvenWithPlausibleContent() {
+        for reason in ["length", "content_filter", "tool_calls"] {
+            let data = Data("{\"choices\":[{\"finish_reason\":\"\(reason)\",\"message\":{\"content\":\"Do not send 42 EUR to Léa\"}}]}".utf8)
+            XCTAssertThrowsError(try OllamaHTTPContract.responseText(data: data, statusCode: 200)) {
+                XCTAssertEqual($0 as? OllamaHTTPContract.Error, .incompleteResponse)
+            }
+        }
+    }
+
+    func testReasoningMustFinishAndContainAnAnswer() throws {
+        for content in ["<think>unfinished", "<think>done</think>  "] {
+            let data = try JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": content]]]])
+            XCTAssertThrowsError(try OllamaHTTPContract.responseText(data: data, statusCode: 200))
+        }
+        let data = Data(#"{"choices":[{"finish_reason":"stop","message":{"content":"<think>internal</think> Do not send 42 EUR to Léa."}}]}"#.utf8)
+        XCTAssertEqual(try OllamaHTTPContract.responseText(data: data, statusCode: 200), "Do not send 42 EUR to Léa.")
+    }
+
+    func testLiteralClosingTagDoesNotDiscardTranscriptPrefix() throws {
+        let data = Data(#"{"choices":[{"message":{"content":"Keep the literal </think> tag."}}]}"#.utf8)
+        XCTAssertEqual(try OllamaHTTPContract.responseText(data: data, statusCode: 200), "Keep the literal </think> tag.")
     }
 }

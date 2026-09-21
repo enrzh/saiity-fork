@@ -13,6 +13,11 @@ public enum KeyboardDeletion {
     public static let wordRepeatDelay: TimeInterval = 2.5
     public static let cursorHoldDuration: TimeInterval = 0.3
     public static let holdRecognitionDuration: TimeInterval = 0.35
+    public static let dictationHoldRecognitionDuration: TimeInterval = 0.15
+    /// Extra audio retained after a hold-to-dictate release. The UI enters its
+    /// finishing state immediately; the app receives the stop request after this
+    /// short tail so final words are less likely to be clipped.
+    public static let dictationReleaseTailDuration: TimeInterval = 1.0
     public static let touchUpSuppressionDuration: TimeInterval = 0.12
 
     public enum RepeatAction: Equatable, Sendable {

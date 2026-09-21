@@ -1,66 +1,36 @@
-// DictusApp/Onboarding/WelcomePage.swift
-// Step 1 of onboarding: animated waveform, wordmark, tagline, and "Commencer" button.
 import SwiftUI
 import DictusCore
 
-/// Welcome page shown on first launch with animated brand waveform and tagline.
-///
-/// WHY BrandWaveform with processing (sinusoidal) animation:
-/// A smooth traveling sine wave creates a polished first impression instead of
-/// random jittery bars. The sinusoidal mode is inherently fluid (60fps via
-/// TimelineView) and requires no Timer — simpler code, better visual result.
 struct WelcomePage: View {
     let onNext: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showContent = false
-
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // Smooth sinusoidal waveform — same as the transcription processing animation
-            BrandWaveform(
-                maxHeight: 100,
-                animation: reduceMotion ? .still : .sweep,
-                isActive: !reduceMotion
-            )
-                .opacity(0.5)
-                .padding(.bottom, 24)
-
-            // sAiity wordmark
-            Text("sAiity")
-                .font(.largeTitle.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(.bottom, 12)
-
-            // Tagline
-            Text("Voice dictation, 100% offline")
-                .font(.dictusBody)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            // "Commencer" button
-            Button(action: onNext) {
-                Text("Get started")
-                    .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 16) {
+            DictusLogo(height: 48)
+            SaiityPageHeader(eyebrow: "HELLO, SAIITY", title: "Think it.\nSay it.\nSend it.",
+                             subtitle: "A private voice keyboard for everything you want to say.")
+            VStack(alignment: .leading, spacing: 16) {
+                benefit("Stay in your flow", detail: "Dictate into the apps you already use.", icon: "keyboard")
+                benefit("Keep your languages", detail: "Multilingual models keep your words in their spoken language.", icon: "globe")
+                benefit("Make it yours", detail: "Choose a local voice model. Audio stays on your iPhone.", icon: "iphone")
             }
-            .font(.headline)
-            .buttonStyle(.borderedProminent)
-            .tint(.accentColor)
-            .controlSize(.large)
-            .padding(.horizontal, 32)
-            .padding(.bottom, 48)
-            .opacity(showContent ? 1 : 0)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 28))
+            Button(action: onNext) {
+                HStack { Text("Let’s set you up"); Spacer(); Image(systemName: "arrow.right") }
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent).controlSize(.large)
         }
-        .onAppear {
-            if AccessibilityMotionPolicy.permitsAnimation(reduceMotion: reduceMotion) {
-                withAnimation(.easeIn(duration: 0.6).delay(0.5)) {
-                    showContent = true
-                }
-            } else {
-                showContent = true
+    }
+
+    private func benefit(_ title: LocalizedStringKey, detail: LocalizedStringKey, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: icon).font(.title3).foregroundStyle(.tint).frame(width: 28)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.headline)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
             }
         }
     }

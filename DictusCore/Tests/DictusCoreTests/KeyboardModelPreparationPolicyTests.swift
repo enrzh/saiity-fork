@@ -2,6 +2,68 @@ import XCTest
 @testable import DictusCore
 
 final class KeyboardModelPreparationPolicyTests: XCTestCase {
+    func testDownloadedModelIDsReadsCurrentJSONStorage() throws {
+        let data = try JSONEncoder().encode(["tiny", "base"])
+        XCTAssertEqual(
+            KeyboardModelPreparationPolicy.downloadedModelIDs(from: data),
+            ["tiny", "base"]
+        )
+    }
+
+    func testDownloadedModelIDsReadsLegacyArrayStorage() {
+        XCTAssertEqual(
+            KeyboardModelPreparationPolicy.downloadedModelIDs(from: ["tiny", "base"]),
+            ["tiny", "base"]
+        )
+    }
+
+    func testReadyLoadStateOverridesStaleReadinessBit() {
+        XCTAssertFalse(
+            KeyboardModelPreparationPolicy.shouldOpenApp(
+                modelReady: false,
+                modelLoadState: .ready,
+                appPhase: .background
+            )
+        )
+    }
+
+    func testEffectiveReadinessRepairsStaleFalseBitFromActiveDownloadedPair() {
+        XCTAssertTrue(
+            KeyboardModelPreparationPolicy.effectiveModelReady(
+                modelReady: false,
+                activeModel: "base",
+                downloadedModels: ["tiny", "base"]
+            )
+        )
+    }
+
+    func testEffectiveReadinessRejectsMissingOrUnknownActiveModel() {
+        XCTAssertFalse(
+            KeyboardModelPreparationPolicy.effectiveModelReady(
+                modelReady: false,
+                activeModel: "large",
+                downloadedModels: ["base"]
+            )
+        )
+        XCTAssertFalse(
+            KeyboardModelPreparationPolicy.effectiveModelReady(
+                modelReady: false,
+                activeModel: nil,
+                downloadedModels: ["base"]
+            )
+        )
+    }
+
+    func testExplicitReadyBitRemainsAuthoritativeForLegacyInstalls() {
+        XCTAssertTrue(
+            KeyboardModelPreparationPolicy.effectiveModelReady(
+                modelReady: true,
+                activeModel: nil,
+                downloadedModels: []
+            )
+        )
+    }
+
     func testBackgroundIdleReadyModelKeepsDictationAvailable() {
         XCTAssertFalse(
             KeyboardModelPreparationPolicy.shouldOpenApp(

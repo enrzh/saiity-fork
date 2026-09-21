@@ -21,9 +21,6 @@ struct ModelCardView: View {
     var onDeletePartialRequest: (() -> Void)?
 
     @State private var showsLanguageInfo = false
-    @State private var downloadTask: Task<Void, Never>?
-
-    private let actionColumnWidth: CGFloat = 128
 
     private var state: ModelState {
         modelManager.modelStates[model.identifier] ?? .notDownloaded
@@ -42,11 +39,11 @@ struct ModelCardView: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             modelSummary
                 .frame(maxWidth: .infinity, alignment: .leading)
             actionContent
-                .frame(width: actionColumnWidth, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
@@ -66,11 +63,19 @@ struct ModelCardView: View {
                     .font(.headline)
                     .lineLimit(2)
 
-                if modelManager.isRecommended(model.identifier) {
+                if isActive {
+                    Text("Active")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else if modelManager.isRecommended(model.identifier) {
                     Text("Recommended")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tint)
                 }
+                Spacer(minLength: 0)
+                Text(model.sizeLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Text(model.localizedDescription)
@@ -78,16 +83,12 @@ struct ModelCardView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            Text("\(model.engine.displayName) · \(model.sizeLabel)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 16) {
-                Text("Accuracy \(scoreText(model.accuracyScore))")
-                Text("Speed \(scoreText(model.speedScore))")
+            Text(model.languageSupport.coverage.localizedSummary)
+                .font(.caption).foregroundStyle(.secondary)
+            if model.isExperimental {
+                Label("Preview · validate on your iPhone", systemImage: "flask")
+                    .font(.caption).foregroundStyle(.orange)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             statusContent
 
@@ -124,10 +125,6 @@ struct ModelCardView: View {
         }
     }
 
-    private func scoreText(_ score: Double) -> String {
-        "\(Int(score * 100))%"
-    }
-
     private func downloadProgressLabel(_ progress: Float) -> String {
         "\(Int(progress * 100)) percent"
     }
@@ -157,9 +154,13 @@ struct ModelCardView: View {
                     .font(.caption)
                     .foregroundStyle(.tint)
             case .ready:
-                Label(isActive ? "Active" : "Installed", systemImage: isActive ? "checkmark.circle.fill" : "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(isActive ? .green : .secondary)
+                if isActive {
+                    EmptyView()
+                } else {
+                    Label("Installed", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             case .error:
                 Label("Failed", systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -170,22 +171,21 @@ struct ModelCardView: View {
 
     @ViewBuilder
     private var actionContent: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        HStack(spacing: 8) {
             primaryAction
-                .frame(minHeight: 44)
-            HStack(spacing: 0) {
-                Button {
-                    showsLanguageInfo = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Supported languages")
+            Spacer(minLength: 0)
+            Button {
+                showsLanguageInfo = true
+            } label: {
+                Label("Info", systemImage: "info.circle")
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Supported languages")
 
-                if state == .ready || isFailed {
-                    deletionMenu
-                }
+            if state == .ready || isFailed {
+                deleteButton
             }
         }
     }
@@ -193,12 +193,10 @@ struct ModelCardView: View {
     @ViewBuilder
     private var primaryAction: some View {
         if incompatibilityReason != nil {
-            Color.clear
-                .frame(height: 44)
-                .accessibilityHidden(true)
+            EmptyView()
         } else if isLoading || state == .prewarming {
             ProgressView()
-                .frame(minWidth: 44, minHeight: 44)
+                .controlSize(.small)
                 .accessibilityLabel(Text(isLoading ? "Loading" : "Preparing"))
         } else {
             switch state {
@@ -206,44 +204,44 @@ struct ModelCardView: View {
                 Button {
                     startDownload()
                 } label: {
-                    Text("Download")
-                        .fixedSize(horizontal: true, vertical: false)
+                    Label("Download", systemImage: "arrow.down.circle")
                 }
-                .buttonStyle(.borderless)
-                .frame(minWidth: 44, minHeight: 44)
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .accessibilityHint("Downloads this model")
             case .downloading:
-                Button("Cancel", role: .cancel) {
-                    downloadTask?.cancel()
+                Button {
+                    modelManager.cancelCatalogDownload(model.identifier)
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle")
                 }
-                .fixedSize(horizontal: true, vertical: false)
-                .buttonStyle(.borderless)
-                .frame(minWidth: 44, minHeight: 44)
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             case .prewarming:
-                Color.clear.frame(height: 44).accessibilityHidden(true)
+                EmptyView()
             case .ready:
                 if !isActive {
                     Button {
                         modelManager.selectModel(model.identifier)
                     } label: {
-                        Text("Select")
-                            .fixedSize(horizontal: true, vertical: false)
+                        Label("Select", systemImage: "checkmark.circle")
                     }
-                    .buttonStyle(.borderless)
-                    .frame(minWidth: 44, minHeight: 44)
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                     .accessibilityHint("Uses this model for transcription")
-                } else {
-                    Color.clear.frame(height: 44).accessibilityHidden(true)
                 }
             case .error(let message):
                 Button {
                     startDownload()
                 } label: {
-                    Text("Retry")
-                        .fixedSize(horizontal: true, vertical: false)
+                    Label("Retry", systemImage: "arrow.clockwise.circle")
                 }
-                .buttonStyle(.borderless)
-                .frame(minWidth: 44, minHeight: 44)
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .foregroundStyle(.orange)
                 .help(message)
             }
@@ -255,45 +253,27 @@ struct ModelCardView: View {
         return false
     }
 
-    private var deletionMenu: some View {
-        Menu {
+    private var deleteButton: some View {
+        Button(role: .destructive) {
             if isFailed {
-                Button(role: .destructive) {
-                    onDeletePartialRequest?()
-                } label: {
-                    Label("Delete partial download", systemImage: "trash")
-                }
-            } else if canDeleteModel {
-                Button(role: .destructive) {
-                    onDeleteRequest?()
-                } label: {
-                    Label("Delete model", systemImage: "trash")
-                }
-            } else if modelManager.downloadedModels.count <= 1 {
-                Button("At least one model must stay installed") { }
-                    .disabled(true)
+                onDeletePartialRequest?()
             } else {
-                Button("Select another model to delete this one") { }
-                    .disabled(true)
+                onDeleteRequest?()
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Label("Delete", systemImage: "trash")
         }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Model options")
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(!isFailed && !canDeleteModel)
+        .accessibilityHint(canDeleteModel ? "Removes this model from the device." : "At least one installed model must remain active.")
     }
 
     private func startDownload() {
-        downloadTask = Task { @MainActor in
-            do {
-                try await modelManager.downloadModel(model.identifier)
-            } catch is CancellationError {
-                // Manager cancellation resolves the request to .notDownloaded.
-            } catch {
-                onDownloadError(error.localizedDescription)
-            }
-        }
+        modelManager.startCatalogDownload(model.identifier, onError: onDownloadError)
     }
+
 }
 
 #Preview {

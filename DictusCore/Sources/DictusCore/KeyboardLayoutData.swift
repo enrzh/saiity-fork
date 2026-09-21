@@ -17,6 +17,10 @@ public enum LayoutType: String, Codable, Sendable, CaseIterable {
     case qwerty
     case qwertz
     case qwertzStandard
+    case dvorak
+    case colemak
+    case workman
+    case norman
 
     /// Label shown wherever a layout is named in the UI (Settings picker, keyboard panel).
     ///
@@ -29,6 +33,10 @@ public enum LayoutType: String, Codable, Sendable, CaseIterable {
         case .qwerty: return "QWERTY"
         case .qwertz: return "QWERTZ Deutschland"
         case .qwertzStandard: return "QWERTZ"
+        case .dvorak: return "Dvorak"
+        case .colemak: return "Colemak"
+        case .workman: return "Workman"
+        case .norman: return "Norman"
         }
     }
 
@@ -49,6 +57,36 @@ public enum LayoutType: String, Codable, Sendable, CaseIterable {
 /// KeyDefinition lives in DictusKeyboard and carries UI-specific properties (widthMultiplier,
 /// KeyType). DictusCore shouldn't depend on UI types. The keyboard target converts these
 /// strings to KeyDefinition at the view layer. This also makes the layout data easily testable.
+public enum AlternateLatinLayout {
+    public static let dvorakRows: [[String]] = [
+        ["'", ",", ".", "p", "y", "f", "g", "c", "r", "l"],
+        ["a", "o", "e", "u", "i", "d", "h", "t", "n", "s"],
+        ["q", "j", "k", "x", "b", "m", "w"]
+    ]
+
+    public static let colemakRows: [[String]] = [
+        ["q", "w", "f", "p", "g", "j", "l", "u", "y", ";"],
+        ["a", "r", "s", "t", "d", "h", "n", "e", "i", "o"],
+        ["z", "x", "c", "v", "b", "k", "m"]
+    ]
+
+    public static let workmanRows: [[String]] = [
+        ["q", "d", "r", "w", "b", "j", "f", "u", "p", ";"],
+        ["a", "s", "h", "t", "g", "y", "n", "e", "o", "i"],
+        ["z", "x", "m", "c", "v", "k", "l"]
+    ]
+
+    public static let normanRows: [[String]] = [
+        ["q", "w", "d", "r", "k", "p", "j", "f", "u", ";"],
+        ["a", "s", "t", "h", "n", "e", "i", "o", "l", "'"],
+        ["z", "x", "m", "c", "v", "b"]
+    ]
+
+    public static func shiftedRows(from rows: [[String]]) -> [[String]] {
+        rows.map { $0.map { $0.uppercased() } }
+    }
+}
+
 public enum QWERTYLayout {
     /// Three rows of letter labels.
     /// - Row 0: 10 letter keys (Q through P)

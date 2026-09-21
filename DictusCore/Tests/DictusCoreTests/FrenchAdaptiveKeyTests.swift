@@ -87,8 +87,8 @@ final class FrenchAdaptiveKeyTests: XCTestCase {
         }
 
         KeyboardLanguageSelection.explicit(.french).persist(to: defaults!)
-        XCTAssertEqual(FrenchAdaptiveKey.label(afterTyping: "e"), "'",
-                       "The retired French selection must resolve to the English keyboard.")
+        XCTAssertEqual(FrenchAdaptiveKey.label(afterTyping: "e"), "\u{00E9}",
+                       "An explicit French selection must use the French adaptive key.")
 
         KeyboardLanguageSelection.explicit(.english).persist(to: defaults!)
         XCTAssertEqual(FrenchAdaptiveKey.label(afterTyping: "e"), "'")

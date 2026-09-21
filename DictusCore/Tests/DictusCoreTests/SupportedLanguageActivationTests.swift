@@ -56,20 +56,12 @@ final class SupportedLanguageActivationTests: XCTestCase {
     // `SharedKeys.keyboardLayout` below read the legacy mirror, kept in step so a build
     // without #272 finds the same shape.
 
-    func testActivateUnsupportedFrenchDoesNotChangeTheActiveLanguage() {
+    func testActivateFrenchWritesAzertyByDefault() {
         SupportedLanguage.activate(.english)
         SupportedLanguage.activate(.french)
-        XCTAssertEqual(SupportedLanguage.active, .english)
-        XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), "qwerty")
-        XCTAssertEqual(LayoutType.active, .qwerty)
-    }
-
-    func testUnsupportedFrenchDoesNotChangeAnExistingLanguage() {
-        SupportedLanguage.activate(.german)
-        SupportedLanguage.activate(.french)
-        XCTAssertEqual(SupportedLanguage.active, .german)
-        XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), "qwertz")
-        XCTAssertEqual(LayoutType.active, .qwertz)
+        XCTAssertEqual(SupportedLanguage.active, .french)
+        XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), "azerty")
+        XCTAssertEqual(LayoutType.active, .azerty)
     }
 
     func testActivateGermanWritesQwertz() {

@@ -18,15 +18,17 @@ public enum AccentedCharacters {
     /// Maps a base letter (lowercase) to its accented variants. Currently a union
     /// of French AZERTY accents and Spanish acute/n-tilde variants.
     public static let mappings: [String: [String]] = [
-        "e": ["\u{00E9}", "\u{00E8}", "\u{00EA}", "\u{00EB}"],          // e acute, grave, circumflex, diaeresis
-        "a": ["\u{00E0}", "\u{00E2}", "\u{00E4}", "\u{00E1}"],          // a grave, circumflex, diaeresis, acute
-        "u": ["\u{00F9}", "\u{00FB}", "\u{00FC}", "\u{00FA}"],          // u grave, circumflex, diaeresis, acute
-        "i": ["\u{00EE}", "\u{00EF}", "\u{00ED}"],                      // i circumflex, diaeresis, acute
-        "o": ["\u{00F4}", "\u{00F6}", "\u{00F3}"],                      // o circumflex, diaeresis, acute
-        "c": ["\u{00E7}"],                                              // c cedilla
-        "y": ["\u{00FF}"],                                              // y diaeresis
-        "n": ["\u{00F1}"],                                              // n tilde
-        "s": ["\u{00DF}"]                                               // ß (German eszett, added with #109)
+        "a": ["\u{00E0}", "\u{00E1}", "\u{00E2}", "\u{00E4}", "\u{00E3}", "\u{00E5}", "\u{0101}", "\u{00E6}"],
+        "e": ["\u{00E8}", "\u{00E9}", "\u{00EA}", "\u{00EB}", "\u{0113}", "\u{0117}", "\u{0119}"],
+        "i": ["\u{00EC}", "\u{00ED}", "\u{00EE}", "\u{00EF}", "\u{012B}"],
+        "o": ["\u{00F2}", "\u{00F3}", "\u{00F4}", "\u{00F6}", "\u{00F5}", "\u{00F8}", "\u{014D}", "\u{0153}"],
+        "u": ["\u{00F9}", "\u{00FA}", "\u{00FB}", "\u{00FC}", "\u{016B}"],
+        "y": ["\u{00FD}", "\u{00FF}"],
+        "c": ["\u{00E7}", "\u{0107}", "\u{010D}"],
+        "n": ["\u{00F1}", "\u{0144}"],
+        "s": ["\u{00DF}", "\u{015B}", "\u{0161}"],
+        "l": ["\u{0142}"],
+        "z": ["\u{017A}", "\u{017C}", "\u{017E}"]
     ]
 
     /// Returns accented variants for a given key, or nil if no accents exist.

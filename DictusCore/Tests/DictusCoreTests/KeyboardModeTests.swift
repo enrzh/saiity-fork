@@ -12,6 +12,7 @@ final class KeyboardModeTests: XCTestCase {
     override func tearDown() {
         super.tearDown()
         defaults?.removeObject(forKey: SharedKeys.defaultKeyboardLayer)
+        defaults?.removeObject(forKey: SharedKeys.defaultKeyboardMode)
         defaults?.removeObject(forKey: "dictus.keyboardMode")
     }
 
@@ -112,5 +113,22 @@ final class KeyboardModeTests: XCTestCase {
 
     func testSharedKeyValue() {
         XCTAssertEqual(SharedKeys.defaultKeyboardLayer, "dictus.defaultKeyboardLayer")
+    }
+
+    func testDefaultSurfaceOpensDictationBoardForNewInstall() {
+        defaults?.removeObject(forKey: SharedKeys.defaultKeyboardMode)
+        defaults?.removeObject(forKey: SharedKeys.defaultKeyboardLayer)
+        XCTAssertEqual(DefaultKeyboardMode.active, .dictationBoard)
+    }
+
+    func testDefaultSurfaceReadsKeyboardChoice() {
+        defaults?.set(DefaultKeyboardMode.keyboard.rawValue, forKey: SharedKeys.defaultKeyboardMode)
+        XCTAssertEqual(DefaultKeyboardMode.active, .keyboard)
+    }
+
+    func testOldLayerChoiceMigratesToKeyboardSurface() {
+        defaults?.removeObject(forKey: SharedKeys.defaultKeyboardMode)
+        defaults?.set(DefaultKeyboardLayer.letters.rawValue, forKey: SharedKeys.defaultKeyboardLayer)
+        XCTAssertEqual(DefaultKeyboardMode.active, .keyboard)
     }
 }

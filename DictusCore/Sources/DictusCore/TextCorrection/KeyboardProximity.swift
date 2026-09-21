@@ -125,7 +125,23 @@ public enum KeyboardProximity {
             let letterRows = QWERTZLayout.lowercasedLettersRows.map(letters)
             let offsets: [Double] = [0, 0, 0.75]
             return zip(letterRows, offsets).map { KeyRow(keys: $0, xOffset: $1) }
+        case .dvorak:
+            return proximityRows(for: AlternateLatinLayout.dvorakRows, offsets: [0, 0, 0.75])
+        case .colemak:
+            return proximityRows(for: AlternateLatinLayout.colemakRows)
+        case .workman:
+            return proximityRows(for: AlternateLatinLayout.workmanRows)
+        case .norman:
+            return proximityRows(for: AlternateLatinLayout.normanRows)
         }
+    }
+
+    private static func proximityRows(
+        for rows: [[String]],
+        offsets: [Double] = [0, 0.25, 0.75]
+    ) -> [KeyRow] {
+        let letterRows = rows.prefix(3).map(letters)
+        return zip(letterRows, offsets).map { KeyRow(keys: $0, xOffset: $1) }
     }
 
     /// The single-letter key labels of a layout row, lowercased. Drops anything that is

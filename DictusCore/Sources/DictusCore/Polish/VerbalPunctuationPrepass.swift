@@ -59,6 +59,8 @@ public enum VerbalPunctuationPrepass {
         case .english: return englishRules
         case .spanish: return spanishRules
         case .german: return germanRules
+        case .italian, .portuguese, .dutch, .polish, .swedish, .danish, .finnish, .czech:
+            return englishRules
         }
     }
 

@@ -86,16 +86,16 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        HomeView()
+                        HomeView(modelManager: modelManager)
                     }
                     .tabItem {
-                        Label("Home", systemImage: "waveform")
+                        Label("Speak", systemImage: "waveform")
                     }
                     .tag(0)
 
                     // Tab 1: Settings
                     NavigationStack {
-                        SettingsView()
+                        SettingsView(modelManager: modelManager)
                     }
                     .tabItem {
                         Label("Settings", systemImage: "slider.horizontal.3")

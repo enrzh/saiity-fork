@@ -64,11 +64,14 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let categories = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
-        XCTAssertTrue(emoji.contains("keyboardGlass(in: Capsule(), interactive: false)"))
-        XCTAssertFalse(categories.contains("glassEffect"))
-        XCTAssertTrue(emoji.contains("floatingEmojiCategoryFrame"),
+        XCTAssertFalse(root.contains("withoutGlassRim: state.areaMode == .emoji"),
+                       "emoji uses the same shared glass inset as the other keyboard pages")
+        XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertTrue(categories.contains("contentOffset"))
+        XCTAssertTrue(root.contains("floatingEmojiCategoryFrame"),
                       "category bookmarks float over the emoji grid")
-        XCTAssertTrue(emoji.contains("EmojiCategoryBar("))
+        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(root.contains("KeyboardDeleteButton("))
         XCTAssertTrue(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertTrue(emoji.contains("UICollectionView"),
                       "emoji categories must use the native paged collection surface")
@@ -79,16 +82,33 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     }
 
     func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
+        let root = try read("DictusKeyboard/KeyboardRootView.swift")
+        let plates = try read("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+
+        XCTAssertTrue(plates.contains("if reduceTransparency || accessibilityContrast == .increased"))
+        XCTAssertTrue(plates.contains("shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))"))
+        XCTAssertTrue(plates.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertTrue(plates.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
+        XCTAssertTrue(plates.contains("Color(uiColor: .tertiarySystemFill)"))
+        XCTAssertTrue(root.contains("background(Color.clear)"))
+        XCTAssertTrue(root.contains("keyboardGlass(in: shape, role: role)"))
+        XCTAssertFalse(root.contains("glassEffect("),
+                       "material branches live in KeyboardGlassSurface")
+        XCTAssertFalse(root.contains("systemGroupedBackground"),
+                       "solid dictation board must not paint a nested grouped slab")
+        XCTAssertFalse(plates.contains("systemGroupedBackground"),
+                       "solid key plates use tertiary fill, not a grouped board slab")
+    }
+
+    func testDictationBoardChromeStacksAboveTheGlassSurface() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(source.contains("if reduceTransparency || accessibilityContrast == .increased"))
-        XCTAssertTrue(source.contains("shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))"))
-        XCTAssertTrue(source.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(source.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
-        XCTAssertTrue(source.contains("background(Color.clear)"))
-        XCTAssertTrue(source.contains("Color(uiColor: .tertiarySystemFill)"))
-        XCTAssertFalse(source.contains("systemGroupedBackground"),
-                       "solid dictation board must not paint a nested grouped slab")
+        XCTAssertTrue(source.contains(".zIndex(3)"),
+                      "the shared surface remains above the suggestion lane for key popups")
+        XCTAssertTrue(source.contains(".zIndex(4)"),
+                      "dictation-board controls must render above the shared surface")
+        XCTAssertTrue(source.contains("Group {\n            if voiceBoardUsesUIKitHits"),
+                      "both visual and SwiftUI-owned board chrome must share the elevated layer")
     }
 
     func testLegacySuggestionRowIsNotReachableFromTheKeyboardToolbar() throws {
@@ -113,9 +133,10 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
 
         XCTAssertTrue(bar.contains("Image(systemName: section.icon)"))
         XCTAssertTrue(bar.contains("EmojiCategoryScrubControl"))
-        XCTAssertTrue(bar.contains("touchesMoved"))
         XCTAssertTrue(bar.contains("continueTracking"))
         XCTAssertTrue(bar.contains("beginTracking"))
+        XCTAssertTrue(bar.contains("dragActivationDistance"))
+        XCTAssertTrue(bar.contains("onExpansionChanged"))
         XCTAssertTrue(bar.contains("final class EmojiCategoryScrubControl: UIControl"))
         XCTAssertFalse(bar.contains("section.icon.contains"))
         XCTAssertFalse(bar.contains("Text(section.icon)"))
@@ -160,9 +181,9 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let root = try read("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(picker.contains(".frame(width: availableWidth, height: availableHeight)"))
-        XCTAssertTrue(picker.contains("KeyboardDeleteButton("))
-        XCTAssertTrue(picker.contains("EmojiCategoryBar("))
-        XCTAssertFalse(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(root.contains("KeyboardDeleteButton("))
+        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertFalse(picker.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("let categoryBarHeight: CGFloat = 44"))
         XCTAssertTrue(root.contains("private func accessoryBar("))
     }

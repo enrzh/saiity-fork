@@ -3,7 +3,7 @@
 import SwiftUI
 import DictusCore
 
-/// Displays the seven loadable models in native Installed and Available sections.
+/// Displays Tiny, Base, Medium, Large v3, and Turbo Whisper downloads plus any already-installed models.
 struct ModelManagerView: View {
     @ObservedObject var modelManager: ModelManager
 
@@ -13,39 +13,58 @@ struct ModelManagerView: View {
     @State private var showPartialDeleteAlert = false
     @State private var downloadError: String?
     @State private var showErrorAlert = false
-    @State private var showAddModel = false
+    @State private var failedDownloadModelID: String?
     @State private var customModelToDelete: CustomModel?
-
-    /// Only prewarming and RAM loading use the blocking preparation cover.
-    /// Downloads stay in the list so their real cancel action remains reachable.
-    @State private var preparingModelID: String?
+    @State private var searchText = ""
 
     private let deviceCapabilities = DeviceCapabilities.current()
 
     private var installedModels: [ModelInfo] {
         ModelInfo.installedRows(from: ModelInfo.allIncludingDeprecated)
-            .filter(isInstalled)
+            .filter(isInstalled).filter(matchesFilter)
+            .sorted { lhs, rhs in
+                let leftActive = modelManager.activeModel == lhs.identifier
+                let rightActive = modelManager.activeModel == rhs.identifier
+                if leftActive != rightActive { return leftActive }
+                return lhs.sizeBytes < rhs.sizeBytes
+            }
     }
 
     private var availableModels: [ModelInfo] {
         return ModelInfo.available(on: deviceCapabilities)
-            .filter { !isInstalled($0) }
+            .filter { !isInstalled($0) }.filter(matchesFilter)
+            .sorted { lhs, rhs in
+                let leftRecommended = modelManager.isRecommended(lhs.identifier)
+                let rightRecommended = modelManager.isRecommended(rhs.identifier)
+                if leftRecommended != rightRecommended { return leftRecommended }
+                if lhs.isExperimental != rhs.isExperimental { return !lhs.isExperimental }
+                return lhs.sizeBytes < rhs.sizeBytes
+            }
+    }
+
+    private var recommendedModels: [ModelInfo] {
+        ModelInfo.available(on: deviceCapabilities)
+            .filter { modelManager.isRecommended($0.identifier) }
+            .filter(matchesFilter)
+            .sorted { lhs, rhs in
+                if isInstalled(lhs) != isInstalled(rhs) { return isInstalled(lhs) }
+                return lhs.sizeBytes < rhs.sizeBytes
+            }
+    }
+
+    private func matchesFilter(_ model: ModelInfo) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let coverage = model.languageSupport
+        let codes = coverage.highlights.map(\.code) + coverage.additionalCodes + coverage.tierGroups.flatMap(\.codes)
+        let searchable = ([model.displayName, model.engine.displayName, model.description] +
+                          codes.map { ModelLanguageSupport.localizedLanguageName(for: $0) }).joined(separator: " ")
+        return searchable.localizedCaseInsensitiveContains(query)
     }
 
     private func isInstalled(_ model: ModelInfo) -> Bool {
         if modelManager.downloadedModels.contains(model.identifier) { return true }
         return modelManager.modelStates[model.identifier] == .ready
-    }
-
-    /// The first model currently compiling or loading, in catalog order.
-    private var liveActivePrepModel: String? {
-        if modelManager.modelLoadState == .loading,
-           let active = modelManager.activeModel {
-            return active
-        }
-        return ModelInfo.allIncludingDeprecated.first { model in
-            modelManager.modelStates[model.identifier] == .prewarming
-        }?.identifier
     }
 
     var body: some View {
@@ -56,9 +75,6 @@ struct ModelManagerView: View {
         // Xcode 26.3 can time out when it carries the concrete nested List type
         // through every sheet, alert, and cover modifier below.
         AnyView(configuredModelList)
-        .sheet(isPresented: $showAddModel) {
-            NavigationStack { AddCustomModelView(modelManager: modelManager) }
-        }
         .alert("Delete custom model?", isPresented: Binding(get: { customModelToDelete != nil }, set: { if !$0 { customModelToDelete = nil } })) {
             Button("Cancel", role: .cancel) { customModelToDelete = nil }
             Button("Delete", role: .destructive) {
@@ -77,6 +93,7 @@ struct ModelManagerView: View {
                 do {
                     try modelManager.deleteModel(model.identifier)
                 } catch {
+                    failedDownloadModelID = nil
                     presentError(error.localizedDescription)
                 }
             }
@@ -91,36 +108,17 @@ struct ModelManagerView: View {
         } message: { model in
             Text("Delete the partially downloaded files for \(model.displayName)? The next download will start from the beginning.")
         }
-        .alert("Error", isPresented: $showErrorAlert) {
+        .alert("Model action failed", isPresented: $showErrorAlert) {
+            if let failedDownloadModelID {
+                Button("Retry") {
+                    modelManager.startCatalogDownload(failedDownloadModelID, onError: presentError)
+                }
+            }
             Button("OK", role: .cancel) { }
         } message: {
             if let downloadError {
                 Text(downloadError)
             }
-        }
-        .onChange(of: liveActivePrepModel) { _, newValue in
-            if let newValue, preparingModelID == nil {
-                preparingModelID = newValue
-            }
-        }
-        .onAppear {
-            if preparingModelID == nil {
-                preparingModelID = liveActivePrepModel
-            }
-        }
-        .fullScreenCover(item: Binding<PreparingModelItem?>(
-            get: { preparingModelID.map(PreparingModelItem.init) },
-            set: { preparingModelID = $0?.id }
-        )) { item in
-            ModelLoadingOverlay(
-                modelManager: modelManager,
-                modelIdentifier: item.id,
-                context: .modelSelection,
-                isPresented: Binding(
-                    get: { preparingModelID != nil },
-                    set: { if !$0 { preparingModelID = nil } }
-                )
-            )
         }
     }
 
@@ -132,21 +130,46 @@ struct ModelManagerView: View {
             .listStyle(.insetGrouped)
             .contentMargins(.bottom, 88, for: .scrollContent)
             .navigationTitle("Models")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddModel = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Add custom model")
-                }
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Model, engine or language")
+            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground))
     }
 
     @ViewBuilder
     private var modelList: some View {
         List {
+            Section {
+                ModelSelectionModePicker(modelManager: modelManager)
+            } header: {
+                Text("Selection")
+            } footer: {
+                Text(modelManager.selectionMode.explanation)
+            }
+            recommendedSection
             installedSection
             availableSection
-            customModelsSection(.asr, title: "Custom speech recognition")
-            customModelsSection(.cleanup, title: "Custom cleanup")
+            dictationCleanupSection
+        }
+    }
+
+    @ViewBuilder
+    private var recommendedSection: some View {
+        if !recommendedModels.isEmpty {
+            Section {
+                ForEach(recommendedModels) { model in
+                    modelRow(
+                        model,
+                        incompatibilityReason: model.incompatibilityReason(on: deviceCapabilities)
+                    )
+                }
+            } header: {
+                modelSectionHeader("Recommended", systemImage: "sparkles")
+            } footer: {
+                Text("Recommendations are based on device compatibility and editorial guidance. They are not accuracy measurements.")
+                    .font(.caption)
+            }
+            .listSectionSeparator(.hidden)
         }
     }
 
@@ -162,7 +185,7 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            Text("Installed")
+            modelSectionHeader("Installed", systemImage: "tray.full.fill")
         } footer: {
             modelEngineFooter(for: installedModels)
         }
@@ -173,7 +196,7 @@ struct ModelManagerView: View {
     private var availableSection: some View {
         Section {
             if availableModels.isEmpty {
-                Text("All available models are installed")
+                Text(searchText.isEmpty ? "All available models are installed" : "No matching downloads")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(availableModels) { model in
@@ -184,15 +207,11 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            Text("Available")
+            modelSectionHeader("All models", systemImage: "square.stack.3d.up")
         } footer: {
             modelEngineFooter(for: availableModels)
         }
         .listSectionSeparator(.hidden)
-    }
-
-    private struct PreparingModelItem: Identifiable {
-        let id: String
     }
 
     private func modelRow(
@@ -203,6 +222,7 @@ struct ModelManagerView: View {
             model: model,
             modelManager: modelManager,
             onDownloadError: { error in
+                failedDownloadModelID = model.identifier
                 presentError(error)
             },
             incompatibilityReason: incompatibilityReason,
@@ -223,25 +243,114 @@ struct ModelManagerView: View {
     }
 
     @ViewBuilder
-    private func customModelsSection(_ role: CustomModelRole, title: String) -> some View {
-        let models = modelManager.customModels.filter { $0.role == role }
-        if !models.isEmpty {
-            Section(title) {
-                ForEach(models) { model in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(model.name)
-                            Text("\(model.source.displayName) · \(model.role.displayName)")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text(customModelStatus(model)).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(role: .destructive) { customModelToDelete = model } label: { Image(systemName: "trash") }
-                            .buttonStyle(.borderless)
+    private var dictationCleanupSection: some View {
+        let cleanupModels = modelManager.customModels.filter { $0.role == .cleanup }
+        Section {
+            appleIntelligenceCleanupRow
+            ForEach(cleanupModels) { model in
+                customCleanupRow(model)
+            }
+        } header: {
+            modelSectionHeader("Dictation cleanup", systemImage: "sparkles")
+        } footer: {
+            Text("Apple Intelligence uses the on-device Foundation Models in iOS. Select an Ollama cleanup model only after you have registered one.")
+                .font(.caption)
+        }
+        .listSectionSeparator(.hidden)
+    }
+
+    private var isAppleIntelligenceCleanupActive: Bool {
+        modelManager.cleanupBackend == .appleIntelligence
+    }
+
+    private var appleIntelligenceCleanupRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("Apple Intelligence")
+                    if isAppleIntelligenceCleanupActive {
+                        Text("Active")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.green)
                     }
                 }
+                Text("On-device Foundation Models")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(PolishAvailability.guidance(for: PolishAvailability.state))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !isAppleIntelligenceCleanupActive {
+                Button {
+                    modelManager.selectCleanupBackend(.appleIntelligence)
+                } label: {
+                    Label("Select", systemImage: "checkmark.circle")
+                }
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .accessibilityHint("Uses Apple Intelligence for dictation cleanup")
             }
         }
+        .padding(.vertical, 6)
+        .listRowSeparator(.hidden)
+    }
+
+    private func customCleanupRow(_ model: CustomModel) -> some View {
+        let isActive = modelManager.cleanupBackend == .ollama(model.id)
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(model.name)
+                    if isActive {
+                        Text("Active")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+                Text("\(model.source.displayName) · \(model.role.displayName)")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(customModelStatus(model)).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            HStack(spacing: 8) {
+                if model.validationError == nil && !isActive {
+                    Button {
+                        modelManager.selectCleanupBackend(.ollama(model.id))
+                    } label: {
+                        Label("Select", systemImage: "checkmark.circle")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .accessibilityHint("Uses this Ollama model for dictation cleanup")
+                }
+                Button(role: .destructive) { customModelToDelete = model } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Delete \(model.name)")
+            }
+        }
+        .padding(.vertical, 6)
+        .listRowSeparator(.hidden)
+    }
+
+    private func modelSectionHeader(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .textCase(nil)
+        }
+        .padding(.bottom, 4)
     }
 
     private func customModelStatus(_ model: CustomModel) -> String {
@@ -273,101 +382,10 @@ struct ModelManagerView: View {
                 Text("WhisperKit runs speech recognition locally on Apple silicon.")
             }
             if models.contains(where: { $0.engine == .parakeet }) {
-                Text("Parakeet is a fast on-device recognition engine from NVIDIA.")
+                Text("NVIDIA on-device ASR is Parakeet v2/v3. Nemotron speech checkpoints are not in the current FluidAudio runtime, so they are not one-tap downloads.")
             }
         }
         .font(.caption)
-    }
-}
-
-private struct AddCustomModelView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var modelManager: ModelManager
-    @State private var name = ""
-    @State private var url = ""
-    @State private var role: CustomModelRole = .asr
-    @State private var source: CustomModelSource = .huggingFace
-    @State private var modelName = ""
-    @State private var isVerifying = false
-    @State private var verificationError: String?
-    @State private var verifiedIdentityKey: String?
-
-    private var model: CustomModel {
-        let candidate = CustomModel(name: name, repositoryURL: url, role: role, source: source,
-                                    modelName: modelName.isEmpty ? nil : modelName)
-        return CustomModel(id: candidate.id, name: candidate.name, repositoryURL: candidate.repositoryURL,
-                           role: candidate.role, source: candidate.source, modelName: candidate.modelName,
-                           remoteValidationState: verifiedIdentityKey == candidate.identityKey ? .verified : candidate.remoteValidationState)
-    }
-
-    var body: some View {
-        Form {
-            Section("Model") {
-                Picker("Use for", selection: $role) {
-                    Text(CustomModelRole.asr.displayName).tag(CustomModelRole.asr)
-                    Text(CustomModelRole.cleanup.displayName).tag(CustomModelRole.cleanup)
-                }
-                Picker("Source", selection: $source) {
-                    Text(CustomModelSource.huggingFace.displayName).tag(CustomModelSource.huggingFace)
-                    if role == .asr { Text(CustomModelSource.nvidia.displayName).tag(CustomModelSource.nvidia) }
-                    if role == .cleanup { Text(CustomModelSource.ollama.displayName).tag(CustomModelSource.ollama) }
-                }
-                TextField("Display name", text: $name)
-                TextField("Repository URL", text: $url)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                if source == .ollama {
-                    TextField("Ollama model name", text: $modelName)
-                        .textInputAutocapitalization(.never)
-                }
-                if let error = model.validationError { Text(error).font(.caption).foregroundStyle(.red) }
-                if role == .asr && source == .huggingFace && model.validationError == nil {
-                    Button(isVerifying ? "Checking model..." : "Check model") {
-                        verifyModel()
-                    }
-                    .disabled(isVerifying)
-                    if let verificationError {
-                        Text(verificationError).font(.caption).foregroundStyle(.red)
-                    } else if verifiedIdentityKey == model.identityKey {
-                        Label("ASR model verified", systemImage: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-                }
-            }
-            Section { Text("Ollama cleanup models are used for dictation cleanup. Custom speech-recognition sources are saved for future runtime support and are not loaded yet.")
-                .font(.footnote).foregroundStyle(.secondary) }
-        }
-        .navigationTitle("Add Model")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { modelManager.addCustomModel(model); dismiss() }
-                    .disabled(model.validationError != nil ||
-                              (role == .asr && source == .huggingFace && model.remoteValidationState != .verified))
-            }
-        }
-        .onChange(of: role) { _, newRole in
-            if newRole == .asr && source == .ollama { source = .huggingFace }
-            if newRole == .cleanup && source == .nvidia { source = .ollama }
-        }
-        .onChange(of: model.identityKey) { _, _ in
-            verifiedIdentityKey = nil
-            verificationError = nil
-        }
-    }
-
-    private func verifyModel() {
-        let candidate = model
-        isVerifying = true
-        verificationError = nil
-        Task {
-            let error = await candidate.remoteValidationError()
-            await MainActor.run {
-                verificationError = error
-                verifiedIdentityKey = error == nil ? candidate.identityKey : nil
-                isVerifying = false
-            }
-        }
     }
 }
 

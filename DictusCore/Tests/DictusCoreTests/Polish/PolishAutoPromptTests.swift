@@ -37,6 +37,23 @@ final class PolishAutoPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains("`Punkt`"), "bare German 'Punkt' must stay excluded (#185)")
     }
 
+    func testAutoPromptCleansFillersSelfCorrectionsAndRestatedDuplicates() {
+        let prompt = PolishAutoPrompt.instructions(glossary: PolishGlossary.promptBlock)
+        XCTAssertTrue(prompt.contains("oh sorry"))
+        XCTAssertTrue(prompt.contains("2am"))
+        XCTAssertTrue(prompt.contains("4am") || prompt.contains("4 a.m"))
+        XCTAssertTrue(prompt.contains("like"))
+        XCTAssertTrue(prompt.contains("so basically") || prompt.contains("So basically"))
+        XCTAssertTrue(prompt.contains("grundsätzlich"))
+        XCTAssertTrue(prompt.contains("snow crunching"))
+        XCTAssertTrue(prompt.contains("Ich habe jetzt einen Termin um 15 Uhr"))
+        XCTAssertTrue(prompt.contains("the invoice tomorrow"))
+        XCTAssertTrue(prompt.contains("我晚上再确认"))
+        XCTAssertTrue(prompt.contains("restat"))
+        XCTAssertTrue(prompt.contains("Hey Jack I got like a appointment at 2am"))
+        XCTAssertTrue(prompt.contains("Hey Jack, I got an appointment at 4am. Can you come by please?"))
+    }
+
     func testAutoPromptEmbedsGlossary() {
         let prompt = PolishAutoPrompt.instructions(glossary: PolishGlossary.promptBlock)
         for term in PolishGlossary.terms {

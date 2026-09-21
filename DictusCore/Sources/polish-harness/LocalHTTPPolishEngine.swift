@@ -48,7 +48,7 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
          model: String,
          temperature: Double = 0.0,
          disableThinking: Bool = true,
-         timeout: TimeInterval = 300) {
+         timeout: TimeInterval = OllamaHTTPContract.cleanupTimeout) {
         self.model = model
         self.temperature = temperature
         self.disableThinking = disableThinking
@@ -72,8 +72,15 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
     func polish(raw: String,
                 targetLanguage: SupportedLanguage,
                 mode: PolishMode) async throws -> String {
+        try await polish(raw: raw, targetLanguage: targetLanguage, mode: mode, style: .balanced)
+    }
+
+    func polish(raw: String,
+                targetLanguage: SupportedLanguage,
+                mode: PolishMode,
+                style: WritingStyle) async throws -> String {
         let instructions = AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)
-        let userPrompt = Self.userTurn(raw: raw)
+        let userPrompt = PolishPromptEnvelope.userTurn(raw: raw, style: style)
         var body: [String: Any] = [
             "model": model,
             "temperature": temperature,
@@ -88,7 +95,7 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
         // measuring with it on reports a latency no shipped product would pay.
         //
         // Two keys, because they are not interchangeable. Measured against Ollama
-        // 0.32.6 with qwen3.5:0.8b on 2026-08-13: `chat_template_kwargs` was
+        // Ollama 0.32.6 on 2026-08-13: `chat_template_kwargs` was
         // accepted and IGNORED (4594 characters of reasoning still generated),
         // while `reasoning_effort: "none"` actually suppressed it. The former stays
         // for servers that honour it (vLLM, llama-server); the latter is what makes
@@ -103,38 +110,8 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw LocalEngineError.httpStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")
-        }
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw LocalEngineError.malformedResponse(String(data: data, encoding: .utf8) ?? "")
-        }
-        return Self.stripReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Reasoning-tuned checkpoints (Qwen3 and friends) emit a `<think>…</think>`
-    /// block ahead of the answer even when asked not to. Dropping it here is not
-    /// a favour to the model: leaving it in would make the guardrail reject on
-    /// length ratio and the comparison would measure the wrapper, not the model.
-    /// Any candidate that needs this is flagged in the findings, because a real
-    /// integration would have to pay for those tokens in latency.
-    static func stripReasoning(_ text: String) -> String {
-        guard let close = text.range(of: "</think>") else { return text }
-        return String(text[close.upperBound...])
-    }
-
-    enum LocalEngineError: Error, CustomStringConvertible {
-        case httpStatus(Int, String)
-        case malformedResponse(String)
-
-        var description: String {
-            switch self {
-            case .httpStatus(let code, let body): return "HTTP \(code): \(body.prefix(200))"
-            case .malformedResponse(let body): return "malformed response: \(body.prefix(200))"
-            }
-        }
+        return try OllamaHTTPContract.responseText(
+            data: data, statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0
+        )
     }
 }

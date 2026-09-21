@@ -50,6 +50,21 @@ public struct ModelRuntimeResolution: Equatable, Sendable {
 }
 
 extension ModelInfo {
+    /// Picks the best installed model for the current device without requiring
+    /// a previously selected identifier to be valid.
+    public static func automaticRuntimeResolution(
+        installedIdentifiers: Set<String>,
+        osMajor: Int,
+        capabilities: DeviceCapabilities
+    ) -> ModelRuntimeResolution {
+        runtimeResolution(
+            for: recommendedIdentifier(for: capabilities),
+            installedIdentifiers: installedIdentifiers,
+            osMajor: osMajor,
+            capabilities: capabilities
+        )
+    }
+
     /// Runtime capability metadata for the selected engine/model family.
     /// No language claim is made here beyond the existing catalog support data.
     public var runtimeCapability: ModelRuntimeCapability {
@@ -64,12 +79,6 @@ extension ModelInfo {
             return ModelRuntimeCapability(
                 minimumOSMajorVersion: 17,
                 supportsAutomaticLanguageDetection: languageSupport.coverage == .parakeetEuropean,
-                fallbackIdentifier: "openai_whisper-small"
-            )
-        case .qwen3ASR:
-            return ModelRuntimeCapability(
-                minimumOSMajorVersion: 18,
-                supportsAutomaticLanguageDetection: true,
                 fallbackIdentifier: "openai_whisper-small"
             )
         }
@@ -119,12 +128,24 @@ extension ModelInfo {
         if let fallback = requestedModel?.runtimeCapability.fallbackIdentifier {
             candidates.append(fallback)
         }
-        candidates.append(contentsOf: [
-            "openai_whisper-small",
-            "openai_whisper-base",
-            "openai_whisper-tiny",
-            recommendedIdentifier(for: capabilities)
-        ])
+
+        let fastFirst = capabilities.prefersFastRuntimeModel
+        let defaultOrder = fastFirst
+            ? ["openai_whisper-base", "openai_whisper-tiny", "openai_whisper-small"]
+            : [recommendedIdentifier(for: capabilities), "openai_whisper-small", "openai_whisper-base", "openai_whisper-tiny"]
+        candidates.append(contentsOf: defaultOrder)
+
+        // Measured warm latency is a tie-breaker only for compatible fallback
+        // artifacts. Accuracy and multilingual coverage still outrank a noisy
+        // one-off timing sample.
+        let warmLatencies = ModelWarmLatencyStore.load(from: AppGroup.defaults)
+        let ranked = candidates.enumerated().sorted { left, right in
+            let leftLatency = warmLatencies[candidates[left.offset]] ?? Double.greatestFiniteMagnitude
+            let rightLatency = warmLatencies[candidates[right.offset]] ?? Double.greatestFiniteMagnitude
+            if leftLatency != rightLatency { return leftLatency < rightLatency }
+            return left.offset < right.offset
+        }.map(\.element)
+        candidates = ranked
 
         for candidate in candidates where candidate != requestedIdentifier {
             guard let model = forIdentifier(candidate),
@@ -144,5 +165,32 @@ extension ModelInfo {
             resolvedIdentifier: nil,
             fallbackReason: requestedReason
         )
+    }
+}
+
+/// Persists only aggregate model timing, never audio or transcript content.
+public enum ModelWarmLatencyStore {
+    public static func load(from defaults: UserDefaults) -> [String: Double] {
+        guard let data = defaults.data(forKey: SharedKeys.modelWarmLatency),
+              let values = try? JSONDecoder().decode([String: Double].self, from: data) else {
+            return [:]
+        }
+        return values.filter { $0.value.isFinite && $0.value > 0 }
+    }
+
+    public static func record(_ durationMilliseconds: Int,
+                              for identifier: String,
+                              in defaults: UserDefaults) {
+        guard durationMilliseconds > 0, !identifier.isEmpty else { return }
+        var values = load(from: defaults)
+        let sample = Double(durationMilliseconds)
+        if let previous = values[identifier] {
+            values[identifier] = (previous * 0.8) + (sample * 0.2)
+        } else {
+            values[identifier] = sample
+        }
+        if let data = try? JSONEncoder().encode(values) {
+            defaults.set(data, forKey: SharedKeys.modelWarmLatency)
+        }
     }
 }

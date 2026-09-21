@@ -63,6 +63,18 @@ public enum KeyboardLayoutPreference {
         }
     }
 
+    /// One layout for every language. Settings and the keyboard menu expose a
+    /// single type selector, not a per-language grid.
+    public static func setGlobalLayout(_ layout: LayoutType) {
+        migrateToPerLanguageLayoutsIfNeeded()
+        var layouts = storedLayouts()
+        for language in SupportedLanguage.allCases {
+            layouts[language.rawValue] = layout.rawValue
+        }
+        AppGroup.defaults.set(layouts, forKey: SharedKeys.keyboardLayoutsByLanguage)
+        mirrorToLegacyKey(layout)
+    }
+
     // MARK: - Migration (#272)
 
     /// Freezes the layout an existing install is already typing on, once, before the

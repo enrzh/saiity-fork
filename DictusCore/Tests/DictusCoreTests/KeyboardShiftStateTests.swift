@@ -2,6 +2,10 @@ import XCTest
 @testable import DictusCore
 
 final class KeyboardShiftStateTests: XCTestCase {
+    func testDoubleTapWindowMatchesANativeCapsLockGesture() {
+        XCTAssertEqual(KeyboardShiftState.doubleTapWindow, 0.5, accuracy: 0.0001)
+    }
+
     func testFirstTapEntersTemporaryShift() {
         XCTAssertEqual(
             KeyboardShiftState.normal.state(afterTapIsWithinDoubleTapWindow: false),

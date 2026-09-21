@@ -64,11 +64,19 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         XCTAssertEqual(layout.floatingEmojiCategoryFrame.height,
                        VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarHeight,
                        accuracy: 0.001)
-        XCTAssertEqual(layout.floatingEmojiCategoryFrame.maxY,
-                       layout.boardDeleteFrame.maxY,
+        XCTAssertEqual(layout.floatingEmojiCategoryFrame.maxY
+                        + VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarGap,
+                       layout.chromeSpaceFrame.minY,
                        accuracy: 0.001)
-        XCTAssertLessThan(layout.floatingEmojiCategoryFrame.width, layout.chromeWideSpaceFrame.width)
-        XCTAssertGreaterThan(layout.floatingEmojiCategoryFrame.width, layout.chromeWideSpaceFrame.width - 24)
+        XCTAssertEqual(layout.floatingEmojiCategoryFrame.minX,
+                       layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+                       accuracy: 0.001)
+        XCTAssertEqual(layout.floatingEmojiCategoryFrame.maxX,
+                       layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
+                       accuracy: 0.001)
+        XCTAssertGreaterThan(layout.floatingEmojiCategoryFrame.width,
+                             VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarMaxWidth,
+                             "the invisible track must be wider than the moving handle")
         XCTAssertEqual(layout.accessoryDictationBoardFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.accessoryDismissFrame.minX, accuracy: 0.001)
         XCTAssertEqual(layout.accessoryDismissFrame.width, 36, accuracy: 0.001)
@@ -136,15 +144,25 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                 accuracy: 0.001
             )
             XCTAssertEqual(
-                layout.floatingEmojiCategoryFrame.maxY,
-                layout.boardDeleteFrame.maxY,
+                layout.floatingEmojiCategoryFrame.maxY + VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarGap,
+                layout.chromeSpaceFrame.minY,
                 accuracy: 0.001
             )
-            XCTAssertLessThan(
-                layout.floatingEmojiCategoryFrame.maxX + 1,
-                layout.boardDeleteFrame.minX
-            )
         }
+    }
+
+    func testWideEmojiBarFitsItsCompactCategoryContent() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(
+            for: 1024,
+            surfaceHeight: 280,
+            controlOrder: .numberFirst,
+            topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+        )
+
+        XCTAssertGreaterThan(
+            layout.floatingEmojiCategoryFrame.width,
+            VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarMaxWidth
+        )
     }
 
     func testCommandVisualSizeStaysPinnedToDictationDelete() {

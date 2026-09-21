@@ -18,6 +18,70 @@ public struct SpeechRegion: Equatable, Sendable {
     }
 }
 
+/// Coverage diagnostics for one segmented recording.
+///
+/// Leading and trailing silence is intentionally not treated as dropped speech.
+/// `uncoveredWithinSpeechSpan` is the value that detects a real hole between two
+/// decoded regions; `overlapSampleCount` detects duplicated work at boundaries.
+public struct SpeechRegionCoverage: Equatable, Sendable {
+    public let totalSampleCount: Int
+    public let coveredSampleCount: Int
+    public let overlapSampleCount: Int
+    public let uncoveredSampleCount: Int
+    public let uncoveredWithinSpeechSpan: Int
+    public let firstCoveredSample: Int?
+    public let lastCoveredSample: Int?
+
+    public var hasDroppedSpeech: Bool { uncoveredWithinSpeechSpan > 0 }
+    public var hasOverlap: Bool { overlapSampleCount > 0 }
+
+    public init(regions: [SpeechRegion], totalSampleCount: Int) {
+        let total = max(0, totalSampleCount)
+        let normalized = regions.compactMap { region -> Range<Int>? in
+            let start = min(total, max(0, region.startSample))
+            let end = min(total, max(start, region.endSample))
+            guard start < end else { return nil }
+            return start..<end
+        }.sorted { $0.lowerBound < $1.lowerBound }
+
+        var unionLength = 0
+        var summedLength = 0
+        var currentStart: Int?
+        var currentEnd: Int?
+
+        for range in normalized {
+            summedLength += range.count
+            guard let activeStart = currentStart, let activeEnd = currentEnd else {
+                currentStart = range.lowerBound
+                currentEnd = range.upperBound
+                continue
+            }
+            if range.lowerBound <= activeEnd {
+                currentEnd = max(activeEnd, range.upperBound)
+            } else {
+                unionLength += activeEnd - activeStart
+                currentStart = range.lowerBound
+                currentEnd = range.upperBound
+            }
+        }
+        if let activeStart = currentStart, let activeEnd = currentEnd {
+            unionLength += activeEnd - activeStart
+        }
+
+        let first = normalized.first?.lowerBound
+        let last = normalized.last?.upperBound
+        let spanLength = if let first, let last { max(0, last - first) } else { 0 }
+
+        self.totalSampleCount = total
+        self.coveredSampleCount = unionLength
+        self.overlapSampleCount = max(0, summedLength - unionLength)
+        self.uncoveredSampleCount = max(0, total - unionLength)
+        self.uncoveredWithinSpeechSpan = max(0, spanLength - unionLength)
+        self.firstCoveredSample = first
+        self.lastCoveredSample = last
+    }
+}
+
 /// Finds speech regions using short-term energy and meaningful silence.
 ///
 /// This is deliberately a small, deterministic boundary detector rather than a
@@ -32,6 +96,9 @@ public struct SpeechRegionSegmenter: Sendable {
         public let minimumRegionDurationMilliseconds: Int
         public let maximumRegionDurationMilliseconds: Int
         public let silenceRMS: Float
+        public let noiseFloorMultiplier: Float
+        public let noiseFloorMargin: Float
+        public let speechReleaseMultiplier: Float
 
         public init(
             sampleRate: Int = 16_000,
@@ -40,7 +107,10 @@ public struct SpeechRegionSegmenter: Sendable {
             contextDurationMilliseconds: Int = 200,
             minimumRegionDurationMilliseconds: Int = 800,
             maximumRegionDurationMilliseconds: Int = 10_000,
-            silenceRMS: Float = 0.01
+            silenceRMS: Float = 0.01,
+            noiseFloorMultiplier: Float = 2.0,
+            noiseFloorMargin: Float = 0.004,
+            speechReleaseMultiplier: Float = 0.65
         ) {
             self.sampleRate = max(1, sampleRate)
             self.frameDurationMilliseconds = max(1, frameDurationMilliseconds)
@@ -49,6 +119,9 @@ public struct SpeechRegionSegmenter: Sendable {
             self.minimumRegionDurationMilliseconds = max(1, minimumRegionDurationMilliseconds)
             self.maximumRegionDurationMilliseconds = max(1, maximumRegionDurationMilliseconds)
             self.silenceRMS = max(0, silenceRMS)
+            self.noiseFloorMultiplier = max(1, noiseFloorMultiplier)
+            self.noiseFloorMargin = max(0, noiseFloorMargin)
+            self.speechReleaseMultiplier = min(1, max(0, speechReleaseMultiplier))
         }
     }
 
@@ -70,7 +143,8 @@ public struct SpeechRegionSegmenter: Sendable {
             Int(ceil(Double(configuration.silenceDurationMilliseconds)
                 / Double(configuration.frameDurationMilliseconds)))
         )
-        let activeFrames = makeActivityMap(samples: samples, frameSize: frameSize)
+        let frameRMS = makeFrameRMS(samples: samples, frameSize: frameSize)
+        let activeFrames = makeActivityMap(frameRMS: frameRMS)
         guard let firstActive = activeFrames.firstIndex(of: true),
               let lastActive = activeFrames.lastIndex(of: true) else {
             return []
@@ -170,11 +244,11 @@ public struct SpeechRegionSegmenter: Sendable {
         max(1, Int((Double(configuration.sampleRate) * Double(milliseconds) / 1_000).rounded()))
     }
 
-    private func makeActivityMap(samples: [Float], frameSize: Int) -> [Bool] {
+    private func makeFrameRMS(samples: [Float], frameSize: Int) -> [Float] {
         stride(from: 0, to: samples.count, by: frameSize).map { start in
             let end = min(samples.count, start + frameSize)
             let count = end - start
-            guard count > 0 else { return false }
+            guard count > 0 else { return 0 }
 
             var sum: Double = 0
             for sample in samples[start..<end] {
@@ -182,7 +256,44 @@ public struct SpeechRegionSegmenter: Sendable {
                 sum += value * value
             }
             let rms = sqrt(sum / Double(count))
-            return rms >= Double(configuration.silenceRMS)
+            return Float(rms)
+        }
+    }
+
+    private func makeActivityMap(frameRMS: [Float]) -> [Bool] {
+        guard !frameRMS.isEmpty else { return [] }
+
+        // Use the quietest tenth of the recording as a local noise estimate. The
+        // fixed floor remains the lower bound, so clean recordings keep the old
+        // behavior while noisy microphones get a higher speech boundary.
+        let sortedRMS = frameRMS.sorted()
+        let quietCount = max(1, Int(ceil(Double(sortedRMS.count) * 0.1)))
+        let noiseFloor = sortedRMS[min(sortedRMS.count - 1, quietCount - 1)]
+        let rawAdaptiveThreshold = max(
+            configuration.silenceRMS,
+            max(
+                noiseFloor * configuration.noiseFloorMultiplier,
+                noiseFloor + configuration.noiseFloorMargin
+            )
+        )
+        // A recording can contain speech continuously, so its quietest frames
+        // may still be speech. Keep the adaptive threshold below a useful
+        // fraction of the observed signal instead of classifying that entire
+        // recording as silence.
+        let signalCeiling = max(
+            configuration.silenceRMS,
+            (frameRMS.max() ?? configuration.silenceRMS) * 0.4
+        )
+        let adaptiveThreshold = min(rawAdaptiveThreshold, signalCeiling)
+        let startThreshold = Double(adaptiveThreshold)
+        let releaseThreshold = startThreshold
+            * Double(configuration.speechReleaseMultiplier)
+
+        var speechActive = false
+        return frameRMS.map { rms in
+            let threshold = speechActive ? releaseThreshold : startThreshold
+            speechActive = Double(rms) >= threshold
+            return speechActive
         }
     }
 }
@@ -192,18 +303,42 @@ public struct SpeechRegionTranscript: Equatable, Sendable {
     public let region: SpeechRegion
     public let text: String
     public let detectedLanguage: String?
+    /// A script-validated language token. The raw detector result above is
+    /// retained for diagnostics, but cleanup and translation should use this
+    /// value so short or incompatible detections cannot relabel a region.
+    public let validatedLanguage: String?
     public let overlapsPreviousRegion: Bool
+    /// Optional decode diagnostics. These remain nil for compatibility
+    /// decoders that only return text.
+    public let decodeDurationSeconds: Double?
+    public let averageLogProbability: Double?
+    public let fallbackReason: String?
+    /// Script-aware consistency score for the detected Whisper language.
+    /// Optional so non-Whisper engines keep their existing metadata contract.
+    public let languageEvidenceScore: Double?
+
+    public var characterCount: Int { text.count }
 
     public init(
         region: SpeechRegion,
         text: String,
         detectedLanguage: String? = nil,
-        overlapsPreviousRegion: Bool = false
+        validatedLanguage: String? = nil,
+        overlapsPreviousRegion: Bool = false,
+        decodeDurationSeconds: Double? = nil,
+        averageLogProbability: Double? = nil,
+        fallbackReason: String? = nil,
+        languageEvidenceScore: Double? = nil
     ) {
         self.region = region
         self.text = text
         self.detectedLanguage = detectedLanguage
+        self.validatedLanguage = validatedLanguage
         self.overlapsPreviousRegion = overlapsPreviousRegion
+        self.decodeDurationSeconds = decodeDurationSeconds
+        self.averageLogProbability = averageLogProbability
+        self.fallbackReason = fallbackReason
+        self.languageEvidenceScore = languageEvidenceScore
     }
 }
 
@@ -227,7 +362,8 @@ public enum SpeechRegionTranscriptionRunner {
     public static func run(
         audioSamples: [Float],
         regions: [SpeechRegion],
-        decode: @escaping @Sendable (Int, ArraySlice<Float>, SpeechRegion) async throws -> SpeechRegionTranscript
+        decode: @escaping @Sendable (Int, ArraySlice<Float>, SpeechRegion) async throws -> SpeechRegionTranscript,
+        onRegion: (@Sendable (SpeechRegionTranscript) -> Void)? = nil
     ) async throws -> [SpeechRegionTranscript] {
         var results: [SpeechRegionTranscript] = []
         results.reserveCapacity(regions.count)
@@ -237,13 +373,20 @@ public enum SpeechRegionTranscriptionRunner {
             let slice = audioSamples[region.startSample..<region.endSample]
             let decoded = try await decode(index, slice, region)
             try Task.checkCancellation()
-            results.append(SpeechRegionTranscript(
+            let result = SpeechRegionTranscript(
                 region: decoded.region,
                 text: decoded.text,
                 detectedLanguage: decoded.detectedLanguage,
+                validatedLanguage: decoded.validatedLanguage,
                 overlapsPreviousRegion: index > 0
-                    && region.startSample < regions[index - 1].endSample
-            ))
+                    && region.startSample < regions[index - 1].endSample,
+                decodeDurationSeconds: decoded.decodeDurationSeconds,
+                averageLogProbability: decoded.averageLogProbability,
+                fallbackReason: decoded.fallbackReason,
+                languageEvidenceScore: decoded.languageEvidenceScore
+            )
+            results.append(result)
+            onRegion?(result)
         }
         return results
     }

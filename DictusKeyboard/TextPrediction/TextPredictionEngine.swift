@@ -29,6 +29,9 @@ class TextPredictionEngine {
     private var frequencyDict = FrequencyDictionary()
     private let aospTrieEngine = AOSPTrieEngine()
     private var language: String = SupportedLanguage.active.rawValue
+    private var selectedLanguage: String = SupportedLanguage.active.rawValue
+    private var lastLanguageProbeText: String?
+    private var lastDetectedLanguage: String?
 
     /// The active language's data profile, or nil if `language` is not a registered
     /// `SupportedLanguage`. Used to gate language-specific pipeline stages by
@@ -57,41 +60,148 @@ class TextPredictionEngine {
         loadDictionaries(for: lang)
     }
 
+    /// Anchors a new host-field context without reloading the selected
+    /// dictionary on every keystroke. Recent-text detection may temporarily
+    /// refine `language`, but the selected language remains the fallback.
+    func setSelectedLanguage(_ lang: String) {
+        let selectionChanged = selectedLanguage != lang
+        selectedLanguage = lang
+        if selectionChanged {
+            lastLanguageProbeText = nil
+            lastDetectedLanguage = nil
+        }
+        setLanguage(lang)
+    }
+
+    /// Clears sticky typed-language detection so an emptied field falls back
+    /// to the selected keyboard language instead of the previous document's prior.
+    func resetTypedLanguageDetection() {
+        lastLanguageProbeText = nil
+        lastDetectedLanguage = nil
+        setLanguage(selectedLanguage)
+    }
+
     /// Uses the most recent text when it is confidently identifiable. The
     /// active keyboard language remains the fallback for short or mixed input.
     func setLanguage(forRecentText text: String) {
         let recentText = String(text.suffix(240))
-        guard recentText.count >= 24,
-              recentText.split(whereSeparator: { $0.isWhitespace }).count >= 4 else {
+        // Empty / fully-deleted input must drop sticky detection so the next
+        // document does not inherit the previous field's language prior.
+        if recentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            resetTypedLanguageDetection()
+            return
+        }
+        // While the user is still extending the same word, keep the last
+        // confident typed-language decision instead of re-probing every glyph.
+        if let lastProbe = lastLanguageProbeText,
+           lastProbe.count >= 8,
+           recentText.hasPrefix(lastProbe),
+           recentText.count > lastProbe.count,
+           !recentText.dropFirst(lastProbe.count).contains(where: { $0.isWhitespace || $0.isNewline }) {
+            setLanguage(lastDetectedLanguage ?? selectedLanguage)
             return
         }
 
+        let detected = recentLanguageCode(for: recentText)
+        // Hysteresis: once typing has a confident language, stick to it until
+        // another supported language clearly wins. Avoids DE/EN flip-flops mid-word.
+        let resolved: String?
+        if let detected {
+            resolved = detected
+        } else if let sticky = lastDetectedLanguage,
+                  recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count >= 2 {
+            resolved = sticky
+        } else {
+            resolved = nil
+        }
+        lastLanguageProbeText = recentText
+        if let resolved { lastDetectedLanguage = resolved }
+        setLanguage(resolved ?? selectedLanguage)
+    }
+
+    /// CJK text has no useful Latin spell-check path. Returning no correction
+    /// is safer and cheaper than applying an English/German dictionary to it.
+    func shouldSkipTokenPrediction(for word: String) -> Bool {
+        word.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+                 0xAC00...0xD7AF, 0xF900...0xFAFF:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    /// Long unsupported or ambiguous context must not silently use the active
+    /// dictionary, which is commonly English. Short context is intentionally
+    /// allowed to use the user's selected keyboard language.
+    func shouldAbstainFromPrediction(for text: String) -> Bool {
+        let recentText = String(text.suffix(240))
+        guard recentText.count >= 24,
+              recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count >= 4 else {
+            return false
+        }
+        return recentLanguageCode(for: recentText) == nil
+    }
+
+    /// Post-dictation offers require a confident supported language rather
+    /// than the selected keyboard language as a fallback.
+    func canOfferLocalContinuation(for text: String) -> Bool {
+        recentLanguageCode(for: String(text.suffix(240))) != nil
+    }
+
+    private func recentLanguageCode(for recentText: String) -> String? {
+        // Typed keyboard input is shorter than dictation snippets. Detect once
+        // we have a couple of words / ~12 glyphs so DE/EN/FR/ES priors can
+        // adapt mid-sentence without waiting for a full paragraph.
+        let wordCount = recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        guard recentText.count >= 12,
+              wordCount >= 2,
+              !PredictionLanguageSafety.shouldAbstain(for: recentText) else {
+            return nil
+        }
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(recentText)
-        let hypotheses = recognizer.languageHypotheses(withMaximum: 2)
+        // Bias toward languages the keyboard actually ships dictionaries for.
+        recognizer.languageConstraints = SupportedLanguage.allCases.compactMap {
+            NLLanguage(rawValue: $0.rawValue)
+        }
+        let hypotheses = recognizer.languageHypotheses(withMaximum: 3)
             .sorted { $0.value > $1.value }
         guard let top = hypotheses.first else {
-            return
+            return nil
         }
         let secondProbability = hypotheses.dropFirst().first?.value ?? 0
-        guard top.value >= 0.70,
-              top.value - secondProbability >= 0.15,
+        let confidenceFloor: Double = wordCount >= 4 ? 0.55 : 0.62
+        let leadFloor: Double = wordCount >= 4 ? 0.08 : 0.12
+        guard top.value >= confidenceFloor,
+              top.value - secondProbability >= leadFloor,
               let language = Self.supportedLanguageCode(for: top.key.rawValue),
               UITextChecker.availableLanguages.contains(where: { $0.hasPrefix(language) }) else {
-            // Mixed-language and low-confidence context keeps the current
-            // dictionary instead of thrashing back to the selected language.
-            return
+            return nil
         }
-        setLanguage(language)
+        return language
     }
 
     private static func supportedLanguageCode(for identifier: String) -> String? {
-        switch identifier.lowercased() {
+        // NaturalLanguage can return regional identifiers such as `pt-BR`.
+        // Normalize to the base code and let the existing loader decide which
+        // bundled resources exist. UITextChecker still provides useful local
+        // completions for the other keyboard languages without a new download.
+        let baseCode = identifier
+            .lowercased()
+            .split(separator: "-")
+            .first
+            .map(String.init) ?? identifier.lowercased()
+        switch baseCode {
         case "de": return SupportedLanguage.german.rawValue
         case "en": return SupportedLanguage.english.rawValue
         case "es": return SupportedLanguage.spanish.rawValue
         case "fr": return SupportedLanguage.french.rawValue
-        default: return nil
+        default:
+            guard SupportedLanguage(rawValue: baseCode) != nil else { return nil }
+            return baseCode
         }
     }
 
@@ -212,7 +322,14 @@ class TextPredictionEngine {
     /// cache would only add an invalidation to get wrong — the other process
     /// writes to this dictionary too.
     func suggestions(for partialWord: String) -> [String] {
-        guard !partialWord.isEmpty else { return [] }
+        suggestions(for: partialWord, limit: 3)
+    }
+
+    /// Ranked typed-prefix completions for the active keyboard language.
+    /// `limit` widens the pool for next-letter priors without changing the
+    /// three visible suggestion-bar slots (those still call `limit: 3`).
+    func suggestions(for partialWord: String, limit: Int) -> [String] {
+        guard !partialWord.isEmpty, limit > 0 else { return [] }
 
         let nsString = partialWord as NSString
         let range = NSRange(location: 0, length: nsString.length)
@@ -226,18 +343,19 @@ class TextPredictionEngine {
         ) ?? []
 
         let learnedWords = UserDictionary.shared.learnedWordsByLastUsed
-        // Keep one extra system candidate when a learned word will claim a slot.
-        // That preserves the three visible slots without sorting the full checker result.
-        let rankingLimit = 3 + (LearnedWordCompletions.offer(
+        // Keep one extra system candidate when a learned word will claim a slot
+        // on the visible bar. Wider limits are for next-letter priors.
+        let rankingLimit = max(limit, 3) + (LearnedWordCompletions.offer(
             for: partialWord,
             in: learnedWords
         ) == nil ? 0 : 1)
         let ranked = frequencyDict.rankedCompletions(completions, limit: rankingLimit)
-        return LearnedWordCompletions.merge(
+        let merged = LearnedWordCompletions.merge(
             typedPrefix: partialWord,
             learnedWords: learnedWords,
             systemCompletions: ranked
         )
+        return Array(merged.prefix(limit))
     }
 
     /// Returns the best correction and alternatives for a misspelled word.
@@ -474,12 +592,100 @@ class TextPredictionEngine {
     /// When the user types a word not in the n-gram model (rare word, name, etc.),
     /// showing the most common words is better than an empty suggestion bar.
     /// These are the words most likely to follow any context.
-    func predictNextWords(after words: [String]) -> [String] {
-        let predictions = aospTrieEngine.predictNextWords(after: words)
+    func predictNextWords(after words: [String], maxResults: Int = 3) -> [String] {
+        let predictions = aospTrieEngine.predictNextWords(after: words, maxResults: maxResults)
         if predictions.isEmpty {
-            return frequencyDict.topWords(count: 3)
+            return frequencyDict.topWords(count: maxResults)
         }
         return predictions
+    }
+
+    /// N-gram-only continuation candidates. Unlike ordinary typing prediction,
+    /// post-dictation offers never fall back to generic frequent words.
+    func localContinuationCandidates(after words: [String], maxResults: Int = 3) -> [String] {
+        aospTrieEngine.predictNextWords(after: words, maxResults: maxResults)
+    }
+
+    /// Derives a bounded next-character distribution from the existing local
+    /// completion dictionary. No network or model-backed prediction is involved.
+    func nextCharacterProbabilities(for partialWord: String) -> NextCharacterProbabilities {
+        nextCharacterProbabilities(for: partialWord, after: [], isAtSentenceStart: false)
+    }
+
+    func nextCharacterProbabilities(
+        for partialWord: String,
+        after previousWords: [String],
+        isAtSentenceStart: Bool
+    ) -> NextCharacterProbabilities {
+        let prefix = partialWord.lowercased()
+        guard !prefix.isEmpty else { return NextCharacterProbabilities([:]) }
+
+        var weights: [String: Double] = [:]
+        // Pull a wider completion list so next-letter priors reflect the active
+        // typed-language dictionary, not only the top 3 bar suggestions.
+        let completionCandidates = suggestions(for: partialWord, limit: 24)
+        for (index, candidate) in completionCandidates.enumerated() {
+            let lowered = candidate.lowercased()
+            guard lowered.hasPrefix(prefix), lowered.count > prefix.count else { continue }
+            let nextIndex = lowered.index(lowered.startIndex, offsetBy: prefix.count)
+            let nextCharacter = String(lowered[nextIndex])
+            guard nextCharacter.count == 1 else { continue }
+            weights[nextCharacter, default: 0] += Double(12 - min(index, 11))
+        }
+
+        // Frequency-dictionary prefix fan-out catches letters the suggestion
+        // bar ranked away but that are still common for this typed language.
+        for (index, candidate) in frequencyDict.prefixCompletions(prefix: prefix, limit: 32).enumerated() {
+            let lowered = candidate.lowercased()
+            guard lowered.count > prefix.count else { continue }
+            let nextIndex = lowered.index(lowered.startIndex, offsetBy: prefix.count)
+            weights[String(lowered[nextIndex]), default: 0] += Double(6 - min(index / 4, 5))
+        }
+
+        // Add the existing local bigram/trigram signal when it knows the
+        // preceding words. A sentence boundary deliberately resets that signal.
+        let contextual = isAtSentenceStart
+            ? []
+            : predictNextWords(after: previousWords, maxResults: 12)
+        for (index, candidate) in contextual.enumerated() {
+            let lowered = candidate.lowercased()
+            guard lowered.hasPrefix(prefix), lowered.count > prefix.count else { continue }
+            let nextIndex = lowered.index(lowered.startIndex, offsetBy: prefix.count)
+            weights[String(lowered[nextIndex]), default: 0] += Double(10 - min(index, 9))
+        }
+        return NextCharacterProbabilities(weights)
+    }
+
+    func nextCharacterProbabilities(
+        after previousWords: [String],
+        isAtSentenceStart: Bool
+    ) -> NextCharacterProbabilities {
+        let candidates = isAtSentenceStart
+            ? frequencyDict.topWords(count: 8)
+            : predictNextWords(after: previousWords, maxResults: 8)
+        let weights = candidates.enumerated().reduce(into: [String: Double]()) { result, item in
+            guard let first = item.element.lowercased().first else { return }
+            let weight = Double(8 - min(item.offset, 7))
+            result[String(first), default: 0] += weight
+        }
+        return NextCharacterProbabilities(weights)
+    }
+
+    /// Best dictionary word for a sampled swipe path, or the sampled letters
+    /// when no ranked candidate exists.
+    func swipeWord(from path: String) -> String? {
+        let sampled = SwipeTypingDecoder.sampledLetters(from: path)
+        guard SwipeTypingDecoder.shouldCommit(path: sampled) else { return nil }
+        if let best = frequencyDict.swipeCandidates(path: sampled, limit: 1).first {
+            return best
+        }
+        if aospTrieEngine.wordExists(sampled) {
+            return sampled
+        }
+        if let result = aospTrieEngine.spellCheck(sampled) {
+            return result.correction
+        }
+        return sampled
     }
 
     /// Spell check with n-gram context boosting.

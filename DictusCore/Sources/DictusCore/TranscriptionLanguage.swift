@@ -2,6 +2,48 @@
 // Transcription (STT) language mode, decoupled from the keyboard language (issue #226).
 import Foundation
 
+/// Controls whether Auto transcription preserves language switches inside one
+/// recording or forces one source language for the ASR decoder.
+public enum TranscriptionOutputMode: String, CaseIterable, Equatable, Sendable {
+    case multilingual
+    case singleLanguage
+
+    public static let defaultMode: Self = .multilingual
+
+    public init(storedValue: String?) {
+        self = Self(rawValue: storedValue ?? "") ?? Self.defaultMode
+    }
+
+    public var storedValue: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .multilingual: return "Preserve spoken languages"
+        case .singleLanguage: return "Use one language"
+        }
+    }
+
+    public var explanation: String {
+        switch self {
+        case .multilingual:
+            return "Keeps German, English, Chinese and other spoken languages in the same dictation."
+        case .singleLanguage:
+            return "Uses the current keyboard language as the ASR language. This does not translate speech."
+        }
+    }
+
+    public static var active: Self {
+        active(from: AppGroup.defaults)
+    }
+
+    /// Reads the persisted product preference without coupling callers to a
+    /// particular UserDefaults suite. The missing value is the safe,
+    /// language-preserving default.
+    public static func active(from defaults: UserDefaults) -> Self {
+        Self(storedValue: defaults.string(forKey: SharedKeys.transcriptionOutputMode))
+    }
+}
+
 /// The transcription language policy used by the pipeline.
 ///
 /// The product always uses `.autoDetect`; the other cases remain for decoding
@@ -174,15 +216,22 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// Captured here so polish metrics describe the model that actually
     /// transcribed, even if the user switches models mid-dictation.
     public let modelIdentifier: String
+    /// Whether Auto transcription preserves spoken language switches or uses
+    /// one forced source language.
+    public let outputMode: TranscriptionOutputMode
 
     public init(mode: TranscriptionLanguageMode,
                 keyboardLanguage: SupportedLanguage,
                 engine: SpeechEngine,
-                modelIdentifier: String) {
+                modelIdentifier: String,
+                outputMode: TranscriptionOutputMode? = nil) {
         self.mode = mode
         self.keyboardLanguage = keyboardLanguage
         self.engine = engine
         self.modelIdentifier = modelIdentifier
+        // Preserve legacy explicit/follow callers while new Auto snapshots use
+        // the multilingual product default.
+        self.outputMode = outputMode ?? (mode == .autoDetect ? .multilingual : .singleLanguage)
     }
 
     /// Capture the current App Group state. Call once per dictation, at
@@ -190,23 +239,43 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// and finalization.
     public static func snapshot() -> TranscriptionLanguagePolicy {
         let defaults = AppGroup.defaults
+        TranscriptionLanguagePolicy.persistProductDefaults(to: defaults)
         let modelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
         return TranscriptionLanguagePolicy(
-            mode: TranscriptionLanguageMode(
-                storedValue: defaults.string(forKey: SharedKeys.transcriptionLanguage)
-            ),
+            mode: TranscriptionLanguageMode.active,
             keyboardLanguage: SupportedLanguage.active,
             engine: ModelInfo.forIdentifier(modelIdentifier)?.engine ?? .whisperKit,
-            modelIdentifier: modelIdentifier
+            modelIdentifier: modelIdentifier,
+            outputMode: TranscriptionOutputMode.active(from: defaults)
         )
+    }
+
+    /// Keep older installs on Auto-detect + multilingual STT while preserving
+    /// an explicit output-mode choice made in Settings.
+    public static func persistProductDefaults(to defaults: UserDefaults = AppGroup.defaults) {
+        defaults.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
+        if defaults.object(forKey: SharedKeys.transcriptionOutputMode) == nil {
+            defaults.set(TranscriptionOutputMode.defaultMode.storedValue,
+                         forKey: SharedKeys.transcriptionOutputMode)
+        }
     }
 
     /// Language code for the STT engine, or `nil` for Whisper auto-detection.
     /// Parakeet ignores the parameter either way; it receives the keyboard
     /// code exactly as it did before #226 so its flows stay byte-identical.
     public var sttLanguageCode: String? {
-        guard engine == .whisperKit || engine == .qwen3ASR else { return keyboardLanguage.rawValue }
-        return mode.resolvedLanguageCode(keyboardLanguageCode: keyboardLanguage.rawValue)
+        guard engine == .whisperKit else {
+            // Parakeet ignores this parameter; retain its existing call shape
+            // and expose the limitation through `sttLanguageIsEffective`.
+            return keyboardLanguage.rawValue
+        }
+        guard outputMode == .singleLanguage else { return nil }
+        // Auto + single-language mode means "one language, chosen by the
+        // current keyboard". The mode itself intentionally resolves to nil
+        // because nil is the correct value for multilingual Auto.
+        return mode == .autoDetect
+            ? keyboardLanguage.rawValue
+            : mode.resolvedLanguageCode(keyboardLanguageCode: keyboardLanguage.rawValue)
     }
 
     /// Polish-stage prompt selection (#239, resolution order fixed in #332).
@@ -245,11 +314,26 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     ///   the four supported languages. Injected by the caller rather than
     ///   detected here so this stays a pure, testable function.
     public func polishPromptSelection(
-        detectedLanguage: SupportedLanguage?
+        detectedLanguage: SupportedLanguage?,
+        translationTarget: TranslationLanguage? = nil
     ) -> PolishPromptSelection {
+        // AUTO translation is an explicit "write this in one language"
+        // instruction and outranks the transcript-language setting.
+        if let translationTarget {
+            if let language = SupportedLanguage(rawValue: translationTarget.rawValue) {
+                return .language(language)
+            }
+            return .autoDetected
+        }
+        // "Preserve spoken languages" must never pick a polish target: the
+        // per-language path (and Parakeet repair) would translate mixed
+        // speech into the keyboard language.
+        if outputMode == .multilingual {
+            return .autoDetected
+        }
         switch mode {
         case .autoDetect:
-            return .autoDetected
+            return .language(keyboardLanguage)
         case .explicit(let language):
             return .language(language)
         case .followKeyboard:
@@ -261,6 +345,29 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
         }
     }
 
+    /// Language for the deterministic grammar floor after cleanup. `nil` keeps
+    /// mixed and CJK scripts intact; a value applies that language's fillers,
+    /// verbal punctuation, and capitalisation.
+    public var grammarFloorLanguage: SupportedLanguage? {
+        grammarFloorLanguage(translationTarget: nil)
+    }
+
+    public func grammarFloorLanguage(
+        translationTarget: TranslationLanguage?
+    ) -> SupportedLanguage? {
+        if let translationTarget {
+            return SupportedLanguage(rawValue: translationTarget.rawValue)
+        }
+        return outputMode == .multilingual ? nil : keyboardLanguage
+    }
+
+    /// Mixed-language Auto must not run whole-document polish: even the
+    /// language-agnostic prompt still rewrites clauses into one language.
+    /// Span-aware polish may still run on confident monolingual slices.
+    public func skipsModelPolish(translationTarget: TranslationLanguage? = nil) -> Bool {
+        translationTarget == nil && outputMode == .multilingual
+    }
+
     /// Whether the STT engine actually honours `sttLanguageCode` (#332).
     ///
     /// Parakeet auto-detects from audio and ignores the parameter entirely
@@ -270,7 +377,7 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// when the raw text was French; recording this alongside it is what
     /// removes the ambiguity.
     public var sttLanguageIsEffective: Bool {
-        engine == .whisperKit || engine == .qwen3ASR
+        engine == .whisperKit
     }
 
     /// `sttLanguageCode` rendered for logs and the debug export, with `nil`
@@ -284,6 +391,6 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// output language is unknown and appending Western punctuation to e.g.
     /// CJK text would corrupt it.
     public var insertsTranscriptionAsIs: Bool {
-        (engine == .whisperKit || engine == .qwen3ASR) && mode == .autoDetect
+        engine == .whisperKit && outputMode == .multilingual
     }
 }

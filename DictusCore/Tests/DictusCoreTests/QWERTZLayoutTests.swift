@@ -77,7 +77,8 @@ final class QWERTZLayoutTests: XCTestCase {
     }
 
     func testEszettIsReachableByLongPressOnS() {
-        XCTAssertEqual(AccentedCharacters.mappings["s"], ["\u{00DF}"])
+        XCTAssertTrue(AccentedCharacters.mappings["s"]?.contains("\u{00DF}") == true,
+                      "ß remains on the S hold; additional Slavic variants may sit beside it")
     }
 
     // MARK: - Data conventions

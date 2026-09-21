@@ -14,6 +14,10 @@ struct DiagnosticDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                SaiityPageHeader(eyebrow: "CONNECTION CHECK", title: "App. Keyboard. Connected.",
+                                 subtitle: "Check the shared space that carries your dictation between apps.")
+            }.listRowBackground(Color.clear)
             Section("App Group") {
                 diagnosticRow("Container", result.containerExists)
                 diagnosticRow("Read", result.canRead)
@@ -27,7 +31,7 @@ struct DiagnosticDetailView: View {
             }
         }
         .navigationTitle("Diagnostics")
-        .accessibilityAddTraits(.isModal)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder

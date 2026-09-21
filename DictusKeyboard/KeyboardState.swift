@@ -1,6 +1,7 @@
 // DictusKeyboard/KeyboardState.swift
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 import Combine
 import DictusCore
 
@@ -13,6 +14,9 @@ import DictusCore
 /// - Auto-insert transcription into active text field via textDocumentProxy
 /// - Haptic feedback on recording lifecycle events
 class KeyboardState: ObservableObject {
+    /// Shift-key double-tap clock. Owned here so a SwiftUI rebuild of the
+    /// letter page during the first tap cannot forget the second tap.
+    var lastShiftTapDate = Date.distantPast
     static let shared = KeyboardState()
     private let instanceID = String(UUID().uuidString.prefix(8))
 
@@ -106,6 +110,9 @@ class KeyboardState: ObservableObject {
             // `refreshFromDefaults`, so a reset placed there would be bypassed.
             if dictationStatus != .failed {
                 presentedErrorMessage = nil
+            }
+            if dictationStatus != .requested && dictationStatus != .recording {
+                cancelDictationReleaseTail()
             }
         }
     }
@@ -243,6 +250,12 @@ class KeyboardState: ObservableObject {
     @Published var waveformEnergy: [Float] = []
     @Published var recordingElapsed: Double = 0
 
+    /// True during the short release tail after the user lifts the dictate
+    /// button. Audio is still owned by DictusApp until the delayed stop request
+    /// fires, while the keyboard can immediately show that processing is being
+    /// prepared.
+    @Published private(set) var isFinishingRecording = false
+
     /// Darwin notifications can arrive in bursts while the extension is waking.
     /// Keep at most one main-queue read pending and skip payloads already decoded.
     private let waveformReadLock = NSLock()
@@ -260,12 +273,32 @@ class KeyboardState: ObservableObject {
 
     /// Combined action state consumed by the UIKit hit layer and SwiftUI label.
     @Published private(set) var appNeedsAppAction = false
+    /// Home Screen "Keyboard dictation" preference. Missing values stay on.
+    @Published private(set) var keyboardDictationEnabled: Bool = {
+        let defaults = AppGroup.defaults
+        return defaults.object(forKey: SharedKeys.serviceEnabled) == nil
+            || defaults.bool(forKey: SharedKeys.serviceEnabled)
+    }()
     @Published var accessoryDictationActive = false
+    /// A foreground handoff cancels the UIKit touch, not the recording request.
+    /// Published so the recovery button can acknowledge the tap immediately even
+    /// before iOS finishes switching away from the keyboard extension.
+    @Published var isOpeningForDictation = false
 
     /// True when the host field advertises iOS's one-time-code content type.
-    /// This only changes the local paste affordance; iOS remains responsible for
-    /// delivering SMS verification-code AutoFill suggestions.
     @Published private(set) var isOneTimeCodeField = false
+    /// Number/phone/OTP fields open the 3×4 number pad instead of ABC.
+    @Published private(set) var hostPrefersNumberPad = false
+    @Published private(set) var hostNumberPadStyle: HostFieldPolicy.NumberPadStyle = .digits
+    @Published private(set) var hostLetterFieldKeys: HostFieldPolicy.LetterFieldKeys = .standard
+    @Published private(set) var hostPrefersSymbolPage = false
+    /// True when `.numberPad` was opened because the host field asked for a pad,
+    /// so leaving that field can restore letters or the dictation board.
+    private var autoPresentedNumberPad = false
+    private var autoPresentedSymbolPage = false
+    /// Unused pasteboard preview. Kept so appear/disappear can clear it without
+    /// reading UIPasteboard. Paste still goes through an explicit tap.
+    @Published private(set) var clipboardSuggestion: SuggestionLaneClipboardItem?
 
     /// Emits readiness changes for UIKit controls that cannot observe the
     /// SwiftUI object directly. The controller schedules its layout on the
@@ -316,13 +349,47 @@ class KeyboardState: ObservableObject {
     /// a reliable routing authority for the recovery button.
     var openContainingApp: ((URL, @escaping (Bool) -> Void) -> Void)?
 
+    /// UIKit suggestion-lane category scrubber reports an index; SwiftUI maps it
+    /// onto the emoji picker's category jump.
+    var onSelectEmojiCategory: ((Int) -> Void)?
+    @Published private(set) var emojiCategoryJumpIndex = 0
+    @Published private(set) var emojiCategoryJumpToken = UUID()
+    @Published private(set) var emojiCategoryBarOffset: CGFloat = 0
+    @Published private(set) var emojiCategorySelectionIndex = 0
+    @Published private(set) var emojiCategoryBarExpanded = false
+
+    func selectEmojiCategory(at index: Int) {
+        emojiCategorySelectionIndex = max(0, index)
+        emojiCategoryJumpIndex = index
+        emojiCategoryJumpToken = UUID()
+        onSelectEmojiCategory?(index)
+    }
+
+    func setEmojiCategorySelectionIndex(_ index: Int) {
+        let normalized = max(0, index)
+        guard emojiCategorySelectionIndex != normalized else { return }
+        emojiCategorySelectionIndex = normalized
+    }
+
+    func setEmojiCategoryBarExpanded(_ expanded: Bool) {
+        guard emojiCategoryBarExpanded != expanded else { return }
+        emojiCategoryBarExpanded = expanded
+    }
+
+    func setEmojiCategoryBarOffset(_ offset: CGFloat) {
+        let normalized = max(0, offset)
+        guard abs(emojiCategoryBarOffset - normalized) > 0.5 else { return }
+        emojiCategoryBarOffset = normalized
+    }
+
     /// The active model's actual input-language detection capability.
     /// Translation readiness is deliberately not inferred here.
     var asrCapability: ASRCapability {
         ASRCapability.forModelIdentifier(
             defaults.string(forKey: SharedKeys.activeModel),
             mode: languageRequest.mode,
-            keyboardLanguage: SupportedLanguage.active
+            keyboardLanguage: SupportedLanguage.active,
+            outputMode: TranscriptionOutputMode.active
         )
     }
 
@@ -330,27 +397,44 @@ class KeyboardState: ObservableObject {
         TranslationTargetReadiness.load(from: defaults)
     }
 
-    var translationTargets: [SupportedLanguage] {
-        let ready = translationReadiness?.selectableTargets(for: asrCapability.sourceLanguage) ?? []
+    private var currentTranslationReadiness: TranslationTargetReadiness? {
+        let sourceCode = asrCapability.sourceLanguage?.rawValue
+        guard let readiness = translationReadiness,
+              readiness.matchesSourceCode(sourceCode) else { return nil }
+        return readiness
+    }
+
+    var translationTargets: [TranslationLanguage] {
+        let sourceCode = asrCapability.sourceLanguage?.rawValue
+        let ready = currentTranslationReadiness?.selectableTargets(forSourceCode: sourceCode) ?? []
         if !ready.isEmpty { return ready }
-        return SupportedLanguage.allCases.filter { $0 != asrCapability.sourceLanguage }
+        return TranslationLanguage.allCases.filter { $0.code != sourceCode }
     }
 
-    func translationTargetStatus(_ target: SupportedLanguage) -> TranslationTargetStatus {
-        translationReadiness?.status(for: target, sourceLanguage: asrCapability.sourceLanguage) ?? .unavailable
+    func translationTargetStatus(_ target: TranslationLanguage) -> TranslationTargetStatus {
+        currentTranslationReadiness?.status(
+            for: target,
+            sourceCode: asrCapability.sourceLanguage?.rawValue
+        ) ?? .checking
     }
 
-    func translationTargetMenuLabel(_ target: SupportedLanguage) -> String {
-        translationReadiness?.menuLabel(for: target, sourceLanguage: asrCapability.sourceLanguage)
-            ?? "Translate to \(target.displayName) (Unavailable)"
+    func translationTargetMenuLabel(_ target: TranslationLanguage) -> String {
+        currentTranslationReadiness?.menuLabel(
+            for: target,
+            sourceCode: asrCapability.sourceLanguage?.rawValue
+        )
+            ?? "Translate to \(target.displayName) (Checking availability)"
     }
 
-    func translationTargetAccessibilityLabel(_ target: SupportedLanguage) -> String {
-        translationReadiness?.accessibilityLabel(for: target, sourceLanguage: asrCapability.sourceLanguage)
-            ?? "Translate to \(target.displayName), unavailable"
+    func translationTargetAccessibilityLabel(_ target: TranslationLanguage) -> String {
+        currentTranslationReadiness?.accessibilityLabel(
+            for: target,
+            sourceCode: asrCapability.sourceLanguage?.rawValue
+        )
+            ?? "Translate to \(target.displayName), checking availability"
     }
 
-    var selectedTranslationTarget: SupportedLanguage? {
+    var selectedTranslationTarget: TranslationLanguage? {
         languageRequest.translationTarget
     }
 
@@ -363,7 +447,7 @@ class KeyboardState: ObservableObject {
         languageRequest = request
     }
 
-    func selectTranslation(_ target: SupportedLanguage) {
+    func selectTranslation(_ target: TranslationLanguage) {
         let request = DictationLanguageRequest(
             mode: TranscriptionLanguageMode.active,
             translationTarget: target
@@ -372,30 +456,144 @@ class KeyboardState: ObservableObject {
         languageRequest = request
     }
 
-    /// Called after transcription text is inserted into the text field.
-    /// KeyboardViewController sets this to trigger a SuggestionState update
-    /// so the suggestion bar shows completions for the last dictated word.
-    var onTranscriptionInserted: (() -> Void)?
+    @Published private(set) var typingLanguage = SupportedLanguage.active
+    @Published private(set) var typingLanguageIsAutomatic = false
 
-    /// Opens a URL from the keyboard extension using NSExtensionContext.
-    /// WHY extensionContext: This is the Apple-documented API for app extensions
-    /// to open URLs. Neither SwiftUI's openURL nor the responder chain work
-    /// reliably in keyboard extensions.
+    func refreshTypingLanguage() {
+        let language = SupportedLanguage.active
+        let isAutomatic = KeyboardLanguageSelection.load(from: defaults) == .automatic
+        if language != typingLanguage {
+            SuggestionState.shared.setLanguage(language.rawValue)
+        }
+        typingLanguage = language
+        typingLanguageIsAutomatic = isAutomatic
+    }
+
+    func selectTypingLanguage(_ language: SupportedLanguage) {
+        SupportedLanguage.activate(language)
+        refreshTypingLanguage()
+    }
+
+    func selectAutomaticTypingLanguage() {
+        KeyboardLanguageSelection.automatic.persist(to: defaults)
+        let resolved = KeyboardLanguageSelection.resolve(locale: .current, defaults: defaults)
+        defaults.set(resolved.rawValue, forKey: SharedKeys.language)
+        refreshTypingLanguage()
+    }
+
+    func selectKeyboardLayout(_ layout: LayoutType) {
+        KeyboardLayoutPreference.setGlobalLayout(layout)
+        objectWillChange.send()
+    }
+
+    /// Opens through the currently visible keyboard extension context.
+    /// SwiftUI's openURL action is a fallback when the extension context rejects
+    /// the handoff.
     func openURLFromExtension(_ url: URL, completion: @escaping (Bool) -> Void) {
-        if let openContainingApp {
-            openContainingApp(url, completion)
+        if let extensionContext = controller?.extensionContext {
+            let fallback = openContainingApp
+            extensionContext.open(url) { succeeded in
+                guard !succeeded, let fallback else {
+                    completion(succeeded)
+                    return
+                }
+                fallback(url, completion)
+            }
             return
         }
-        guard let extensionContext = controller?.extensionContext else {
+        guard let openContainingApp else {
             completion(false)
             return
         }
-        extensionContext.open(url, completionHandler: completion)
+        openContainingApp(url, completion)
     }
 
     /// Refreshes the host-field metadata used by the keyboard UI.
-    func refreshHostInputTraits(from proxy: UITextDocumentProxy) {
+    /// `applyArea` is false while `viewWillAppear` is about to choose the
+    /// opening surface, so a number field is not presented twice.
+    func refreshHostInputTraits(from proxy: UITextDocumentProxy, applyArea: Bool = true) {
         isOneTimeCodeField = HostInputTraits.isOneTimeCodeField(for: proxy)
+        let prefers = HostInputTraits.prefersNumberPad(for: proxy)
+        let previouslyPreferred = hostPrefersNumberPad
+        hostPrefersNumberPad = prefers
+        hostNumberPadStyle = HostInputTraits.numberPadStyle(for: proxy) ?? .digits
+        hostLetterFieldKeys = HostInputTraits.letterFieldKeys(for: proxy)
+        let previouslySymbols = hostPrefersSymbolPage
+        hostPrefersSymbolPage = HostInputTraits.prefersSymbolPage(for: proxy)
+        guard applyArea else { return }
+        applyHostNumberPadArea(previouslyPreferred: previouslyPreferred)
+        applyHostSymbolPage(previouslyPreferred: previouslySymbols)
+    }
+
+    /// Opening surface after the keyboard appears. Number fields open the 3×4
+    /// pad; otherwise the saved dictation/keyboard preference.
+    func presentPreferredOpeningArea() {
+        let mode: KeyboardAreaMode
+        if hostPrefersNumberPad {
+            mode = .numberPad
+        } else if hostPrefersSymbolPage {
+            mode = .panel
+        } else {
+            mode = KeyboardAreaMode.openingMode(
+                prefersNumberPad: false,
+                defaultMode: DefaultKeyboardMode.active
+            )
+        }
+        autoPresentedNumberPad = mode == .numberPad
+        autoPresentedSymbolPage = mode == .panel
+        presentArea(mode, registerUserDismissal: false)
+    }
+
+    /// 123 from the dictation board, letter keyboard, or emoji page. Numeric
+    /// fields reopen the 3×4 pad; other fields still open symbols.
+    func presentNumbersArea() {
+        presentArea(KeyboardAreaMode.numbersMode(prefersNumberPad: hostPrefersNumberPad))
+    }
+
+    /// Pasteboard text is read only when the user taps Paste. Automatic reads
+    /// (timers, appear retries, host-trait refresh) show the system clipboard
+    /// banner and are not used.
+    func refreshClipboardSuggestion(force: Bool = false) {
+        _ = force
+        pasteboardChangeCount = Int.min
+        if clipboardSuggestion != nil {
+            clipboardSuggestion = nil
+        }
+    }
+
+    func startClipboardMonitoring() {
+        refreshClipboardSuggestion()
+    }
+
+    func stopClipboardMonitoring() {
+        refreshClipboardSuggestion()
+    }
+
+    /// Reads every text representation the pasteboard may be holding.
+    /// The values themselves are not logged.
+    static func readPasteboardText(from board: UIPasteboard) -> String? {
+        if let resolved = SuggestionLaneClipboardItem.resolvedText(
+            string: board.hasStrings ? board.string : nil,
+            strings: board.hasStrings ? board.strings : nil,
+            urlString: board.hasURLs ? board.url?.absoluteString : nil
+        ) {
+            return resolved
+        }
+        let types = [UTType.utf8PlainText.identifier, UTType.plainText.identifier]
+        for type in types {
+            guard let data = board.data(forPasteboardType: type),
+                  let string = String(data: data, encoding: .utf8) else {
+                continue
+            }
+            if let resolved = SuggestionLaneClipboardItem.resolvedText(
+                string: string,
+                strings: nil,
+                urlString: nil
+            ) {
+                return resolved
+            }
+        }
+        return nil
     }
 
     /// A failed attempt needs the app when its model or service must be brought
@@ -407,10 +605,41 @@ class KeyboardState: ObservableObject {
 
     /// Open the app without creating another recording request.
     func openDictusForRecovery() {
-        guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 0.75 else { return }
+        guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 0.75 else {
+            HapticFeedback.actionRefused()
+            return
+        }
         lastModelPreparationOpenDate = Date()
-        guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else { return }
-        openDictusURL(url)
+        guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else {
+            HapticFeedback.actionRefused()
+            return
+        }
+        isOpeningForDictation = true
+        HapticFeedback.dictationPressBegan()
+        presentStatusMessage(
+            "Opening sAiity…",
+            reason: "recovery-opening",
+            timeoutReason: "recovery-opening-timeout"
+        )
+        logProbe("openDictusForRecovery", details: "url=\(url.absoluteString)")
+        // Launching from touch-down can be ignored while the keyboard host still
+        // owns the active touch. Keep the immediate acknowledgement, then hand
+        // off on the next main-run-loop turn.
+        DispatchQueue.main.async { [weak self] in
+            self?.openDictusURL(url)
+        }
+    }
+
+    /// Same preference as Home's "Keyboard dictation" toggle. The app applies
+    /// the session change when it receives the Darwin ping.
+    func setKeyboardDictationEnabled(_ enabled: Bool) {
+        guard keyboardDictationEnabled != enabled else { return }
+        defaults.set(enabled, forKey: SharedKeys.serviceEnabled)
+        defaults.synchronize()
+        keyboardDictationEnabled = enabled
+        HapticFeedback.keyTapped()
+        DarwinNotificationCenter.post(DarwinNotificationName.serviceToggleRequested)
+        refreshFromDefaults()
     }
 
     private let defaults = AppGroup.defaults
@@ -421,6 +650,7 @@ class KeyboardState: ObservableObject {
     /// detects this by checking if waveform data has stopped updating for 5s
     /// while status is still .recording or .transcribing.
     private var watchdogTimer: Timer?
+    private var dictationReleaseTimer: Timer?
 
     /// Tracks when waveform energy was last refreshed from App Group.
     /// Used by the watchdog to detect stale states (no updates for 5s).
@@ -431,6 +661,7 @@ class KeyboardState: ObservableObject {
     /// stabilize audio recording and start posting waveform updates.
     /// Cleared automatically when recording ends (status becomes idle).
     private var coldStartGraceEnd: Date?
+    private var pasteboardChangeCount = Int.min
 
     private init() {
         PersistentLog.log(.diagnosticProbe(
@@ -440,6 +671,7 @@ class KeyboardState: ObservableObject {
             details: ""
         ))
         // Read initial state from App Group
+        TranscriptionLanguagePolicy.persistProductDefaults(to: defaults)
         refreshFromDefaults()
 
         // Observe Darwin notifications for real-time updates
@@ -480,16 +712,27 @@ class KeyboardState: ObservableObject {
             }
         }
 
+        DarwinNotificationCenter.addObserver(
+            for: DarwinNotificationName.keyboardPreferencesChanged
+        ) { [weak self] in
+            DispatchQueue.main.async {
+                self?.objectWillChange.send()
+                SuggestionState.shared.refreshPreferences()
+            }
+        }
+
     }
 
     deinit {
         logProbe("deinit")
         stopWatchdog()
         transcribingHoldTimer?.invalidate()
+        dictationReleaseTimer?.invalidate()
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.waveformUpdate)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.modelReadinessChanged)
+        DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardPreferencesChanged)
     }
 
     // MARK: - Watchdog
@@ -519,6 +762,8 @@ class KeyboardState: ObservableObject {
     func forceResetToIdle() {
         guard !isResettingToIdle else { return }
         isResettingToIdle = true
+        cancelDictationReleaseTail()
+        isOpeningForDictation = false
         sessionGeneration += 1
         defer { isResettingToIdle = false }
 
@@ -640,13 +885,71 @@ class KeyboardState: ObservableObject {
         areaMode = KeyboardAreaMode.resolving(status: dictationStatus, current: areaMode)
     }
 
-    func presentArea(_ mode: KeyboardAreaMode) {
+    private func applyHostNumberPadArea(previouslyPreferred: Bool) {
         guard !dictationStatus.ownsKeyboardArea else { return }
+        if hostPrefersNumberPad && !previouslyPreferred {
+            autoPresentedNumberPad = true
+            presentArea(.numberPad, registerUserDismissal: false)
+            return
+        }
+        if hostPrefersNumberPad {
+            return
+        }
+        guard previouslyPreferred, autoPresentedNumberPad, areaMode == .numberPad else {
+            autoPresentedNumberPad = false
+            return
+        }
+        autoPresentedNumberPad = false
+        presentArea(
+            KeyboardAreaMode.openingMode(
+                prefersNumberPad: false,
+                defaultMode: DefaultKeyboardMode.active
+            ),
+            registerUserDismissal: false
+        )
+    }
+
+    private func applyHostSymbolPage(previouslyPreferred: Bool) {
+        guard !dictationStatus.ownsKeyboardArea, !hostPrefersNumberPad else { return }
+        if hostPrefersSymbolPage && !previouslyPreferred {
+            autoPresentedSymbolPage = true
+            presentArea(.panel, registerUserDismissal: false)
+            return
+        }
+        if hostPrefersSymbolPage { return }
+        guard previouslyPreferred, autoPresentedSymbolPage, areaMode == .panel else {
+            autoPresentedSymbolPage = false
+            return
+        }
+        autoPresentedSymbolPage = false
+        presentArea(
+            KeyboardAreaMode.openingMode(
+                prefersNumberPad: false,
+                defaultMode: DefaultKeyboardMode.active
+            ),
+            registerUserDismissal: false
+        )
+    }
+
+    func presentArea(_ mode: KeyboardAreaMode, registerUserDismissal: Bool = true) {
+        guard !dictationStatus.ownsKeyboardArea else { return }
+        if registerUserDismissal, hostPrefersNumberPad, mode != .numberPad {
+            autoPresentedNumberPad = false
+        }
+        if registerUserDismissal, hostPrefersSymbolPage, mode != .panel {
+            autoPresentedSymbolPage = false
+        }
         areaMode = mode
     }
 
     func closeArea() {
         guard !dictationStatus.ownsKeyboardArea else { return }
+        if hostPrefersNumberPad {
+            autoPresentedNumberPad = false
+        }
+        if hostPrefersSymbolPage {
+            autoPresentedSymbolPage = false
+        }
         areaMode = .keys
     }
 
@@ -654,6 +957,7 @@ class KeyboardState: ObservableObject {
 
     /// Press-and-hold began on the dictate control (UIKit overlay or SwiftUI fallback).
     func handleMicPressBegan() {
+        cancelDictationReleaseTail()
         // Model state is written by the app process. Read it immediately before
         // deciding whether this tap records or opens the app, so a missed Darwin
         // delivery can never leave the button stuck on a stale label.
@@ -662,45 +966,81 @@ class KeyboardState: ObservableObject {
         case .idle, .ready:
             if appNeedsAppAction {
                 PersistentLog.log(.keyboardMicTapped)
-                deferRecordingForModelPreparation(reason: "app is not warm in background")
+                openDictusForRecovery()
             } else {
+                HapticFeedback.recordingStarted()
                 startRecording()
             }
         case .failed:
             if failedRequiresApp {
                 openDictusForRecovery()
             } else {
+                HapticFeedback.recordingStarted()
                 startRecording()
             }
         case .transcribing, .processing:
-            // Cleanup never finished (host app suspended). Don't leave the mic
-            // dead on "Cleaning up..." — drop the stale round and start again.
-            abandonStuckCleanup()
-            startRecording()
+            // The current round is still authoritative. Cancel it rather than
+            // starting a second dictation while Whisper or cleanup is running.
+            cancelActiveDictation()
         case .requested, .recording:
             return
         }
     }
 
-    private func abandonStuckCleanup() {
-        defaults.set(true, forKey: SharedKeys.cancelRequested)
-        defaults.synchronize()
-        DarwinNotificationCenter.post(DarwinNotificationName.cancelRecording)
-        lastMicTapDate = Date.distantPast
-        forceResetToIdle()
+    /// Cancel an active dictation from the microphone control without waiting for
+    /// the normal recording-release path. This also covers transcription and
+    /// cleanup, where `requestStop()` correctly does nothing by design.
+    func cancelActiveDictation() {
+        refreshFromDefaults()
+        guard DictationSessionLivenessPolicy.isActive(dictationStatus) else { return }
+        requestCancel()
+        HapticFeedback.recordingStopped()
     }
 
     /// Press-and-hold ended on the dictate control.
     func handleMicPressEnded() {
         refreshFromDefaults()
         guard dictationStatus == .requested || dictationStatus == .recording else { return }
-        requestStop()
+        // The audio tail is intentionally delayed to preserve the final word;
+        // feedback should stay anchored to the user's finger lift.
+        HapticFeedback.recordingStopped()
+        scheduleDictationReleaseTail()
+    }
+
+    /// Keep the microphone open briefly after release so the final spoken word
+    /// is not lost to a finger lifting slightly before speech ends.
+    private func scheduleDictationReleaseTail() {
+        guard dictationReleaseTimer == nil else { return }
+        isFinishingRecording = true
+        let timer = Timer(
+            timeInterval: KeyboardDeletion.dictationReleaseTailDuration,
+            repeats: false
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.dictationReleaseTimer = nil
+            guard self.dictationStatus == .requested || self.dictationStatus == .recording else {
+                self.isFinishingRecording = false
+                return
+            }
+            self.isFinishingRecording = false
+            self.requestStop()
+        }
+        dictationReleaseTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// A new hold within the tail continues the same recording session.
+    private func cancelDictationReleaseTail() {
+        dictationReleaseTimer?.invalidate()
+        dictationReleaseTimer = nil
+        isFinishingRecording = false
     }
 
     /// Request DictusApp to stop recording and begin transcription.
     /// Uses the Darwin notification + Bool flag pattern: write the flag first,
     /// then post the notification so the app reads the flag when it handles the notification.
     func requestStop() {
+        cancelDictationReleaseTail()
         logProbe("requestStop", details: sessionDetails())
 
         if dictationStatus == .requested {
@@ -733,13 +1073,14 @@ class KeyboardState: ObservableObject {
         defaults.set(true, forKey: SharedKeys.stopRequested)
         defaults.synchronize()
         DarwinNotificationCenter.post(DarwinNotificationName.stopRecording)
-        HapticFeedback.recordingStopped()
     }
 
     /// Request DictusApp to cancel recording and discard audio.
     /// Resets local keyboard state immediately for instant UI feedback,
     /// while the Darwin notification tells the app to clean up its side.
     func requestCancel() {
+        cancelDictationReleaseTail()
+        isOpeningForDictation = false
         logProbe("requestCancel", details: sessionDetails())
         sessionGeneration += 1
         DictationDelivery.clear(in: defaults)
@@ -767,6 +1108,7 @@ class KeyboardState: ObservableObject {
         logProbe("refreshFromDefaults", details: "storedStatus=\(defaults.string(forKey: SharedKeys.dictationStatus) ?? "nil") visible=\(isKeyboardVisible) \(sessionDetails())")
         languageRequest = Self.loadLanguageRequest(from: defaults)
         refreshModelPreparationState()
+        refreshTypingLanguage()
 
         // Read BEFORE the reconcile guard below (#315): that guard returns early
         // on an abandoned dictation, and the polish state has nothing to do with
@@ -952,30 +1294,53 @@ class KeyboardState: ObservableObject {
         }
         let phase = defaults.string(forKey: SharedKeys.appScenePhase)
             .flatMap(AppScenePhaseMarker.init(rawValue:)) ?? .unknown
+        let persistedModelReady = defaults.bool(forKey: SharedKeys.modelReady)
+        let activeModel = defaults.string(forKey: SharedKeys.activeModel)
+        let downloadedModels = KeyboardModelPreparationPolicy.downloadedModelIDs(
+            from: defaults.object(forKey: SharedKeys.downloadedModels)
+        )
+        let modelReady = KeyboardModelPreparationPolicy.effectiveModelReady(
+            modelReady: persistedModelReady,
+            activeModel: activeModel,
+            downloadedModels: downloadedModels
+        )
         let needsModelPreparation = KeyboardModelPreparationPolicy.shouldOpenApp(
-            modelReady: defaults.bool(forKey: SharedKeys.modelReady),
+            modelReady: modelReady,
             modelLoadState: loadState,
             appPhase: phase,
             modelLoadStartedAt: loadStartedAt
         )
         appNeedsModelPreparation = needsModelPreparation
 
-        let status = defaults.string(forKey: SharedKeys.dictationStatus)
-            .flatMap(DictationStatus.init(rawValue:))
         let serviceEnabled = defaults.object(forKey: SharedKeys.serviceEnabled) == nil
             || defaults.bool(forKey: SharedKeys.serviceEnabled)
+        if keyboardDictationEnabled != serviceEnabled {
+            keyboardDictationEnabled = serviceEnabled
+        }
         let heartbeat = defaults.double(forKey: SharedKeys.appProcessHeartbeat)
-        let liveActivityUpdatedAt = defaults.double(forKey: SharedKeys.liveActivityUpdatedAt)
-        let needsServiceRecovery = !DictationSessionLivenessPolicy.isActive(status ?? .idle)
-            && DictationServiceLivenessPolicy.shouldOpenApp(
-                serviceEnabled: serviceEnabled,
-                appProcessHeartbeat: heartbeat > 0 ? heartbeat : nil,
-                liveActivityPresent: defaults.bool(forKey: SharedKeys.liveActivityPresent),
-                liveActivityUpdatedAt: liveActivityUpdatedAt > 0 ? liveActivityUpdatedAt : nil,
-                audioReady: defaults.bool(forKey: SharedKeys.keyboardAudioReady)
-            )
+        let appHeartbeat = heartbeat > 0 ? heartbeat : nil
+        let liveActivityPresent = defaults.bool(forKey: SharedKeys.liveActivityPresent)
+        let activityTimestamp = defaults.double(forKey: SharedKeys.liveActivityUpdatedAt)
+        let liveActivityUpdatedAt = activityTimestamp > 0 ? activityTimestamp : nil
+        let audioReady = defaults.bool(forKey: SharedKeys.keyboardAudioReady)
+
+        // Heartbeats are recovery hints, not proof of microphone readiness.
+        // Direct holds require the explicitly enabled background audio session;
+        // Darwin notifications cannot launch or unsuspend a cold audio process.
+        let serviceNeedsRecovery = DictationServiceLivenessPolicy.shouldOfferRecovery(
+            modelReady: modelReady,
+            serviceEnabled: serviceEnabled,
+            appProcessHeartbeat: appHeartbeat,
+            liveActivityPresent: liveActivityPresent,
+            liveActivityUpdatedAt: liveActivityUpdatedAt,
+            audioReady: audioReady
+        )
+        let needsServiceRecovery = serviceNeedsRecovery
         appNeedsServiceRecovery = needsServiceRecovery
-        appNeedsAppAction = needsModelPreparation || needsServiceRecovery
+        // A ready model does not imply a usable background microphone. Include
+        // service recovery so the keyboard cannot offer a dead hold after an
+        // idle release, interruption, or engine teardown.
+        appNeedsAppAction = needsModelPreparation || !serviceEnabled || needsServiceRecovery
     }
 
     @discardableResult
@@ -1002,10 +1367,11 @@ class KeyboardState: ObservableObject {
     /// calling, which is what stops a redelivered Darwin notification from inserting
     /// the same text twice.
     private func insertTranscription(_ transcription: String) {
-        controller?.textDocumentProxy.insertText(transcription)
+        cancelDictationReleaseTail()
+        guard let proxy = controller?.textDocumentProxy else { return }
+        proxy.insertText(transcription)
         PersistentLog.log(.keyboardTextInserted)
         HapticFeedback.textInserted()
-        onTranscriptionInserted?()
 
         // Reset state to idle.
         // WHY explicit stopWatchdog: refreshFromDefaults() in the caller may have read
@@ -1459,18 +1825,17 @@ class KeyboardState: ObservableObject {
 
     /// Start recording: set local state, then signal DictusApp.
     ///
-    /// WHY the keyboard doesn't record directly:
-    /// WhisperKit requires loading ML models (~50-200MB) which exceeds the keyboard
-    /// extension's ~50MB memory limit. The actual recording runs in DictusApp.
+    /// iOS keyboard extensions cannot capture microphone audio. DictusApp owns
+    /// capture and inference; the keyboard only sends start/stop requests.
     ///
-    /// Flow (Wispr Flow-inspired):
+    /// Flow:
     /// 1. Set local state to .requested (recording overlay appears immediately)
-    /// 2. Post startRecording Darwin notification (app records in background if alive)
-    /// 3. If app doesn't respond in 500ms → fall back to URL scheme (opens app)
+    /// 2. Post startRecording Darwin notification to the enabled audio session.
+    /// 3. If the app does not acknowledge, show an explicit recovery action.
     ///
-    /// This means: after the first launch, subsequent recordings happen without
-    /// switching apps. The user stays in their current app the entire time.
+    /// Holds never switch apps. Session preparation is a separate tap action.
     func startRecording() {
+        isOpeningForDictation = false
         if dictationStatus == .failed {
             guard DictationFailureAction.recoveryTransition(
                 for: DictationErrorChannel.currentDisposition, urlOpened: true
@@ -1506,15 +1871,23 @@ class KeyboardState: ObservableObject {
         // A new dictation ends the previous one's undo offer, whatever comes of it.
         invalidateDictationUndo(reason: "new-dictation")
 
-        // Issue #262: a model load is now a prepare-only handoff. Opening Dictus
-        // lets the app show truthful preparation feedback instead of leaving the
-        // user with a refusal message in the keyboard. The app still prevents a
-        // recording from starting until the model is ready.
+        // A model load is a prepare-only state, but a hold-to-dictate gesture
+        // must remain local to the keyboard. Expose the explicit recovery action
+        // without launching the containing app from the recording path.
         // We synchronize defaults first because cross-process writes from DictusApp
         // can lag a few ms behind the actual state change.
         if isModelLoading() {
             PersistentLog.log(.keyboardMicTapped)
-            deferRecordingForModelPreparation()
+            PersistentLog.log(.dictationDeferred(reason: "model load in flight before session start"))
+            failKeyboardStart()
+            return
+        }
+
+        defaults.synchronize()
+        if !defaults.bool(forKey: SharedKeys.keyboardAudioReady) {
+            PersistentLog.log(.keyboardMicTapped)
+            PersistentLog.log(.dictationDeferred(reason: "keyboard audio session not ready"))
+            failKeyboardStart()
             return
         }
 
@@ -1529,7 +1902,8 @@ class KeyboardState: ObservableObject {
         let resolvedSourceLanguage = ASRCapability.forModelIdentifier(
             defaults.string(forKey: SharedKeys.activeModel),
             mode: requestMode,
-            keyboardLanguage: SupportedLanguage.active
+            keyboardLanguage: SupportedLanguage.active,
+            outputMode: TranscriptionOutputMode.active
         ).sourceLanguage
         let request = DictationLanguageRequest(
             mode: requestMode,
@@ -1555,21 +1929,28 @@ class KeyboardState: ObservableObject {
         // being handed to DictusApp. Re-check immediately before posting the
         // recording request so a model swap cannot race into a recording.
         if isModelLoading() {
-            forceResetToIdle()
-            deferRecordingForModelPreparation(reason: "model became loading before Darwin handoff")
+            requestCancel()
+            PersistentLog.log(.dictationDeferred(reason: "model load raced after markRequested"))
+            failKeyboardStart()
             return
         }
 
-        // Try background recording first — if app is alive, it will handle this
-        // notification and start recording without coming to the foreground.
+        defaults.synchronize()
+        if !defaults.bool(forKey: SharedKeys.keyboardAudioReady) {
+            requestCancel()
+            PersistentLog.log(.dictationDeferred(reason: "keyboard audio session lost after markRequested"))
+            failKeyboardStart()
+            return
+        }
+
         DarwinNotificationCenter.post(DarwinNotificationName.startRecording)
 
-        // Fallback: if app didn't respond (not running), open URL to launch it.
-        // We check after 500ms whether status progressed past .requested.
-        // If the app handled the notification, status will be .recording by now.
+        // A stale readiness marker must not switch apps during a hold. Allow
+        // time for the background process to acknowledge, then offer recovery.
         let darwinPostTime = Date()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self = self else { return }
+            self.refreshFromDefaults()
             let elapsedMs = Int(Date().timeIntervalSince(darwinPostTime) * 1000)
             if DictationFailureAction.fallbackMayOpen(
                 expectedSessionID: requestSessionID,
@@ -1578,22 +1959,21 @@ class KeyboardState: ObservableObject {
                 currentGeneration: self.sessionGeneration,
                 status: self.dictationStatus
             ) {
-                if self.isModelLoading() {
-                    self.forceResetToIdle()
-                    self.deferRecordingForModelPreparation(reason: "model became loading before fallback URL")
-                    return
-                }
                 PersistentLog.log(.coldStartDarwinFallback(
                     elapsedMs: elapsedMs,
                     status: self.dictationStatus.rawValue
                 ))
-                self.logProbe("fallbackOpenURL", details: self.sessionDetails())
-                // App didn't respond — not running. Open URL to launch it.
-                if let url = URL(string: "saiity://dictate?source=keyboard") {
-                    self.openDictusURL(url)
-                }
+                self.failKeyboardStart()
             }
         }
+    }
+
+    private func failKeyboardStart() {
+        requestCancel()
+        refreshModelPreparationState()
+        appNeedsAppAction = true
+        presentStatusMessage("Enable keyboard dictation in sAiity, then return here.",
+                             reason: "keyboard-session-unavailable", timeoutReason: "keyboard-session-unavailable-timeout")
     }
 
     /// Open Dictus without creating a recording request. The user explicitly
@@ -1640,6 +2020,7 @@ class KeyboardState: ObservableObject {
     /// Use the extension context and fail closed when the handoff is unavailable.
     private func openDictusURL(_ url: URL) {
         guard openContainingApp != nil || controller?.extensionContext != nil else {
+            isOpeningForDictation = false
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardState",
                 instanceID: instanceID,
@@ -1652,6 +2033,7 @@ class KeyboardState: ObservableObject {
         openURLFromExtension(url) { [weak self] succeeded in
             DispatchQueue.main.async {
                 guard let self, !succeeded else { return }
+                self.isOpeningForDictation = false
                 self.presentStatusMessage("iOS could not open sAiity. Open it from the Home Screen to start dictation.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
                 PersistentLog.log(.diagnosticProbe(
                     component: "KeyboardState", instanceID: self.instanceID,
@@ -1668,7 +2050,6 @@ class KeyboardState: ObservableObject {
         defaults.synchronize()
         dictationStatus = .requested
         startWatchdog()
-        HapticFeedback.recordingStarted()
     }
 
     private func sessionDetails() -> String {

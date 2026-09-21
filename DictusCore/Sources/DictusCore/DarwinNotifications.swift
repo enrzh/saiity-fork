@@ -43,23 +43,29 @@ public enum DarwinNotificationName {
     /// Posted by DictusApp when the persisted model-on-disk or model-in-RAM state
     /// changes. The keyboard re-reads both shared values after receiving it.
     public static let modelReadinessChanged = "de.aiity.saiity.modelReadinessChanged" as CFString
+
+    /// Posted by DictusApp when keyboard interaction preferences change
+    /// (key popups, material). The keyboard re-reads App Group defaults.
+    public static let keyboardPreferencesChanged = "de.aiity.saiity.keyboardPreferencesChanged" as CFString
+
+    /// Posted by the keyboard after it writes `serviceEnabled`. DictusApp applies
+    /// the same enable or disable path as the Home Screen toggle.
+    public static let serviceToggleRequested = "de.aiity.saiity.serviceToggleRequested" as CFString
 }
 
 /// Global callback registry for Darwin notifications.
 /// Must be at module level because CFNotificationCenter callbacks are C function pointers
 /// that cannot capture Swift context. The registry is thread-safe via NSLock.
 private let _darwinCallbackLock = NSLock()
-private var _darwinCallbacks: [String: () -> Void] = [:]
+private var _darwinCallbacks: [String: [() -> Void]] = [:]
 
-/// C-compatible callback dispatched by CFNotificationCenter.
-/// No context captured — looks up handler in the global registry by notification name.
 private let _darwinCallback: CFNotificationCallback = { _, _, cfName, _, _ in
     guard let cfName = cfName else { return }
     let key = cfName.rawValue as String
     _darwinCallbackLock.lock()
-    let cb = _darwinCallbacks[key]
+    let callbacks = _darwinCallbacks[key] ?? []
     _darwinCallbackLock.unlock()
-    cb?()
+    callbacks.forEach { $0() }
 }
 
 /// Helper to post and observe Darwin notifications.
@@ -78,10 +84,14 @@ public enum DarwinNotificationCenter {
         for name: CFString,
         callback: @escaping () -> Void
     ) {
+        let key = name as String
         _darwinCallbackLock.lock()
-        _darwinCallbacks[name as String] = callback
+        let existing = _darwinCallbacks[key] ?? []
+        _darwinCallbacks[key] = existing + [callback]
+        let shouldRegister = existing.isEmpty
         _darwinCallbackLock.unlock()
 
+        guard shouldRegister else { return }
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
@@ -92,21 +102,30 @@ public enum DarwinNotificationCenter {
         )
     }
 
-    /// Remove a specific observer by notification name.
-    /// Prefer this over removeAllObservers() for safer cleanup.
     public static func removeObserver(for name: CFString) {
+        let key = name as String
+        _darwinCallbackLock.lock()
+        var callbacks = _darwinCallbacks[key] ?? []
+        if !callbacks.isEmpty {
+            callbacks.removeFirst()
+        }
+        if callbacks.isEmpty {
+            _darwinCallbacks.removeValue(forKey: key)
+        } else {
+            _darwinCallbacks[key] = callbacks
+        }
+        let shouldUnregister = callbacks.isEmpty
+        _darwinCallbackLock.unlock()
+
+        guard shouldUnregister else { return }
         CFNotificationCenterRemoveObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
             CFNotificationName(name),
             nil
         )
-        _darwinCallbackLock.lock()
-        _darwinCallbacks.removeValue(forKey: name as String)
-        _darwinCallbackLock.unlock()
     }
 
-    /// Remove all registered observers.
     public static func removeAllObservers() {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         _darwinCallbackLock.lock()

@@ -43,14 +43,18 @@ func optionValue(_ name: String, in args: [String]) -> String? {
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
-guard let command = args.first, ["show", "eval", "ab", "prompt"].contains(command), args.count >= 2 else {
+guard let command = args.first, ["show", "eval", "ab", "prompt", "spans"].contains(command), args.count >= 2 else {
     print("""
     polish-harness — off-device polish eval (macOS + Apple Intelligence)
 
-      show   <fixtures.json> [--runs N] [--instructions <prompt.txt>]
-      eval   <fixtures.json> [--instructions <prompt.txt>]
+      show   <fixtures.json> [--runs N] [--instructions <prompt.txt>] [--spans]
+      eval   <fixtures.json> [--instructions <prompt.txt>] [--spans]
       ab     <fixtures.json> --a <promptA.txt> --b <promptB.txt>
       prompt <fixtures.json> [--id <fixtureID>] [--out <dir>]
+      spans  <fixtures.json>
+
+    --spans  multilingual coordinator path (floor + per-sentence engine)
+    spans    print floor + sentence-span decisions; no model required
 
     show/eval also accept (#268 spike, throwaway):
       --engine apple-fm | local   (default apple-fm)
@@ -72,6 +76,7 @@ let localBaseURL = optionValue("--base-url", in: args) ?? "http://127.0.0.1:1143
 // #268 D2, throwaway. `prompt` only.
 let promptFixtureID = optionValue("--id", in: args)
 let promptOutputDir = optionValue("--out", in: args)
+let useSpans = args.contains("--spans")
 
 // MARK: - Load fixtures
 
@@ -106,7 +111,7 @@ guard #available(macOS 26.0, *) else {
 #if canImport(FoundationModels)
 // `prompt` never runs a model — it prints the bytes one would be sent — so it is
 // usable on a machine with Apple Intelligence off, which is the point of it.
-if command != "prompt", engineKind == "apple-fm" {
+if command != "prompt", command != "spans", engineKind == "apple-fm" {
     switch SystemLanguageModel.default.availability {
     case .available:
         break
@@ -209,16 +214,58 @@ func runOnceAuto(_ fx: Fixture, engine: any PolishEngineProtocol) async -> RunOu
     return RunOutcome(final: final, engineOutput: r.engineOutput, outcome: r.outcome, engineMs: r.engineMs, detected: detectedCode, mode: .auto, failureReason: r.failureReason)
 }
 
+/// Multilingual product path: language-neutral floor, then sequential
+/// sentence-span polish. Mixed-script slices stay on the floor.
+@available(macOS 26.0, *)
+func runOnceSpans(_ fx: Fixture, engine: any PolishEngineProtocol) async -> RunOutcome {
+    let r = await PolishSpanPipeline.polish(raw: fx.raw, engine: engine)
+    let detected = r.detectedLanguages.isEmpty ? nil : r.detectedLanguages.joined(separator: ",")
+    return RunOutcome(
+        final: r.text,
+        engineOutput: r.outcome == .success ? r.text : nil,
+        outcome: r.outcome,
+        engineMs: r.engineMs,
+        detected: detected,
+        mode: .auto,
+        failureReason: r.failureReason
+    )
+}
+
+@available(macOS 26.0, *)
+func runFixture(_ fx: Fixture, engine: any PolishEngineProtocol) async -> RunOutcome {
+    if useSpans {
+        return await runOnceSpans(fx, engine: engine)
+    }
+    return await runOnce(fx, engine: engine)
+}
+
+func spanSummary(for raw: String) -> String {
+    let floor = PolishPostpass.cleanupFloor(raw, language: nil)
+    let spans = PolishSpanDetector.spans(in: floor)
+    if spans.isEmpty {
+        return "(none)"
+    }
+    return spans.map { span in
+        let lang = span.languageCode ?? "-"
+        let decision = span.polishable ? "polishable" : "passthrough"
+        return "[\(lang) \(decision)] \(span.text)"
+    }.joined(separator: " | ")
+}
+
 @available(macOS 26.0, *)
 func runHarness() async {
     switch command {
     case "show":
         let engine = makeEngine(loadInstructions(instructionsFile))
         for fx in fixtures {
-            print("\n━━ [\(fx.id)] lang=\(fx.lang) stt=\(fx.sttEngine ?? "PK")")
+            print("\n━━ [\(fx.id)] lang=\(fx.lang) stt=\(fx.sttEngine ?? "PK")\(useSpans ? " spans" : "")")
             print("  raw:      \(fx.raw)")
+            if useSpans {
+                print("  floor:    \(PolishPostpass.cleanupFloor(fx.raw, language: nil))")
+                print("  spans:    \(spanSummary(for: fx.raw))")
+            }
             for run in 1...max(1, runs) {
-                let o = await runOnce(fx, engine: engine)
+                let o = await runFixture(fx, engine: engine)
                 let tag = runs > 1 ? " #\(run)" : ""
                 let why = o.failureReason.map { ", reason=\($0.slug)" } ?? ""
                 let route = "\(o.outcome.rawValue), \(o.engineMs)ms, detected=\(o.detected ?? "-")→\(o.mode?.rawValue ?? "-")\(why)"
@@ -236,7 +283,7 @@ func runHarness() async {
         let engine = makeEngine(loadInstructions(instructionsFile))
         var passed = 0, total = 0
         for fx in fixtures {
-            let o = await runOnce(fx, engine: engine)
+            let o = await runFixture(fx, engine: engine)
             let checks = fx.expect ?? []
             let failures = checks.compactMap { $0.failure(polished: o.final, raw: fx.raw) }
             total += 1
@@ -273,6 +320,15 @@ func runHarness() async {
     // Parakeet fixture whose detected language differs from its target resolves to
     // `.repair`, and printing the Natural instructions for it would be printing a
     // prompt the engine would never send.
+    case "spans":
+        for fx in fixtures {
+            let floor = PolishPostpass.cleanupFloor(fx.raw, language: nil)
+            print("\n━━ [\(fx.id)] lang=\(fx.lang) stt=\(fx.sttEngine ?? "PK")")
+            print("  raw:   \(fx.raw)")
+            print("  floor: \(floor)")
+            print("  spans: \(spanSummary(for: fx.raw))")
+        }
+
     case "prompt":
         let selected = promptFixtureID.map { id in fixtures.filter { $0.id == id } } ?? fixtures
         if selected.isEmpty {

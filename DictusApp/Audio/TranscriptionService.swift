@@ -8,6 +8,7 @@ import DictusCore
 enum TranscriptionError: Error, LocalizedError {
     case notReady
     case emptyAudio
+    case noSpeech
     case transcriptionFailed(String)
 
     var errorDescription: String? {
@@ -16,6 +17,8 @@ enum TranscriptionError: Error, LocalizedError {
             return "TranscriptionService is not ready — no engine initialized"
         case .emptyAudio:
             return "No audio samples to transcribe"
+        case .noSpeech:
+            return "No speech detected"
         case .transcriptionFailed(let message):
             return "Transcription failed: \(message)"
         }
@@ -125,6 +128,11 @@ class TranscriptionService {
     /// an explicit or auto choice can never be overridden by it.
     func transcribe(audioSamples: [Float],
                     languagePolicy: TranscriptionLanguagePolicy) async throws -> String {
+        try await transcribeDetailed(audioSamples: audioSamples, languagePolicy: languagePolicy).text
+    }
+
+    func transcribeDetailed(audioSamples: [Float],
+                            languagePolicy: TranscriptionLanguagePolicy) async throws -> SpeechTranscriptionOutput {
         let transcriptionStart = Date()
 
         // nil = Whisper auto-detection. Parakeet ignores the value entirely.
@@ -154,11 +162,19 @@ class TranscriptionService {
         // Route to active engine if set (multi-engine path)
         if let activeEngine {
             do {
-                let result = try await activeEngine.transcribe(audioSamples: audioSamples, language: language)
+                let result = try await activeEngine.transcribeDetailed(
+                    audioSamples: audioSamples,
+                    language: language
+                )
                 let durationMs = Int(Date().timeIntervalSince(transcriptionStart) * 1000)
-                let wordCount = result.split(separator: " ").count
+                let wordCount = result.text.split(separator: " ").count
                 PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
-                logPerformance(modelName: modelName, audioSamples: audioSamples, transcriptionDurationMs: durationMs)
+                logPerformance(
+                    modelName: modelName,
+                    audioSamples: audioSamples,
+                    transcriptionDurationMs: durationMs,
+                    firstRegionReadyAfterSeconds: result.firstRegionReadyAfterSeconds
+                )
                 return result
             } catch {
                 PersistentLog.log(.transcriptionFailed(error: error.localizedDescription))
@@ -176,17 +192,22 @@ class TranscriptionService {
         }
 
         do {
-            let trimmed = try await WhisperKitTranscriptionSupport.transcribe(
+            let output = try await WhisperKitTranscriptionSupport.transcribeDetailed(
                 whisperKit: whisperKit,
                 audioSamples: audioSamples,
                 language: language,
                 logComponent: "TranscriptionService"
             )
             let durationMs = Int(Date().timeIntervalSince(transcriptionStart) * 1000)
-            let wordCount = trimmed.split(separator: " ").count
+            let wordCount = output.text.split(separator: " ").count
             PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
-            logPerformance(modelName: modelName, audioSamples: audioSamples, transcriptionDurationMs: durationMs)
-            return trimmed
+            logPerformance(
+                modelName: modelName,
+                audioSamples: audioSamples,
+                transcriptionDurationMs: durationMs,
+                firstRegionReadyAfterSeconds: output.firstRegionReadyAfterSeconds
+            )
+            return output
         } catch let error as TranscriptionError {
             PersistentLog.log(.transcriptionFailed(error: error.localizedDescription ?? "unknown"))
             throw error
@@ -203,7 +224,10 @@ class TranscriptionService {
     /// `peakMemoryMB` here is a point-in-time reading of remaining jetsam headroom right
     /// after transcription, not a true peak. Paired with the prewarm delta in
     /// `modelPrewarmPeakMemory`, it gives a coarse-but-useful signal for per-device gating.
-    private func logPerformance(modelName: String, audioSamples: [Float], transcriptionDurationMs: Int) {
+    private func logPerformance(modelName: String,
+                                audioSamples: [Float],
+                                transcriptionDurationMs: Int,
+                                firstRegionReadyAfterSeconds: Double?) {
         // WhisperKit and FluidAudio both consume audio at 16 kHz. Hardcoded to stay
         // consistent with the sample-rate assumption everywhere else in the pipeline.
         let sampleRateHz = 16_000
@@ -215,5 +239,18 @@ class TranscriptionService {
             transcriptionDurationMs: transcriptionDurationMs,
             peakMemoryMB: peakMemoryMB
         ))
+        ModelWarmLatencyStore.record(
+            transcriptionDurationMs,
+            for: modelName,
+            in: AppGroup.defaults
+        )
+        if let firstRegionReadyAfterSeconds {
+            PersistentLog.log(.diagnosticProbe(
+                component: "TranscriptionService",
+                instanceID: "firstRegion",
+                action: "ready",
+                details: "model=\(modelName) seconds=\(String(format: "%.3f", firstRegionReadyAfterSeconds))"
+            ))
+        }
     }
 }

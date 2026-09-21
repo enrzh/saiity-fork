@@ -3,6 +3,7 @@
 // Stripped: No external dependencies to remove
 
 import UIKit
+import DictusCore
 
 final class KeyOverlayView: UIView {
     private class KeyOverlayShadowView: UIView {}
@@ -12,6 +13,7 @@ final class KeyOverlayView: UIView {
 
     let overlayContentView: UIView
     private var shadowView: KeyOverlayShadowView?
+    private var glassView: UIVisualEffectView?
 
     private var path: CGPath!
 
@@ -54,24 +56,11 @@ final class KeyOverlayView: UIView {
 
         overlayContentView.backgroundColor = .clear
         isUserInteractionEnabled = false
+        installGlassIfNeeded()
     }
 
     func addShadow() {
-        guard self.shadowView == nil else { return }
-        guard let superview = self.superview else { return }
-
-        let shadowView = KeyOverlayShadowView()
-        self.shadowView = shadowView
-        shadowView.translatesAutoresizingMaskIntoConstraints = false
-        shadowView.backgroundColor = UIColor.black
-        superview.insertSubview(shadowView, belowSubview: self)
-
-        shadowView.fill(superview: overlayContentView)
-        shadowView.layer.shadowColor = UIColor(white: 0.0, alpha: 1.0).cgColor
-        shadowView.layer.shadowOffset = CGSize(width: 0, height: theme.popupCornerRadius / 2.0)
-        shadowView.layer.shadowOpacity = 1.0
-        shadowView.layer.shadowRadius = 12.0
-        shadowView.clipsToBounds = false
+        // Solid chrome has no drop shadow. Liquid glass supplies its own rim.
     }
 
     override func didMoveToSuperview() {
@@ -79,6 +68,7 @@ final class KeyOverlayView: UIView {
         shadowView = nil
 
         addShadow()
+        installGlassIfNeeded()
         super.didMoveToSuperview()
     }
 
@@ -95,12 +85,11 @@ final class KeyOverlayView: UIView {
         guard self.superview != nil else { return }
 
         let path = createPath()
-        let bezier = UIBezierPath(cgPath: path)
-
-        theme.popupColor.setFill()
-        bezier.fill()
-        theme.popupBorderColor.setStroke()
-        bezier.stroke()
+        if !KeyboardInteractionPreferences.liquidGlassEnabled {
+            let bezier = UIBezierPath(cgPath: path)
+            theme.popupColor.setFill()
+            bezier.fill()
+        }
 
         let mask = CAShapeLayer()
         mask.path = path
@@ -110,6 +99,34 @@ final class KeyOverlayView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         setNeedsDisplay()
+        if let glassView {
+            let mask = CAShapeLayer()
+            mask.path = createPath()
+            glassView.layer.mask = mask
+        }
+    }
+
+    private func installGlassIfNeeded() {
+        glassView?.removeFromSuperview()
+        glassView = nil
+        guard KeyboardInteractionPreferences.liquidGlassEnabled else { return }
+        let effect: UIVisualEffect
+        if #available(iOS 26.0, *) {
+            effect = UIGlassEffect()
+        } else {
+            effect = UIBlurEffect(style: .systemMaterial)
+        }
+        let view = UIVisualEffectView(effect: effect)
+        view.isUserInteractionEnabled = false
+        insertSubview(view, belowSubview: overlayContentView)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: topAnchor),
+            view.bottomAnchor.constraint(equalTo: bottomAnchor),
+            view.leftAnchor.constraint(equalTo: leftAnchor),
+            view.rightAnchor.constraint(equalTo: rightAnchor)
+        ])
+        glassView = view
     }
 
     fileprivate struct PopupPathPoint {

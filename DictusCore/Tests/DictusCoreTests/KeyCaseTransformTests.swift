@@ -30,7 +30,8 @@ final class KeyCaseTransformTests: XCTestCase {
     /// `AccentedCharacterTests` and `QWERTZLayoutTests` pin the mapping itself; this
     /// restates it here so the unshifted half of #322 is visible in one place.
     func testUnshiftedSharpSComesStraightFromTheMapping() {
-        XCTAssertEqual(AccentedCharacters.accents(for: "s"), ["\u{00DF}"])
+        XCTAssertEqual(AccentedCharacters.accents(for: "s")?.first, "\u{00DF}")
+        XCTAssertTrue(AccentedCharacters.accents(for: "s")?.contains("\u{00DF}") == true)
     }
 
     // MARK: - The general rule

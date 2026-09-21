@@ -60,8 +60,8 @@ final class DictationServiceLivenessTests: XCTestCase {
         )
     }
 
-    func testLiveActivityKeepsServiceAvailableAfterProcessHeartbeatGoesStale() {
-        XCTAssertFalse(
+    func testStaleHeartbeatRequiresAppEvenWhenLiveActivityIsPresent() {
+        XCTAssertTrue(
             DictationServiceLivenessPolicy.shouldOpenApp(
                 serviceEnabled: true,
                 appProcessHeartbeat: now - DictationServiceLivenessPolicy.maximumAppHeartbeatAge - 1,
@@ -98,6 +98,71 @@ final class DictationServiceLivenessTests: XCTestCase {
     func testMissingSignalsRequireApp() {
         XCTAssertTrue(
             DictationServiceLivenessPolicy.shouldOpenApp(
+                serviceEnabled: true,
+                appProcessHeartbeat: nil,
+                liveActivityPresent: false,
+                now: now
+            )
+        )
+    }
+
+    func testReadyModelShowsRecoveryForAnExpiredHeartbeat() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOfferRecovery(
+                modelReady: true,
+                serviceEnabled: true,
+                appProcessHeartbeat: now - DictationServiceLivenessPolicy.maximumAppHeartbeatAge - 1,
+                liveActivityPresent: false,
+                now: now
+            )
+        )
+    }
+
+    func testReadyModelStillOffersRecoveryWhenAudioEngineIsUnavailable() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOfferRecovery(
+                modelReady: true,
+                serviceEnabled: true,
+                appProcessHeartbeat: now,
+                liveActivityPresent: true,
+                liveActivityUpdatedAt: now,
+                audioReady: false,
+                now: now
+            )
+        )
+    }
+
+    func testReadyModelKeepsDirectHoldWhenAudioEngineIsReady() {
+        XCTAssertFalse(
+            DictationServiceLivenessPolicy.shouldOfferRecovery(
+                modelReady: true,
+                serviceEnabled: true,
+                appProcessHeartbeat: now,
+                liveActivityPresent: false,
+                audioReady: true,
+                now: now
+            )
+        )
+    }
+
+    func testMissingHeartbeatOffersRecoveryEvenWhenModelIsReady() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOfferRecovery(
+                modelReady: true,
+                serviceEnabled: true,
+                appProcessHeartbeat: nil,
+                liveActivityPresent: true,
+                liveActivityUpdatedAt: now,
+                audioReady: true,
+                now: now
+            )
+        )
+    }
+
+    func testUnreadyModelStillUsesSignalsForRecovery() {
+        XCTAssertTrue(
+            DictationServiceLivenessPolicy.shouldOfferRecovery(
+                modelReady: false,
                 serviceEnabled: true,
                 appProcessHeartbeat: nil,
                 liveActivityPresent: false,

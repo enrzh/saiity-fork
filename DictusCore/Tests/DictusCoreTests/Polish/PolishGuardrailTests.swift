@@ -96,12 +96,13 @@ final class PolishGuardrailTests: XCTestCase {
 
     // MARK: - Auto-mode language-match guardrail (#239)
 
-    /// Auto mode ratio band mirrors Natural: light corrections only.
+    /// Auto mode ratio band is slightly wider than Natural so spoken cleanup
+    /// can drop fillers, abandoned times, and restated clauses.
     func testAutoAcceptsNaturalBandAndRejectsOutside() {
         let raw = String(repeating: "a", count: 100)
-        XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 50), mode: .auto))
+        XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 40), mode: .auto))
         XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 200), mode: .auto))
-        XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 49), mode: .auto))
+        XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 39), mode: .auto))
         XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: String(repeating: "a", count: 201), mode: .auto))
     }
 

@@ -83,19 +83,15 @@ struct AvailabilityPage: View {
     @State private var isDownloading = false
     @State private var errorMessage: String?
     @State private var preparingModelID: String?
+    @State private var keyboardCheckTask: Task<Void, Never>?
     private var recommendedModel: String {
         ModelInfo.initialModelIdentifier(existingSelection: modelManager.activeModel)
     }
     private var modelReady: Bool { modelManager.downloadedModels.contains(recommendedModel) && modelManager.modelStates[recommendedModel] == .ready }
     private var keyboardStatus: KeyboardSetupStatus {
-        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
-            verified: AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified),
-            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
-            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
-        )
-        return KeyboardSetupStatus(
+        KeyboardSetupStatus(
             keyboardInstalled: keyboardInstalled,
-            fullAccessHandshake: handshake,
+            fullAccessHandshake: fullAccessVerified,
             handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
     }
@@ -133,21 +129,29 @@ struct AvailabilityPage: View {
         }
         .onAppear {
             ensureFullAccessProbe()
-            refreshKeyboard()
-            refreshModel()
-            if modelReady {
-                coordinator.enableKeyboardSession()
-            }
             DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
                 DispatchQueue.main.async {
                     refreshKeyboard()
                 }
             }
+            refreshKeyboard()
+            refreshModel()
+            if modelReady {
+                coordinator.enableKeyboardSession()
+            }
+            pollKeyboardHandshake()
         }
         .onDisappear {
+            keyboardCheckTask?.cancel()
+            keyboardCheckTask = nil
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { refreshKeyboard(); refreshModel() } }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            refreshKeyboard()
+            refreshModel()
+            pollKeyboardHandshake()
+        }
         .fullScreenCover(item: Binding<PreparingItem?>(get: { preparingModelID.map(PreparingItem.init) }, set: { preparingModelID = $0?.id })) { item in
             ModelLoadingOverlay(modelManager: modelManager, modelIdentifier: item.id, context: .onboarding, isPresented: Binding(get: { preparingModelID != nil }, set: { if !$0 { preparingModelID = nil } }))
         }
@@ -200,10 +204,14 @@ struct AvailabilityPage: View {
             handshakeDate: handshakeDate.map(Date.init(timeIntervalSince1970:))
         )
         let installed = status.keyboardDetected
+        let verifiedChanged = handshake != fullAccessVerified
+        let installedChanged = installed != keyboardInstalled
         keyboardInstalled = installed
-        if handshake {
-            fullAccessVerified = true
+        fullAccessVerified = handshake
+        if handshake, let handshakeDate {
+            fullAccessHandshakeDate = handshakeDate
         }
+        guard installedChanged || verifiedChanged else { return }
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"
@@ -236,13 +244,29 @@ struct AvailabilityPage: View {
         }
     }
     private func openSettings() {
-        ensureFullAccessProbe()
+        AppGroup.defaults.set(UUID().uuidString, forKey: SharedKeys.onboardingFullAccessProbe)
+        AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
     private func ensureFullAccessProbe() {
         guard AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe) == nil else { return }
         AppGroup.defaults.set(UUID().uuidString, forKey: SharedKeys.onboardingFullAccessProbe)
+    }
+
+    private func pollKeyboardHandshake() {
+        keyboardCheckTask?.cancel()
+        keyboardCheckTask = Task { @MainActor in
+            // Settings can return before iOS has relaunched the keyboard
+            // extension. Keep the page live long enough for that handshake,
+            // while cancelling the work as soon as the page disappears.
+            for delay in [250, 750, 1500, 3000, 6000, 10000] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard !Task.isCancelled else { return }
+                refreshKeyboard()
+                if fullAccessVerified { return }
+            }
+        }
     }
     private struct PreparingItem: Identifiable { let id: String }
 }

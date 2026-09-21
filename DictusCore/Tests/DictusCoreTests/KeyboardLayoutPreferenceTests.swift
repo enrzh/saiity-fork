@@ -102,7 +102,7 @@ final class KeyboardLayoutPreferenceTests: XCTestCase {
     }
 
     func testAnUnreadableStoredEntryFallsBackToTheLanguageDefault() {
-        defaults?.set(["de": "dvorak"], forKey: SharedKeys.keyboardLayoutsByLanguage)
+        defaults?.set(["de": "not-a-layout"], forKey: SharedKeys.keyboardLayoutsByLanguage)
 
         XCTAssertEqual(KeyboardLayoutPreference.layout(for: .german), .qwertz,
                        "A layout we cannot parse must behave as no choice at all, not as AZERTY")
@@ -163,7 +163,7 @@ final class KeyboardLayoutPreferenceTests: XCTestCase {
     /// is looking at, so that is what gets frozen.
     func testMigrationFreezesAzertyForAnUnreadableLegacyValue() {
         defaults?.set(SupportedLanguage.spanish.rawValue, forKey: SharedKeys.language)
-        defaults?.set("dvorak", forKey: SharedKeys.keyboardLayout)
+        defaults?.set("not-a-layout", forKey: SharedKeys.keyboardLayout)
 
         KeyboardLayoutPreference.migrateToPerLanguageLayoutsIfNeeded()
 
@@ -250,6 +250,16 @@ final class KeyboardLayoutPreferenceTests: XCTestCase {
         KeyboardLayoutPreference.setLayout(.azerty, for: .german)
         XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), "azerty",
                        "A build without #272 must find the shape the user is actually on")
+    }
+
+    func testSetGlobalLayoutWritesEveryLanguage() {
+        KeyboardLayoutPreference.setGlobalLayout(.qwerty)
+
+        for language in SupportedLanguage.allCases {
+            XCTAssertEqual(KeyboardLayoutPreference.layout(for: language), .qwerty)
+            XCTAssertEqual(KeyboardLayoutPreference.explicitLayout(for: language), .qwerty)
+        }
+        XCTAssertEqual(defaults?.string(forKey: SharedKeys.keyboardLayout), LayoutType.qwerty.rawValue)
     }
 
     func testChoosingALayoutForAnotherLanguageLeavesTheMirrorAlone() {

@@ -39,14 +39,19 @@ final class AudioLifecycleContractTests: XCTestCase {
         XCTAssertFalse(foreground.contains("audioEngine.warmUp()"))
     }
 
-    func testCaptureCompletionReleasesAudioBeforeTranscription() throws {
+    func testCaptureCompletionRetainsAudioOnlyForExplicitKeyboardSession() throws {
         let coordinator = try source("DictusApp/DictationCoordinator.swift")
         let stopStart = try XCTUnwrap(coordinator.range(of: "func stopDictation()"))
         let nextMethod = try XCTUnwrap(coordinator.range(of: "func processAuthoritativeFinalTranscript("))
         let stop = String(coordinator[stopStart.lowerBound..<nextMethod.lowerBound])
 
-        XCTAssertTrue(stop.contains("audioEngine.collectSamplesAndDeactivate()"))
-        XCTAssertFalse(stop.contains("let samples = audioEngine.collectSamples()"))
+        XCTAssertTrue(stop.contains("let samples = collectCompletedRecording()"))
+        let start = try XCTUnwrap(coordinator.range(of: "private func collectCompletedRecording()"))
+        let end = try XCTUnwrap(coordinator.range(of: "func deactivateAudioIfIdle()"))
+        let collection = String(coordinator[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(collection.contains("if keyboardSessionEnabled"))
+        XCTAssertTrue(collection.contains("return audioEngine.collectSamples()"))
+        XCTAssertTrue(collection.contains("return audioEngine.collectSamplesAndDeactivate()"))
     }
 
     func testCancelAndErrorPathsReleaseConfiguredAudio() throws {
@@ -72,6 +77,22 @@ final class AudioLifecycleContractTests: XCTestCase {
 
         XCTAssertTrue(background.contains("coordinator.deactivateAudioIfIdle()"))
         XCTAssertFalse(background.contains("coordinator.isEngineRunning"))
+        let coordinator = try source("DictusApp/DictationCoordinator.swift")
+        XCTAssertTrue(coordinator.contains("guard !keyboardSessionEnabled else { return }"))
+    }
+
+    func testKeyboardSessionRequiresExplicitForegroundPreparation() throws {
+        let coordinator = try source("DictusApp/DictationCoordinator.swift")
+        let start = try XCTUnwrap(coordinator.range(of: "func enableKeyboardSession()"))
+        let end = try XCTUnwrap(coordinator.range(of: "func disableKeyboardSession()"))
+        let prepare = String(coordinator[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(coordinator.contains("keyboardSessionEnabled = false"))
+        XCTAssertTrue(prepare.contains("guard UIApplication.shared.applicationState == .active else { return }"))
+        XCTAssertTrue(prepare.contains("guard !Task.isCancelled, self.keyboardSessionEnabled,"))
+        XCTAssertTrue(prepare.contains("try self.audioEngine.warmUp()"))
+        let audio = try source("DictusApp/Audio/UnifiedAudioEngine.swift")
+        XCTAssertTrue(audio.contains("if !isRecordingFlag {"), "standby must discard idle buffers")
+        XCTAssertTrue(audio.contains("scheduleIdleRelease(after: Self.idleReleaseInterval)"))
     }
 
     func testServiceDisableCancelsEveryActiveDictationStatus() throws {

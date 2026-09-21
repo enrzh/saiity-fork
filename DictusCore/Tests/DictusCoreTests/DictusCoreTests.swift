@@ -31,6 +31,9 @@ final class DictusCoreTests: XCTestCase {
             SharedKeys.dictationStatus,
             SharedKeys.lastTranscription,
             SharedKeys.lastTranscriptionTimestamp,
+            SharedKeys.lastDictationIssueSnapshot,
+            SharedKeys.recentDictations,
+            SharedKeys.dictationPresenceMode,
             SharedKeys.lastError,
         ]
         XCTAssertEqual(keys.count, Set(keys).count, "SharedKeys must be unique")
@@ -41,6 +44,9 @@ final class DictusCoreTests: XCTestCase {
         XCTAssertTrue(SharedKeys.dictationStatus.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.lastTranscription.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.lastTranscriptionTimestamp.hasPrefix("dictus."))
+        XCTAssertTrue(SharedKeys.lastDictationIssueSnapshot.hasPrefix("dictus."))
+        XCTAssertTrue(SharedKeys.recentDictations.hasPrefix("dictus."))
+        XCTAssertTrue(SharedKeys.dictationPresenceMode.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.lastError.hasPrefix("dictus."))
     }
 

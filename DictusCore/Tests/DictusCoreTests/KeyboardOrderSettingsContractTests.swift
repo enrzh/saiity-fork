@@ -18,24 +18,60 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         XCTAssertEqual(KeyboardAccessoryOrder.emojiFirst.displayName, "Emoji, 123")
         XCTAssertEqual(KeyboardAccessoryOrder.numberFirst.displayName, "123, Emoji")
         let keyboardSection = try XCTUnwrap(
-            source.range(of: "settingsPanel(\"Keyboard\"")
+            source.range(of: "LabeledContent(\"Keyboard layout\")")
         )
         let nextSection = try XCTUnwrap(
-            source.range(of: "settingsPanel(\"Activity\"", range: keyboardSection.upperBound..<source.endIndex)
+            source.range(of: "Section(\"Help\")", range: keyboardSection.upperBound..<source.endIndex)
         )
         let keyboardSectionSource = String(source[keyboardSection.lowerBound..<nextSection.lowerBound])
         XCTAssertTrue(keyboardSectionSource.contains("Keyboard layout"))
         XCTAssertFalse(keyboardSectionSource.contains("Control order"))
-        XCTAssertTrue(keyboardSectionSource.contains("Label(\"Models\", systemImage:"))
-        XCTAssertTrue(source.contains("Toggle(\"Haptic feedback\", isOn: $hapticsEnabled)"))
-        XCTAssertTrue(source.contains("Toggle(\"Key popups\", isOn: $keyPopupsEnabled)"))
+        XCTAssertTrue(keyboardSectionSource.contains("DefaultKeyboardModePicker()"))
+        XCTAssertFalse(keyboardSectionSource.contains("ModelManagerView"))
+        XCTAssertTrue(source.contains("Toggle(\"Keyboard haptics\""))
+        XCTAssertTrue(source.contains("Toggle(\"Key containers\""))
+        XCTAssertTrue(source.contains("KeyPopupPicker()"))
+        XCTAssertTrue(source.contains("KeyboardMaterialPicker()"))
+        XCTAssertTrue(source.contains("DictationPresencePicker()"))
+        XCTAssertFalse(source.contains("Toggle(\"Liquid glass\""))
+        XCTAssertFalse(source.contains("Toggle(\"Live Activity\""))
+        XCTAssertTrue(source.contains("Section(\"Help\")"))
+        XCTAssertTrue(source.contains("Section(\"About\")"))
+        XCTAssertFalse(source.contains("settingsPanel("))
+        XCTAssertFalse(source.contains("moreGroup("))
 
         for removedSetting in [
             "sounds", "soundFeedbackEnabled", "soundVolume", "keyboardLanguage",
             "keyboardLanguageSelection", "numberRowEnabled",
-            "autocorrectEnabled"
         ] {
             XCTAssertFalse(source.localizedCaseInsensitiveContains(removedSetting), "旧键盘设置仍出现在 SettingsView: \(removedSetting)")
         }
+    }
+
+    func testAutocorrectionIsAUserSettingAndKeepsTheExistingDefault() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repository.appending(path: "DictusApp/Views/SettingsView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("private var autocorrectEnabled = true"))
+        XCTAssertTrue(source.contains("Toggle(\"Autocorrection\", isOn: $autocorrectEnabled)"))
+        XCTAssertTrue(source.contains("KeyboardInteractionPreferences.notifyChanged()"))
+
+        let suggestionState = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/TextPrediction/SuggestionState.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(suggestionState.contains("hostPolicy.autocorrectAllowed,\n           autocorrectEnabled"),
+                      "disabled autocorrection must skip space-time replacement")
+        XCTAssertTrue(suggestionState.contains("if self.autocorrectEnabled,"),
+                      "disabled autocorrection must skip async correction suggestions")
+        XCTAssertTrue(suggestionState.contains("guard !autocorrectEnabled else { return }"),
+                      "preference refresh must clear stale correction UI when disabled")
     }
 }

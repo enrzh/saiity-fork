@@ -45,6 +45,15 @@ final class AdaptiveTouchControlRegistry {
     }
 }
 
+enum KeyHitTarget {
+    /// A fully clear control is skipped when an opaque plate is behind it.
+    static func prepare(_ control: UIControl) {
+        control.backgroundColor = UIColor.label.withAlphaComponent(0.01)
+        control.isMultipleTouchEnabled = true
+        control.isExclusiveTouch = false
+    }
+}
+
 /// Shared native-style bottom control row for auxiliary keyboard surfaces.
 /// ABC and 123 pages use compact 123/ABC, then emoji, space, and return.
 /// Emoji pages keep compact 123 + ABC and give the leftover width to space.
@@ -56,6 +65,8 @@ struct AuxiliaryBottomBar: View {
     let onEmoji: () -> Void
     let spaceFrame: CGRect
     let returnFrame: CGRect
+    var periodFrame: CGRect = .zero
+    var onPeriod: (String) -> Void = { _ in }
     let onSpace: () -> Void
     let onSpaceCursorBegan: () -> Void
     let onSpaceCursorMoved: (KeyboardCursorStep) -> Void
@@ -64,6 +75,13 @@ struct AuxiliaryBottomBar: View {
     var showsNumbersControl: Bool = true
     var showsLettersControl: Bool = true
     var showsEmojiControl: Bool = true
+    var showsPeriodKey: Bool = false
+    var fieldKeys: HostFieldPolicy.LetterFieldKeys = .standard
+    var onSymbolInsert: (String) -> Void = { _ in }
+
+    @State private var periodVariantSession: KeyVariantSession?
+    @State private var periodPreviewSession: KeyPreviewSession?
+    @State private var periodHoldToken: UUID?
 
     var body: some View {
         let surface = layout.surfaceFrame
@@ -77,6 +95,14 @@ struct AuxiliaryBottomBar: View {
             CGFloat(frame.midY - barOriginY)
         }
         let compactMode = layout.chromeNumbersFrame
+        let periodSourceFrame = CGRect(
+            x: periodFrame.minX - surface.minX,
+            y: periodFrame.minY - barOriginY,
+            width: periodFrame.width,
+            height: periodFrame.height
+        )
+        let barBounds = CGSize(width: surfaceWidth, height: rowHeight)
+        let popupTopOverflow = max(0, barOriginY - CGFloat(surface.minY))
         ZStack(alignment: .topLeading) {
             if showsNumbersControl && showsLettersControl {
                 roundControl(text: numbersTitle, label: "Open symbols keyboard", action: onNumbers)
@@ -90,7 +116,15 @@ struct AuxiliaryBottomBar: View {
                 roundControl(text: "ABC", label: "Open letter keyboard", action: onLetters)
                     .position(x: localX(compactMode), y: localY(compactMode))
             }
-            if showsEmojiControl {
+            if let insert = fieldKeys.leftInsert {
+                roundControl(
+                    text: insert,
+                    label: insert,
+                    textPointSize: insert.count > 1 ? 12 : 14,
+                    action: { onSymbolInsert(insert) }
+                )
+                .position(x: localX(layout.chromeLettersFrame), y: localY(layout.chromeLettersFrame))
+            } else if showsEmojiControl {
                 roundControl(systemName: "face.smiling", label: "Emoji", action: onEmoji)
                     .position(x: localX(layout.chromeLettersFrame), y: localY(layout.chromeLettersFrame))
             }
@@ -102,11 +136,153 @@ struct AuxiliaryBottomBar: View {
             )
                 .frame(width: CGFloat(spaceFrame.width), height: CGFloat(spaceFrame.height))
                 .position(x: localX(spaceFrame), y: localY(spaceFrame))
-            wideControl(systemName: "return", label: "Return", action: onReturn)
+            if let insert = fieldKeys.rightInsert, !periodFrame.isEmpty {
+                roundControl(
+                    text: insert,
+                    label: insert,
+                    textPointSize: insert.count > 1 ? 12 : 14,
+                    action: { onSymbolInsert(insert) }
+                )
+                .position(x: localX(periodFrame), y: localY(periodFrame))
+            } else if showsPeriodKey && !periodFrame.isEmpty {
+                periodKey(source: periodSourceFrame, bounds: barBounds, topOverflow: popupTopOverflow)
+                    .frame(width: periodSourceFrame.width, height: periodSourceFrame.height)
+                    .offset(x: periodSourceFrame.minX, y: periodSourceFrame.minY)
+            }
+            if fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle {
+                wideControl(systemName: "return", label: "Return", action: onReturn)
+                    .position(x: localX(returnFrame), y: localY(returnFrame))
+            } else {
+                wideControl(
+                    text: fieldKeys.returnTitle,
+                    label: fieldKeys.returnTitle,
+                    action: onReturn,
+                    hitWidth: returnFrame.width,
+                    hitHeight: returnFrame.height
+                )
                 .position(x: localX(returnFrame), y: localY(returnFrame))
+            }
+
+            if let session = periodVariantSession {
+                KeyVariantPopup(
+                    options: session.options,
+                    selectedIndex: session.selectedIndex,
+                    isEmoji: false
+                )
+                .frame(width: session.popupFrame.width, height: session.popupFrame.height)
+                .position(x: session.popupFrame.midX, y: session.popupFrame.midY)
+                .allowsHitTesting(false)
+                .zIndex(20)
+            } else if periodPreviewSession != nil {
+                KeyPressPreviewHost(session: $periodPreviewSession)
+                    .zIndex(20)
+            }
         }
         .frame(width: surfaceWidth, height: rowHeight, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .center)
+    }
+
+    private func periodKey(source: CGRect, bounds: CGSize, topOverflow: CGFloat) -> some View {
+        let plateHeight = VoiceOnlyKeyboardPolicy.commandVisualSize(
+            for: CGSize(width: source.width, height: source.height)
+        ).height
+        return ZStack {
+            VStack(spacing: 1) {
+                Text(".")
+                    .font(.system(size: 22, weight: .light))
+                Text(",")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(
+                width: min(VoiceOnlyKeyboardPolicy.periodKeyPlateWidth, source.width),
+                height: plateHeight
+            )
+            .letterKeyPlate()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+            ImmediateVariantKey(
+                onBegan: { point in
+                    periodBegan(at: point, source: source, bounds: bounds, topOverflow: topOverflow)
+                },
+                onMoved: { point in
+                    periodMoved(to: CGPoint(x: source.minX + point.x, y: source.minY + point.y))
+                },
+                onEnded: { cancelled in
+                    periodEnded(cancelled: cancelled)
+                }
+            )
+        }
+        .frame(width: source.width, height: source.height)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Period")
+        .accessibilityHint("Hold for punctuation options.")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func periodBegan(at _: CGPoint, source: CGRect, bounds: CGSize, topOverflow: CGFloat) {
+        HapticFeedback.prepareForNextTap()
+        HapticFeedback.keyTapped()
+        periodPreviewSession = KeyPreviewSession(
+            text: ".",
+            sourceFrame: source,
+            popupFrame: KeyPressPreviewHost.frame(
+                for: source,
+                in: bounds,
+                topOverflow: topOverflow
+            ),
+            cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius
+        )
+
+        let token = UUID()
+        periodHoldToken = token
+        DispatchQueue.main.asyncAfter(deadline: .now() + KeyboardDeletion.holdRecognitionDuration) {
+            guard periodHoldToken == token, periodVariantSession == nil else { return }
+            periodPreviewSession = nil
+            let options = SymbolKeyVariants.options(for: ".")
+            guard options.count > 1 else { return }
+            let popupFrame = KeyVariantPopup.frame(
+                for: source,
+                optionCount: options.count,
+                isEmoji: false,
+                in: bounds,
+                topOverflow: topOverflow
+            )
+            periodVariantSession = KeyVariantSession(
+                options: options,
+                sourceFrame: source,
+                popupFrame: popupFrame,
+                isEmoji: false,
+                selectedIndex: 0
+            )
+            HapticFeedback.variantPopupPresented()
+        }
+    }
+
+    private func periodMoved(to point: CGPoint) {
+        guard var session = periodVariantSession else { return }
+        let index = KeyVariantPopup.selectedIndex(
+            at: point,
+            popupFrame: session.popupFrame,
+            optionCount: session.options.count
+        )
+        guard session.selectedIndex != index else { return }
+        session.selectedIndex = index
+        periodVariantSession = session
+        HapticFeedback.variantHighlightChanged()
+    }
+
+    private func periodEnded(cancelled: Bool) {
+        periodHoldToken = nil
+        let session = periodVariantSession
+        periodVariantSession = nil
+        periodPreviewSession = nil
+        guard !cancelled else { return }
+        if let session, session.options.indices.contains(session.selectedIndex) {
+            onPeriod(session.options[session.selectedIndex])
+        } else {
+            onPeriod(".")
+        }
     }
 
 }
@@ -156,11 +332,10 @@ struct SpaceBarControl: View {
 
     var body: some View {
         ZStack {
-            Text("space")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, minHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize), maxHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize))
-                .commandKeyPlate(cornerRadius: 18)
+            CommandKeyFace(
+                text: "space",
+                plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+            )
             SpaceTrackingButton(
                 onTap: onTap,
                 onCursorBegan: onCursorBegan,
@@ -216,9 +391,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
-            isMultipleTouchEnabled = true
-            isExclusiveTouch = false
-            backgroundColor = .clear
+            KeyHitTarget.prepare(self)
             installCursorPanRecognizer()
         }
 
@@ -229,9 +402,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
 
         required init?(coder: NSCoder) {
             super.init(coder: coder)
-            isMultipleTouchEnabled = true
-            isExclusiveTouch = false
-            backgroundColor = .clear
+            KeyHitTarget.prepare(self)
             installCursorPanRecognizer()
         }
 
@@ -414,7 +585,7 @@ struct KeyboardDeleteButton: View {
         onDeleteWord: @escaping () -> Void,
         visualWidth: CGFloat = 80,
         visualHeight: CGFloat = 36,
-        visualCornerRadius: CGFloat = 18,
+        visualCornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
         hitWidth: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.width,
         hitHeight: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.height
     ) {
@@ -429,11 +600,12 @@ struct KeyboardDeleteButton: View {
 
     var body: some View {
         ZStack {
-            Image(systemName: "delete.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: visualWidth, height: visualHeight)
-                .commandKeyPlate(cornerRadius: visualCornerRadius)
+            CommandKeyFace(
+                systemName: "delete.backward",
+                plateWidth: visualWidth,
+                plateHeight: visualHeight,
+                cornerRadius: visualCornerRadius
+            )
             DeleteRepeatControl(
                 onDelete: onDelete,
                 onDeleteWord: onDeleteWord
@@ -487,9 +659,7 @@ final class KeyboardDeleteRepeatControl: UIControl {
     }
 
     private func configure() {
-        backgroundColor = .clear
-        isMultipleTouchEnabled = true
-        isExclusiveTouch = false
+        KeyHitTarget.prepare(self)
         accessibilityIdentifier = "board-delete"
         accessibilityLabel = "Delete backward"
         accessibilityTraits = .button
@@ -559,6 +729,8 @@ struct ImmediateKeyButton: UIViewRepresentable {
     var highlightSize: CGSize?
     var adaptiveKeyID: String?
     var adaptiveTouchScopeID: String?
+    var holdDuration: TimeInterval? = nil
+    var onHold: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> UIView {
         let button = ImmediateKeyControl(frame: .zero)
@@ -569,6 +741,8 @@ struct ImmediateKeyButton: UIViewRepresentable {
         button.hitExpansion = 6
         button.adaptiveTouchScopeID = adaptiveTouchScopeID
         button.adaptiveKeyID = adaptiveKeyID
+        button.holdDuration = holdDuration
+        button.onHold = onHold
         button.onTouchDown = onTouchDown
         button.onTouchUp = onTouchUp
         return button
@@ -583,6 +757,8 @@ struct ImmediateKeyButton: UIViewRepresentable {
         uiView.hitExpansion = 6
         uiView.adaptiveTouchScopeID = adaptiveTouchScopeID
         uiView.adaptiveKeyID = adaptiveKeyID
+        uiView.holdDuration = holdDuration
+        uiView.onHold = onHold
         uiView.onTouchDown = onTouchDown
         uiView.onTouchUp = onTouchUp
     }
@@ -616,12 +792,15 @@ private final class ImmediateKeyControl: UIControl {
     }
     var onTouchDown: (() -> Void)?
     var onTouchUp: (() -> Void)?
+    var holdDuration: TimeInterval? = nil
+    var onHold: (() -> Void)? = nil
+    private var holdTimer: Timer?
+    private var holdActive = false
+    private var holdRecognized = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        isMultipleTouchEnabled = true
-        isExclusiveTouch = false
-        backgroundColor = .clear
+        KeyHitTarget.prepare(self)
         layer.addSublayer(highlightLayer)
     }
 
@@ -629,6 +808,7 @@ private final class ImmediateKeyControl: UIControl {
         if let adaptiveKeyID {
             AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
         }
+        holdTimer?.invalidate()
     }
 
     private func registerAdaptiveKey() {
@@ -640,10 +820,12 @@ private final class ImmediateKeyControl: UIControl {
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        isMultipleTouchEnabled = true
-        isExclusiveTouch = false
-        backgroundColor = .clear
+        KeyHitTarget.prepare(self)
         layer.addSublayer(highlightLayer)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        self.point(inside: point, with: event) ? self : nil
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -652,21 +834,49 @@ private final class ImmediateKeyControl: UIControl {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         isHighlighted = true
-        for _ in touches {
-            onTouchDown?()
+        if let holdDuration {
+            guard !holdActive else { return }
+            holdActive = true
+            holdRecognized = false
+            let timer = Timer(timeInterval: holdDuration, repeats: false) { [weak self] _ in
+                guard let self, self.holdActive else { return }
+                self.holdRecognized = true
+                self.onHold?()
+            }
+            holdTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        } else {
+            for _ in touches {
+                onTouchDown?()
+            }
         }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         updateHighlight(using: event)
         if !hasActiveTouches(in: event) {
-            onTouchUp?()
+            finishHoldIfNeeded()
         }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         updateHighlight(using: event)
         if !hasActiveTouches(in: event) {
+            finishHoldIfNeeded()
+        }
+    }
+
+    private func finishHoldIfNeeded() {
+        guard holdDuration != nil else {
+            onTouchUp?()
+            return
+        }
+        holdTimer?.invalidate()
+        holdTimer = nil
+        let recognized = holdRecognized
+        holdActive = false
+        holdRecognized = false
+        if recognized {
             onTouchUp?()
         }
     }
@@ -711,7 +921,10 @@ private final class ImmediateKeyControl: UIControl {
     }
 
     override var intrinsicContentSize: CGSize {
-        highlightSize ?? super.intrinsicContentSize
+        // highlightSize is only for the press chrome. Returning it here shrinks
+        // the UIKit control inside SwiftUI frames and leaves dead gaps around
+        // command plates (shift/delete/123/etc).
+        CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
     }
 }
 
@@ -765,8 +978,11 @@ struct ImmediateVariantKey: UIViewRepresentable {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
-            isMultipleTouchEnabled = true
-            isExclusiveTouch = false
+            KeyHitTarget.prepare(self)
+        }
+
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            self.point(inside: point, with: event) ? self : nil
         }
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -775,8 +991,7 @@ struct ImmediateVariantKey: UIViewRepresentable {
 
         required init?(coder: NSCoder) {
             super.init(coder: coder)
-            isMultipleTouchEnabled = true
-            isExclusiveTouch = false
+            KeyHitTarget.prepare(self)
         }
 
         deinit {
@@ -865,56 +1080,66 @@ private extension AuxiliaryBottomBar {
     }
 
     private func roundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        chromeControl(label: label, action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
+        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) {
+            CommandKeyFace(
+                systemName: systemName,
+                plateWidth: commandVisual.width,
+                plateHeight: commandVisual.height
+            )
         }
     }
 
-    private func roundControl(text: String, label: String, action: @escaping () -> Void) -> some View {
-        chromeControl(label: label, action: action) {
-            Text(text)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+    private func roundControl(
+        text: String,
+        label: String,
+        textPointSize: CGFloat = 14,
+        action: @escaping () -> Void
+    ) -> some View {
+        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) {
+            CommandKeyFace(
+                text: text,
+                plateWidth: commandVisual.width,
+                plateHeight: commandVisual.height,
+                textPointSize: textPointSize
+            )
         }
     }
 
-    private func chromeControl<Glyph: View>(
+    private func chromeControl<Face: View>(
         label: String,
         action: @escaping () -> Void,
-        @ViewBuilder glyph: () -> Glyph
+        hit: CGSize,
+        highlightSize: CGSize,
+        @ViewBuilder face: () -> Face
     ) -> some View {
         ZStack {
-            glyph()
-                .frame(width: commandVisual.width, height: commandVisual.height)
-                .commandKeyPlate(cornerRadius: 18)
+            face()
             ImmediateKeyButton(
                 onTouchDown: {
                     HapticFeedback.keyTapped()
                     action()
                 },
                 onTouchUp: {},
-                highlightCornerRadius: 18,
-                highlightSize: commandVisual
+                highlightCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
+                highlightSize: highlightSize
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: commandHitSize.width, height: commandHitSize.height)
+        .frame(width: hit.width, height: hit.height)
         .contentShape(Rectangle())
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
     }
 
     private func wideControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        wideControl(
-            label: label,
-            action: action,
-            hitWidth: VoiceOnlyKeyboardPolicy.actionHitSize.width,
-            hitHeight: VoiceOnlyKeyboardPolicy.actionHitSize.height
-        ) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
+        let hit = VoiceOnlyKeyboardPolicy.actionHitSize
+        let plate = widePlateSize(hitWidth: hit.width, hitHeight: hit.height)
+        return chromeControl(label: label, action: action, hit: hit, highlightSize: hit) {
+            CommandKeyFace(
+                systemName: systemName,
+                plateWidth: plate.width,
+                plateHeight: plate.height
+            )
         }
     }
 
@@ -925,37 +1150,26 @@ private extension AuxiliaryBottomBar {
         hitWidth: CGFloat,
         hitHeight: CGFloat
     ) -> some View {
-        wideControl(label: label, action: action, hitWidth: hitWidth, hitHeight: hitHeight) {
-            Text(text)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+        let plate = widePlateSize(hitWidth: hitWidth, hitHeight: hitHeight)
+        return chromeControl(
+            label: label,
+            action: action,
+            hit: CGSize(width: hitWidth, height: hitHeight),
+            highlightSize: CGSize(width: hitWidth, height: hitHeight)
+        ) {
+            CommandKeyFace(
+                text: text,
+                plateWidth: plate.width,
+                plateHeight: plate.height
+            )
         }
     }
 
-    private func wideControl<Glyph: View>(
-        label: String,
-        action: @escaping () -> Void,
-        hitWidth: CGFloat,
-        hitHeight: CGFloat,
-        @ViewBuilder glyph: () -> Glyph
-    ) -> some View {
-        ZStack {
-            glyph()
-                .frame(width: max(36, hitWidth - VoiceOnlyKeyboardPolicy.commandVisualInset), height: VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(width: hitWidth, height: hitHeight)).height)
-                .commandKeyPlate(cornerRadius: 18)
-            ImmediateKeyButton(
-                onTouchDown: {
-                    HapticFeedback.keyTapped()
-                    action()
-                },
-                onTouchUp: {},
-                highlightCornerRadius: 18
-            )
-        }
-        .frame(width: hitWidth, height: hitHeight)
-        .contentShape(Rectangle())
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isButton)
+    private func widePlateSize(hitWidth: CGFloat, hitHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: max(36, hitWidth - VoiceOnlyKeyboardPolicy.commandVisualInset),
+            height: VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(width: hitWidth, height: hitHeight)).height
+        )
     }
 
 }
@@ -975,16 +1189,25 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
     func body(content: Content) -> some View {
+        // Plates are visual. A hittable solid fill sits behind the clear key
+        // control and swallows the tap; glass does not, which is why solid
+        // mode felt dead.
+        plate(content)
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func plate(_ content: Content) -> some View {
         if !KeyboardInteractionPreferences.liquidGlassEnabled {
             if role == .board {
                 content
             } else {
-                content
-                    .background(shape.fill(solidFill))
+                content.background { shape.fill(solidFill).allowsHitTesting(false) }
             }
         } else if reduceTransparency || accessibilityContrast == .increased {
-            content
-                .background(shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill)))
+            content.background {
+                shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill)).allowsHitTesting(false)
+            }
         } else if #available(iOS 26, *) {
             if interactive {
                 content.glassEffect(.regular.interactive(), in: shape)
@@ -992,8 +1215,7 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
                 content.glassEffect(.regular, in: shape)
             }
         } else {
-            content
-                .background(shape.fill(.regularMaterial))
+            content.background { shape.fill(.regularMaterial).allowsHitTesting(false) }
         }
     }
 
@@ -1017,8 +1239,75 @@ extension View {
     }
 
     /// Always-on plate for 123 / ABC / emoji / shift / delete / space / return.
-    func commandKeyPlate(cornerRadius: CGFloat = 18) -> some View {
+    func commandKeyPlate(cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius) -> some View {
         keyboardGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+/// Symbol or short label on a command plate. The hit target stays on the caller.
+struct CommandKeyFace: View {
+    private let systemName: String?
+    private let text: String?
+    private let textWeight: Font.Weight
+    private let symbolPointSize: CGFloat
+    private let textPointSize: CGFloat
+    private let plateWidth: CGFloat?
+    private let plateHeight: CGFloat
+    private let cornerRadius: CGFloat
+
+    init(
+        systemName: String,
+        plateWidth: CGFloat? = nil,
+        plateHeight: CGFloat,
+        cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
+        symbolPointSize: CGFloat = 16
+    ) {
+        self.systemName = systemName
+        self.text = nil
+        self.textWeight = .semibold
+        self.symbolPointSize = symbolPointSize
+        self.textPointSize = 14
+        self.plateWidth = plateWidth
+        self.plateHeight = plateHeight
+        self.cornerRadius = cornerRadius
+    }
+
+    init(
+        text: String,
+        plateWidth: CGFloat? = nil,
+        plateHeight: CGFloat,
+        cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
+        textPointSize: CGFloat = 14,
+        textWeight: Font.Weight = .semibold
+    ) {
+        self.systemName = nil
+        self.text = text
+        self.textWeight = textWeight
+        self.symbolPointSize = 16
+        self.textPointSize = textPointSize
+        self.plateWidth = plateWidth
+        self.plateHeight = plateHeight
+        self.cornerRadius = cornerRadius
+    }
+
+    var body: some View {
+        Group {
+            if let systemName {
+                Image(systemName: systemName)
+                    .font(.system(size: symbolPointSize, weight: .semibold))
+            } else if let text {
+                Text(text)
+                    .font(.system(size: textPointSize, weight: textWeight))
+            }
+        }
+        .foregroundStyle(.primary)
+        .frame(
+            minWidth: plateWidth,
+            maxWidth: plateWidth ?? .infinity,
+            minHeight: plateHeight,
+            maxHeight: plateHeight
+        )
+        .commandKeyPlate(cornerRadius: cornerRadius)
     }
 }
 
@@ -1027,8 +1316,10 @@ private struct LetterKeyPlateModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if KeyboardInteractionPreferences.keyContainersEnabled {
+            // Visual only — interactive glass must not compete with ImmediateKeyButton.
             content.keyboardGlass(
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                interactive: false
             )
         } else {
             content

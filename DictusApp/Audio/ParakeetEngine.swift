@@ -114,9 +114,13 @@ class ParakeetEngine: SpeechModelProtocol {
     ///     Parakeet TDT v3 auto-detects language from audio — this parameter is
     ///     a no-op either way. Dictation uses Auto-detect for every model; this
     ///     parameter remains for the shared engine interface. Language forcing
-    ///     requires a separate ASR backend such as Qwen3-ASR (iOS 18+).
+    ///     requires a separate multilingual ASR backend.
     /// - Returns: Transcribed text.
     func transcribe(audioSamples: [Float], language: String?) async throws -> String {
+        try await transcribeDetailed(audioSamples: audioSamples, language: language).text
+    }
+
+    func transcribeDetailed(audioSamples: [Float], language: String?) async throws -> SpeechTranscriptionOutput {
         guard let asrManager else {
             throw TranscriptionError.notReady
         }
@@ -125,15 +129,63 @@ class ParakeetEngine: SpeechModelProtocol {
             throw TranscriptionError.emptyAudio
         }
 
-        do {
-            let result = try await asrManager.transcribe(audioSamples)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quality = SpeechAudioQuality.analyze(audioSamples)
+        let regions = SpeechRegionSegmenter().regions(in: audioSamples)
+        let coverage = SpeechRegionCoverage(regions: regions, totalSampleCount: audioSamples.count)
+        PersistentLog.log(.diagnosticProbe(
+            component: "ParakeetEngine",
+            instanceID: "captureQuality",
+            action: "measured",
+            details: "condition=\(quality.condition.rawValue) rms=\(String(format: "%.4f", quality.rms)) peak=\(String(format: "%.4f", quality.peak)) noise=\(String(format: "%.4f", quality.estimatedNoiseFloor)) clipping=\(String(format: "%.4f", quality.clippingRatio))"
+        ))
+        PersistentLog.log(.diagnosticProbe(
+            component: "ParakeetEngine",
+            instanceID: "regionCoverage",
+            action: "measured",
+            details: "regions=\(regions.count) totalSamples=\(coverage.totalSampleCount) coveredSamples=\(coverage.coveredSampleCount) overlapSamples=\(coverage.overlapSampleCount) uncoveredSamples=\(coverage.uncoveredSampleCount) uncoveredWithinSpeechSpan=\(coverage.uncoveredWithinSpeechSpan)"
+        ))
+        guard !regions.isEmpty else {
+            throw TranscriptionError.noSpeech
+        }
 
+        do {
+            let transcripts = try await SpeechRegionTranscriptionRunner.run(
+                audioSamples: audioSamples,
+                regions: regions
+            ) { index, slice, region in
+                try Task.checkCancellation()
+                let startedAt = Date()
+                let gain = SpeechAudioGain.gain(for: slice)
+                let result = try await asrManager.transcribe(
+                    SpeechAudioGain.applying(gain, to: slice)
+                )
+                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let duration = Date().timeIntervalSince(startedAt)
+                PersistentLog.log(.diagnosticProbe(
+                    component: "ParakeetEngine",
+                    instanceID: "region-\(index)",
+                    action: "decoded",
+                    details: "startSample=\(region.startSample) endSample=\(region.endSample) chars=\(text.count) decodeMs=\(Int(duration * 1000)) gain=\(String(format: "%.2f", gain))"
+                ))
+                return SpeechRegionTranscript(
+                    region: region,
+                    text: text,
+                    decodeDurationSeconds: duration,
+                    fallbackReason: text.isEmpty ? "noResults" : nil
+                )
+            }
+            let text = SpeechTranscriptMerger.merge(transcripts)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else {
                 throw TranscriptionError.transcriptionFailed("Empty Parakeet transcription result")
             }
-
-            return text
+            return SpeechTranscriptionOutput(
+                text: text,
+                regions: transcripts,
+                firstRegionReadyAfterSeconds: transcripts.first?.decodeDurationSeconds
+            )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as TranscriptionError {
             throw error
         } catch {

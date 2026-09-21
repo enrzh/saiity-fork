@@ -42,72 +42,26 @@ struct DictusLiveActivity: Widget {
 
     // MARK: - Compact Views (Dynamic Island pill)
 
-    /// Compact leading: logo bars (static in standby, animated heights in recording)
+    /// Compact leading carries the compact sAiity mark.
     @ViewBuilder
     private func compactLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        Text("sAI")
-            .font(.system(size: 13, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
+        SaiityMark(size: 20)
     }
 
-    /// Compact trailing: "On" text in standby, timer in recording
+    /// Compact trailing uses the same status language as the expanded surface.
     @ViewBuilder
     private func compactTrailing(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        switch context.state.phase {
-        case .standby:
-            Text("Ready")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-        case .recording:
-            Text("Rec")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.sAiityRecording)
-        case .transcribing:
-            // Small spinner-like indicator via SF Symbol
-            Image(systemName: "ellipsis")
-                .foregroundColor(.white.opacity(0.7))
-                .font(.system(size: 14))
-        case .processing:
-            // Different glyph AND different colour from transcribing: at compact
-            // size the pill shows one icon, so it has to carry the whole
-            // distinction on its own (#267). Purple is the brand's Smart-mode
-            // colour, which is where this stage is heading (#79).
-            Image(systemName: "sparkles")
-                .foregroundStyle(Color.sAiityProcessing)
-                .font(.system(size: 14))
-        case .ready:
-            Text("Done")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.sAiitySuccess)
-        case .failed:
-            Image(systemName: "xmark")
-                .foregroundStyle(Color.sAiityRecording)
-                .font(.system(size: 14))
-        }
+        Image(systemName: statusSymbol(for: context.state.phase))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(statusColor(for: context.state.phase))
+            .accessibilityLabel(statusLabel(for: context.state.phase))
     }
 
     // MARK: - Minimal View
 
     @ViewBuilder
     private func minimalView(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        switch context.state.phase {
-        case .standby:
-            // Full 3-bar logo even in minimal — single bar was invisible
-            MiniLogoBars(levels: [0.43, 1.0, 0.64], animated: false)
-                .frame(width: 14, height: 12)
-        case .recording:
-            let levels = normalizedLevels(context.state.waveformLevels, count: 3)
-            MiniLogoBars(levels: levels, animated: true)
-                .frame(width: 14, height: 12)
-        case .ready:
-            Image(systemName: "checkmark")
-                .foregroundStyle(Color.sAiitySuccess)
-                .font(.system(size: 12, weight: .bold))
-        default:
-            Image(systemName: "waveform")
-                .foregroundColor(.white.opacity(0.7))
-                .font(.system(size: 12))
-        }
+        SaiityMark(size: 24)
     }
 
     // MARK: - Expanded Views (long press)
@@ -115,40 +69,70 @@ struct DictusLiveActivity: Widget {
     @ViewBuilder
     private func expandedLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
         HStack(spacing: 8) {
+            SaiityMark(size: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text("sAI")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-
-                switch context.state.phase {
-                case .standby:
-                    Text("Ready")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.6))
-                case .recording:
-                    Text("Recording...")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: 0xEF4444))
-                case .transcribing:
-                    Text("Transcribing...")
-                        .font(.system(size: 12))
-                .foregroundStyle(Color.sAiityAccent)
-                case .processing:
-                    Text("Processing...")
-                        .font(.system(size: 12))
-                .foregroundStyle(Color.sAiityProcessing)
-                case .ready:
-                    Text("Transcription ready")
-                        .font(.system(size: 12))
-                .foregroundStyle(Color.sAiitySuccess)
-                case .failed:
-                    Text("Error")
-                        .font(.system(size: 12))
-                .foregroundStyle(Color.sAiityRecording)
-                }
+                Text("sAiity")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text(statusLabel(for: context.state.phase))
+                    .font(.system(size: 12))
+                    .foregroundStyle(statusColor(for: context.state.phase))
             }
         }
         .frame(maxHeight: .infinity, alignment: .center)
+    }
+
+    private func statusLabel(for phase: DictusLiveActivityAttributes.Phase) -> String {
+        switch phase {
+        case .standby: return "Ready"
+        case .recording: return "Listening"
+        case .transcribing: return "Transcribing"
+        case .processing: return "Polishing"
+        case .ready: return "Ready to use"
+        case .failed: return "Needs attention"
+        }
+    }
+
+    private func statusSymbol(for phase: DictusLiveActivityAttributes.Phase) -> String {
+        switch phase {
+        case .standby: return "mic"
+        case .recording: return "waveform"
+        case .transcribing: return "ellipsis"
+        case .processing: return "wand.and.stars"
+        case .ready: return "checkmark"
+        case .failed: return "exclamationmark.triangle"
+        }
+    }
+
+    private func statusColor(for phase: DictusLiveActivityAttributes.Phase) -> Color {
+        switch phase {
+        case .standby: return .white.opacity(0.7)
+        case .recording: return .sAiityRecording
+        case .transcribing: return .sAiityAccent
+        case .processing: return .sAiityProcessing
+        case .ready: return .sAiitySuccess
+        case .failed: return .sAiityRecording
+        }
+    }
+
+    @ViewBuilder
+    private func serviceControl(enabled: Bool, size: CGFloat) -> some View {
+        let label = Image(systemName: enabled ? "power" : "power.circle")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: size, height: size)
+            .background(Color.primary.opacity(0.15), in: Circle())
+        if enabled {
+            Button(intent: StopStandbyIntent(toggleDetection: true)) { label }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Disable keyboard dictation")
+        } else if let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") {
+            // Starting a cold microphone requires foreground activation; the
+            // keyboard holds themselves never open the app.
+            Link(destination: url) { label }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Enable keyboard dictation in sAiity")
+        }
     }
 
     @ViewBuilder
@@ -157,15 +141,7 @@ struct DictusLiveActivity: Widget {
             Spacer(minLength: 0) // Push trailing elements to the right edge
             switch context.state.phase {
             case .standby:
-                Button(intent: StopStandbyIntent(toggleDetection: true)) {
-                    Image(systemName: context.state.serviceEnabled ? "power" : "power.circle")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(0.15))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
+                serviceControl(enabled: context.state.serviceEnabled, size: 44)
 
             case .recording:
                 // Stop button (left side)
@@ -223,11 +199,9 @@ struct DictusLiveActivity: Widget {
     @ViewBuilder
     private func lockScreenView(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("sAI")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.primary)
+            SaiityMark(size: 40)
 
+            VStack(alignment: .leading, spacing: 2) {
                 switch context.state.phase {
                 case .standby:
                     Text("Ready")
@@ -270,15 +244,7 @@ struct DictusLiveActivity: Widget {
             // Action buttons
             switch context.state.phase {
             case .standby:
-                Button(intent: StopStandbyIntent(toggleDetection: true)) {
-                    Image(systemName: context.state.serviceEnabled ? "power" : "power.circle")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .frame(width: 48, height: 48)
-                        .background(context.state.serviceEnabled ? Color.white.opacity(0.1) : Color.secondary)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
+                serviceControl(enabled: context.state.serviceEnabled, size: 48)
             case .recording:
                 if let stopURL = URL(string: "saiity://stop") {
                     Link(destination: stopURL) {
@@ -298,90 +264,6 @@ struct DictusLiveActivity: Widget {
         .background(Color(uiColor: .systemBackground))
     }
 
-    // MARK: - Helpers
-
-    /// Normalize waveform levels to the requested count.
-    /// Downsamples by averaging groups if input has more values.
-    /// Pads with default values if input has fewer.
-    private func normalizedLevels(_ levels: [Float], count: Int) -> [Float] {
-        guard !levels.isEmpty else {
-            // Default levels matching logo proportions
-            return count == 3
-                ? [0.43, 1.0, 0.64]
-                : Array(repeating: 0.3, count: count)
-        }
-
-        if levels.count == count {
-            return levels
-        }
-
-        if levels.count > count {
-            // Downsample: average groups
-            let groupSize = levels.count / count
-            return (0..<count).map { i in
-                let start = i * groupSize
-                let end = min(start + groupSize, levels.count)
-                let slice = levels[start..<end]
-                return slice.reduce(0, +) / Float(slice.count)
-            }
-        }
-
-        // Pad with last value or 0.3
-        var result = levels
-        let pad = levels.last ?? 0.3
-        while result.count < count {
-            result.append(pad)
-        }
-        return result
-    }
-}
-
-// MARK: - Mini Logo Bars
-
-/// Compact 3-bar logo for Dynamic Island display.
-/// Matches brand proportions: left=43%, center=100% (gradient), right=64%.
-///
-/// WHY not reusing DictusLogo from DictusCore:
-/// DictusLogo uses @ScaledMetric and @Environment(\.colorScheme) which behave
-/// differently in Widget extensions. This simplified version uses fixed sizes
-/// appropriate for the tiny Dynamic Island space.
-struct MiniLogoBars: View {
-    let levels: [Float]
-    let animated: Bool
-
-    var body: some View {
-        GeometryReader { geo in
-            let barWidth = max(2.5, geo.size.width / 5)
-            let spacing = (geo.size.width - barWidth * 3) / 2
-            // Boost side bar opacity in small frames so bars stay visible
-            let isSmall = geo.size.width < 16
-
-            HStack(spacing: spacing) {
-                ForEach(0..<min(levels.count, 3), id: \.self) { index in
-                    let height = CGFloat(levels[index]) * geo.size.height
-                    if index == 1 {
-                        // Center bar: brand gradient
-                        RoundedRectangle(cornerRadius: barWidth / 2)
-                            .fill(LinearGradient(
-                                colors: [Color(hex: 0x6BA3FF), Color(hex: 0x2563EB)],
-                                startPoint: .top, endPoint: .bottom
-                            ))
-                            .frame(width: barWidth, height: max(2, height))
-                    } else {
-                        // Side bars: white with brand opacity (boosted when small)
-                        let opacity: Double = index == 0
-                            ? (isSmall ? 0.60 : 0.45)
-                            : (isSmall ? 0.80 : 0.65)
-                        RoundedRectangle(cornerRadius: barWidth / 2)
-                            .fill(Color.white.opacity(opacity))
-                            .frame(width: barWidth, height: max(2, height))
-                    }
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-            .animation(animated ? .easeInOut(duration: 0.3) : nil, value: levels)
-        }
-    }
 }
 
 // MARK: - Waveform Bars (Expanded View)
@@ -413,6 +295,27 @@ struct WaveformBars: View {
     }
 }
 
+/// Compact sAiity mark for WidgetKit surfaces where the app icon asset is not
+/// available to the extension bundle.
+private struct SaiityMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.sAiityBrand)
+
+            Text(verbatim: "sAi")
+                .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
+                .tracking(-size * 0.025)
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityLabel("sAiity")
+    }
+}
+
 // MARK: - Color Extension (Widget-local)
 
 /// WHY duplicate Color(hex:) here instead of importing from DictusCore:
@@ -420,6 +323,7 @@ struct WaveformBars: View {
 /// is linked, keeping this tiny extension local avoids any import ordering
 /// issues with SwiftUI in widget builds.
 private extension Color {
+    static let sAiityBrand = Color(hex: 0x16A6AA)
     static let sAiityAccent = Color.accentColor
     static let sAiityRecording = Color.red
     static let sAiitySuccess = Color.green

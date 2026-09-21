@@ -56,21 +56,23 @@ enum PolishAutoPrompt {
            - German: `Komma` → `,`, `Fragezeichen` → `?`, `Ausrufezeichen` → `!`, `Doppelpunkt` → `:`, `Semikolon` / `Strichpunkt` → `;`, `neue Zeile` → line break.
            Apply mid-clause too, and the equivalent commands in other languages. Only when the words are clearly a spoken command — not when the speaker talks ABOUT punctuation.
         5. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`I I think` → `I think`). Only immediate same-word repetition.
-        6. Resolve spoken false starts and self-corrections in the input's own language. When the speaker abandons a phrase (`send it Tuesday, actually Wednesday`), keep the corrected phrase and remove the abandoned fragment. Treat a correction marker such as `actually` according to its context; never delete it when it carries meaning.
-        7. Remove pure hesitation fillers (`uh`, `um`, `euh`, `ähm`, `este`, `eeh`) when they carry no meaning. KEEP transition words that carry intent.
+        6. Resolve spoken false starts, self-corrections, and restated duplicates in the input's own language. When the speaker abandons a phrase (`send it Tuesday, actually Wednesday` or `2am, oh sorry, it's 4am`), keep the corrected phrase and remove the abandoned fragment. If they restart the same message (`I got an appointment at 4am` then `so basically I got a poem at 4am`), keep the first complete message and drop the restatement. Treat a correction marker such as `actually` according to its context; never delete it when it carries meaning.
+        7. Remove pure hesitation fillers (`uh`, `um`, `euh`, `ähm`, `este`, `eeh`) when they carry no meaning. Remove `like` when it is filler between a verb and its object (`got like a appointment` → `got an appointment`), not when it is a verb or comparison (`I like`, `looks like`). Remove stalling clusters (`Um, yeah.`) and restart frames (`So basically`, German `So grundsätzlich`) when they only stall or introduce a repeat. KEEP a lone transition `so` / `also` / `grundsätzlich` when it carries intent. After dropping a German fronted stall, restore statement order (`So grundsätzlich habe ich` → `Ich habe`), not the question order `Habe ich`.
         8. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker where the language uses capitalization. Do NOT alter, paraphrase, surround with spaces, or add new markers.
-        9. Fix obvious one-letter typos.
+        9. Fix obvious one-letter typos. Restore grammar required by the input language: German `um` before a clock time (`Termin 15 Uhr` → `Termin um 15 Uhr`); conjugate a spoken infinitive invitation (`und heute dich dafür einladen` → `Und heute lade ich dich dafür ein`). Do not invent a different verb or fact.
+        10. Remove non-speech event labels invented by ASR, including environmental sounds (`(singing)`, `(laughs)`, `(snow crunching)`, `[kiss]`, `[MUSIC]`, `[BLANK_AUDIO]`, `♪`). Do not remove ordinary parenthetical asides (`(see attached)`, `(2024)`).
 
         PRESERVE — DO NOT change these:
 
-        - The input language and script. Mixed-language input keeps every part in its original language — polish each part in place.
+        - Mixed-language input keeps every part in its original language — polish each part in place. Never translate a clause to match its neighbors.
         - Word choice: do NOT substitute synonyms. Slang, casual abbreviations, and contractions stay exactly as spoken.
+        - Names, identifiers, amounts, dates, units and negation. Do not guess a different name, invent digits, convert units, or reverse intent. Do drop the superseded number in an explicit self-correction (`2am, oh sorry, 4am` → `4am`).
         - Tone and register: familiar stays familiar, formal stays formal. Do NOT shift up or down.
 
         FORBIDDEN:
         - Do NOT translate. Not even partially. If you cannot identify the language, return the input with only punctuation fixed.
-        - Do NOT add words or content that weren't in the input. No inventing endings, no inserting context, no completing cut-off sentences.
-        - Do NOT reorder words.
+        - Do NOT add content that wasn't implied. Grammar function words required by the language (subject-verb order, `um` before `Uhr`, conjugating an infinitive that was already spoken) are required. No inventing endings, no inserting context, no completing cut-off sentences with new facts.
+        - Do NOT reorder words except to restore that grammar.
         - Do NOT add `<<NL>>` markers where none existed. Do NOT split or alter existing markers.
 
         Domain vocabulary — preserve canonical spelling:
@@ -83,6 +85,15 @@ enum PolishAutoPrompt {
 
         INPUT: send it on Tuesday, actually Wednesday
         OUTPUT: Send it on Wednesday.
+
+        INPUT: Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?
+        OUTPUT: Hey Jack, I got an appointment at 4am. Can you come by please?
+
+        INPUT: (snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.
+        OUTPUT: Ich habe jetzt einen Termin um 15 Uhr. Und heute lade ich dich dafür ein.
+
+        INPUT: Ich schicke dir the invoice tomorrow und 我晚上再确认。
+        OUTPUT: Ich schicke dir the invoice tomorrow und 我晚上再确认。
 
         INPUT: euh je sais pas trop si on doit y aller maintenant
         OUTPUT: Je sais pas trop si on doit y aller maintenant.

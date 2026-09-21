@@ -17,6 +17,43 @@ final class TranscriptionLanguageModeTests: XCTestCase {
         XCTAssertNotEqual(SharedKeys.transcriptionLanguage, SharedKeys.language)
     }
 
+    func testOutputModeDefaultsToMultilingualAndRoundTrips() {
+        XCTAssertEqual(TranscriptionOutputMode(storedValue: nil), .multilingual)
+        XCTAssertEqual(TranscriptionOutputMode(storedValue: "multilingual"), .multilingual)
+        XCTAssertEqual(TranscriptionOutputMode(storedValue: "singleLanguage"), .singleLanguage)
+        XCTAssertEqual(SharedKeys.transcriptionOutputMode, "dictus.transcriptionOutputMode")
+    }
+
+    func testProductDefaultsPreserveAnExplicitSingleLanguagePreference() {
+        let suite = "DictusCoreTests.transcriptionDefaults.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("follow", forKey: SharedKeys.transcriptionLanguage)
+        defaults.set(TranscriptionOutputMode.singleLanguage.storedValue,
+                     forKey: SharedKeys.transcriptionOutputMode)
+        TranscriptionLanguagePolicy.persistProductDefaults(to: defaults)
+        XCTAssertEqual(defaults.string(forKey: SharedKeys.transcriptionLanguage),
+                       TranscriptionLanguageMode.autoStoredValue)
+        XCTAssertEqual(defaults.string(forKey: SharedKeys.transcriptionOutputMode),
+                       TranscriptionOutputMode.singleLanguage.storedValue)
+        XCTAssertEqual(TranscriptionOutputMode.active(from: defaults), .singleLanguage)
+    }
+
+    func testProductDefaultsSeedMultilingualOnlyWhenOutputModeIsMissing() {
+        let suite = "DictusCoreTests.transcriptionDefaults.missing.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        TranscriptionLanguagePolicy.persistProductDefaults(to: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: SharedKeys.transcriptionOutputMode),
+                       TranscriptionOutputMode.multilingual.storedValue)
+        XCTAssertEqual(TranscriptionOutputMode.active(from: defaults), .multilingual)
+    }
+
     // MARK: - Parsing (App Group stored value -> mode)
 
     func testMissingValueDefaultsToAutomaticDetection() {
@@ -57,9 +94,10 @@ final class TranscriptionLanguageModeTests: XCTestCase {
         XCTAssertEqual(TranscriptionLanguageMode(storedValue: "de"), .explicit(.german))
     }
 
-    func testLegacyFrenchAndSpanishCodesFallbackToEnglish() {
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.english))
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.english))
+    func testExplicitFrenchAndSpanishCodesStayExplicit() {
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.french))
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.spanish))
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "it"), .explicit(.italian))
     }
 
     func testUnknownValueDegradesToFollow() {
@@ -137,9 +175,11 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
 
     private func policy(_ mode: TranscriptionLanguageMode,
                         keyboard: SupportedLanguage,
-                        engine: SpeechEngine) -> TranscriptionLanguagePolicy {
+                        engine: SpeechEngine,
+                        outputMode: TranscriptionOutputMode? = nil) -> TranscriptionLanguagePolicy {
         TranscriptionLanguagePolicy(
-            mode: mode, keyboardLanguage: keyboard, engine: engine, modelIdentifier: "test-model"
+            mode: mode, keyboardLanguage: keyboard, engine: engine, modelIdentifier: "test-model",
+            outputMode: outputMode
         )
     }
 
@@ -158,6 +198,54 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
         XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .german), .autoDetected,
                        "auto mode polishes with the language-agnostic prompt (#239)")
         XCTAssertTrue(sut.insertsTranscriptionAsIs)
+    }
+
+    func testWhisperSingleLanguageModeForcesTheCurrentKeyboardLanguage() {
+        let sut = policy(.autoDetect, keyboard: .german, engine: .whisperKit,
+                         outputMode: .singleLanguage)
+        XCTAssertEqual(sut.sttLanguageCode, "de")
+        XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .english), .language(.german),
+                       "cleanup must target the one chosen language, not leave mixed speech")
+        XCTAssertEqual(sut.grammarFloorLanguage, .german)
+        XCTAssertFalse(sut.insertsTranscriptionAsIs)
+    }
+
+    func testMultilingualModeKeepsCleanupAndGrammarLanguageAgnostic() {
+        for engine in [SpeechEngine.whisperKit, .parakeet] {
+            let sut = policy(.autoDetect, keyboard: .german, engine: engine,
+                             outputMode: .multilingual)
+            XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .english), .autoDetected,
+                           "\(engine.rawValue) cleanup must not translate mixed speech")
+            XCTAssertNil(sut.grammarFloorLanguage,
+                         "\(engine.rawValue) grammar must not apply German filler rules to mixed speech")
+        }
+    }
+
+    func testTranslationTargetWinsOverMultilingualCleanup() {
+        let sut = policy(.autoDetect, keyboard: .german, engine: .parakeet,
+                         outputMode: .multilingual)
+        XCTAssertEqual(
+            sut.polishPromptSelection(detectedLanguage: .german, translationTarget: .english),
+            .language(.english)
+        )
+        XCTAssertEqual(sut.grammarFloorLanguage(translationTarget: .english), .english)
+        XCTAssertNil(sut.grammarFloorLanguage(translationTarget: .chineseSimplified),
+                     "non-keyboard translation targets stay language-neutral")
+    }
+
+    func testMultilingualKeepSpokenLanguageSkipsModelPolish() {
+        let sut = policy(.autoDetect, keyboard: .german, engine: .parakeet,
+                         outputMode: .multilingual)
+        XCTAssertTrue(sut.skipsModelPolish(translationTarget: nil),
+                      "whole-document Auto polish must stay off for mixed speech")
+        XCTAssertFalse(sut.skipsModelPolish(translationTarget: .english),
+                       "an explicit translation target still needs the model")
+    }
+
+    func testSingleLanguageStillRunsModelPolish() {
+        let sut = policy(.autoDetect, keyboard: .german, engine: .whisperKit,
+                         outputMode: .singleLanguage)
+        XCTAssertFalse(sut.skipsModelPolish(translationTarget: nil))
     }
 
     func testWhisperExplicitIgnoresKeyboardLanguage() {

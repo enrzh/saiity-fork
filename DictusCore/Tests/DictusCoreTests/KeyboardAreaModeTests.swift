@@ -10,12 +10,13 @@ final class KeyboardAreaModeTests: XCTestCase {
         XCTAssertFalse(KeyboardAreaMode.letters.usesVoiceActionControls)
         XCTAssertFalse(KeyboardAreaMode.emoji.usesVoiceActionControls)
         XCTAssertFalse(KeyboardAreaMode.panel.usesVoiceActionControls)
+        XCTAssertFalse(KeyboardAreaMode.numberPad.usesVoiceActionControls)
     }
 
     // MARK: - Cases
 
     func testEnumHasOnlyVoiceModes() {
-        XCTAssertEqual(KeyboardAreaMode.allCases, [.keys, .letters, .emoji, .panel, .recording])
+        XCTAssertEqual(KeyboardAreaMode.allCases, [.keys, .letters, .emoji, .panel, .numberPad, .recording])
     }
 
     func testRawValues() {
@@ -90,6 +91,7 @@ final class KeyboardAreaModeTests: XCTestCase {
         XCTAssertEqual(KeyboardAreaMode.resolving(status: .processing, current: .recording), .keys)
         XCTAssertEqual(KeyboardAreaMode.resolving(status: .transcribing, current: .emoji), .emoji)
         XCTAssertEqual(KeyboardAreaMode.resolving(status: .processing, current: .panel), .panel)
+        XCTAssertEqual(KeyboardAreaMode.resolving(status: .processing, current: .numberPad), .numberPad)
     }
 
     func testClosingAnAuxiliaryAreaLeavesKeysAvailable() {
@@ -101,6 +103,30 @@ final class KeyboardAreaModeTests: XCTestCase {
     func testSymbolsActionTogglesBetweenPanelAndKeys() {
         XCTAssertEqual(KeyboardAreaMode.toggledPanel(from: .keys), .panel)
         XCTAssertEqual(KeyboardAreaMode.toggledPanel(from: .panel), .keys)
+    }
+
+    func testNumberFieldsOpenTheThreeByFourPadInsteadOfLettersOrDictation() {
+        XCTAssertEqual(
+            KeyboardAreaMode.openingMode(prefersNumberPad: true, defaultMode: .dictationBoard),
+            .numberPad
+        )
+        XCTAssertEqual(
+            KeyboardAreaMode.openingMode(prefersNumberPad: true, defaultMode: .keyboard),
+            .numberPad
+        )
+        XCTAssertEqual(
+            KeyboardAreaMode.openingMode(prefersNumberPad: false, defaultMode: .dictationBoard),
+            .keys
+        )
+        XCTAssertEqual(
+            KeyboardAreaMode.openingMode(prefersNumberPad: false, defaultMode: .keyboard),
+            .letters
+        )
+    }
+
+    func testNumbersControlReturnsToThePadOnNumericFields() {
+        XCTAssertEqual(KeyboardAreaMode.numbersMode(prefersNumberPad: true), .numberPad)
+        XCTAssertEqual(KeyboardAreaMode.numbersMode(prefersNumberPad: false), .panel)
     }
 
     func testSymbolsPageHasAnExplicitReturnToABCTransition() {
@@ -125,5 +151,6 @@ final class KeyboardAreaModeTests: XCTestCase {
         XCTAssertEqual(KeyboardAreaMode.recording.modeControlTitle, "123")
         XCTAssertEqual(KeyboardAreaMode.emoji.modeControlTitle, "ABC")
         XCTAssertEqual(KeyboardAreaMode.panel.modeControlTitle, "ABC")
+        XCTAssertEqual(KeyboardAreaMode.numberPad.modeControlTitle, "ABC")
     }
 }

@@ -89,10 +89,10 @@ struct DictusApp: App {
         if let defaults {
             KeyboardLanguageSelection.migrateLegacyFrenchIfNeeded(in: defaults)
         }
-        // Transcription is always language-agnostic Auto-detect. Persist the
-        // canonical value so older installs do not leave a stale mode behind.
+        // Transcription always uses Auto-detect at the ASR boundary. Preserve
+        // the separately persisted output-mode preference from Settings.
         if let defaults {
-            defaults.set(TranscriptionLanguageMode.autoStoredValue, forKey: SharedKeys.transcriptionLanguage)
+            TranscriptionLanguagePolicy.persistProductDefaults(to: defaults)
         }
         // Freeze the layout an updating install is already typing on, before anything can
         // change the active language (#272). The migration is idempotent and also runs from
@@ -106,6 +106,10 @@ struct DictusApp: App {
         // Without this, existing users upgrading would see Live Activity disabled.
         if defaults?.object(forKey: SharedKeys.liveActivityEnabled) == nil {
             defaults?.set(true, forKey: SharedKeys.liveActivityEnabled)
+        }
+        if defaults?.object(forKey: SharedKeys.dictationPresenceMode) == nil {
+            let enabled = defaults?.object(forKey: SharedKeys.liveActivityEnabled) as? Bool ?? true
+            (enabled ? DictationPresenceMode.liveActivity : .off).persist(to: defaults ?? AppGroup.defaults)
         }
         if defaults?.object(forKey: SharedKeys.serviceEnabled) == nil {
             defaults?.set(true, forKey: SharedKeys.serviceEnabled)
@@ -147,6 +151,15 @@ struct DictusApp: App {
                     }
                 }
                 .task {
+                    // The preference is enabled by default. Re-arm the warm
+                    // microphone session when the app process starts so the first
+                    // keyboard hold does not become a needless recovery handoff.
+                    let serviceEnabled = AppGroup.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
+                        || AppGroup.defaults.bool(forKey: SharedKeys.serviceEnabled)
+                    if serviceEnabled {
+                        coordinator.enableKeyboardSession()
+                    }
+
                     // Keep the cross-process availability signal fresh while the
                     // app process remains alive, including during background audio.
                     // iOS suspends this task when the process is suspended; the
@@ -287,7 +300,7 @@ struct DictusApp: App {
                 // The keyboard opens this URL when the model is not warm enough for a
                 // background start. Start preparation explicitly so the overlay reflects
                 // real work instead of waiting on a state change that never arrives.
-                coordinator.preloadActiveModel()
+                coordinator.enableKeyboardSession()
                 NotificationCenter.default.post(
                     name: .dictusKeyboardPreparationRequested,
                     object: nil

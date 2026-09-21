@@ -41,6 +41,8 @@ final class PerformanceMetricsSubscriber: NSObject, MXMetricManagerSubscriber {
             DictusLogger.app.info(
                 "MetricKit metrics \(fields.joined(separator: " "), privacy: .public)"
             )
+            PersistentLog.log(.diagnosticProbe(component: "MetricKit", instanceID: payload.latestApplicationVersion,
+                                             action: "dailyMetrics", details: fields.joined(separator: " ")))
         }
     }
 
@@ -55,6 +57,9 @@ final class PerformanceMetricsSubscriber: NSObject, MXMetricManagerSubscriber {
             DictusLogger.app.error(
                 "MetricKit diagnostics hangs=\(hangs) crashes=\(crashes) launches=\(launches) cpuExceptions=\(cpuExceptions) diskWriteExceptions=\(diskWriteExceptions)"
             )
+            PersistentLog.log(.diagnosticProbe(component: "MetricKit", instanceID: "daily",
+                                             action: "diagnostics",
+                                             details: "hangs=\(hangs) crashes=\(crashes) launches=\(launches) cpuExceptions=\(cpuExceptions) diskWriteExceptions=\(diskWriteExceptions)"))
         }
     }
 

@@ -20,94 +20,30 @@ struct MicPermissionPage: View {
     @State private var isRequesting = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // Mic icon
-            Image(systemName: "mic.circle.fill")
-                .font(.system(.largeTitle, weight: .semibold))
-                .foregroundColor(.dictusAccent)
-                .padding(.bottom, 24)
-
-            // Title
-            Text("Microphone")
-                .font(.dictusHeading)
-                .foregroundStyle(.primary)
-                .padding(.bottom, 16)
-
-            // Explanation
-            Text("sAiity needs the microphone to transcribe your voice. Your recordings stay on your device.")
-                .font(.dictusBody)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Spacer()
-
-            // Permission result feedback
-            if let granted = permissionGranted {
-                if granted {
-                    Label("Microphone authorized", systemImage: "checkmark.circle.fill")
-                        .font(.dictusBody)
-                        .foregroundColor(.dictusSuccess)
-                        .padding(.bottom, 16)
-                } else {
-                    Text("You can enable the microphone later in Settings")
-                        .font(.dictusCaption)
-                        .foregroundColor(.orange)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 16)
+        VStack(alignment: .leading, spacing: 28) {
+            SaiityPageHeader(eyebrow: "YOU’RE IN CONTROL", title: "A voice needs a microphone.",
+                             subtitle: "sAiity uses your microphone for dictation. Your recordings stay on your device.")
+            VStack(alignment: .leading, spacing: 20) {
+                Label("Permission is yours to give", systemImage: "hand.raised").font(.headline)
+                Text("iOS will ask for microphone access. You can change it at any time in Settings.")
+                    .foregroundStyle(.secondary)
+                if permissionGranted == true {
+                    Label("Microphone authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+                } else if permissionGranted == false {
+                    Text("Microphone access is required for dictation").foregroundStyle(.secondary)
                 }
             }
-
-            // Action button
+            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 28))
             if permissionGranted == nil {
-                // Request permission button.
-                // WHY neutral wording ("Continue", not "Allow microphone"):
-                // App Review guideline 5.1.1(iv) forbids priming buttons that direct
-                // the user toward granting a system permission. The button only advances
-                // to the OS prompt — iOS owns the actual allow/deny choice.
-                Button(action: requestPermission) {
-                    Text("Continue")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(.headline)
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                .controlSize(.large)
-                .disabled(isRequesting)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 48)
+                Button("Continue", action: requestPermission)
+                    .buttonStyle(.borderedProminent).controlSize(.large).disabled(isRequesting)
             } else if permissionGranted == true {
-                Button(action: onNext) {
-                    Text("Continue after authorization")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(.headline)
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                .controlSize(.large)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 48)
+                Button("Continue after authorization", action: onNext)
+                    .buttonStyle(.borderedProminent).controlSize(.large)
             } else {
-                VStack(spacing: 12) {
-                    Button(action: openSettings) {
-                        Label("Open Settings", systemImage: "arrow.up.right")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .font(.headline)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding(.horizontal, 32)
-
-                    Text("Microphone access is required for dictation")
-                        .font(.dictusCaption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                .padding(.bottom, 48)
+                Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
             }
         }
         .onChange(of: scenePhase) { _, newPhase in

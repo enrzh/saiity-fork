@@ -4,9 +4,13 @@ import Foundation
 /// The app owns URLSession and prompt construction; this type keeps wire parsing
 /// deterministic and testable without requiring an Ollama process.
 public enum OllamaHTTPContract {
+    /// Interactive cleanup must fall back rather than wait minutes for a server.
+    public static let cleanupTimeout: TimeInterval = 30
+
     public enum Error: Swift.Error, Equatable, Sendable {
         case httpStatus(Int, String)
         case malformedResponse
+        case incompleteResponse
     }
 
     public static func endpoint(baseURL: String) -> URL? {
@@ -31,6 +35,17 @@ public enum OllamaHTTPContract {
               !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Error.malformedResponse
         }
-        return content
+        // A plausible partial sentence can pass length/language guardrails.
+        // Older compatible servers omit finish_reason; retain that compatibility.
+        if let reason = choices.first?["finish_reason"] as? String, reason != "stop" {
+            throw Error.incompleteResponse
+        }
+        var output = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if output.hasPrefix("<think>") {
+            guard let close = output.range(of: "</think>") else { throw Error.incompleteResponse }
+            output = String(output[close.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !output.isEmpty else { throw Error.incompleteResponse }
+        return output
     }
 }

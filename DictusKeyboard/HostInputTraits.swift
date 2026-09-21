@@ -31,16 +31,43 @@ enum HostInputTraits {
         proxy.textContentType == .oneTimeCode
     }
 
+    static func prefersNumberPad(for proxy: UITextDocumentProxy) -> Bool {
+        HostFieldPolicy.prefersNumberPad(
+            keyboard: keyboardKind(proxy.keyboardType),
+            content: contentKind(proxy.textContentType)
+        )
+    }
+
+    static func letterFieldKeys(for proxy: UITextDocumentProxy) -> HostFieldPolicy.LetterFieldKeys {
+        HostFieldPolicy.letterFieldKeys(
+            keyboard: keyboardKind(proxy.keyboardType),
+            content: contentKind(proxy.textContentType)
+        )
+    }
+
+    static func prefersSymbolPage(for proxy: UITextDocumentProxy) -> Bool {
+        HostFieldPolicy.prefersSymbolPage(keyboard: keyboardKind(proxy.keyboardType))
+    }
+
+    static func numberPadStyle(for proxy: UITextDocumentProxy) -> HostFieldPolicy.NumberPadStyle? {
+        HostFieldPolicy.numberPadStyle(
+            keyboard: keyboardKind(proxy.keyboardType),
+            content: contentKind(proxy.textContentType)
+        )
+    }
+
     private static func keyboardKind(_ type: UIKeyboardType?) -> HostFieldPolicy.KeyboardKind {
         switch type {
         case .URL: return .url
         case .emailAddress: return .email
         case .webSearch: return .webSearch
         case .twitter: return .twitter
-        case .numberPad, .decimalPad, .asciiCapableNumberPad: return .numeric
+        case .numberPad, .asciiCapableNumberPad: return .numeric
+        case .decimalPad: return .decimal
         case .phonePad: return .phone
         case .namePhonePad: return .namePhone
         case .asciiCapable: return .asciiCapable
+        case .numbersAndPunctuation: return .symbols
         default: return .standard
         }
     }

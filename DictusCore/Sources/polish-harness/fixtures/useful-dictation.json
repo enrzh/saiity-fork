@@ -1,0 +1,52 @@
+[
+  {
+    "id": "useful-de-appointment",
+    "lang": "auto",
+    "sttEngine": "WK",
+    "raw": "(snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.",
+    "expect": [
+      { "contains": "Termin" },
+      { "contains": "15 Uhr" },
+      { "notContains": "snow crunching" },
+      { "lengthRatioMax": 1.5 }
+    ]
+  },
+  {
+    "id": "useful-en-time-restate",
+    "lang": "auto",
+    "sttEngine": "WK",
+    "raw": "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?",
+    "expect": [
+      { "contains": "4am" },
+      { "contains": "Jack" },
+      { "notContains": "2am" },
+      { "notContains": "poem" },
+      { "lengthRatioMax": 1.4 }
+    ]
+  },
+  {
+    "id": "useful-de-en-latin",
+    "lang": "auto",
+    "sttEngine": "WK",
+    "raw": "Ich schicke dir the invoice tomorrow.",
+    "expect": [
+      { "contains": "Ich schicke dir" },
+      { "contains": "invoice" },
+      { "notContains": "I will send you" },
+      { "lengthRatioMax": 1.5 }
+    ]
+  },
+  {
+    "id": "useful-latin-cjk",
+    "lang": "auto",
+    "sttEngine": "WK",
+    "raw": "Ich schicke dir the invoice tomorrow und 我晚上再确认。",
+    "expect": [
+      { "contains": "Ich schicke dir" },
+      { "contains": "the invoice tomorrow" },
+      { "contains": "我晚上再确认" },
+      { "notContains": "I will confirm" },
+      { "lengthRatioMax": 1.2 }
+    ]
+  }
+]

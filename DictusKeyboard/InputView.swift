@@ -20,11 +20,17 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
 
     override init(frame: CGRect, inputViewStyle: UIInputView.Style) {
         super.init(frame: frame, inputViewStyle: inputViewStyle)
+        // Let UIKit honor the declared height constraint instead of replacing
+        // the custom surface with its transient default keyboard height.
+        allowsSelfSizing = true
+        clipsToBounds = false
+        layer.masksToBounds = false
         reassertTransparentBackdrop()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        allowsSelfSizing = true
         reassertTransparentBackdrop()
     }
 
@@ -41,6 +47,8 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
     private func reassertTransparentBackdrop() {
         backgroundColor = .clear
         isOpaque = false
+        clipsToBounds = false
+        layer.masksToBounds = false
         layer.backgroundColor = UIColor.clear.cgColor
     }
 }

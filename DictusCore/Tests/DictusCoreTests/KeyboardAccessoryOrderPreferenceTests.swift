@@ -67,8 +67,11 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         )
 
         XCTAssertTrue(bar.contains("let layout: VoiceOnlyKeyboardPolicy.Layout"))
-        XCTAssertTrue(bar.contains("layout.auxiliaryMicrophoneFrame"))
-        XCTAssertTrue(picker.contains("VoiceOnlyKeyboardPolicy.visibleControlGap"))
+        XCTAssertTrue(bar.contains("chromeNumbersFrame"))
+        XCTAssertTrue(bar.contains("chromeLettersFrame"))
+        XCTAssertFalse(bar.contains("chromeWideLettersFrame"))
+        XCTAssertFalse(bar.contains("layout.auxiliaryMicrophoneFrame"))
+        XCTAssertTrue(picker.contains("VoiceOnlyKeyboardPolicy.keyGridInset"))
         XCTAssertFalse(picker.contains("surfaceLayout.auxiliaryControlFrames.first"))
         XCTAssertTrue(root.contains("controlOrder: KeyboardAccessoryOrder.current"))
     }
@@ -113,14 +116,14 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
         let content = layout.auxiliaryContentFrame
         let controls = layout.bottomAuxiliaryControlFrame
 
-        XCTAssertEqual(surface, CGRect(x: 6, y: 4, width: 378, height: 208))
+        XCTAssertEqual(surface, CGRect(x: 0, y: 4, width: 390, height: 208))
         XCTAssertTrue(surface.contains(content))
         XCTAssertTrue(surface.contains(controls))
         XCTAssertEqual(content.minX, surface.minX)
         XCTAssertEqual(content.width, surface.width)
         XCTAssertEqual(controls.minX, surface.minX)
         XCTAssertEqual(controls.width, surface.width)
-        XCTAssertEqual(controls.maxY, surface.maxY - VoiceOnlyKeyboardPolicy.visibleControlGap)
+        XCTAssertEqual(controls.maxY, surface.maxY - VoiceOnlyKeyboardPolicy.chromeBottomInset)
         XCTAssertEqual(content.maxY, controls.minY - VoiceOnlyKeyboardPolicy.visibleControlGap)
     }
 

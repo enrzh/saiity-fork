@@ -33,8 +33,6 @@ public struct ModelLanguageSupport: Equatable, Sendable {
         /// Parakeet TDT v3: exactly the 25 European languages documented by
         /// NVIDIA. No Chinese or other non-European languages.
         case parakeetEuropean
-        /// Qwen3-ASR's documented 30-language set, including CJK languages.
-        case qwenMultilingual
     }
 
     /// A curated quality note attached to a highlighted language on a
@@ -230,15 +228,6 @@ extension ModelLanguageSupport {
         highlights: [Entry(code: "en")]
     )
 
-    static let qwenMultilingual = ModelLanguageSupport(
-        coverage: .qwenMultilingual,
-        highlights: testedHighlights,
-        additionalCodes: [
-            "yue", "ja", "ko", "vi", "th", "id", "ms", "hi", "ar", "tr",
-            "ru", "pt", "it", "nl", "pl", "sv", "da", "fi", "cs", "fil",
-            "fa", "el", "hu", "mk", "ro"
-        ]
-    )
 }
 
 // MARK: - ModelInfo accessor
@@ -259,21 +248,18 @@ extension ModelInfo {
              "openai_whisper-large-v2_949MB",
              "openai_whisper-large-v2_turbo_955MB",
              "openai_whisper-large-v3_947MB",
-             "distil-whisper_distil-large-v3_594MB",
-             "distil-whisper_distil-large-v3_turbo_600MB",
              "openai_whisper-large-v3-v20240930_626MB",
              "openai_whisper-large-v3-v20240930_turbo_632MB":
             return .whisperHighAccuracy
         case "openai_whisper-tiny.en",
              "openai_whisper-base.en",
-             "openai_whisper-small.en":
+             "openai_whisper-small.en", "openai_whisper-small.en_217MB", "openai_whisper-medium.en",
+             "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
             return .whisperEnglishOnly
         case "parakeet-tdt-0.6b-v3":
             return .parakeetV3
         case "parakeet-tdt-0.6b-v2":
             return .parakeetV2
-        case "qwen3-asr-0.6b-f32", "qwen3-asr-0.6b-int8":
-            return .qwenMultilingual
         default:
             // tiny / base / small / small_216MB, plus any future Whisper
             // entry until it is explicitly classified above. Defaulting to
@@ -284,8 +270,6 @@ extension ModelInfo {
                 return .whisperSmallClass
             case .parakeet:
                 return .parakeetV3
-            case .qwen3ASR:
-                return .qwenMultilingual
             }
         }
     }

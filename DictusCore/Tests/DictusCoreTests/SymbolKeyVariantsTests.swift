@@ -24,6 +24,13 @@ final class SymbolKeyVariantsTests: XCTestCase {
         XCTAssertTrue(SymbolKeyVariants.options(for: "'").contains("’"))
     }
 
+    func testLetterPeriodKeyOffersUsefulPunctuation() {
+        XCTAssertEqual(
+            SymbolKeyVariants.options(for: "."),
+            [".", "…", "?", "!", "&", ",", ":", ";", "'", "\""]
+        )
+    }
+
     func testSymbolsPageLongPressMatchesNativeExtras() {
         XCTAssertTrue(SymbolKeyVariants.options(for: "%").contains("‰"))
         XCTAssertTrue(SymbolKeyVariants.options(for: "=").contains("≠"))

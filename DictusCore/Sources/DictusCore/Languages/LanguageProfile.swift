@@ -90,6 +90,34 @@ extension SupportedLanguage {
         case .english: return englishProfile
         case .spanish: return spanishProfile
         case .german: return germanProfile
+        case .italian, .portuguese, .dutch, .polish, .swedish, .danish, .finnish, .czech:
+            return LanguageProfile(
+                code: rawValue,
+                displayName: displayName,
+                shortCode: shortCode,
+                defaultLayout: defaultLayout,
+                spaceName: spaceName,
+                returnName: returnName,
+                overrides: [:],
+                accentMap: europeanLatinAccentMap,
+                contractionPrefixes: []
+            )
         }
     }
 }
+
+/// Shared long-press / expander accents for Latin-script languages without a
+/// curated native-speaker override map. Matches `AccentedCharacters.mappings`.
+private let europeanLatinAccentMap: [Character: [Character]] = [
+    "a": ["à", "á", "â", "ä", "ã", "å", "ā", "æ"],
+    "e": ["è", "é", "ê", "ë", "ē", "ė", "ę"],
+    "i": ["ì", "í", "î", "ï", "ī"],
+    "o": ["ò", "ó", "ô", "ö", "õ", "ø", "ō", "œ"],
+    "u": ["ù", "ú", "û", "ü", "ū"],
+    "y": ["ý", "ÿ"],
+    "c": ["ç", "ć", "č"],
+    "n": ["ñ", "ń"],
+    "s": ["ß", "ś", "š"],
+    "l": ["ł"],
+    "z": ["ź", "ż", "ž"]
+]

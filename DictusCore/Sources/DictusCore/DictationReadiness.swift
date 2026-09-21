@@ -20,10 +20,11 @@ public struct DictationReadiness: Equatable, Sendable {
         microphonePermission: MicrophonePermissionState,
         modelReady: Bool,
         modelLoadState: ModelLoadState,
-        status: DictationStatus
+        status: DictationStatus,
+        modelLoadFailure: String? = nil
     ) {
         if !serviceEnabled {
-            self.init(title: "Dictation service is off", subtitle: "Turn on the service from the top right to use dictation.", symbol: "waveform.slash", action: .none)
+            self.init(title: "Dictation is paused", subtitle: "Turn dictation on here or from the Live Activity.", symbol: "waveform.slash", action: .none)
             return
         }
 
@@ -35,12 +36,17 @@ public struct DictationReadiness: Equatable, Sendable {
             self.init(title: "Microphone access needed", subtitle: "Microphone access has not been granted yet.", symbol: "mic.badge.plus", action: .requestMicrophone)
             return
         }
-        if !modelReady && !DictationSessionLivenessPolicy.isActive(status) {
-            self.init(title: "Choose a local model", subtitle: "Choose a local model to begin.", symbol: "arrow.down.circle", action: .none)
+        if let modelLoadFailure, !modelLoadFailure.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !DictationSessionLivenessPolicy.isActive(status) {
+            self.init(title: "Voice model needs attention", subtitle: modelLoadFailure, symbol: "exclamationmark.triangle", action: .retry)
             return
         }
         if modelLoadState == .loading && !DictationSessionLivenessPolicy.isActive(status) {
             self.init(title: "Preparing your model", subtitle: "Your local model is preparing for offline dictation.", symbol: "arrow.triangle.2.circlepath", action: .none)
+            return
+        }
+        if !modelReady && !DictationSessionLivenessPolicy.isActive(status) {
+            self.init(title: "Choose a local model", subtitle: "Choose a local model to begin.", symbol: "arrow.down.circle", action: .none)
             return
         }
 

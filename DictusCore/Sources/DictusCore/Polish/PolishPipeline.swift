@@ -60,7 +60,11 @@ public enum PolishPipeline {
                                  engine: PolishEngineProtocol,
                                  target: SupportedLanguage,
                                  mode: PolishMode,
+                                 style: WritingStyle = .balanced,
                                  gate: PolishAvailabilityGate = PolishAvailabilityGate()) async -> Result {
+        guard !Task.isCancelled else {
+            return Result(engineOutput: nil, outcome: .cancelled, engineMs: 0, postprocessMs: 0)
+        }
         // Polish is in its unavailable state for this engine (#315): two
         // consecutive `rateLimited` refusals said this process is on the wrong
         // side of Apple's background rate limit, and only a fresh process
@@ -92,8 +96,9 @@ public enum PolishPipeline {
         }
         let engineStart = Date()
         do {
+            try Task.checkCancellation()
             let polishedRaw = try await engine.polish(
-                raw: engineInput, targetLanguage: target, mode: mode
+                raw: engineInput, targetLanguage: target, mode: mode, style: style
             )
             let engineMs = Int(Date().timeIntervalSince(engineStart) * 1000)
             let postStart = Date()
@@ -114,7 +119,8 @@ public enum PolishPipeline {
                 let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
-            guard PolishGuardrail.preservesStructure(raw: preprocessed, polished: polished, mode: mode) else {
+            guard PolishGuardrail.preservesStructure(raw: preprocessed, polished: polished, mode: mode),
+                  PolishGuardrail.preservesFacts(raw: preprocessed, polished: polished, mode: mode) else {
                 let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
@@ -130,6 +136,10 @@ public enum PolishPipeline {
             return Result(engineOutput: nil, outcome: .cancelled, engineMs: engineMs, postprocessMs: 0)
         } catch {
             let engineMs = Int(Date().timeIntervalSince(engineStart) * 1000)
+            // URLSession reports cancellation as URLError, not CancellationError.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                return Result(engineOutput: nil, outcome: .cancelled, engineMs: engineMs, postprocessMs: 0)
+            }
             // Ask the engine that threw what it threw (#315). Only the failing
             // backend can read its own SDK's error type; the transform records
             // the answer without ever knowing which backend it is talking to.
@@ -189,7 +199,9 @@ public enum PolishPipeline {
             return output
         }
         guard mode != .auto else {
-            return PolishPostpass.cleanupFloor(PolishPostpass.decodeNewlines(preprocessed), language: nil)
+            // This is input, not model output: decoding would collapse original
+            // paragraph breaks and nested-list indentation on a failed call.
+            return PolishPostpass.cleanupFloor(preprocessed, language: nil)
         }
         return PolishPostpass.cleanupFloor(
             PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
@@ -248,12 +260,17 @@ public enum PolishPipeline {
 
     /// Detect the dominant language, or `nil` when confidence is below
     /// `confidenceThreshold` (treated as gibberish → skip) OR when the detected
-    /// language is not one of the four supported ones (per-language prompt
-    /// paths only make sense for those).
+    /// language has no dedicated polish prompt. Typing layouts can include more
+    /// Latin-script languages than polish can authoritatively clean.
     public static func detectLanguage(in text: String,
                                       confidenceThreshold: Double = defaultConfidenceThreshold) -> SupportedLanguage? {
-        detectLanguageCode(in: text, confidenceThreshold: confidenceThreshold)
-            .flatMap(SupportedLanguage.init(rawValue:))
+        switch detectLanguageCode(in: text, confidenceThreshold: confidenceThreshold) {
+        case "en": return .english
+        case "de": return .german
+        case "fr": return .french
+        case "es": return .spanish
+        default: return nil
+        }
     }
 
     /// Choose the polish mode. Whisper respects the language picker upstream →
@@ -262,7 +279,7 @@ public enum PolishPipeline {
                             detected: SupportedLanguage,
                             target: SupportedLanguage) -> PolishMode {
         switch sttEngine {
-        case .whisperKit, .qwen3ASR:
+        case .whisperKit:
             return .natural
         case .parakeet:
             return detected == target ? .natural : .repair

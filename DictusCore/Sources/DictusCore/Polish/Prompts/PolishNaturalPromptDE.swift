@@ -32,8 +32,8 @@ enum PolishNaturalPromptDE {
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`das das` → `das`, `ich ich` → `ich`). Only immediate same-word repetition.
         7. Resolve spoken false starts and self-corrections in German. When the speaker abandons a phrase (`Dienstag, eigentlich Mittwoch`), keep the corrected phrase (`Mittwoch`) and remove the abandoned fragment. Keep a correction marker such as `eigentlich` when it carries meaning rather than deleting it blindly.
-        8. Remove gratuitous oral fillers: `äh`, `ähm`, `hmm` always; `weißt du` only at sentence-end with no informational role; `halt` / `eben` when repeated (keep the first occurrence). KEEP `also`, `naja`, `tja`, `nun` when they carry transition or intent.
-        9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in German using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
+        8. Remove gratuitous oral fillers: `äh`, `ähm`, `hmm` always; `weißt du` only at sentence-end with no informational role; `halt` / `eben` when repeated (keep the first occurrence); sentence-initial stalling frames `so grundsätzlich` / `also grundsätzlich` (same job as English `so basically`). After dropping that stall, restore statement order (`So grundsätzlich habe ich` → `Ich habe`). KEEP `also`, `naja`, `tja`, `nun`, and a lone `grundsätzlich` when they carry transition or intent. Remove ASR non-speech labels including environmental sounds (`(snow crunching)`, `[Musik]`, `(lacht)`); keep ordinary asides such as `(siehe Anhang)`.
+        9. ASR error repair: when the speaker leaves grammar unfinished — `Termin 15 Uhr` → `Termin um 15 Uhr`; `und heute dich dafür einladen` → `Und heute lade ich dich dafür ein` — restore the written German. When a segment is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in German using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
         10. Fix obvious one-letter typos that don't rise to the level of rule 9.
 
         PRESERVE — DO NOT change these:
@@ -44,8 +44,8 @@ enum PolishNaturalPromptDE {
         - Tone and register: familiar stays familiar, formal stays formal. Do NOT shift up or down.
 
         FORBIDDEN:
-        - Do NOT add words or content that weren't in the input. No inventing endings, no inserting context, no completing cut-off sentences with imagined words.
-        - Do NOT reorder words.
+        - Do NOT add content that wasn't implied. Grammar required by German (statement order, `um` before `Uhr`, conjugating a spoken infinitive) is required. No inventing endings, no inserting context, no completing cut-off sentences with imagined facts.
+        - Do NOT reorder words except to restore that grammar.
         - Do NOT translate.
         - Do NOT add `<<NL>>` markers where none existed. Do NOT split or alter existing markers.
 
@@ -59,6 +59,9 @@ enum PolishNaturalPromptDE {
 
         INPUT: schick es am Dienstag, eigentlich Mittwoch
         OUTPUT: Schick es am Mittwoch.
+
+        INPUT: (snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.
+        OUTPUT: Ich habe jetzt einen Termin um 15 Uhr. Und heute lade ich dich dafür ein.
 
         INPUT: hallo komma wie gehts dir fragezeichen ich hab deinen bericht gelesen komma und ich finde er ist gut
         OUTPUT: Hallo, wie geht's dir? Ich hab deinen Bericht gelesen, und ich finde er ist gut.

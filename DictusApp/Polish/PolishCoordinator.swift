@@ -33,7 +33,9 @@ public final class PolishCoordinator {
     private let passthroughEngine: PolishEngineProtocol = PassthroughPolishEngine()
     private let defaults: UserDefaults
     private let metricsRing = PolishMetricsRing()
+    private var resultCache = PolishResultCache(capacity: 12)
     private var inflight: Task<PolishPipeline.Result, Never>?
+    private var spanInflight: Task<PolishSpanPipeline.Result, Never>?
 
     /// Whether polish is still calling its engine (#315).
     ///
@@ -44,13 +46,14 @@ public final class PolishCoordinator {
     /// observer, a retry — would be theatre against the measurements on #315.
     private var availabilityGate = PolishAvailabilityGate()
 
-    /// A valid custom Ollama cleanup registration takes precedence over Apple FM.
-    /// ASR registrations are deliberately ignored here and remain configuration-only.
+    /// Valid Ollama cleanup registrations. ASR rows stay configuration-only.
+    private var validCleanupOllamaModels: [CustomModel] {
+        PolishCleanupBackend.validOllamaCleanupModels(from: CustomModel.load(from: defaults))
+    }
+
     @available(iOS 26.0, *)
-    private var customOllamaEngine: OllamaPolishEngine? {
-        guard let model = CustomModel.load(from: defaults).first(where: {
-            $0.role == .cleanup && $0.source == .ollama && $0.validationError == nil
-        }) else { return nil }
+    private func ollamaEngine(for id: UUID) -> OllamaPolishEngine? {
+        guard let model = validCleanupOllamaModels.first(where: { $0.id == id }) else { return nil }
         return OllamaPolishEngine(model: model)
     }
 
@@ -76,12 +79,31 @@ public final class PolishCoordinator {
     /// Resolve the engine for this call. Re-checked on every `polish()` so a
     /// late availability flip (model finishes downloading, user toggles Apple
     /// Intelligence on) takes effect without an app relaunch.
+    ///
+    /// The user-selected cleanup backend wins. Apple Intelligence never yields
+    /// to a registered Ollama model unless that model is the explicit choice.
     private var activeEngine: PolishEngineProtocol {
-        if #available(iOS 26.0, *), let customOllamaEngine { return customOllamaEngine }
-        if let appleFMEngine, PolishAvailability.isAppleFMAvailable {
-            return appleFMEngine
+        let validOllama = validCleanupOllamaModels
+        let preference = PolishCleanupBackend.load(from: defaults, customModels: validOllama)
+        let kind = PolishCleanupBackend.resolvedEngine(
+            preference: preference,
+            appleFMAvailable: appleFMEngine != nil && PolishAvailability.isAppleFMAvailable,
+            validOllamaIDs: Set(validOllama.map(\.id))
+        )
+        switch kind {
+        case .appleIntelligence:
+            return appleFMEngine ?? passthroughEngine
+        case .ollama(let id):
+            if #available(iOS 26.0, *), let engine = ollamaEngine(for: id) {
+                return engine
+            }
+            if let appleFMEngine, PolishAvailability.isAppleFMAvailable {
+                return appleFMEngine
+            }
+            return passthroughEngine
+        case .passthrough:
+            return passthroughEngine
         }
-        return passthroughEngine
     }
 
     // MARK: - Public API
@@ -91,6 +113,8 @@ public final class PolishCoordinator {
     public func cancelInflight() {
         inflight?.cancel()
         inflight = nil
+        spanInflight?.cancel()
+        spanInflight = nil
     }
 
     /// Warm up the Apple FM engine (if present) for the user's current target
@@ -104,7 +128,15 @@ public final class PolishCoordinator {
     /// no polish will run) or when the engine has nothing to warm.
     public func prewarm() {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else { return }
-        guard let engineToWarm = appleFMEngine else { return }
+        guard let engineToWarm = appleFMEngine, PolishAvailability.isAppleFMAvailable else { return }
+        let validOllama = validCleanupOllamaModels
+        let preference = PolishCleanupBackend.load(from: defaults, customModels: validOllama)
+        let kind = PolishCleanupBackend.resolvedEngine(
+            preference: preference,
+            appleFMAvailable: true,
+            validOllamaIDs: Set(validOllama.map(\.id))
+        )
+        guard kind == .appleIntelligence else { return }
         // Resolve the prompt selection through the language policy
         // (#226/#239/#332): explicit mode targets the language the user chose,
         // not the keyboard one; Auto mode warms the language-agnostic auto
@@ -169,9 +201,67 @@ public final class PolishCoordinator {
     public func polish(raw: String,
                        languagePolicy: TranscriptionLanguagePolicy,
                        recordingDuration: TimeInterval,
+                       translationTarget: TranslationLanguage? = nil,
+                       regions: [SpeechRegionTranscript] = [],
                        onEngineWillRun: (() -> Void)? = nil) async -> String {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else {
             return raw
+        }
+        let engine = activeEngine
+        let writingStyle = WritingStyle.active(from: defaults)
+        let key = PolishResultCache.Key(
+            raw: raw,
+            engine: engine.identifier,
+            target: translationTarget.map { String(describing: $0) },
+            spanAware: languagePolicy.skipsModelPolish(translationTarget: translationTarget)
+                && PolishSpanPipeline.isEnabled(in: defaults),
+            regionSignature: regionSignature(for: regions),
+            writingStyle: writingStyle.rawValue
+        )
+        if let cached = resultCache.value(for: key) {
+            PersistentLog.log(.diagnosticProbe(
+                component: "PolishCoordinator",
+                instanceID: "resultCache",
+                action: "hit",
+                details: "chars=\(raw.count) engine=\(engine.identifier)"
+            ))
+            return cached
+        }
+        let result = await polishUncached(
+            raw: raw,
+            languagePolicy: languagePolicy,
+            recordingDuration: recordingDuration,
+            translationTarget: translationTarget,
+            regions: regions,
+            writingStyle: writingStyle,
+            onEngineWillRun: onEngineWillRun
+        )
+        resultCache.insert(result, for: key)
+        return result
+    }
+
+    private func polishUncached(raw: String,
+                       languagePolicy: TranscriptionLanguagePolicy,
+                       recordingDuration: TimeInterval,
+                       translationTarget: TranslationLanguage? = nil,
+                       regions: [SpeechRegionTranscript] = [],
+                       writingStyle: WritingStyle = .balanced,
+                       onEngineWillRun: (() -> Void)? = nil) async -> String {
+        guard defaults.bool(forKey: SharedKeys.polishEnabled) else {
+            return raw
+        }
+        if languagePolicy.skipsModelPolish(translationTarget: translationTarget) {
+            if PolishSpanPipeline.isEnabled(in: defaults) {
+                return await polishMultilingualSpans(
+                    raw: raw,
+                    languagePolicy: languagePolicy,
+                    recordingDuration: recordingDuration,
+                    regions: regions,
+                    writingStyle: writingStyle,
+                    onEngineWillRun: onEngineWillRun
+                )
+            }
+            return PolishPostpass.cleanupFloor(raw, language: nil)
         }
 
         // `methodStart` anchors the full wall-clock the user actually waits
@@ -212,11 +302,23 @@ public final class PolishCoordinator {
         // language is unknown (could be zh, it, pt, …), so the engine uses
         // the auto prompt; the verbal-punctuation pre-pass runs keyed on the
         // DETECTED language, and the typography post-pass stays off.
-        switch languagePolicy.polishPromptSelection(detectedLanguage: request.detected) {
+        switch languagePolicy.polishPromptSelection(
+            detectedLanguage: request.detected,
+            translationTarget: translationTarget
+        ) {
         case .language(let target):
-            return await polishTargeted(request, target: target, onEngineWillRun: onEngineWillRun)
+            return await polishTargeted(
+                request,
+                target: target,
+                writingStyle: writingStyle,
+                onEngineWillRun: onEngineWillRun
+            )
         case .autoDetected:
-            return await polishAutoDetected(request, onEngineWillRun: onEngineWillRun)
+            return await polishAutoDetected(
+                request,
+                writingStyle: writingStyle,
+                onEngineWillRun: onEngineWillRun
+            )
         }
     }
 
@@ -255,6 +357,7 @@ public final class PolishCoordinator {
     /// exactly what selects `PolishMode.repair` below.
     private func polishTargeted(_ request: Request,
                                 target: SupportedLanguage,
+                                writingStyle: WritingStyle,
                                 onEngineWillRun: (() -> Void)?) async -> String {
         let raw = request.raw
         let languagePolicy = request.languagePolicy
@@ -350,6 +453,7 @@ public final class PolishCoordinator {
         let currentEngine = activeEngine
 
         inflight?.cancel()
+        spanInflight?.cancel()
         announceEngineStage(currentEngine, to: onEngineWillRun)
         // Everything above (pre-pass + detection + mode) is the preprocess cost;
         // the engine-facing transform (encode → engine → decode → guardrail) is
@@ -364,7 +468,7 @@ public final class PolishCoordinator {
             // should overlap at all is #361's question, not this one.
             await PolishPipeline.transform(
                 preprocessed: preprocessed, engine: currentEngine, target: target,
-                mode: mode, gate: self.availabilityGate
+                mode: mode, style: writingStyle, gate: self.availabilityGate
             )
         }
         inflight = task
@@ -428,6 +532,7 @@ public final class PolishCoordinator {
     /// how device tests validate output language == input language. Engine
     /// runs are identified by `mode == .auto` in the debug export.
     private func polishAutoDetected(_ request: Request,
+                                    writingStyle: WritingStyle,
                                     onEngineWillRun: (() -> Void)?) async -> String {
         let raw = request.raw
         let languagePolicy = request.languagePolicy
@@ -475,6 +580,7 @@ public final class PolishCoordinator {
 
         let currentEngine = activeEngine
         inflight?.cancel()
+        spanInflight?.cancel()
         announceEngineStage(currentEngine, to: onEngineWillRun)
         // Pre-engine work in auto mode: detection + detected-language pre-pass.
         let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
@@ -483,7 +589,7 @@ public final class PolishCoordinator {
             // per-language path above (#315).
             await PolishPipeline.transform(
                 preprocessed: preprocessed, engine: currentEngine, target: contextLanguage,
-                mode: .auto, gate: self.availabilityGate
+                mode: .auto, style: writingStyle, gate: self.availabilityGate
             )
         }
         inflight = task
@@ -507,6 +613,80 @@ public final class PolishCoordinator {
         )
         await emit(m, raw: raw, polished: bundle.engineOutput)
         return returned
+    }
+
+    // MARK: - Multilingual span path
+
+    /// Multilingual product mode: never run whole-document Auto polish.
+    /// Confident monolingual sentence spans still go through the engine
+    /// sequentially; mixed-script and low-confidence slices stay on the floor.
+    private func polishMultilingualSpans(raw: String,
+                                         languagePolicy: TranscriptionLanguagePolicy,
+                                         recordingDuration: TimeInterval,
+                                         regions: [SpeechRegionTranscript],
+                                         writingStyle: WritingStyle,
+                                         onEngineWillRun: (() -> Void)?) async -> String {
+        let methodStart = Date()
+        let skipEngine = recordingDuration < Self.engineMinDuration
+        let currentEngine = activeEngine
+        inflight?.cancel()
+        spanInflight?.cancel()
+        if !skipEngine {
+            announceEngineStage(currentEngine, to: onEngineWillRun)
+        }
+        let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let task = Task {
+            if regions.isEmpty {
+                return await PolishSpanPipeline.polish(
+                    raw: raw,
+                    engine: currentEngine,
+                    gate: self.availabilityGate,
+                    skipEngine: skipEngine,
+                    placeholderLanguage: languagePolicy.keyboardLanguage,
+                    style: writingStyle
+                )
+            }
+            return await PolishSpanPipeline.polish(
+                regions: regions,
+                engine: currentEngine,
+                gate: self.availabilityGate,
+                skipEngine: skipEngine,
+                placeholderLanguage: languagePolicy.keyboardLanguage,
+                style: writingStyle
+            )
+        }
+        spanInflight = task
+        let bundle = await task.value
+        recordAvailability(
+            PolishPipeline.Result(
+                engineOutput: bundle.text,
+                outcome: bundle.outcome,
+                engineMs: bundle.engineMs,
+                postprocessMs: bundle.postprocessMs,
+                failureReason: bundle.failureReason
+            ),
+            engine: currentEngine
+        )
+        let totalMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let detected = bundle.detectedLanguages.joined(separator: ",")
+        let m = autoEventMetrics(
+            outcome: bundle.outcome,
+            raw: raw,
+            finalCount: bundle.text.count,
+            languagePolicy: languagePolicy,
+            engineID: currentEngine.identifier,
+            mode: bundle.polishedSpanCount > 0 ? .auto : nil,
+            detectedLanguage: detected.isEmpty ? nil : detected,
+            latencyMs: totalMs,
+            timings: PolishTimings(
+                preprocessMs: preprocessMs,
+                engineMs: bundle.engineMs,
+                postprocessMs: bundle.postprocessMs
+            ),
+            failureReason: bundle.failureReason
+        )
+        await emit(m, raw: raw, polished: bundle.text)
+        return bundle.text
     }
 
     /// Metrics for one auto-path event. Defaults cover the skip exits (no
@@ -611,6 +791,13 @@ public final class PolishCoordinator {
     /// On flash dictations the user wants instant text and the model rarely adds
     /// value for ~3-6s of latency. Deterministic passes still run. Tunable.
     private static let engineMinDuration: TimeInterval = 2.0
+
+    private func regionSignature(for regions: [SpeechRegionTranscript]) -> String? {
+        guard !regions.isEmpty else { return nil }
+        return regions.map { region in
+            "\(region.region.startSample)-\(region.region.endSample):\(region.validatedLanguage ?? "-"):\(region.overlapsPreviousRegion ? "1" : "0")"
+        }.joined(separator: ";")
+    }
 }
 
 /// App-target cleanup backend for a registered Ollama model.
@@ -630,21 +817,28 @@ private struct OllamaPolishEngine: PolishEngineProtocol {
         self.endpoint = endpoint
         self.model = modelName
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 300
-        configuration.timeoutIntervalForResource = 300
+        configuration.timeoutIntervalForRequest = OllamaHTTPContract.cleanupTimeout
+        configuration.timeoutIntervalForResource = OllamaHTTPContract.cleanupTimeout
         self.session = URLSession(configuration: configuration)
     }
 
     func polish(raw: String,
                 targetLanguage: SupportedLanguage,
                 mode: PolishMode) async throws -> String {
+        try await polish(raw: raw, targetLanguage: targetLanguage, mode: mode, style: .balanced)
+    }
+
+    func polish(raw: String,
+                targetLanguage: SupportedLanguage,
+                mode: PolishMode,
+                style: WritingStyle) async throws -> String {
         let body: [String: Any] = [
             "model": model,
             "temperature": 0.0,
             "stream": false,
             "messages": [
                 ["role": "system", "content": AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)],
-                    ["role": "user", "content": PolishPromptEnvelope.userTurn(raw: raw)]
+                    ["role": "user", "content": PolishPromptEnvelope.userTurn(raw: raw, style: style)]
             ],
             "reasoning_effort": "none",
             "chat_template_kwargs": ["enable_thinking": false]
@@ -656,12 +850,6 @@ private struct OllamaPolishEngine: PolishEngineProtocol {
 
         let (data, response) = try await session.data(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let content = try OllamaHTTPContract.responseText(data: data, statusCode: statusCode)
-        return Self.stripReasoning(content).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func stripReasoning(_ text: String) -> String {
-        guard let close = text.range(of: "</think>") else { return text }
-        return String(text[close.upperBound...])
+        return try OllamaHTTPContract.responseText(data: data, statusCode: statusCode)
     }
 }

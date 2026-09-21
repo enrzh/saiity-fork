@@ -9,6 +9,9 @@ public enum KeyboardShiftState: String, Equatable, Sendable {
     case shifted
     case capsLock
 
+    /// Native-style window for promoting a one-shot shift into caps lock.
+    public static let doubleTapWindow: TimeInterval = 0.5
+
     /// Returns the state after one completed shift-key tap.
     ///
     /// A second tap only promotes a temporary shift to caps lock. Once caps

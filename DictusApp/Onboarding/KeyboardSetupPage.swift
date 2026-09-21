@@ -87,10 +87,14 @@ struct KeyboardSetupPage: View {
         .scrollBounceBehavior(.basedOnSize)
         .onAppear {
             checkKeyboardInstalled()
+            DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
+                DispatchQueue.main.async { checkKeyboardInstalled() }
+            }
         }
         .onDisappear {
             keyboardCheckTask?.cancel()
             keyboardCheckTask = nil
+            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
         }
         .onChange(of: scenePhase) { newPhase in
             // Returning from Settings can publish .active before iOS updates the
@@ -119,7 +123,11 @@ struct KeyboardSetupPage: View {
                     checkKeyboardInstalled()
                 }
 
-                if !keyboardDetected && !Task.isCancelled {
+                // The keyboard can be visible in Settings before its extension
+                // has relaunched and published the current Full Access bit.
+                // Retry for that handshake too; stopping once the keyboard is
+                // installed leaves the page stale until the app is re-entered.
+                if !fullAccessHandshake && !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(1200))
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
@@ -197,9 +205,7 @@ struct KeyboardSetupPage: View {
             handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil
         )
         keyboardDetected = status.keyboardDetected
-        if handshake {
-            fullAccessHandshake = true
-        }
+        fullAccessHandshake = handshake
         let announcement: String
         if status.fullAccessVerified {
             announcement = "sAiity keyboard and Full Access verified"

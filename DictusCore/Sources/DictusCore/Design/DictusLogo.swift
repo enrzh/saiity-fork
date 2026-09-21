@@ -41,13 +41,10 @@ public struct DictusLogo: View {
         ZStack {
             RoundedRectangle(cornerRadius: height * 0.22)
                 .fill(Color.dictusAccent)
-            HStack(alignment: .center, spacing: height * 0.055) {
-                ForEach([0.42, 0.68, 1.0, 0.68, 0.42], id: \.self) { scale in
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(width: height * 0.105, height: height * 0.62 * scale)
-                }
-            }
+            Text(verbatim: "sAi")
+                .font(.system(size: height * 0.52, weight: .bold, design: .rounded))
+                .tracking(-height * 0.035)
+                .foregroundStyle(.white)
         }
     }
 }

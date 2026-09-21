@@ -288,6 +288,29 @@ final class PolishPostpassTests: XCTestCase {
         XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .repair))
     }
 
+    func testCleanupFloorAutoPathRemovesFillersResolvesTimeCorrectionAndDropsRestatement() {
+        let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor(raw, language: nil),
+            "Hey Jack I got an appointment at 4am. Can you come by please?"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor(raw, language: .english),
+            "Hey Jack I got an appointment at 4am. Can you come by please?"
+        )
+    }
+
+    func testCleanupFloorKeepsLikeWhenItIsAVerbOrComparison() {
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("I like a quiet office", language: nil),
+            "I like a quiet office"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("it looks like a bug", language: nil),
+            "It looks like a bug"
+        )
+    }
+
     func testCleanupFloorLanguageNeutralPreservesLanguageSpecificLexicalPatterns() {
         let inputs = [
             "el el texto",
@@ -315,6 +338,77 @@ final class PolishPostpassTests: XCTestCase {
         XCTAssertEqual(
             PolishPostpass.cleanupFloor("de de tekst", language: .german),
             "De tekst"
+        )
+    }
+
+    func testNonSpeechEventLabelsAreStrippedIncludingTrailingFillers() {
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("hello (singing)~ there"),
+            "hello there"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("a kiss [kiss]. later"),
+            "a kiss later"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("quiet [BLANK_AUDIO] now"),
+            "quiet now"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("intro ♪ verse"),
+            "intro verse"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("Meet at (2024) campus"),
+            "Meet at (2024) campus"
+        )
+        XCTAssertEqual(
+            PolishPostpass.grammarFloor("uh hello (laughs) world", language: .english),
+            "Hello world"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("(snow crunching) hello"),
+            "hello"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("quiet (soft music) now"),
+            "quiet now"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("aside (see attached) stays"),
+            "aside (see attached) stays"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("credit (music director) stays"),
+            "credit (music director) stays"
+        )
+        XCTAssertEqual(
+            PolishPostpass.removeNonSpeechEventLabels("start *cough* end"),
+            "start end"
+        )
+    }
+
+    func testCleanupFloorStripsEnvironmentalNoiseAndGermanStallFrame() {
+        let raw = "(snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen."
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor(raw, language: nil),
+            "So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen."
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("Grundsätzlich stimme ich zu", language: nil),
+            "Grundsätzlich stimme ich zu"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("So I have a meeting at 3", language: nil),
+            "So I have a meeting at 3"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("Habe ich recht?", language: nil),
+            "Habe ich recht?"
+        )
+        XCTAssertEqual(
+            PolishPostpass.cleanupFloor("Ich habe einen Termin um 15 Uhr", language: nil),
+            "Ich habe einen Termin um 15 Uhr"
         )
     }
 }

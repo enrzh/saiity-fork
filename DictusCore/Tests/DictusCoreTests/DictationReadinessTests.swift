@@ -2,9 +2,14 @@ import XCTest
 @testable import DictusCore
 
 final class DictationReadinessTests: XCTestCase {
+    func testModelBeingLoadedDoesNotAskUserToDownloadItAgain() {
+        let loading = make(modelReady: false, modelLoadState: .loading)
+        XCTAssertEqual(loading.title, "Preparing your model")
+        XCTAssertEqual(loading.action, .none)
+    }
     func testServiceAndPrerequisiteStatesTakePriority() {
         let disabled = make(serviceEnabled: false, modelReady: true, status: .recording)
-        XCTAssertEqual(disabled.title, "Dictation service is off")
+        XCTAssertEqual(disabled.title, "Dictation is paused")
         XCTAssertEqual(disabled.action, .none)
 
         let denied = make(permission: .denied, modelReady: true)
@@ -45,11 +50,31 @@ final class DictationReadinessTests: XCTestCase {
         XCTAssertEqual(readiness.action, .none)
     }
 
+    func testModelLoadFailureOffersRecoveryBeforeStart() {
+        let readiness = make(
+            modelReady: true,
+            modelLoadFailure: "The transcription model could not be loaded. Try again."
+        )
+        XCTAssertEqual(readiness.title, "Voice model needs attention")
+        XCTAssertEqual(readiness.subtitle, "The transcription model could not be loaded. Try again.")
+        XCTAssertEqual(readiness.action, .retry)
+    }
+
+    func testModelLoadFailureDoesNotHideAnActiveDictation() {
+        let readiness = make(
+            modelReady: true,
+            status: .recording,
+            modelLoadFailure: "The transcription model could not be loaded. Try again."
+        )
+        XCTAssertEqual(readiness.title, "Recording")
+        XCTAssertEqual(readiness.action, .none)
+    }
+
     func testDisabledServiceNeverOffersStartOrRetry() {
         for status in DictationStatus.allCases {
             let readiness = make(serviceEnabled: false, modelReady: true, modelLoadState: .ready, status: status)
             XCTAssertEqual(readiness.action, .none)
-            XCTAssertEqual(readiness.title, "Dictation service is off")
+            XCTAssertEqual(readiness.title, "Dictation is paused")
         }
     }
 
@@ -58,9 +83,11 @@ final class DictationReadinessTests: XCTestCase {
         permission: MicrophonePermissionState = .authorized,
         modelReady: Bool = false,
         modelLoadState: ModelLoadState = .idle,
-        status: DictationStatus = .idle
+        status: DictationStatus = .idle,
+        modelLoadFailure: String? = nil
     ) -> DictationReadiness {
         DictationReadiness(serviceEnabled: serviceEnabled, microphonePermission: permission,
-                           modelReady: modelReady, modelLoadState: modelLoadState, status: status)
+                           modelReady: modelReady, modelLoadState: modelLoadState, status: status,
+                           modelLoadFailure: modelLoadFailure)
     }
 }

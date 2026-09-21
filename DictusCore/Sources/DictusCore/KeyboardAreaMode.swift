@@ -27,6 +27,8 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
     case letters
     case emoji
     case panel
+    /// Native-style 3×4 number pad for `numberPad` / `decimalPad` / `phonePad` / OTP.
+    case numberPad
     /// The recording overlay fills the whole area, toolbar included.
     case recording
 
@@ -37,13 +39,34 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
     public var modeControlTitle: String {
         switch self {
         case .keys, .letters, .recording: return "123"
-        case .emoji, .panel: return "ABC"
+        case .emoji, .panel, .numberPad: return "ABC"
         }
     }
 
     /// Toggles the symbols surface from the keyboard's ABC/123 action.
     public static func toggledPanel(from current: KeyboardAreaMode) -> KeyboardAreaMode {
         current == .panel ? .keys : .panel
+    }
+
+    /// Destination for the 123 control. Numeric host fields return to the 3×4
+    /// pad; every other field still opens the symbols page.
+    public static func numbersMode(prefersNumberPad: Bool) -> KeyboardAreaMode {
+        prefersNumberPad ? .numberPad : .panel
+    }
+
+    /// Surface to open when the keyboard appears, or when the host field type
+    /// changes. Number/phone fields open the 3×4 pad, not the 123 symbols page.
+    public static func openingMode(
+        prefersNumberPad: Bool,
+        defaultMode: DefaultKeyboardMode
+    ) -> KeyboardAreaMode {
+        if prefersNumberPad {
+            return .numberPad
+        }
+        switch defaultMode {
+        case .dictationBoard: return .keys
+        case .keyboard: return .letters
+        }
     }
 
     /// The mode after a dictation status change.

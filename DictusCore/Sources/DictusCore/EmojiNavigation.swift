@@ -13,8 +13,11 @@ public struct EmojiNavigationPage: Equatable, Sendable {
     }
 }
 
-/// Pure category navigation for the horizontally continuous emoji stream.
+/// Pure category navigation for the horizontally free-scrolling emoji pages.
 public enum EmojiNavigation {
+    /// Points per millisecond-scale UIScrollView velocity. Below this, the
+    /// finger's projected resting page wins.
+    public static let flickVelocity: Double = 0.05
     public enum ScrollResolution: Equatable, Sendable {
         case unavailable
         case pending(index: Int)
@@ -33,14 +36,92 @@ public enum EmojiNavigation {
         return (itemCount + pageCapacity - 1) / pageCapacity
     }
 
-    /// Recents always occupies page 0, including when it has no glyphs.
-    public static func collectionPageCount(standardItemCount: Int, pageCapacity: Int) -> Int {
-        1 + pageCount(itemCount: standardItemCount, pageCapacity: pageCapacity)
+    public static func pageContentOffsetX(
+        pageIndex: Int,
+        pageWidth: Double,
+        pageGap: Double = 0
+    ) -> Double {
+        guard pageIndex > 0, pageWidth > 0 else { return 0 }
+        return Double(pageIndex) * (pageWidth + max(0, pageGap))
     }
 
-    public static func pageContentOffsetX(pageIndex: Int, pageWidth: Double) -> Double {
-        guard pageIndex > 0, pageWidth > 0 else { return 0 }
-        return Double(pageIndex) * pageWidth
+    /// Resolves offsets for responsive pages whose final category page may be
+    /// narrower than the viewport. Widths are measured at runtime, so emoji
+    /// capacity changes do not create a fake blank page tail.
+    public static func pageContentOffsetX(
+        pageIndex: Int,
+        pageWidths: [Double],
+        pageGap: Double = 0
+    ) -> Double {
+        guard pageIndex > 0, !pageWidths.isEmpty else { return 0 }
+        let end = min(pageIndex, pageWidths.count)
+        return pageWidths.prefix(end).reduce(0, +)
+            + Double(end) * max(0, pageGap)
+    }
+
+    /// Page whose span contains the offset. Unlike `pageIndex`, a point near
+    /// the next page's edge still belongs to the page under the finger.
+    public static func containingPageIndex(
+        contentOffsetX: Double,
+        pageWidths: [Double],
+        pageGap: Double = 0
+    ) -> Int {
+        guard pageWidths.count > 1 else { return 0 }
+        let gap = max(0, pageGap)
+        var origin = 0.0
+        for index in 0..<pageWidths.count - 1 {
+            origin += max(0, pageWidths[index]) + gap
+            if contentOffsetX < origin { return index }
+        }
+        return pageWidths.count - 1
+    }
+
+    /// Page a finger-up should land on. A flick moves one page from the page
+    /// under the finger. A slow release uses the nearest projected page.
+    public static func settledPageIndex(
+        contentOffsetX: Double,
+        projectedOffsetX: Double,
+        velocityX: Double,
+        pageWidths: [Double],
+        pageGap: Double = 0
+    ) -> Int {
+        guard pageWidths.count > 1 else { return 0 }
+        let last = pageWidths.count - 1
+        let origin = containingPageIndex(
+            contentOffsetX: contentOffsetX,
+            pageWidths: pageWidths,
+            pageGap: pageGap
+        )
+        // A light flick should change pages. The pager also uses a fast
+        // deceleration rate so the settle does not coast.
+        if velocityX > flickVelocity { return min(last, origin + 1) }
+        if velocityX < -flickVelocity { return max(0, origin - 1) }
+        return pageIndex(
+            contentOffsetX: projectedOffsetX,
+            pageWidths: pageWidths,
+            pageGap: pageGap
+        )
+    }
+
+    public static func pageIndex(
+        contentOffsetX: Double,
+        pageWidths: [Double],
+        pageGap: Double = 0
+    ) -> Int {
+        guard pageWidths.count > 1 else { return 0 }
+        let gap = max(0, pageGap)
+        var origin = 0.0
+        var selectedIndex = 0
+        var bestDistance = abs(contentOffsetX)
+        for index in 1..<pageWidths.count {
+            origin += max(0, pageWidths[index - 1]) + gap
+            let distance = abs(contentOffsetX - origin)
+            if distance < bestDistance {
+                bestDistance = distance
+                selectedIndex = index
+            }
+        }
+        return selectedIndex
     }
 
     /// Returns the first page containing an item from each category.

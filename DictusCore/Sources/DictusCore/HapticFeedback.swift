@@ -1,8 +1,44 @@
 // DictusCore/Sources/DictusCore/HapticFeedback.swift
 // Haptic feedback helpers for dictation recording lifecycle events.
+import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+
+/// User-facing keyboard haptic switch. `off` keeps the legacy
+/// `hapticsEnabled=false` contract so older builds stay in sync.
+public enum HapticIntensity: String, CaseIterable, Sendable {
+    case off
+    case on
+
+    public var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .on: return "On"
+        }
+    }
+
+    public var isEnabled: Bool { self != .off }
+
+    public static var current: HapticIntensity {
+        load(from: UserDefaults(suiteName: AppGroup.identifier))
+    }
+
+    public static func load(from defaults: UserDefaults?) -> HapticIntensity {
+        if let raw = defaults?.string(forKey: SharedKeys.hapticIntensity) {
+            return raw == "off" ? .off : .on
+        }
+        if defaults?.object(forKey: SharedKeys.hapticsEnabled) as? Bool == false {
+            return .off
+        }
+        return .on
+    }
+
+    public func persist(to defaults: UserDefaults? = UserDefaults(suiteName: AppGroup.identifier)) {
+        defaults?.set(rawValue, forKey: SharedKeys.hapticIntensity)
+        defaults?.set(isEnabled, forKey: SharedKeys.hapticsEnabled)
+    }
+}
 
 /// Provides distinct haptic feedback for key dictation events.
 ///
@@ -25,19 +61,29 @@ import UIKit
 /// - recordingStarted: medium impact -- user needs to feel that recording is actively happening
 /// - recordingStopped: light impact -- subtle confirmation that recording stopped
 /// - textInserted: success notification -- distinct "done" feel when transcribed text appears
-/// - keyTapped: light impact -- matches native iOS keyboard tactile feel
+/// - keyTapped: light impact -- the public stand-in for native keyboard taps
 /// - trackpadActivated: medium impact -- confirms spacebar trackpad mode activation
 public enum HapticFeedback {
 
     // MARK: - Pre-allocated generators
 
     #if canImport(UIKit) && !os(macOS)
-    /// Light impact generator for key taps and subtle feedback.
-    /// Static allocation avoids 2-5ms per-call overhead from creating new generators.
+    /// Light impact for recording-stop and secondary feedback.
     private static let lightGenerator = UIImpactFeedbackGenerator(style: .light)
+
+    /// Dedicated short rigid impulse for keyboard taps. Sharing the recording
+    /// generator makes key taps feel soft and delayed on rapid input.
+    private static let keyGenerator = UIImpactFeedbackGenerator(style: .rigid)
 
     /// Medium impact generator for recording events and trackpad activation.
     private static let mediumGenerator = UIImpactFeedbackGenerator(style: .medium)
+
+    /// Rigid impact when a hold-to-variant popup appears.
+    private static let popupGenerator = UIImpactFeedbackGenerator(style: .rigid)
+
+    /// Subtle press acknowledgement for the dictation control. Recording has
+    /// its own stronger transition haptic once the request is accepted.
+    private static let dictationPressGenerator = UISelectionFeedbackGenerator()
 
     /// Notification generator for success/error feedback (e.g., text inserted).
     private static let notificationGenerator = UINotificationFeedbackGenerator()
@@ -51,7 +97,7 @@ public enum HapticFeedback {
     /// Native keyboard taps are distinct, but never arrive as two ticks within
     /// the same few milliseconds.
     private static var lastSelectionTick = Date.distantPast
-    private static let minimumSelectionInterval: TimeInterval = 0.028
+    private static let minimumSelectionInterval: TimeInterval = 0.04
     #endif
 
     // MARK: - Cached enabled state
@@ -67,25 +113,17 @@ public enum HapticFeedback {
     /// The correct default is true (haptics enabled out of the box).
     /// `object(forKey:)` returns nil for missing keys, letting us provide the right default.
     #if canImport(UIKit) && !os(macOS)
-    private static var _isEnabled: Bool = {
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        return defaults?.object(forKey: SharedKeys.hapticsEnabled) as? Bool ?? true
-    }()
+    private static var _intensity: HapticIntensity = HapticIntensity.current
 
-    /// Refresh cached enabled state from UserDefaults.
+    /// Refresh cached intensity from UserDefaults.
     /// Call on keyboard appear (KeyboardRootView.onAppear) and when
     /// settings-changed notification arrives.
-    ///
-    /// WHY not just cache forever: User may toggle haptics off in Settings.
-    /// Refreshing on keyboard appear (which fires every time the keyboard opens)
-    /// ensures staleness is at most one keyboard session.
     public static func refreshEnabledState() {
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        _isEnabled = defaults?.object(forKey: SharedKeys.hapticsEnabled) as? Bool ?? true
+        _intensity = HapticIntensity.current
     }
 
     private static func isEnabled() -> Bool {
-        return _isEnabled
+        _intensity.isEnabled
     }
 
     /// Prime the Taptic Engine for the next tap. Call on every touchDown.
@@ -94,7 +132,10 @@ public enum HapticFeedback {
     /// Calling prepare() on every touchDown ensures the engine is ready for
     /// the NEXT tap even during rapid typing (>6 taps/second).
     public static func prepareForNextTap() {
+        keyGenerator.prepare()
+        lightGenerator.prepare()
         selectionGenerator.prepare()
+        dictationPressGenerator.prepare()
     }
     #endif
 
@@ -104,18 +145,22 @@ public enum HapticFeedback {
     /// Engine to spin up in advance.
     public static func warmUp() {
         #if canImport(UIKit) && !os(macOS)
+        keyGenerator.prepare()
         lightGenerator.prepare()
         mediumGenerator.prepare()
+        popupGenerator.prepare()
+        dictationPressGenerator.prepare()
         notificationGenerator.prepare()
         selectionGenerator.prepare()
         #endif
     }
 
-    /// Medium impact feedback when recording begins.
+    /// Medium impact feedback when the dictation hold is recognized and
+    /// recording is about to begin.
     public static func recordingStarted() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        mediumGenerator.impactOccurred()
+        mediumGenerator.impactOccurred(intensity: 0.65)
         mediumGenerator.prepare()
         #endif
     }
@@ -124,7 +169,7 @@ public enum HapticFeedback {
     public static func recordingStopped() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        lightGenerator.impactOccurred()
+        lightGenerator.impactOccurred(intensity: 0.45)
         lightGenerator.prepare()
         #endif
     }
@@ -147,13 +192,43 @@ public enum HapticFeedback {
         #endif
     }
 
-    /// Selection feedback for keyboard key taps.
+    /// Short rigid impulse for keyboard key taps and discrete controls.
     ///
-    /// WHY selectionGenerator instead of lightGenerator:
-    /// UIImpactFeedbackGenerator(.light) feels noticeably heavier than Apple's
-    /// native keyboard. UISelectionFeedbackGenerator produces the subtle "tick"
-    /// Apple uses for pickers — closer to the native keyboard feel.
+    /// Public UIKit has no keyboard-click generator. A dedicated rigid impact
+    /// is the closest public API match to the native keyboard's sharp tick.
     public static func keyTapped() {
+        #if canImport(UIKit) && !os(macOS)
+        guard isEnabled() else { return }
+        keyGenerator.prepare()
+        // Use the generator's full rigid impulse. A reduced intensity reads as
+        // soft on a phone, especially during rapid typing, while .rigid keeps
+        // the short native-style click distinct from recording feedback.
+        keyGenerator.impactOccurred()
+        keyGenerator.prepare()
+        #endif
+    }
+
+    /// Immediate acknowledgement when a dictation hold begins. This is separate
+    /// from `recordingStarted()` because the microphone request is asynchronous.
+    public static func dictationPressBegan() {
+        #if canImport(UIKit) && !os(macOS)
+        guard isEnabled() else { return }
+        dictationPressGenerator.selectionChanged()
+        dictationPressGenerator.prepare()
+        #endif
+    }
+
+    /// Confirmation when a hold-to-variant popup appears.
+    public static func variantPopupPresented() {
+        #if canImport(UIKit) && !os(macOS)
+        guard isEnabled() else { return }
+        popupGenerator.impactOccurred(intensity: 0.55)
+        popupGenerator.prepare()
+        #endif
+    }
+
+    /// Selection tick while sliding across accent, symbol, or emoji variants.
+    public static func variantHighlightChanged() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
         emitSelectionTick()
@@ -165,7 +240,7 @@ public enum HapticFeedback {
     public static func autocorrectApplied() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        lightGenerator.impactOccurred()
+        lightGenerator.impactOccurred(intensity: 0.45)
         lightGenerator.prepare()
         #endif
     }

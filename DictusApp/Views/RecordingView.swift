@@ -65,147 +65,88 @@ struct RecordingView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.dictusBackground.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Close button (top-left) — standalone only
-                HStack {
-                    if mode == .standalone {
-                        Button {
-                            HapticFeedback.recordingStopped()
-                            // Step 1: animate RecordingView out
-                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
-                                isDismissing = true
-                            }
-                            // Step 2: after animation, reset status (no animation leak to HomeView).
-                            // Generation guard (issue #60): if a new dictation started while the
-                            // dismiss animation ran, this stale reset must not tear it down.
-                            let generation = coordinator.dictationGeneration
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                guard coordinator.dictationGeneration == generation else { return }
-                                coordinator.resetStatus()
-                            }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .frame(width: 40, height: 40)
-                                .background(Color(.secondarySystemBackground), in: Circle())
-                                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                        }
-                        .frame(width: 44, height: 44)
-                        .buttonStyle(GlassPressStyle(pressedScale: 1.35))
-                        .accessibilityLabel("Close dictation")
-                        .accessibilityHint("Returns to Home")
-                        .padding(.leading, 20)
-                        .padding(.top, 8)
-                    }
-                    Spacer()
-                }
-
-                Text("Dictation")
-                    .font(.title2.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-
-                // MARK: - Upper zone: result text (centered between top and waveform)
-                // WHY above waveform: The waveform+mic are anchored in the bottom
-                // third. Placing the result in the large empty upper zone avoids
-                // pushing anything down when text appears.
-                ZStack {
-                    if showResult, let result = transcriptionResult {
-                        // WHY GeometryReader + ScrollView combo:
-                        // GeometryReader gives us the available height so we can
-                        // vertically center short text. ScrollView handles long text
-                        // that exceeds the zone. Short text sits centered; long text scrolls.
-                        GeometryReader { geo in
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Processed result")
-                                        .font(.headline)
-                                    Text(result)
-                                        .font(.dictusBody)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Button("Copy") {
-                                        UIPasteboard.general.string = result
-                                        showCopiedFeedback = true
-                                        HapticFeedback.recordingStopped()
-                                        UIAccessibility.post(notification: .announcement, argument: "Copied")
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                            showCopiedFeedback = false
-                                        }
-                                    }
-                                    if showCopiedFeedback {
-                                        Text("Copied")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.horizontal, 24)
-                                .frame(minHeight: geo.size.height)
-                            }
-                        }
-                        .transition(reduceMotion ? .identity : .opacity)
-                    } else if showError, let error = errorMessage {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.orange)
-                            Text(userFacingError(error))
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-
-                            Button("Try again") {
-                                retryRecording()
-                            }
-                            .buttonStyle(.borderedProminent)
-
-                            if mode == .standalone {
-                                Button("Close") {
-                                    dismissRecording()
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                    } else {
-                        VStack(spacing: 8) {
-                            Text("Live transcript")
-                                .font(.headline)
-                            Text(displayedStatus == .recording ? "Listening..." : "Your words will appear after recording.")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-
-                    // Onboarding: auto-advance handled in handleStatusChange
-                }
-                .frame(maxHeight: .infinity)
-
-                // MARK: - Waveform (always visible, anchored in bottom third)
-                waveformSection
-                    .padding(.horizontal)
-                    .frame(height: 120)
-
-                // MARK: - Status text (duration or processing indicator)
-                statusText
-                    .frame(height: 30)
-                    .padding(.top, 8)
-
-                // MARK: - Mic / Stop button (always in same position)
-                micOrStopButton
-                    .frame(height: 100)
-                    .padding(.top, 16)
-
+        VStack(spacing: 0) {
+            HStack {
+                Label("sAiity", systemImage: "waveform").font(.headline)
                 Spacer()
-                    .frame(height: 40)
+                if mode == .standalone {
+                    Button(action: dismissRecording) {
+                        Image(systemName: "xmark").frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.bordered).buttonBorderShape(.circle)
+                    .accessibilityLabel("Close dictation")
+                }
             }
+            .padding(.horizontal, 24).padding(.top, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(showResult ? "Transcript" : "Listening")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if showResult, let result = transcriptionResult {
+                                ShareLink(item: result) { Image(systemName: "square.and.arrow.up") }
+                                    .accessibilityLabel("Share transcript")
+                            }
+                        }
+                        if showResult, let result = transcriptionResult {
+                            Text(result).font(.title3).textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                UIPasteboard.general.string = result
+                                showCopiedFeedback = true
+                                HapticFeedback.recordingStopped()
+                                UIAccessibility.post(notification: .announcement, argument: "Copied")
+                            } label: {
+                                Label(showCopiedFeedback ? "Copied" : "Copy transcript",
+                                      systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                            }
+                            .labelStyle(.titleAndIcon)
+                            .buttonStyle(.bordered)
+                            if mode == .onboarding {
+                                Button("Continue", action: completeOnboarding)
+                                    .buttonStyle(.borderedProminent)
+                            }
+                        } else if showError, let error = errorMessage {
+                            Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
+                                .font(.headline)
+                            Text(userFacingError(error)).foregroundStyle(.secondary)
+                            Button("Try again", action: retryRecording).buttonStyle(.borderedProminent)
+                        } else {
+                            Text(displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
+                                .font(.title3).foregroundStyle(.secondary)
+                            Text("Finish recording when you’re ready.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(16).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding(20).frame(maxWidth: 680).frame(maxWidth: .infinity)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+
+            VStack(spacing: 16) {
+                HStack {
+                    Label(statusTitle, systemImage: displayedStatus == .recording ? "mic.fill" : "mic.slash")
+                    Spacer()
+                    if displayedStatus == .recording { Text(formattedTime).monospacedDigit() }
+                }
+                .font(.subheadline).foregroundStyle(.secondary)
+                if displayedStatus == .recording {
+                    ProgressView(value: Double(coordinator.bufferEnergy.max() ?? 0), total: 1)
+                        .tint(.accentColor).accessibilityLabel("Microphone input level")
+                }
+                micOrStopButton
+            }
+            .padding(24).frame(maxWidth: 680)
+            .background(.bar)
         }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .opacity(isDismissing ? 0 : 1)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showResult)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showCopiedFeedback)
@@ -251,105 +192,47 @@ struct RecordingView: View {
         .navigationBarHidden(true)
     }
 
-    // MARK: - Waveform Section
-
-    /// Always-visible waveform that changes behavior based on state.
-    /// Single BrandWaveform instance — properties change dynamically instead of
-    /// swapping 3 separate instances. Prevents ghost CADisplayLinks when the app
-    /// continues its run loop in background (UIBackgroundModes:audio).
-    private var waveformSection: some View {
-        BrandWaveform(
-            energyLevels: displayedStatus == .recording
-                ? coordinator.bufferEnergy
-                : Array(repeating: Float(0), count: 30),
-            maxHeight: 120,
-            animation: waveformAnimation,
-            isActive: displayedStatus == .recording || isPostRecordingStage
-        )
-        .opacity(displayedStatus == .recording ? 0.5 :
-                 isPostRecordingStage ? 0.3 : 0.15)
+    private var isCancellationStage: Bool {
+        coordinator.status == .requested
+            || coordinator.status == .transcribing
+            || coordinator.status == .processing
     }
 
-    /// The animation for the current stage.
-    ///
-    /// This screen draws the same three animations as the keyboard overlay, from
-    /// the same `ProcessingWaveform` maths (#267). An earlier round shared one
-    /// animation across both post-recording stages, on the argument that the
-    /// distinction belongs where the user waits during a keyboard dictation. Device
-    /// testing settled it the other way: someone dictating inside DictusApp is
-    /// waiting on this screen, and it owes them the same answer.
-    ///
-    /// Driven by `displayedStatus` rather than the coordinator's, so the animation and
-    /// the label below change together (#309).
-    private var waveformAnimation: WaveformAnimation {
-        if reduceMotion { return .still }
-        switch displayedStatus {
-        case .recording:
-            return .micLevels
-        case .transcribing:
-            return .sweep
-        case .processing:
-            return .travellingPeak
-        case .idle, .requested, .ready, .failed:
-            return .still
+    private var cancellationTitle: String {
+        switch coordinator.status {
+        case .transcribing: return "Cancel transcription"
+        case .processing: return "Cancel cleanup"
+        default: return "Cancel dictation"
         }
     }
 
-    /// Whether the pipeline is past the microphone and working on the audio or the
-    /// transcript. Drives opacity and the disabled mic button, both of which are
-    /// the same for either stage.
-    private var isPostRecordingStage: Bool {
-        displayedStatus == .transcribing || displayedStatus == .processing
-    }
-
-    // MARK: - Status Text
-
-    @ViewBuilder
-    private var statusText: some View {
-        Text(displayedStatus == .recording ? formattedTime : statusTitle)
-            .font(displayedStatus == .recording ? .title3.monospacedDigit() : .subheadline)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel(statusTitle)
-    }
-
-    // MARK: - Mic / Stop Button
-
-    /// Always-present button that changes appearance based on state.
-    /// WHY always present: Prevents layout jumps. The button is the visual anchor
-    /// of the screen — it transforms in place (mic → stop → shimmer → mic).
-    @ViewBuilder
     private var micOrStopButton: some View {
-        if displayedStatus == .recording {
-            // Red stop button with glass ring
-            Button(action: stopRecording) {
-                ZStack {
-                    // Glass ring behind the stop button
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 96, height: 96)
-                        .dictusGlass(in: Circle())
-                    Circle()
-                        .fill(Color.dictusRecording)
-                        .frame(width: 72, height: 72)
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.white)
-                        .frame(width: 26, height: 26)
-                }
-            }
-            .buttonStyle(GlassPressStyle(pressedScale: 0.88))
-            .accessibilityLabel("Stop recording")
-        } else if isPostRecordingStage {
-            // Shimmer mic during processing (disabled). The status is passed
-            // through rather than pinned to `.transcribing` so the button reflects
-            // the stage it is actually in (#267); the shimmer is the same for both.
-            AnimatedMicButton(status: displayedStatus) {}
-                .disabled(true)
-        } else {
-            // Idle / result state: mic button ready for (new) recording
-            AnimatedMicButton(status: .idle) {
+        Button {
+            switch coordinator.status {
+            case .recording:
+                stopRecording()
+            case .requested, .transcribing, .processing:
+                cancelRecording()
+            default:
                 startRecording()
             }
+        } label: {
+            HStack(spacing: 12) {
+                if isCancellationStage {
+                    Image(systemName: "xmark")
+                } else {
+                    Image(systemName: displayedStatus == .recording ? "stop.fill" : "mic.fill")
+                }
+                Text(isCancellationStage ? cancellationTitle :
+                     displayedStatus == .recording ? "Finish recording" : "Start dictation")
+                Spacer()
+                if !isCancellationStage { Image(systemName: "arrow.right") }
+            }
+            .font(.headline).padding(.vertical, 12).frame(maxWidth: .infinity)
         }
+        .buttonStyle(.borderedProminent).controlSize(.large)
+        .tint(displayedStatus == .recording ? .red : .accentColor)
+        .accessibilityIdentifier(isCancellationStage ? "dictation.cancel" : "dictation.start")
     }
 
     // MARK: - Actions
@@ -371,6 +254,11 @@ struct RecordingView: View {
         startRecording()
     }
 
+    private func completeOnboarding() {
+        coordinator.resetStatus()
+        onComplete?()
+    }
+
     private func dismissRecording() {
         HapticFeedback.recordingStopped()
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { isDismissing = true }
@@ -384,6 +272,11 @@ struct RecordingView: View {
     private func stopRecording() {
         HapticFeedback.recordingStopped()
         coordinator.stopDictation()
+    }
+
+    private func cancelRecording() {
+        HapticFeedback.recordingStopped()
+        coordinator.cancelDictation()
     }
 
     private func userFacingError(_ message: String) -> String {
@@ -430,21 +323,6 @@ struct RecordingView: View {
                 transcriptionResult = result
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4)) {
                     showResult = true
-                }
-                // Auto-advance to success screen in onboarding mode
-                // Shows transcription result for 1.5s then triggers onComplete
-                if mode == .onboarding {
-                    // Generation guard (issue #60): if the user started a new dictation
-                    // during the 1.5s delay, this stale auto-advance must not fire.
-                    let generation = coordinator.dictationGeneration
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(1500))
-                        await MainActor.run {
-                            guard coordinator.dictationGeneration == generation else { return }
-                            coordinator.resetStatus()
-                            onComplete?()
-                        }
-                    }
                 }
             }
         case .failed:

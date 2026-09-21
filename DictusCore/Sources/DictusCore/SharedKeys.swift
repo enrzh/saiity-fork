@@ -8,6 +8,9 @@ public enum SharedKeys {
     public static let lastTranscription = "dictus.lastTranscription"
     public static let dictationDelivery = "dictus.dictationDelivery"
     public static let lastTranscriptionTimestamp = "dictus.lastTranscriptionTimestamp"
+    /// JSON snapshot of the most recent dictation for an opt-in issue report.
+    /// One slot; overwritten on every dictation. Not a transcript history.
+    public static let lastDictationIssueSnapshot = "dictus.lastDictationIssueSnapshot"
     public static let lastError = "dictus.lastError"
     public static let failureDisposition = "dictus.failureDisposition"
 
@@ -23,10 +26,21 @@ public enum SharedKeys {
     /// "ready" = active model is loaded in RAM and `transcribe()` calls will succeed.
     /// The keyboard reads this to refuse mic taps during load (issue #144).
     public static let modelLoadState = "dictus.modelLoadState"
+    /// Short user-facing recovery message for the last active-model load failure.
+    /// Technical engine details stay in PersistentLog; this value is safe to show
+    /// in the app readiness surface and is cleared on the next load attempt.
+    public static let modelLoadFailure = "dictus.modelLoadFailure"
+    /// Double (timeIntervalSince1970): when the last model-load failure was recorded.
+    public static let modelLoadFailureTimestamp = "dictus.modelLoadFailureTimestamp"
     /// Double (timeIntervalSince1970): when the current model load started.
     /// A loading state without a fresh timestamp is treated as abandoned so a
     /// crashed or suspended app cannot leave the keyboard on "Open sAiity" forever.
     public static let modelLoadStateTimestamp = "dictus.modelLoadStateTimestamp"
+    /// JSON map of model identifier to exponentially smoothed warm decode time.
+    /// Kept in the App Group so the next process can choose a faster local fallback.
+    public static let modelWarmLatency = "dictus.modelWarmLatency"
+    /// Model selection policy: automatic hardware-aware selection or a manual pick.
+    public static let modelSelectionMode = "dictus.modelSelectionMode"
 
     // Keyboard-App cross-process contracts (added for Plan 3.1)
     /// Legacy single global keyboard layout, stored as String ("azerty"/"qwerty"/"qwertz").
@@ -66,6 +80,8 @@ public enum SharedKeys {
 
     /// Default keyboard layer: "letters" or "numbers". Replaces keyboardMode.
     public static let defaultKeyboardLayer = "dictus.defaultKeyboardLayer"
+    /// Default surface shown when the keyboard appears: "dictationBoard" or "keyboard".
+    public static let defaultKeyboardMode = "dictus.defaultKeyboardMode"
 
     // User preferences (added for Plan 4.1 onboarding + settings)
     /// Legacy keyboard language code. New installs resolve to the system language,
@@ -86,16 +102,33 @@ public enum SharedKeys {
     /// The keyboard toolbar writes only `language`/`keyboardLayout` and cannot
     /// change the product's automatic transcription behavior.
     public static let transcriptionLanguage = "dictus.transcriptionLanguage"
+    /// Auto vs one-language STT preference. Missing values preserve every
+    /// spoken language; Settings may explicitly opt into one language.
+    public static let transcriptionOutputMode = "dictus.transcriptionOutputMode"
+    /// Global cleanup writing style. Missing values resolve to Balanced.
+    public static let writingStyle = "dictus.writingStyle"
     /// JSON-free request contract written by the keyboard and consumed by the app.
     public static let dictationLanguageRequest = "dictus.dictationLanguageRequest"
     /// Codable Translation.framework source/target readiness snapshot written by the app.
     public static let translationReadiness = "dictus.translationReadiness"
     /// Whether haptic feedback is enabled, default true
     public static let hapticsEnabled = "dictus.hapticsEnabled"
+    /// Keyboard haptic intensity: off / light / medium / strong.
+    public static let hapticIntensity = "dictus.hapticIntensity"
     /// Whether long-press alternate-character popups are enabled, default true
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
-    /// Whether the keyboard-mode suggestion row is visible, default true.
-    public static let suggestionsEnabled = "dictus.suggestionsEnabled"
+    /// Off / popup-above-key / popout-from-key. Migrates from `keyPopupsEnabled`.
+    public static let keyPopupMode = "dictus.keyPopupMode"
+    /// Whether keyboard chrome uses liquid glass. Off is fully opaque, with no glass rim.
+    public static let liquidGlassEnabled = "dictus.liquidGlassEnabled"
+    /// Whether letter/symbol insert keys draw their own plates. Default off: keys sit in the inset.
+    public static let keyContainersEnabled = "dictus.keyContainersEnabled"
+    /// Off / Live Activity / Picture in Picture presence while dictating.
+    public static let dictationPresenceMode = "dictus.dictationPresenceMode"
+    /// JSON array of the last 30 successful dictations for the Home recents list.
+    public static let recentDictations = "dictus.recentDictations"
+    /// JSON array of user-created typed expansions shared by app and keyboard.
+    public static let textSnippets = "dictus.textSnippets"
     /// Whether the user has completed onboarding, default false
     public static let hasCompletedOnboarding = "dictus.hasCompletedOnboarding"
     /// Current onboarding step index (0-5). Persisted to UserDefaults so the user
@@ -108,6 +141,10 @@ public enum SharedKeys {
     public static let onboardingFullAccessVerified = "dictus.onboardingFullAccessVerified"
     /// Unix timestamp of the last keyboard extension Full Access handshake.
     public static let onboardingFullAccessHandshakeDate = "dictus.onboardingFullAccessHandshakeDate"
+    /// Probe token written by the app before it asks the user to verify the keyboard.
+    public static let onboardingFullAccessProbe = "dictus.onboardingFullAccessProbe"
+    /// Probe token echoed by the keyboard extension when it actually loads.
+    public static let onboardingFullAccessAcknowledgedProbe = "dictus.onboardingFullAccessAcknowledgedProbe"
 
     // Text prediction preferences (added for Phase 08)
     /// Whether autocorrect is enabled, default true
@@ -122,7 +159,8 @@ public enum SharedKeys {
     // Live Activity preference
     /// Whether Live Activity (Dynamic Island + Lock Screen) is enabled, default true
     public static let liveActivityEnabled = "dictus.liveActivityEnabled"
-    /// Whether the dictation service is enabled from the Home toolbar.
+    /// Internal availability controlled by onboarding and Live Activity
+    /// pause/resume. There is no persistent Home toggle for this state.
     public static let serviceEnabled = "dictus.serviceEnabled"
     /// Whether Live Activity detection is muted without ending standby.
     public static let detectionMuted = "dictus.detectionMuted"
@@ -131,6 +169,13 @@ public enum SharedKeys {
     /// Whether the cleanup layer runs between STT final output and App Group write.
     /// Defaults to true; an explicit user choice is preserved by app migration.
     public static let polishEnabled = "dictus.polishEnabled"
+    /// Selected dictation cleanup backend: `appleIntelligence` or `ollama:<uuid>`.
+    /// Missing values resolve through `PolishCleanupBackend.load`.
+    public static let polishCleanupBackend = "dictus.polishCleanupBackend"
+    /// Bool: multilingual output uses sentence-span polish instead of skipping
+    /// the model. Absent defaults to on. Set false to keep the language-neutral
+    /// floor only.
+    public static let polishSpanAwareMultilingual = "dictus.polishSpanAwareMultilingual"
     /// Bool: whether polish has stopped calling its engine for the rest of this app
     /// process (#315). Written only by DictusApp, read by whichever surface has to
     /// say so — the keyboard toolbar today. Absent reads false, which is the

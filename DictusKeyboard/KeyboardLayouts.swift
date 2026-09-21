@@ -11,7 +11,7 @@ import DictusCore
 /// types as the vendored giellakbd-ios codebase. Each layout includes 5 pages:
 /// normal, shifted, capslock (same visual as shifted), symbols1 (numbers), symbols2 (symbols).
 ///
-/// Bottom row on letter pages: [123] [emoji] [space] [return] -- emoji key added in Phase 20.
+    /// Bottom row on letter pages: [123] [emoji] [space] [.] [return] [keyboard].
 ///
 /// Letter pages are four rows, or five when the number row is on (#331) -- see
 /// `drawsDigitRow`. The symbols pages expose four rendered rows, including the
@@ -210,6 +210,10 @@ enum KeyboardLayouts {
         case .qwerty: definition = qwerty(lang: key.language, )
         case .qwertz: definition = qwertz(lang: key.language, )
         case .qwertzStandard: definition = qwertz(lang: key.language, standard: true)
+        case .dvorak: definition = alternateLatin(lang: key.language, title: "Dvorak", rows: AlternateLatinLayout.dvorakRows)
+        case .colemak: definition = alternateLatin(lang: key.language, title: "Colemak", rows: AlternateLatinLayout.colemakRows)
+        case .workman: definition = alternateLatin(lang: key.language, title: "Workman", rows: AlternateLatinLayout.workmanRows)
+        case .norman: definition = alternateLatin(lang: key.language, title: "Norman", rows: AlternateLatinLayout.normanRows)
         }
         cachedCurrentLayout = CachedCurrentLayout(key: key, definition: definition)
         return definition
@@ -251,6 +255,49 @@ enum KeyboardLayouts {
             // Row 4: same as normal
             letterBottomRow(lang: lang)
         ])
+    }
+
+    private static func alternateLatin(
+        lang: SupportedLanguage,
+        title: String,
+        rows: [[String]]
+    ) -> KeyboardDefinition {
+        let lower = rows.map { $0.map { $0.lowercased() } }
+        let upper = AlternateLatinLayout.shiftedRows(from: rows)
+        return KeyboardDefinition(
+            name: lang.displayName + " (\(title))",
+            locale: lang.rawValue,
+            spaceName: lang.spaceName,
+            returnName: lang.returnName,
+            longPress: longPressData,
+            layout: KeyboardDefinition.Layout(
+                normal: alternateLetterPage(rows: lower, lang: lang),
+                shifted: alternateLetterPage(rows: upper, lang: lang),
+                symbols1: numbersPage(lang: lang),
+                symbols2: symbolsPage(lang: lang)
+            )
+        )
+    }
+
+    private static func alternateLetterPage(
+        rows: [[String]],
+        lang: SupportedLanguage
+    ) -> [[KeyDefinition]] {
+        let flankSize = CGSize(width: 1.5, height: 1)
+        let inset = KeyDefinition(type: .spacer, size: CGSize(width: 0.5, height: 1))
+        let row1 = rows[0].map { key($0) }
+        let home = rows[1]
+        let row2: [KeyDefinition] = home.count == 9
+            ? [inset] + home.map { key($0) } + [inset]
+            : home.map { key($0) }
+        let bottom = rows[2]
+        let filler = max(0, 7 - bottom.count)
+        let row3: [KeyDefinition] = [
+            KeyDefinition(type: .shift, size: flankSize)
+        ] + bottom.map { key($0) }
+            + (0..<filler).map { _ in KeyDefinition(type: .spacer, size: CGSize(width: 1, height: 1)) }
+            + [KeyDefinition(type: .backspace, size: flankSize)]
+        return withDigitRow([row1, row2, row3, letterBottomRow(lang: lang)])
     }
 
     // MARK: - QWERTY Letter Pages
@@ -353,7 +400,8 @@ enum KeyboardLayouts {
         return [
             KeyDefinition(type: .symbols, size: CGSize(width: 1.2, height: 1)),
             KeyDefinition(type: .input(key: emojiKeyGlyph, alternate: nil), size: CGSize(width: 1.2, height: 1)),
-            KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 5.0, height: 1)),
+            KeyDefinition(type: .spacebar(name: lang.spaceName), size: CGSize(width: 4.0, height: 1)),
+            KeyDefinition(type: .fullStop, size: CGSize(width: 1.0, height: 1)),
             KeyDefinition(type: .returnkey(name: lang.returnName), size: CGSize(width: 1.8, height: 1)),
             KeyDefinition(type: .keyboardMode, size: CGSize(width: 0.8, height: 1))
         ]

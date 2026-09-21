@@ -117,23 +117,23 @@ final class DictationLanguageRequestTests: XCTestCase {
             installedTargets: ["en"],
             supportedTargets: ["en", "de"]
         )
-        XCTAssertEqual(readiness.readyTargets(for: asr.sourceLanguage), [.english])
-        XCTAssertEqual(readiness.selectableTargets(for: asr.sourceLanguage), [.english, .german])
-        XCTAssertFalse(readiness.selectableTargets(for: asr.sourceLanguage).contains(.spanish))
+        XCTAssertEqual(readiness.readyTargets(forSourceCode: asr.sourceLanguage?.rawValue), [.english])
+        XCTAssertEqual(readiness.selectableTargets(forSourceCode: asr.sourceLanguage?.rawValue), [.english, .german])
+        XCTAssertFalse(readiness.selectableTargets(forSourceCode: asr.sourceLanguage?.rawValue).contains(.spanish))
         XCTAssertEqual(
-            readiness.status(for: .english, sourceLanguage: asr.sourceLanguage),
+            readiness.status(for: .english, sourceCode: asr.sourceLanguage?.rawValue),
             .installedReady
         )
         XCTAssertEqual(
-            readiness.status(for: .german, sourceLanguage: asr.sourceLanguage),
+            readiness.status(for: .german, sourceCode: asr.sourceLanguage?.rawValue),
             .supportedNeedsDownload
         )
         XCTAssertEqual(
-            readiness.menuLabel(for: .german, sourceLanguage: asr.sourceLanguage),
+            readiness.menuLabel(for: .german, sourceCode: asr.sourceLanguage?.rawValue),
             "Translate to Deutsch (Download required)"
         )
         XCTAssertEqual(
-            readiness.accessibilityLabel(for: .german, sourceLanguage: asr.sourceLanguage),
+            readiness.accessibilityLabel(for: .german, sourceCode: asr.sourceLanguage?.rawValue),
             "Translate to Deutsch, download required"
         )
     }
@@ -152,7 +152,7 @@ final class DictationLanguageRequestTests: XCTestCase {
         ).persist(to: defaults)
 
         XCTAssertEqual(
-            TranslationTargetReadiness.load(from: defaults)?.selectableTargets(for: nil),
+            TranslationTargetReadiness.load(from: defaults)?.selectableTargets(forSourceCode: nil),
             [.english, .german]
         )
     }

@@ -58,9 +58,53 @@ final class HostFieldPolicyTests: XCTestCase {
 
     // MARK: - Keyboard types implying non-prose input
 
+    func testLetterKeyboardAdaptsToTheHostField() {
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .email, content: .none).leftInsert,
+            "@"
+        )
+        XCTAssertNil(HostFieldPolicy.letterFieldKeys(keyboard: .email, content: .none).rightInsert)
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .standard, content: .email).leftInsert,
+            "@"
+        )
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .url, content: .none),
+            HostFieldPolicy.LetterFieldKeys(leftInsert: "/", rightInsert: ".com", returnTitle: "Go")
+        )
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .twitter, content: .none).rightInsert,
+            "#"
+        )
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .webSearch, content: .none).returnTitle,
+            "Go"
+        )
+        XCTAssertEqual(
+            HostFieldPolicy.letterFieldKeys(keyboard: .standard, content: .none),
+            .standard
+        )
+        XCTAssertTrue(HostFieldPolicy.prefersSymbolPage(keyboard: .symbols))
+        XCTAssertFalse(HostFieldPolicy.prefersSymbolPage(keyboard: .email))
+    }
+
+    func testNumericAndPhoneKeyboardsPreferTheNumberPad() {
+        XCTAssertTrue(HostFieldPolicy.prefersNumberPad(keyboard: .numeric, content: .none))
+        XCTAssertTrue(HostFieldPolicy.prefersNumberPad(keyboard: .decimal, content: .none))
+        XCTAssertTrue(HostFieldPolicy.prefersNumberPad(keyboard: .phone, content: .none))
+        XCTAssertTrue(HostFieldPolicy.prefersNumberPad(keyboard: .standard, content: .oneTimeCode))
+        XCTAssertFalse(HostFieldPolicy.prefersNumberPad(keyboard: .namePhone, content: .none))
+        XCTAssertFalse(HostFieldPolicy.prefersNumberPad(keyboard: .standard, content: .none))
+        XCTAssertFalse(HostFieldPolicy.prefersNumberPad(keyboard: .email, content: .email))
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .numeric, content: .none), .digits)
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .decimal, content: .none), .decimal)
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .phone, content: .none), .phone)
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .standard, content: .oneTimeCode), .digits)
+    }
+
     func testSearchAndTokenKeyboardTypesDisableEverything() {
         let kinds: [HostFieldPolicy.KeyboardKind] = [
-            .url, .email, .webSearch, .twitter, .numeric, .phone, .namePhone
+            .url, .email, .webSearch, .twitter, .numeric, .decimal, .phone, .namePhone
         ]
         for kind in kinds {
             let policy = evaluate(keyboard: kind)

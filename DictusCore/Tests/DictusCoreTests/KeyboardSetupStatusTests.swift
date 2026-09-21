@@ -25,17 +25,6 @@ final class KeyboardSetupStatusTests: XCTestCase {
         XCTAssertTrue(status.canContinue)
     }
 
-    func testOldHandshakeStillVerifiesFullAccessWhenKeyboardIsInstalled() {
-        let status = KeyboardSetupStatus(
-            keyboardInstalled: true,
-            fullAccessHandshake: true,
-            handshakeDate: Date(timeIntervalSince1970: 100)
-        )
-
-        XCTAssertTrue(status.fullAccessVerified)
-        XCTAssertTrue(status.canContinue)
-    }
-
     func testInputModeIdentityDoesNotConfuseNativeEnglishWithDictus() {
         XCTAssertTrue(
             KeyboardSetupStatus.isDictusKeyboardIdentifier("de.aiity.saiity.ios.keyboard")
@@ -52,7 +41,7 @@ final class KeyboardSetupStatusTests: XCTestCase {
         XCTAssertFalse(KeyboardSetupStatus.isDictusKeyboardIdentifier(nil))
     }
 
-    func testFullAccessHandshakeTrustsTheExtensionVerifiedBit() {
+    func testFullAccessHandshakeRequiresTheCurrentProbe() {
         XCTAssertTrue(
             KeyboardSetupStatus.isCurrentFullAccessHandshake(
                 verified: true,
@@ -60,14 +49,14 @@ final class KeyboardSetupStatusTests: XCTestCase {
                 acknowledgedProbe: "current"
             )
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             KeyboardSetupStatus.isCurrentFullAccessHandshake(
                 verified: true,
                 probe: "current",
                 acknowledgedProbe: "old"
             )
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             KeyboardSetupStatus.isCurrentFullAccessHandshake(
                 verified: true,
                 probe: nil,

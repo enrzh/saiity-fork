@@ -20,6 +20,7 @@ struct GlobeKeyTutorialPage: View {
     @State private var textFieldContent = ""
     @State private var firstDictationVerified = false
     @State private var awaitingInsertion = false
+    @State private var dictationBaselineText = ""
     @State private var accessibilityAnnouncement = ""
     @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
     @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
@@ -73,7 +74,9 @@ struct GlobeKeyTutorialPage: View {
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
         }
         .onChange(of: textFieldContent) { _, newValue in
-            guard awaitingInsertion, !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard awaitingInsertion,
+                  newValue != dictationBaselineText,
+                  !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             guard fullAccessVerified else { return }
             firstDictationVerified = true
             awaitingInsertion = false
@@ -103,8 +106,8 @@ struct GlobeKeyTutorialPage: View {
     private func observeTranscriptionReady() {
         DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
             DispatchQueue.main.async {
-                guard dictusKeyboardActive else { return }
                 refreshFullAccess()
+                guard dictusKeyboardActive else { return }
                 guard fullAccessVerified else { return }
                 fullAccessRequired = false
                 dictationFailed = false
@@ -122,7 +125,7 @@ struct GlobeKeyTutorialPage: View {
                     accessibilityAnnouncement = "Full Access required before dictation can start."
                     return
                 }
-                textFieldContent = ""
+                dictationBaselineText = textFieldContent
                 awaitingInsertion = true
                 accessibilityAnnouncement = "Dictation received. Waiting for insertion."
                 UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
@@ -145,15 +148,7 @@ struct GlobeKeyTutorialPage: View {
             probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
             acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
         )
-        let date = AppGroup.defaults.double(forKey: SharedKeys.onboardingFullAccessHandshakeDate)
-        let status = KeyboardSetupStatus(
-            keyboardInstalled: dictusKeyboardActive,
-            fullAccessHandshake: handshake,
-            handshakeDate: date > 0 ? Date(timeIntervalSince1970: date) : nil
-        )
-        if handshake {
-            fullAccessVerified = true
-        }
+        fullAccessVerified = handshake
     }
 
     private func openSettings() {

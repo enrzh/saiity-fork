@@ -57,6 +57,8 @@ struct PolishDebugExport: Codable {
         /// triage when `appleFMAvailable` is false (e.g. user has Siri in
         /// English but iPhone in French → "appleIntelligenceNotEnabled").
         let appleFMState: String
+        /// Stored cleanup backend (`appleIntelligence` or `ollama:<uuid>`).
+        let polishCleanupBackend: String
     }
 
     struct Event: Codable {
@@ -133,7 +135,8 @@ enum PolishDebugExporter {
             activeModelID: activeModelID,
             activeModelEngine: activeEngine,
             appleFMAvailable: PolishAvailability.isAppleFMAvailable,
-            appleFMState: String(describing: PolishAvailability.state)
+            appleFMState: String(describing: PolishAvailability.state),
+            polishCleanupBackend: PolishCleanupBackend.load(from: defaults).storageValue
         )
 
         var outcomes: [String: Int] = [

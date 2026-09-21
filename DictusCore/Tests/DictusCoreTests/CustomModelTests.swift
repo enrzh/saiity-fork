@@ -2,10 +2,13 @@ import XCTest
 @testable import DictusCore
 
 final class CustomModelTests: XCTestCase {
-    func testOnlyEnglishAndGermanAreSelectable() {
-        XCTAssertEqual(SupportedLanguage.allCases, [.english, .german])
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.english))
-        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.english))
+    func testSelectableLanguagesCoverLatinEuropeanLayouts() {
+        XCTAssertEqual(SupportedLanguage.allCases, SupportedLanguage.typingMenuLanguages)
+        XCTAssertTrue(SupportedLanguage.allCases.contains(.french))
+        XCTAssertTrue(SupportedLanguage.allCases.contains(.spanish))
+        XCTAssertTrue(SupportedLanguage.allCases.contains(.italian))
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "fr"), .explicit(.french))
+        XCTAssertEqual(TranscriptionLanguageMode(storedValue: "es"), .explicit(.spanish))
     }
 
     func testASRRejectsOllamaAndCleanupRejectsNvidia() {
@@ -54,7 +57,7 @@ final class CustomModelTests: XCTestCase {
             repositoryURL: "http://127.0.0.1:11434",
             role: .cleanup,
             source: .ollama,
-            modelName: "qwen2.5:3b"
+            modelName: "llama3.2:3b"
         )
 
         XCTAssertNotNil(missingName.validationError)
@@ -67,7 +70,7 @@ final class CustomModelTests: XCTestCase {
             repositoryURL: "http://127.0.0.1:11435",
             role: .cleanup,
             source: .ollama,
-            modelName: "qwen2.5:3b"
+            modelName: "llama3.2:3b"
         )
 
         XCTAssertNotNil(nonDefaultPort.validationError)

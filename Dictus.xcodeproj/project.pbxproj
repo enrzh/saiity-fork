@@ -52,9 +52,9 @@
 		AA0000B1 /* RecentEmojis.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B1 /* RecentEmojis.swift */; };
 		AA0000B2 /* EmojiPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B2 /* EmojiPickerView.swift */; };
 		AA0000B3 /* EmojiCategoryBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B3 /* EmojiCategoryBar.swift */; };
+		AA0000B4 /* EmojiSearchFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B4 /* EmojiSearchFR.swift */; };
 		AA0000B5 /* AuxiliaryBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B5 /* AuxiliaryBottomBar.swift */; };
 		AA0000B6 /* KeyVariantPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B6 /* KeyVariantPopup.swift */; };
-		AA0000B4 /* EmojiSearchFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B4 /* EmojiSearchFR.swift */; };
 		AA0000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C0 /* Assets.xcassets */; };
 		AA0000D0 /* TextPredictionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D0 /* TextPredictionEngine.swift */; };
 		AA0000D1 /* SuggestionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D1 /* SuggestionState.swift */; };
@@ -67,10 +67,10 @@
 		AA0000E2 /* GaugeBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E2 /* GaugeBarView.swift */; };
 		AA0000E3 /* ModelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E3 /* ModelCardView.swift */; };
 		AA0000E4 /* SwipeBackOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E4 /* SwipeBackOverlayView.swift */; };
+		AA0000E5 /* AddCustomModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E5 /* AddCustomModelView.swift */; };
 		AA0000EA /* PolishTogglePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000EA /* PolishTogglePage.swift */; };
 		AA0000F0 /* SpeechModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F0 /* SpeechModelProtocol.swift */; };
 		AA0000F1 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F1 /* ParakeetEngine.swift */; };
-		AA0000F8 /* Qwen3AsrEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F8 /* Qwen3AsrEngine.swift */; };
 		AA0000F2 /* SoundFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F2 /* SoundFeedbackService.swift */; };
 		AA0000F3 /* SoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F3 /* SoundSettingsView.swift */; };
 		AA0000F4 /* Sounds in Resources */ = {isa = PBXBuildFile; fileRef = AA1000F4 /* Sounds */; };
@@ -86,6 +86,7 @@
 		AA000300 /* CyclingLoadingText.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100300 /* CyclingLoadingText.swift */; };
 		AA000301 /* ModelLoadingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100301 /* ModelLoadingOverlay.swift */; };
 		AA000302 /* ModelLanguageDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100302 /* ModelLanguageDetailView.swift */; };
+		AA000303 /* LastDictationIssueReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100303 /* LastDictationIssueReportView.swift */; };
 		AA000311 /* ColdStartResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100311 /* ColdStartResolution.swift */; };
 		AA000320 /* PerformanceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100320 /* PerformanceMetrics.swift */; };
 		AA0003A1 /* WhisperComputeOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1003A1 /* WhisperComputeOptions.swift */; };
@@ -219,9 +220,9 @@
 		AA1000B1 /* RecentEmojis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentEmojis.swift; sourceTree = "<group>"; };
 		AA1000B2 /* EmojiPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerView.swift; sourceTree = "<group>"; };
 		AA1000B3 /* EmojiCategoryBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiCategoryBar.swift; sourceTree = "<group>"; };
+		AA1000B4 /* EmojiSearchFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSearchFR.swift; sourceTree = "<group>"; };
 		AA1000B5 /* AuxiliaryBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuxiliaryBottomBar.swift; sourceTree = "<group>"; };
 		AA1000B6 /* KeyVariantPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyVariantPopup.swift; sourceTree = "<group>"; };
-		AA1000B4 /* EmojiSearchFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSearchFR.swift; sourceTree = "<group>"; };
 		AA1000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA1000D0 /* TextPredictionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPredictionEngine.swift; sourceTree = "<group>"; };
 		AA1000D1 /* SuggestionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionState.swift; sourceTree = "<group>"; };
@@ -234,10 +235,10 @@
 		AA1000E2 /* GaugeBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaugeBarView.swift; sourceTree = "<group>"; };
 		AA1000E3 /* ModelCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCardView.swift; sourceTree = "<group>"; };
 		AA1000E4 /* SwipeBackOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeBackOverlayView.swift; sourceTree = "<group>"; };
+		AA1000E5 /* AddCustomModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddCustomModelView.swift; sourceTree = "<group>"; };
 		AA1000EA /* PolishTogglePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishTogglePage.swift; sourceTree = "<group>"; };
 		AA1000F0 /* SpeechModelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelProtocol.swift; sourceTree = "<group>"; };
 		AA1000F1 /* ParakeetEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngine.swift; sourceTree = "<group>"; };
-		AA1000F8 /* Qwen3AsrEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3AsrEngine.swift; sourceTree = "<group>"; };
 		AA1000F2 /* SoundFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFeedbackService.swift; sourceTree = "<group>"; };
 		AA1000F3 /* SoundSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSettingsView.swift; sourceTree = "<group>"; };
 		AA1000F4 /* Sounds */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Sounds; path = Dictus/Sounds; sourceTree = SOURCE_ROOT; };
@@ -254,6 +255,7 @@
 		AA100300 /* CyclingLoadingText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CyclingLoadingText.swift; sourceTree = "<group>"; };
 		AA100301 /* ModelLoadingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLoadingOverlay.swift; sourceTree = "<group>"; };
 		AA100302 /* ModelLanguageDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLanguageDetailView.swift; sourceTree = "<group>"; };
+		AA100303 /* LastDictationIssueReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LastDictationIssueReportView.swift; sourceTree = "<group>"; };
 		AA100311 /* ColdStartResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColdStartResolution.swift; sourceTree = "<group>"; };
 		AA100320 /* PerformanceMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMetrics.swift; sourceTree = "<group>"; };
 		AA1003A1 /* WhisperComputeOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperComputeOptions.swift; sourceTree = "<group>"; };
@@ -473,7 +475,6 @@
 			isa = PBXGroup;
 			children = (
 				AA1000F1 /* ParakeetEngine.swift */,
-				AA1000F8 /* Qwen3AsrEngine.swift */,
 				AA1000F0 /* SpeechModelProtocol.swift */,
 				AA100041 /* TranscriptionService.swift */,
 				AA100045 /* UnifiedAudioEngine.swift */,
@@ -493,11 +494,13 @@
 				AA100051 /* ModelManagerView.swift */,
 				AA100071 /* TestDictationView.swift */,
 				AA100092 /* DiagnosticDetailView.swift */,
+				AA100303 /* LastDictationIssueReportView.swift */,
 				AA1000A6 /* SettingsView.swift */,
 				AA1000A7 /* LicensesView.swift */,
 				AA1000A8 /* DebugLogView.swift */,
 				AA1000E0 /* KeyboardModePicker.swift */,
 				AA1000E2 /* GaugeBarView.swift */,
+				AA1000E5 /* AddCustomModelView.swift */,
 				AA1000E3 /* ModelCardView.swift */,
 				AA100302 /* ModelLanguageDetailView.swift */,
 				AA1000E4 /* SwipeBackOverlayView.swift */,
@@ -969,6 +972,7 @@
 				AA000090 /* MainTabView.swift in Sources */,
 				AA000091 /* HomeView.swift in Sources */,
 				AA000092 /* DiagnosticDetailView.swift in Sources */,
+				AA000303 /* LastDictationIssueReportView.swift in Sources */,
 				AA0000A0 /* OnboardingView.swift in Sources */,
 				AA0000A1 /* WelcomePage.swift in Sources */,
 				AA0000A2 /* MicPermissionPage.swift in Sources */,
@@ -980,11 +984,11 @@
 				AA0000A7 /* LicensesView.swift in Sources */,
 				AA0000A8 /* DebugLogView.swift in Sources */,
 				AA0000E0 /* KeyboardModePicker.swift in Sources */,
+				AA0000E2 /* GaugeBarView.swift in Sources */,
 				AA0000EA /* PolishTogglePage.swift in Sources */,
 				AA0000F0 /* SpeechModelProtocol.swift in Sources */,
 				AA0000F1 /* ParakeetEngine.swift in Sources */,
-				AA0000F8 /* Qwen3AsrEngine.swift in Sources */,
-				AA0000E2 /* GaugeBarView.swift in Sources */,
+				AA0000E5 /* AddCustomModelView.swift in Sources */,
 				AA0000E3 /* ModelCardView.swift in Sources */,
 				AA0000E4 /* SwipeBackOverlayView.swift in Sources */,
 				AA000300 /* CyclingLoadingText.swift in Sources */,
@@ -1203,13 +1207,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1226,13 +1230,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1248,7 +1252,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1259,7 +1263,7 @@
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1276,7 +1280,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1287,7 +1291,7 @@
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1304,13 +1308,13 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1326,13 +1330,13 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 74;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = de.aiity.saiity.ios.beta.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

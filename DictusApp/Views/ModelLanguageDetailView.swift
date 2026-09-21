@@ -7,7 +7,7 @@ import DictusCore
 /// the ⓘ affordance on a model card.
 ///
 /// WHY a sheet instead of an inline list on the card (#240 locked decision):
-/// Model cards are already dense (badges, gauges, states, overflow menu).
+/// Model cards are already dense (badges, states, overflow menu).
 /// A dedicated scrollable sheet leaves room for per-language quality notes
 /// and stays safe at large Dynamic Type sizes.
 ///
@@ -34,6 +34,8 @@ struct ModelLanguageDetailView: View {
             List {
                 // Coverage summary
                 Section {
+                    SaiityPageHeader(eyebrow: "WORDS WITHOUT BORDERS", title: "Your languages.",
+                                     subtitle: "Language coverage depends on the model. Try your own phrases before choosing.")
                     Label {
                         Text(support.coverage.localizedSummary)
                             .font(.headline)

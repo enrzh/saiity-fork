@@ -71,3 +71,29 @@ public enum DefaultKeyboardLayer: String, CaseIterable, Codable {
         defaults.removeObject(forKey: oldKey)
     }
 }
+
+/// Which product surface opens first when a host field activates sAiity.
+public enum DefaultKeyboardMode: String, CaseIterable, Codable, Sendable {
+    case dictationBoard
+    case keyboard
+
+    public static var active: Self {
+        if let raw = AppGroup.defaults.string(forKey: SharedKeys.defaultKeyboardMode),
+           let mode = Self(rawValue: raw) {
+            return mode
+        }
+        // Existing users who explicitly chose the old ABC/123 selector were
+        // already using the typing surface. New installs open the dictation board.
+        if AppGroup.defaults.string(forKey: SharedKeys.defaultKeyboardLayer) != nil {
+            return .keyboard
+        }
+        return .dictationBoard
+    }
+
+    public var displayName: String {
+        switch self {
+        case .dictationBoard: return "Dictation Board"
+        case .keyboard: return "Keyboard"
+        }
+    }
+}

@@ -59,7 +59,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         }
     }
 
-    func testEmojiCategoryBarHasFixedLeadingVoiceReturnAndNoPerCategoryGlass() throws {
+    func testEmojiCategoryBarHasOneSharedGlassStripAndContinuousScrollOffset() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
         let data = try source("DictusKeyboard/Models/EmojiData.swift")
@@ -70,9 +70,10 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(categories.contains("Image(systemName: section.icon)"))
         XCTAssertFalse(categories.contains("representativeEmoji"))
         XCTAssertFalse(categories.contains("Text(emoji)"))
-        XCTAssertFalse(categories.contains("keyboardGlassEffect()"))
-        XCTAssertTrue(categories.contains("CategorySwipeControl("),
-                       "category tap/drag is owned by the bar scrubber as well as the overlay")
+        XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertTrue(categories.contains("contentOffset"))
+        XCTAssertTrue(categories.contains("final class EmojiCategoryScrubControl: UIControl"),
+                       "the UIKit scrubber remains the single hit owner for the floating strip")
         XCTAssertTrue(categories.contains("continueTracking"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
         XCTAssertFalse(categories.contains("Color.secondary"), "category icons must keep the primary semantic tint")
@@ -243,14 +244,16 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(picker.contains("EmojiCategoryBar("))
-        XCTAssertFalse(root.contains("EmojiCategoryBar("))
+        XCTAssertFalse(picker.contains("EmojiCategoryBar("))
+        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(root.contains("KeyboardDeleteButton("))
+        XCTAssertTrue(controller.contains("emojiCategoryScrubber"))
+        XCTAssertTrue(controller.contains("floatingEmojiCategoryFrame"))
         XCTAssertTrue(picker.contains("AuxiliaryBottomBar("))
         XCTAssertTrue(picker.contains("showsEmojiControl: false"))
         XCTAssertTrue(picker.contains("chromeWideSpaceFrame"))
-        XCTAssertTrue(picker.contains("KeyboardDeleteButton("))
-        XCTAssertTrue(picker.contains("boardDeleteFrame"))
         XCTAssertFalse(picker.contains("systemName: \"mic.fill\""))
         XCTAssertTrue(categories.contains("emojiCategoryHorizontalInset"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))

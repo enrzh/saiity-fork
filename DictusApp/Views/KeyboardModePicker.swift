@@ -1,194 +1,155 @@
 // DictusApp/Views/KeyboardModePicker.swift
-// Reusable default layer picker with segmented control and miniature previews.
+// Native pickers for keyboard defaults and interaction preferences.
 import SwiftUI
 import DictusCore
 
-/// Segmented picker for selecting the default keyboard layer with a miniature preview.
-///
-/// WHY reusable component:
-/// This picker used to appear in both SettingsView and onboarding; the
-/// onboarding layer-choice step was removed in #213 and the picker now lives
-/// in SettingsView only, where it stays fully functional.
-///
-/// WHY @AppStorage instead of @Binding:
-/// When used inside onboarding (which has .id(currentPage) + transitions),
-/// a @Binding from the parent's @AppStorage doesn't propagate updates reliably.
-/// Owning the @AppStorage directly ensures the picker always reads/writes
-/// the correct value and triggers view updates on selection change.
-struct DefaultLayerPicker: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @AppStorage(SharedKeys.defaultKeyboardLayer, store: UserDefaults(suiteName: AppGroup.identifier))
-    var selectedLayer: String = "letters"
+/// Native picker for the model policy. The resolver changes only among models
+/// already installed on the device; it never starts a download by itself.
+struct ModelSelectionModePicker: View {
+    @ObservedObject var modelManager: ModelManager
+    @State private var selection = ModelSelectionMode.active
 
     var body: some View {
-        VStack(spacing: 16) {
-            // WHY explicit tags instead of ForEach:
-            // SwiftUI's Picker with segmented style can have tag-matching issues
-            // when tags come from ForEach with dynamic content. Explicit Text/tag
-            // pairs guarantee the correct String value is written to the binding.
-            Picker("Default page", selection: $selectedLayer) {
-                Text("ABC").tag("letters")
-                Text("123").tag("numbers")
+        Picker("Model selection", selection: selectionBinding) {
+            ForEach(ModelSelectionMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
             }
-            .pickerStyle(.segmented)
-
-            // Non-interactive miniature preview of the selected layer.
-            // WHY .id(selectedLayer): Forces SwiftUI to recreate the preview
-            // when the selection changes, instead of trying to diff two very
-            // different view hierarchies. Without this, the segmented picker
-            // updates visually but the preview can stay stale.
-            previewForLayer
-                .id(selectedLayer)
-                .frame(height: 140)
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.secondarySystemBackground))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.accentColor.opacity(0.15), lineWidth: 1)
-                )
-                .allowsHitTesting(false)
-                .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: selectedLayer)
         }
+        .onAppear { selection = modelManager.selectionMode }
+        .accessibilityHint(modelManager.selectionMode.explanation)
     }
 
-    // MARK: - Preview Router
-
-    @ViewBuilder
-    private var previewForLayer: some View {
-        if selectedLayer == DefaultKeyboardLayer.numbers.rawValue {
-            numbersModePreview
-        } else {
-            lettersModePreview
-        }
+    private var selectionBinding: Binding<ModelSelectionMode> {
+        Binding(
+            get: { selection },
+            set: {
+                selection = $0
+                modelManager.setSelectionMode($0)
+            }
+        )
     }
+}
 
-    // MARK: - Shared Toolbar Preview
+/// Selects the product surface that opens first. The old ABC/123 preference is
+/// intentionally left readable for migration, but is no longer exposed here.
+struct DefaultKeyboardModePicker: View {
+    @AppStorage(SharedKeys.defaultKeyboardMode, store: UserDefaults(suiteName: AppGroup.identifier))
+    private var selectedMode = DefaultKeyboardMode.dictationBoard.rawValue
 
-    /// Miniature toolbar matching the real ToolbarView layout:
-    /// gear icon on the left, mic pill on the right.
-    private var toolbarPreview: some View {
-        HStack {
-            // Gear icon (settings shortcut) — left side
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 8, weight: .medium))
-                .foregroundColor(Color(.systemGray))
-
-            Spacer()
-
-            // Mic pill — right side, matching AnimatedMicButton shape
-            Capsule()
-                .fill(Color.accentColor)
-                .frame(width: 36, height: 18)
-                .overlay(
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 8))
-                        .foregroundColor(.white)
-                )
-        }
-        .frame(height: 22)
-    }
-
-    // MARK: - Letters Preview
-
-    /// Four rows with a neutral QWERTY-style layout used for the product preview.
-    private var lettersModePreview: some View {
-        VStack(spacing: 3) {
-            toolbarPreview
-
-            // English/German-compatible letter rows
-            let rows = [
-                ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-                ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-                ["Z", "X", "C", "V", "B", "N", "M"],
-                ["123", "space"]
-            ]
-
-            ForEach(0..<rows.count, id: \.self) { rowIndex in
-                HStack(spacing: 2) {
-                    if rowIndex == 3 {
-                        // Bottom row: 123 key + space bar
-                        miniKey("123", width: 32, isSpecial: true)
-                        miniKey("space", isSpace: true)
-                    } else {
-                        ForEach(rows[rowIndex], id: \.self) { letter in
-                            miniKey(letter)
-                        }
-                    }
+    var body: some View {
+        LabeledContent("Default keyboard") {
+            Picker("Default keyboard", selection: $selectedMode) {
+                ForEach(DefaultKeyboardMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.displayName).tag(mode.rawValue)
                 }
             }
+            .pickerStyle(.menu)
+            .labelsHidden()
         }
-        .padding(10)
-    }
-
-    // MARK: - Numbers Preview (123 + symbols)
-
-    /// Number row + symbol rows to clearly distinguish from letters.
-    private var numbersModePreview: some View {
-        VStack(spacing: 3) {
-            toolbarPreview
-
-            // Number row
-            HStack(spacing: 2) {
-                ForEach(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], id: \.self) { num in
-                    miniKey(num, isHighlighted: true)
-                }
-            }
-
-            // Symbol rows
-            let symbolRows = [
-                ["-", "/", ":", ";", "(", ")", "€", "&", "@"],
-                [".", ",", "?", "!", "'"]
-            ]
-
-            ForEach(0..<symbolRows.count, id: \.self) { rowIndex in
-                HStack(spacing: 2) {
-                    ForEach(symbolRows[rowIndex], id: \.self) { sym in
-                        miniKey(sym)
-                    }
-                }
-            }
-
-            // Bottom row: ABC key + space bar
-            HStack(spacing: 2) {
-                miniKey("ABC", width: 32, isSpecial: true)
-                miniKey("space", isSpace: true)
+        .onAppear {
+            if UserDefaults(suiteName: AppGroup.identifier)?.string(forKey: SharedKeys.defaultKeyboardMode) == nil {
+                selectedMode = DefaultKeyboardMode.active.rawValue
             }
         }
-        .padding(10)
+        .accessibilityHint("Choose whether sAiity opens on the dictation board or typing keyboard.")
+    }
+}
+
+/// Automatic language plus one layout type. Explicit per-language rows were
+/// dropped so Settings and the keyboard menu stay on the same two choices.
+struct TypingLanguagesPanel: View {
+    @State private var layout = LayoutType.active
+
+    var body: some View {
+        Picker("Keyboard layout", selection: layoutBinding) {
+            ForEach(LayoutType.allCases, id: \.self) { entry in
+                Text(entry.displayName).tag(entry)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .accessibilityHint("Choose AZERTY, QWERTY, QWERTZ, or QWERTZ Deutschland.")
+        .onAppear { layout = LayoutType.active }
     }
 
-    // MARK: - Mini Key Helper
+    private var layoutBinding: Binding<LayoutType> {
+        Binding(
+            get: { layout },
+            set: { newValue in
+                KeyboardLayoutPreference.setGlobalLayout(newValue)
+                layout = newValue
+            }
+        )
+    }
+}
 
-    /// A tiny key cell for the miniature keyboard previews.
-    /// All keys use maxWidth: .infinity so they fill the available row width evenly,
-    /// just like the real keyboard. Special keys (123, ABC) get a fixed width instead.
-    private func miniKey(
-        _ label: String,
-        width: CGFloat? = nil,
-        isSpace: Bool = false,
-        isSpecial: Bool = false,
-        isHighlighted: Bool = false
-    ) -> some View {
-        // Adaptive colors: work on both light and dark backgrounds
-        let bg: Color = isSpecial
-            ? Color(.systemGray4)
-            : isHighlighted
-                ? Color.accentColor.opacity(0.2)
-                : Color(.systemGray5)
+/// Native picker for the keyboard surface material.
+struct KeyboardMaterialPicker: View {
+    @AppStorage(SharedKeys.liquidGlassEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
+    private var liquidGlassEnabled = true
 
-        let maxW: CGFloat = width ?? .infinity
+    var body: some View {
+        Picker("Keyboard material", selection: $liquidGlassEnabled) {
+            Text("Liquid Glass").tag(true)
+            Text("Solid").tag(false)
+        }
+        .accessibilityHint("Choose solid keys or liquid glass keys.")
+        .onChange(of: liquidGlassEnabled) { _, _ in
+            KeyboardInteractionPreferences.notifyChanged()
+        }
+    }
+}
 
-        return Text(label)
-            .font(.system(size: isSpace ? 6 : 7, weight: .medium))
-            .foregroundStyle(isHighlighted ? Color.accentColor : .primary)
-            .frame(maxWidth: maxW, minHeight: 16)
-            .background(
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(bg)
-            )
+/// Native picker for the optional Live Activity presence.
+struct DictationPresencePicker: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selection = DictationPresenceMode.active
+
+    var body: some View {
+        Picker("Dictation presence", selection: selectionBinding) {
+            ForEach(DictationPresenceMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+        .onAppear { selection = DictationPresenceMode.active }
+        .accessibilityHint("Choose off or Live Activity.")
+    }
+
+    private var selectionBinding: Binding<DictationPresenceMode> {
+        Binding(
+            get: { selection },
+            set: { apply($0) }
+        )
+    }
+
+    private func apply(_ mode: DictationPresenceMode) {
+        selection = mode
+        mode.persist()
+        LiveActivityManager.shared.applyPresenceMode(mode, isBackground: scenePhase == .background)
+    }
+}
+
+/// Native picker for key-press preview behavior.
+struct KeyPopupPicker: View {
+    @State private var selection = KeyPopupMode.active
+
+    var body: some View {
+        Picker("Key popups", selection: selectionBinding) {
+            ForEach(KeyPopupMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+        .onAppear { selection = KeyPopupMode.active }
+        .accessibilityHint("Choose off, popup above the key, or popout from the key.")
+    }
+
+    private var selectionBinding: Binding<KeyPopupMode> {
+        Binding(
+            get: { selection },
+            set: {
+                selection = $0
+                $0.persist()
+            }
+        )
     }
 }

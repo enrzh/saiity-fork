@@ -7,6 +7,14 @@ import XCTest
 /// anywhere. The Apple-FM behaviour is covered separately by the eval harness.
 final class PolishPipelineTests: XCTestCase {
 
+    private struct OutputEngine: PolishEngineProtocol {
+        let output: String
+        var identifier: String { "test-output" }
+        func polish(raw: String, targetLanguage: SupportedLanguage, mode: PolishMode) async throws -> String {
+            output
+        }
+    }
+
     // MARK: - transform()
 
     func testTransformPassthroughSucceedsAndReturnsCleanedInput() async {
@@ -308,6 +316,28 @@ final class PolishPipelineTests: XCTestCase {
         )
         let out = PolishPipeline.resolvedOutput(result, preprocessed: input, target: .french, mode: .auto)
         XCTAssertEqual(out, "Ça va?", "auto fallback applies language-neutral cleanup without French NBSP")
+    }
+
+    func testAutoTransformAcceptsSpokenCleanupThatDropsSupersededTime() async {
+        let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
+        let polished = "Hey Jack I got an appointment at 4am. Can you come by please?"
+        let result = await PolishPipeline.transform(
+            preprocessed: raw,
+            engine: OutputEngine(output: polished),
+            target: .english,
+            mode: .auto
+        )
+        XCTAssertEqual(result.outcome, .success, "numeric self-correction must not trip the auto guardrail")
+        XCTAssertEqual(result.engineOutput, polished)
+    }
+
+    func testResolvedOutputAutoFallbackCleansSpokenRestart() {
+        let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
+        let result = PolishPipeline.Result(
+            engineOutput: nil, outcome: .engineFailed, engineMs: 100, postprocessMs: 0
+        )
+        let out = PolishPipeline.resolvedOutput(result, preprocessed: raw, target: .english, mode: .auto)
+        XCTAssertEqual(out, "Hey Jack I got an appointment at 4am. Can you come by please?")
     }
 
     func testResolvedOutputAutoSuccessReturnsEngineOutput() {

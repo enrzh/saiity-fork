@@ -29,6 +29,14 @@ public protocol PolishEngineProtocol: Sendable {
                 targetLanguage: SupportedLanguage,
                 mode: PolishMode) async throws -> String
 
+    /// Style-aware cleanup entry point. The original requirement remains the
+    /// compatibility surface for existing test and third-party engines; local
+    /// production engines override this overload to include the style prompt.
+    func polish(raw: String,
+                targetLanguage: SupportedLanguage,
+                mode: PolishMode,
+                style: WritingStyle) async throws -> String
+
     /// Warm up backend state for `(mode, targetLanguage)` (e.g. preload
     /// weights, prime the session with the matching instructions). Called at
     /// app launch and at recording start by `PolishCoordinator`, which passes
@@ -77,6 +85,13 @@ public extension PolishEngineProtocol {
     var announcesProcessingStage: Bool { true }
 
     func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage) async {}
+
+    func polish(raw: String,
+                targetLanguage: SupportedLanguage,
+                mode: PolishMode,
+                style: WritingStyle) async throws -> String {
+        try await polish(raw: raw, targetLanguage: targetLanguage, mode: mode)
+    }
 
     func contextFit(input: String,
                     targetLanguage: SupportedLanguage,

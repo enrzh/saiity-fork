@@ -45,7 +45,10 @@ final class LayoutTypeTests: XCTestCase {
     }
 
     func testAllCasesIncludesBothQwertzVariants() {
-        XCTAssertEqual(LayoutType.allCases, [.azerty, .qwerty, .qwertz, .qwertzStandard])
+        XCTAssertEqual(
+            LayoutType.allCases,
+            [.azerty, .qwerty, .qwertz, .qwertzStandard, .dvorak, .colemak, .workman, .norman]
+        )
     }
 
     // MARK: - Round-trip through App Group defaults
@@ -67,7 +70,7 @@ final class LayoutTypeTests: XCTestCase {
     // MARK: - Fallback
 
     func testUnknownStoredValueFallsBackToAzerty() {
-        defaults?.set([SupportedLanguage.active.rawValue: "dvorak"], forKey: SharedKeys.keyboardLayoutsByLanguage)
+        defaults?.set([SupportedLanguage.active.rawValue: "not-a-layout"], forKey: SharedKeys.keyboardLayoutsByLanguage)
         XCTAssertEqual(LayoutType.active, SupportedLanguage.fromSystem(locale: .current).defaultLayout)
     }
 
@@ -83,6 +86,8 @@ final class LayoutTypeTests: XCTestCase {
         XCTAssertEqual(LayoutType.qwerty.displayName, "QWERTY")
         XCTAssertEqual(LayoutType.qwertz.displayName, "QWERTZ Deutschland")
         XCTAssertEqual(LayoutType.qwertzStandard.displayName, "QWERTZ")
+        XCTAssertEqual(LayoutType.dvorak.displayName, "Dvorak")
+        XCTAssertEqual(LayoutType.colemak.displayName, "Colemak")
     }
 
     func testCompactQwertzKeepsUmlautsOffPrimaryRows() {

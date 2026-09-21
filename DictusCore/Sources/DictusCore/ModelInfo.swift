@@ -24,14 +24,12 @@ public struct KeyboardSetupStatus: Equatable, Sendable {
         return lowered.contains("saiity") && lowered.contains("keyboard")
     }
 
-    /// The extension's `hasFullAccess` bit is the handshake. A setup probe is
-    /// recorded for diagnostics and must not clear a true bit after one switch.
     public static func isCurrentFullAccessHandshake(
         verified: Bool,
-        probe _: String?,
-        acknowledgedProbe _: String?
+        probe: String?,
+        acknowledgedProbe: String?
     ) -> Bool {
-        verified
+        verified && probe != nil && probe == acknowledgedProbe
     }
 
     /// A handshake can only be written by the sAiity keyboard extension itself.
@@ -128,7 +126,7 @@ public struct ModelInfo: Identifiable {
 
     /// Models available for new downloads: Tiny, Base, Medium, Large v3, and
     /// Large v3 Turbo. The full `redesignCatalog` stays resolvable so already
-    /// downloaded Parakeet/Qwen/preview rows still appear under Installed.
+    /// downloaded Parakeet/preview rows still appear under Installed.
     public static let downloadableIdentifiers: Set<String> = [
         "openai_whisper-tiny",
         "openai_whisper-base",
@@ -257,28 +255,6 @@ public struct ModelInfo: Identifiable {
             accuracyScore: 0.85,
             speedScore: 0.85,
             description: "Fast and accurate (NVIDIA)",
-            visibility: .available
-        ),
-        ModelInfo(
-            identifier: "qwen3-asr-0.6b-f32",
-            displayName: "Qwen3-ASR 0.6B",
-            sizeLabel: "~1.75 GB",
-            sizeBytes: 1_750_000_000,
-            engine: .qwen3ASR,
-            accuracyScore: 0.9,
-            speedScore: 0.7,
-            description: "Experimental multilingual ASR; device compatibility is not yet verified",
-            visibility: .available
-        ),
-        ModelInfo(
-            identifier: "qwen3-asr-0.6b-int8",
-            displayName: "Qwen3-ASR 0.6B Int8",
-            sizeLabel: "~900 MB",
-            sizeBytes: 900_000_000,
-            engine: .qwen3ASR,
-            accuracyScore: 0.9,
-            speedScore: 0.45,
-            description: "Experimental multilingual ASR with lower storage; device compatibility is not yet verified",
             visibility: .available
         ),
         // Phase 37 (issue #104): Whisper Turbo re-introduced using Argmax's
@@ -417,9 +393,7 @@ public struct ModelInfo: Identifiable {
         switch identifier {
         case "openai_whisper-small.en_217MB",
              "openai_whisper-medium.en",
-             "openai_whisper-large-v3-v20240930_547MB",
-             "qwen3-asr-0.6b-f32",
-             "qwen3-asr-0.6b-int8":
+             "openai_whisper-large-v3-v20240930_547MB":
             return true
         default:
             return false
@@ -572,10 +546,6 @@ public struct ModelInfo: Identifiable {
              "openai_whisper-large-v3-v20240930_626MB",
              "openai_whisper-large-v3-v20240930_turbo_632MB":
             return capabilities.physicalMemoryGB >= 6 ? nil : .insufficientMemory(requiredGB: 6)
-        case "qwen3-asr-0.6b-int8":
-            return capabilities.physicalMemoryGB >= 6 ? nil : .insufficientMemory(requiredGB: 6)
-        case "qwen3-asr-0.6b-f32":
-            return capabilities.physicalMemoryGB >= 8 ? nil : .insufficientMemory(requiredGB: 8)
         default:
             return nil
         }

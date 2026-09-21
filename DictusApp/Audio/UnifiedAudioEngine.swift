@@ -388,6 +388,7 @@ class UnifiedAudioEngine: ObservableObject {
 
         switch type {
         case .began:
+            let hadRunningEngine = engine.isRunning
             let reason = userInfo[AVAudioSessionInterruptionReasonKey].flatMap { value -> String in
                 if let raw = value as? UInt,
                    let parsed = AVAudioSession.InterruptionReason(rawValue: raw) {
@@ -415,7 +416,12 @@ class UnifiedAudioEngine: ObservableObject {
             // Notify in-process listeners (LiveActivityManager, DictationCoordinator)
             // immediately. Darwin notification mirrors for cross-process consumers
             // (keyboard ext) so they can stop trusting the warm-state contract.
-            NotificationCenter.default.post(name: .dictusAudioSessionInterrupted, object: nil)
+            // iOS can deliver suspension interruptions when no microphone is in
+            // use. They invalidate readiness, but must not kill a pending cold
+            // start or transcription of audio we already captured.
+            if hadRunningEngine {
+                NotificationCenter.default.post(name: .dictusAudioSessionInterrupted, object: nil)
+            }
             DarwinNotificationCenter.post(DarwinNotificationName.audioSessionInterrupted)
 
         case .ended:
@@ -508,9 +514,8 @@ class UnifiedAudioEngine: ObservableObject {
     /// built-in mic is used for recording, AirPods controls stay with media apps.
     /// Confirmed via WhisperFlow reverse-engineering (same NoBluetooth approach).
     ///
-    /// WHY .duckOthers:
-    /// Automatically lowers other apps' volume (~60%) while Dictus's engine is active.
-    /// The AirPods hijack was caused by HFP (.allowBluetooth), not ducking.
+    /// Mix with other audio so an enabled keyboard session does not lower music
+    /// volume throughout its idle window.
     ///
     /// WHY .defaultToSpeaker:
     /// Without it, .playAndRecord routes output to the earpiece by default — nearly
@@ -522,7 +527,7 @@ class UnifiedAudioEngine: ObservableObject {
     func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         if !sessionConfigured {
-            try session.setCategory(.playAndRecord, options: [.allowBluetoothA2DP, .defaultToSpeaker, .duckOthers])
+            try session.setCategory(.playAndRecord, options: [.allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers])
         }
         try session.setActive(true)
         sessionConfigured = true
@@ -635,12 +640,16 @@ class UnifiedAudioEngine: ObservableObject {
     /// Begin recording: purge idle audio and start accumulating samples.
     /// If the engine isn't running yet, starts it first (<100ms).
     func startRecording() throws {
+        // Activation errors must reach the coordinator before any engine start.
+        // In particular, a stopped session cannot silently start in the background.
+        if !engine.isRunning { try configureAudioSession() }
         // Cancel any pending idle release — recording activity resets the timer.
         cancelIdleRelease()
 
         if !engine.isRunning {
             try startEngine(context: "startRecording")
         }
+        configureRecordingAudioProcessing()
         purgeState()
         waveformSessionID = waveformWriter.beginSession()
         isRecording = true
@@ -670,9 +679,17 @@ class UnifiedAudioEngine: ObservableObject {
     private func collectSamples(armingIdleRelease: Bool) -> [Float] {
         isRecording = false
         isRecordingFlag = false
+        restoreIdleAudioProcessing()
         endWaveformSession()
 
         let samples = audioSamples
+        let quality = SpeechAudioQuality.analyze(samples)
+        PersistentLog.log(.diagnosticProbe(
+            component: "UnifiedAudioEngine",
+            instanceID: "captureQuality",
+            action: "measured",
+            details: "sampleRate=16000 channels=1 samples=\(samples.count) condition=\(quality.condition.rawValue) rms=\(String(format: "%.4f", quality.rms)) peak=\(String(format: "%.4f", quality.peak)) noise=\(String(format: "%.4f", quality.estimatedNoiseFloor)) snrDB=\(String(format: "%.1f", quality.signalToNoiseRatioDB)) clipping=\(String(format: "%.4f", quality.clippingRatio))"
+        ))
         audioSamples = []
 
         PersistentLog.log(.engineCollectResult(sampleCount: samples.count, engineRunning: engine.isRunning))
@@ -716,6 +733,7 @@ class UnifiedAudioEngine: ObservableObject {
         cancelIdleRelease()
         isRecording = false
         isRecordingFlag = false
+        restoreIdleAudioProcessing()
         endWaveformSession()
 
         engine.inputNode.removeTap(onBus: 0)
@@ -741,6 +759,7 @@ class UnifiedAudioEngine: ObservableObject {
         cancelIdleRelease()
         isRecording = false
         isRecordingFlag = false
+        restoreIdleAudioProcessing()
         endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -931,6 +950,50 @@ class UnifiedAudioEngine: ObservableObject {
         waveformWriter.endSession()
     }
 
+    /// Ask the system audio stack for its native echo/noise processing while a
+    /// recording is active. Unsupported routes keep the raw capture path.
+    private func configureRecordingAudioProcessing(inputNode: AVAudioInputNode? = nil) {
+        do {
+            try AVAudioSession.sharedInstance().setMode(.voiceChat)
+        } catch {
+            PersistentLog.log(.diagnosticProbe(
+                component: "UnifiedAudioEngine",
+                instanceID: "audioProcessing",
+                action: "voiceChatModeUnavailable",
+                details: error.localizedDescription
+            ))
+        }
+
+        guard let inputNode else { return }
+        if #available(iOS 13.0, *) {
+            do {
+                try inputNode.setVoiceProcessingEnabled(true)
+            } catch {
+                PersistentLog.log(.diagnosticProbe(
+                    component: "UnifiedAudioEngine",
+                    instanceID: "audioProcessing",
+                    action: "voiceProcessingUnavailable",
+                    details: error.localizedDescription
+                ))
+            }
+        }
+    }
+
+    /// Restore the neutral session mode after capture so an idle keyboard does
+    /// not keep the system in a voice-chat route.
+    private func restoreIdleAudioProcessing() {
+        do {
+            try AVAudioSession.sharedInstance().setMode(.default)
+        } catch {
+            PersistentLog.log(.diagnosticProbe(
+                component: "UnifiedAudioEngine",
+                instanceID: "audioProcessing",
+                action: "restoreDefaultModeFailed",
+                details: error.localizedDescription
+            ))
+        }
+    }
+
     /// Start the AVAudioEngine with a tap on the input node.
     ///
     /// - Parameter context: names the path that started the engine, so the
@@ -948,6 +1011,7 @@ class UnifiedAudioEngine: ObservableObject {
         lastUIWaveformUpdate = 0
 
         let inputNode = engine.inputNode
+        configureRecordingAudioProcessing(inputNode: inputNode)
         var hwFormat = inputNode.outputFormat(forBus: 0)
 
         // Guard: zero-channel format means hardware is unavailable (phone call active)

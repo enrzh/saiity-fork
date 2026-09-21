@@ -52,6 +52,9 @@ class ModelManager: ObservableObject {
     /// The currently selected model identifier for transcription.
     @Published var activeModel: String?
 
+    /// Whether the active model is chosen by the device-aware resolver or by the user.
+    @Published var selectionMode: ModelSelectionMode = .automatic
+
     /// Per-model download progress (0.0 to 1.0). Only populated during active downloads.
     @Published var downloadProgress: [String: Float] = [:]
 
@@ -69,11 +72,29 @@ class ModelManager: ObservableObject {
     /// so SwiftUI can drive the loading overlay reactively.
     @Published var modelLoadState: ModelLoadState = .idle
     @Published var customModels: [CustomModel] = []
+    /// Selected dictation cleanup / grammar backend (Apple Intelligence or Ollama).
+    @Published var cleanupBackend: PolishCleanupBackend = .appleIntelligence
 
     // MARK: - Private
 
     private let defaults = AppGroup.defaults
     private var loadStateObserver: NSObjectProtocol?
+    private var catalogDownloads: [String: Task<Void, Never>] = [:]
+
+    /// Own download tasks outside recycled/filterable SwiftUI rows so Cancel always works.
+    func startCatalogDownload(_ identifier: String, onError: @escaping (String) -> Void) {
+        guard catalogDownloads[identifier] == nil else { return }
+        catalogDownloads[identifier] = Task { @MainActor in
+            defer { catalogDownloads[identifier] = nil }
+            do { try await downloadModel(identifier) }
+            catch is CancellationError { }
+            catch { onError(error.localizedDescription) }
+        }
+    }
+
+    func cancelCatalogDownload(_ identifier: String) {
+        catalogDownloads[identifier]?.cancel()
+    }
 
     /// Serial prewarm lock — only one CoreML compilation at a time.
     /// The Neural Engine cannot handle multiple models compiling simultaneously
@@ -148,12 +169,39 @@ class ModelManager: ObservableObject {
     /// UserDefaults can store arrays natively, but using JSON (Data) is more
     /// explicit and avoids type-casting issues. We store a JSON-encoded [String].
     func loadState() {
+        selectionMode = ModelSelectionMode.active(from: defaults)
+        var didMigrateRemovedModels = false
         if let data = defaults.data(forKey: SharedKeys.downloadedModels),
            let models = try? JSONDecoder().decode([String].self, from: data) {
-            downloadedModels = models
+            // Drop identifiers from engines removed in a later release.
+            downloadedModels = models.filter { identifier in
+                guard ModelInfo.forIdentifier(identifier) != nil else { return false }
+                let installed = isArtifactInstalled(identifier)
+                if !installed {
+                    PersistentLog.log(.diagnosticProbe(
+                        component: "ModelManager",
+                        instanceID: identifier,
+                        action: "artifactInvalid",
+                        details: "persisted model has no complete local artifact"
+                    ))
+                }
+                return installed
+            }
+            didMigrateRemovedModels = downloadedModels != models
         }
-        activeModel = defaults.string(forKey: SharedKeys.activeModel)
+        let storedActiveModel = defaults.string(forKey: SharedKeys.activeModel)
+        let storedOrFirst = storedActiveModel.flatMap { downloadedModels.contains($0) ? $0 : nil }
+            ?? downloadedModels.first
+        activeModel = selectionMode == .automatic
+            ? automaticActiveModel() ?? storedOrFirst
+            : storedOrFirst
+        didMigrateRemovedModels = didMigrateRemovedModels || storedActiveModel != activeModel
         customModels = CustomModel.load(from: defaults)
+        cleanupBackend = PolishCleanupBackend.load(from: defaults, customModels: customModels)
+
+        if didMigrateRemovedModels {
+            persistState()
+        }
 
         // Resync modelStates with loaded downloadedModels so models downloaded
         // by onboarding's separate ModelManager instance show as .ready here.
@@ -179,6 +227,13 @@ class ModelManager: ObservableObject {
     func deleteCustomModel(_ model: CustomModel) {
         customModels.removeAll { $0.id == model.id }
         CustomModel.save(customModels, to: defaults)
+        PolishCleanupBackend.handleDeletedModel(model, remaining: customModels, defaults: defaults)
+        cleanupBackend = PolishCleanupBackend.load(from: defaults, customModels: customModels)
+    }
+
+    func selectCleanupBackend(_ backend: PolishCleanupBackend) {
+        backend.persist(to: defaults)
+        cleanupBackend = backend
     }
 
     /// Downloads a model variant, prewarms it, and updates state.
@@ -200,14 +255,6 @@ class ModelManager: ObservableObject {
                 throw ModelManagerError.parakeetUnavailable
             }
             try await downloadParakeetModel(identifier, version: version)
-        case .qwen3ASR:
-            guard #available(iOS 18.0, *) else {
-                throw ModelManagerError.qwenUnavailable
-            }
-            guard let variant = Qwen3AsrEngine.variant(for: identifier) else {
-                throw ModelManagerError.qwenUnavailable
-            }
-            try await downloadQwenModel(identifier, variant: variant)
         default:
             try await downloadWhisperKitModel(identifier)
         }
@@ -333,10 +380,12 @@ class ModelManager: ObservableObject {
                 downloadedModels.append(identifier)
             }
 
-            // Issue #174: a freshly downloaded model becomes the active one.
-            // The user explicitly chose it; without this they had to tap the card
-            // a second time, triggering a redundant second RAM load.
-            activeModel = identifier
+            // Automatic mode resolves again so a newly installed compatible model
+            // can take over without another tap. Manual mode keeps the explicit
+            // download selection behavior from earlier builds.
+            activeModel = selectionMode == .automatic
+                ? automaticActiveModel() ?? identifier
+                : identifier
 
             modelStates[identifier] = .ready
             persistState()
@@ -443,9 +492,9 @@ class ModelManager: ObservableObject {
                 downloadedModels.append(identifier)
             }
 
-            // Issue #174: a freshly downloaded model becomes the active one —
-            // see comment in the WhisperKit path.
-            activeModel = identifier
+            activeModel = selectionMode == .automatic
+                ? automaticActiveModel() ?? identifier
+                : identifier
 
             modelStates[identifier] = .ready
             persistState()
@@ -470,66 +519,6 @@ class ModelManager: ObservableObject {
             // #235, tapping the card's "Retry" affordance retries in place; the
             // full reset lives in the overflow menu's "Delete partial download"
             // entry (cleanupFailedModel).
-            PersistentLog.log(.modelDownloadFailed(name: identifier, error: error.localizedDescription))
-            throw error
-        }
-    }
-
-    /// Download and prewarm one Qwen3-ASR precision variant.
-    @available(iOS 18.0, *)
-    private func downloadQwenModel(_ identifier: String, variant: Qwen3AsrVariant) async throws {
-        modelStates[identifier] = .downloading
-        downloadProgress[identifier] = 0.0
-        lastLoggedDeciles[identifier] = -1
-        let catalogSizeMB = Int((ModelInfo.forIdentifier(identifier)?.sizeBytes ?? 0) / 1_000_000)
-        PersistentLog.log(.modelDownloadStarted(name: identifier, sizeMB: catalogSizeMB))
-
-        do {
-            let cacheDir = Qwen3AsrModels.defaultCacheDirectory(variant: variant)
-            let downloader = ModelRepoDownloader(configuration: .qwen3ASR(variant: variant))
-            try await downloader.download(to: cacheDir, modelName: identifier) { [weak self] progress in
-                Task { @MainActor in
-                    self?.updateDownloadProgress(progress, identifier: identifier)
-                }
-            }
-
-            while isPrewarming {
-                try await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            isPrewarming = true
-            modelStates[identifier] = .prewarming
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
-            PersistentLog.log(.modelPrewarmStarted(name: identifier))
-            defer { isPrewarming = false }
-
-            let prewarmStart = Date()
-            let availableBeforeMB = DeviceCapabilities.current().availableMemoryMB
-            let qwenEngine = Qwen3AsrEngine()
-            try await qwenEngine.prepare(modelIdentifier: identifier)
-            let prewarmDurationMs = Int(Date().timeIntervalSince(prewarmStart) * 1000)
-            let availableAfterMB = DeviceCapabilities.current().availableMemoryMB
-            let consumedMB = max(0, availableBeforeMB - availableAfterMB)
-
-            if !downloadedModels.contains(identifier) {
-                downloadedModels.append(identifier)
-            }
-            activeModel = identifier
-            modelStates[identifier] = .ready
-            persistState()
-
-            PersistentLog.log(.modelCompilationCompleted(name: identifier, durationMs: prewarmDurationMs))
-            PersistentLog.log(.modelPrewarmPeakMemory(modelName: identifier, peakMB: consumedMB))
-            PersistentLog.log(.modelDownloadCompleted(name: identifier))
-            PersistentLog.log(.modelSelected(name: identifier))
-            DictationCoordinator.shared.preloadActiveModel()
-        } catch {
-            modelStates[identifier] = .error(error.localizedDescription)
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
             PersistentLog.log(.modelDownloadFailed(name: identifier, error: error.localizedDescription))
             throw error
         }
@@ -567,7 +556,8 @@ class ModelManager: ObservableObject {
     /// up front. If the keyboard is tapped while a load is in flight, it opens
     /// Dictus in a prepare-only flow; `ModelLoadingOverlay` surfaces the wait.
     func selectModel(_ identifier: String) {
-        guard downloadedModels.contains(identifier) else { return }
+        guard downloadedModels.contains(identifier), isArtifactInstalled(identifier) else { return }
+        selectionMode = .manual
         activeModel = identifier
         persistState()
         PersistentLog.log(.modelSelected(name: identifier))
@@ -606,21 +596,14 @@ class ModelManager: ObservableObject {
             }
         }
 
-        // Remove only the selected FluidAudio cache. Deleting every ASR cache
-        // made switching from v2/v3 or Qwen unexpectedly remove other choices.
+        // Remove only the selected FluidAudio cache so switching Parakeet versions
+        // does not unexpectedly remove the other choice.
         switch engine {
         case .parakeet:
             if let version = parakeetVersion(for: identifier) {
                 let versionDir = AsrModels.defaultCacheDirectory(for: version)
                 if FileManager.default.fileExists(atPath: versionDir.path) {
                     try FileManager.default.removeItem(at: versionDir)
-                }
-            }
-        case .qwen3ASR:
-            if #available(iOS 18.0, *), let variant = Qwen3AsrEngine.variant(for: identifier) {
-                let variantDir = Qwen3AsrModels.defaultCacheDirectory(variant: variant)
-                if FileManager.default.fileExists(atPath: variantDir.path) {
-                    try FileManager.default.removeItem(at: variantDir)
                 }
             }
         default:
@@ -632,7 +615,9 @@ class ModelManager: ObservableObject {
 
         // If deleted model was active, switch to first remaining
         if activeModel == identifier {
-            activeModel = downloadedModels.first
+            activeModel = selectionMode == .automatic
+                ? automaticActiveModel() ?? downloadedModels.first
+                : downloadedModels.first
         }
 
         persistState()
@@ -647,6 +632,20 @@ class ModelManager: ObservableObject {
     /// call-site signature so views don't need to change.
     func isRecommended(_ identifier: String) -> Bool {
         ModelInfo.isRecommended(identifier)
+    }
+
+    /// Changes model policy and immediately applies the resulting model.
+    func setSelectionMode(_ mode: ModelSelectionMode) {
+        selectionMode = mode
+        if mode == .automatic {
+            activeModel = automaticActiveModel() ?? activeModel ?? downloadedModels.first
+            persistState()
+            if activeModel != nil {
+                DictationCoordinator.shared.preloadActiveModel()
+            }
+        } else {
+            persistState()
+        }
     }
 
     /// Cleans up a failed model's files and resets its state to not downloaded.
@@ -678,12 +677,6 @@ class ModelManager: ObservableObject {
             if let version = parakeetVersion(for: identifier) {
                 try? FileManager.default.removeItem(at: AsrModels.defaultCacheDirectory(for: version))
             }
-        case .qwen3ASR:
-            if #available(iOS 18.0, *), let variant = Qwen3AsrEngine.variant(for: identifier) {
-                try? FileManager.default.removeItem(
-                    at: Qwen3AsrModels.defaultCacheDirectory(variant: variant)
-                )
-            }
         default:
             break
         }
@@ -693,14 +686,17 @@ class ModelManager: ObservableObject {
         // Remove from downloaded list if it was added prematurely
         downloadedModels.removeAll { $0 == identifier }
         if activeModel == identifier {
-            activeModel = downloadedModels.first
+            activeModel = selectionMode == .automatic
+                ? automaticActiveModel() ?? downloadedModels.first
+                : downloadedModels.first
         }
         persistState()
     }
 
     /// Whether at least one model is downloaded and ready for transcription.
     var isModelReady: Bool {
-        !downloadedModels.isEmpty && activeModel != nil
+        guard let activeModel else { return false }
+        return downloadedModels.contains(activeModel) && isArtifactInstalled(activeModel)
     }
 
     // MARK: - Private
@@ -713,6 +709,31 @@ class ModelManager: ObservableObject {
         }
     }
 
+    private func automaticActiveModel() -> String? {
+        guard !downloadedModels.isEmpty else { return nil }
+        let osMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let resolution = ModelInfo.automaticRuntimeResolution(
+            installedIdentifiers: Set(downloadedModels),
+            osMajor: osMajor,
+            capabilities: DeviceCapabilities.current()
+        )
+        return resolution.resolvedIdentifier
+    }
+
+    /// UserDefaults is only a claim that a model was downloaded. Validate the
+    /// artifact before exposing it as runnable so a stale or partial cache
+    /// cannot trap the keyboard in a load failure loop.
+    private func isArtifactInstalled(_ identifier: String) -> Bool {
+        guard let model = ModelInfo.forIdentifier(identifier) else { return false }
+        switch model.engine {
+        case .whisperKit:
+            return WhisperModelRepository.isModelInstalled(identifier)
+        case .parakeet:
+            guard let version = parakeetVersion(for: identifier) else { return false }
+            return ParakeetEngine.installedModelCacheDirectory(version: version) != nil
+        }
+    }
+
     /// Persists model state to App Group UserDefaults so the keyboard extension
     /// can read which model is active and whether transcription is available.
     private func persistState() {
@@ -720,6 +741,7 @@ class ModelManager: ObservableObject {
             defaults.set(data, forKey: SharedKeys.downloadedModels)
         }
         defaults.set(activeModel, forKey: SharedKeys.activeModel)
+        defaults.set(selectionMode.rawValue, forKey: SharedKeys.modelSelectionMode)
         defaults.set(!downloadedModels.isEmpty, forKey: SharedKeys.modelReady)
         defaults.synchronize()
         DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
@@ -731,7 +753,6 @@ enum ModelManagerError: Error, LocalizedError {
     case cannotDeleteLastModel
     case noContainer
     case parakeetUnavailable
-    case qwenUnavailable
     case prewarmTimeout(seconds: Int)
 
     var errorDescription: String? {
@@ -742,8 +763,6 @@ enum ModelManagerError: Error, LocalizedError {
             return "App Group container not available"
         case .parakeetUnavailable:
             return "Parakeet requires iOS 17+ or FluidAudio is not linked"
-        case .qwenUnavailable:
-            return "Qwen3-ASR requires iOS 18+ and FluidAudio"
         case .prewarmTimeout(let seconds):
             return "Model optimization did not complete within \(seconds)s"
         }

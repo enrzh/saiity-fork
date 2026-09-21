@@ -19,7 +19,8 @@ final class ModelLanguageSupportTests: XCTestCase {
     private let englishOnlyWhisperIDs = [
         "openai_whisper-tiny.en",
         "openai_whisper-base.en",
-        "openai_whisper-small.en"
+        "openai_whisper-small.en", "openai_whisper-small.en_217MB", "openai_whisper-medium.en",
+        "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB"
     ]
 
     private let highAccuracyWhisperIDs = [
@@ -28,8 +29,6 @@ final class ModelLanguageSupportTests: XCTestCase {
         "openai_whisper-large-v2_949MB",
         "openai_whisper-large-v2_turbo_955MB",
         "openai_whisper-large-v3_947MB",
-        "distil-whisper_distil-large-v3_594MB",
-        "distil-whisper_distil-large-v3_turbo_600MB",
         "openai_whisper-large-v3-v20240930_626MB",
         "openai_whisper-large-v3-v20240930_turbo_632MB"
     ]
@@ -45,7 +44,7 @@ final class ModelLanguageSupportTests: XCTestCase {
 
     func testEnglishOnlyWhisperModelsExposeOnlyEnglish() {
         for id in englishOnlyWhisperIDs {
-            guard let model = ModelInfo.forIdentifier(id) else {
+            guard let model = ModelInfo.redesignCatalog.first(where: { $0.identifier == id }) else {
                 XCTFail("\(id) missing from catalog")
                 continue
             }

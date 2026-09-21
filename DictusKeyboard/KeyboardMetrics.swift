@@ -28,34 +28,14 @@ enum KeyMetrics {
     static let keyHeight: CGFloat = {
         switch DeviceClass.current {
         case .compact:  return 40
-        case .standard: return 43
+        case .standard: return VoiceOnlyKeyboardPolicy.letterKeyHeight
         case .large:    return 46
         }
     }()
 
-    static let rowSpacing: CGFloat = {
-        switch DeviceClass.current {
-        case .compact:  return 9
-        case .standard: return 11
-        case .large:    return 12
-        }
-    }()
-
-    static let keySpacing: CGFloat = {
-        switch DeviceClass.current {
-        case .compact:  return 5
-        case .standard: return 6
-        case .large:    return 6
-        }
-    }()
-
-    static let rowSidePadding: CGFloat = {
-        switch DeviceClass.current {
-        case .compact:  return 3
-        case .standard: return 4
-        case .large:    return 5
-        }
-    }()
+    static let rowSpacing: CGFloat = VoiceOnlyKeyboardPolicy.keyRowSpacing
+    static let keySpacing: CGFloat = VoiceOnlyKeyboardPolicy.keySpacing
+    static let rowSidePadding: CGFloat = VoiceOnlyKeyboardPolicy.keyGridInset
 
     static let keyCornerRadius: CGFloat = 8
 

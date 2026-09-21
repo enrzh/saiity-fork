@@ -163,7 +163,7 @@ public struct CustomModel: Codable, Equatable, Identifiable, Sendable {
         let value = path.lowercased()
         return [
             "asr", "speech", "recogn", "transcrib", "whisper", "wav2vec",
-            "parakeet", "nemotron", "moonshine", "sensevoice", "qwen3-asr",
+            "parakeet", "nemotron", "moonshine", "sensevoice",
             "omnilingual", "canary", "seamless", "zipformer", "vosk"
         ].contains { value.contains($0) }
     }

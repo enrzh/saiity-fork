@@ -73,7 +73,7 @@ public enum EmojiSkinToneVariants {
         guard let baseIndex = scalars.firstIndex(where: { isModifierBase($0) }) else {
             return nil
         }
-        var insertAt = scalars.index(after: baseIndex)
+        let insertAt = scalars.index(after: baseIndex)
         if insertAt < scalars.endIndex, scalars[insertAt].value == variationSelector16 {
             scalars.remove(at: insertAt)
         }

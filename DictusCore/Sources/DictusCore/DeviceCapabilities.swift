@@ -29,16 +29,22 @@ public struct DeviceCapabilities: Sendable, Equatable {
     /// degrade transcription latency significantly.
     public let thermalState: ProcessInfo.ThermalState
 
+    /// System power-saving state. Large models should not be selected as a
+    /// runtime fallback while iOS is explicitly asking apps to save power.
+    public let isLowPowerModeEnabled: Bool
+
     public init(
         physicalMemoryGB: Int,
         availableMemoryMB: Int,
         deviceModelIdentifier: String,
-        thermalState: ProcessInfo.ThermalState
+        thermalState: ProcessInfo.ThermalState,
+        isLowPowerModeEnabled: Bool = false
     ) {
         self.physicalMemoryGB = physicalMemoryGB
         self.availableMemoryMB = availableMemoryMB
         self.deviceModelIdentifier = deviceModelIdentifier
         self.thermalState = thermalState
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
     }
 
     /// Reads the current device's capabilities at call time. Not cached — calling
@@ -48,7 +54,8 @@ public struct DeviceCapabilities: Sendable, Equatable {
             physicalMemoryGB: readPhysicalMemoryGB(),
             availableMemoryMB: readAvailableMemoryMB(),
             deviceModelIdentifier: readDeviceModelIdentifier(),
-            thermalState: ProcessInfo.processInfo.thermalState
+            thermalState: ProcessInfo.processInfo.thermalState,
+            isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
         )
     }
 
@@ -130,6 +137,16 @@ public struct DeviceCapabilities: Sendable, Equatable {
         default:
             return base
         }
+    }
+
+    /// Whether a fast, low-memory model should win a runtime fallback.
+    /// Explicit user selections remain authoritative; this only governs recovery
+    /// after a requested artifact cannot be loaded.
+    public var prefersFastRuntimeModel: Bool {
+        isLowPowerModeEnabled
+            || thermalState == .serious
+            || thermalState == .critical
+            || availableMemoryMB > 0 && availableMemoryMB < 700
     }
 
     // MARK: - Private readers

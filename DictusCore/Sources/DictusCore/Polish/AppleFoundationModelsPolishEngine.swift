@@ -50,6 +50,13 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
     public func polish(raw: String,
                        targetLanguage: SupportedLanguage,
                        mode: PolishMode) async throws -> String {
+        try await polish(raw: raw, targetLanguage: targetLanguage, mode: mode, style: .balanced)
+    }
+
+    public func polish(raw: String,
+                       targetLanguage: SupportedLanguage,
+                       mode: PolishMode,
+                       style: WritingStyle) async throws -> String {
         let key = SessionKey(
             mode: mode,
             language: Self.sessionLanguage(for: mode, requested: targetLanguage)
@@ -74,7 +81,7 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         // acknowledgements ("I'll polish it for you") instead of the polished
         // text. The trailing "Polished output:" marker biases the model toward
         // continuing the transform rather than starting a chat reply.
-        let prompt = PolishPromptEnvelope.userTurn(raw: raw)
+        let prompt = PolishPromptEnvelope.userTurn(raw: raw, style: style)
         // The drop names the session it is dropping (#315). `respond()` suspends
         // for four to five seconds, and the captures on that issue show two
         // dictations chaining inside a single second — so the next recording's
@@ -210,6 +217,10 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
             return PolishRepairPromptES.instructions(glossary: glossary)
         case (.repair, .german):
             return PolishRepairPromptDE.instructions(glossary: glossary)
+        case (.natural, _):
+            return PolishNaturalPromptEN.instructions(glossary: glossary)
+        case (.repair, _):
+            return PolishRepairPromptEN.instructions(glossary: glossary)
         }
     }
 }

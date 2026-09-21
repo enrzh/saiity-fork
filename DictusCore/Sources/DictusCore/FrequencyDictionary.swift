@@ -121,4 +121,44 @@ public struct FrequencyDictionary {
         let eligible = counts.keys.filter { $0.count >= 2 }
         return rankedCompletions(Array(eligible), limit: count)
     }
+
+    /// Highest-frequency dictionary words that continue `prefix`.
+    /// Used for next-letter priors from typed keyboard input.
+    public func prefixCompletions(prefix: String, limit: Int) -> [String] {
+        let needle = prefix.lowercased()
+        guard !needle.isEmpty, limit > 0 else { return [] }
+        let matches = counts.keys.filter { $0.hasPrefix(needle) && $0.count > needle.count }
+        return rankedCompletions(Array(matches), limit: limit)
+    }
+
+    /// Ranked dictionary words that a swipe path can produce.
+    public func swipeCandidates(path: String, limit: Int = 3) -> [String] {
+        let sampled = SwipeTypingDecoder.sampledLetters(from: path)
+        guard SwipeTypingDecoder.shouldCommit(path: sampled), limit > 0 else { return [] }
+        let matches = counts.keys.filter { SwipeTypingDecoder.matches($0, path: sampled) }
+        return rankedCompletions(matches, limit: limit)
+    }
+
+    /// Ranked dictionary words for a timed swipe using key geometry.
+    /// Spatial score breaks ties that frequency alone cannot.
+    public func swipeCandidates(
+        touches: [SwipeTypingDecoder.Touch],
+        keys: [SwipeTypingDecoder.Key],
+        limit: Int = 3
+    ) -> [String] {
+        let sampled = SwipeTypingDecoder.sampledLetters(from: touches, keys: keys)
+        guard SwipeTypingDecoder.shouldCommit(path: sampled), limit > 0 else { return [] }
+        let matches = counts.keys.filter { SwipeTypingDecoder.matches($0, path: sampled) }
+        let ranked = matches.compactMap { word -> (String, Double, Int)? in
+            guard let score = SwipeTypingDecoder.spatialScore(word: word, touches: touches, keys: keys) else {
+                return nil
+            }
+            return (word, score, counts[word] ?? 0)
+        }
+        .sorted { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
+            return lhs.2 > rhs.2
+        }
+        return Array(ranked.prefix(limit).map(\.0))
+    }
 }

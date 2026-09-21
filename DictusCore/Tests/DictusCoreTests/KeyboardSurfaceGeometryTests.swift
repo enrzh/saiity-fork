@@ -50,6 +50,15 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
         XCTAssertNil(invalid.observedInputViewHeight)
     }
 
+    func testKeyboardInputViewOptsIntoSelfSizingForStableHeightConstraints() throws {
+        let source = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/InputView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("allowsSelfSizing = true"))
+    }
+
     func testSymbolGridKeepsFourUsableRowsAtStandardHeights() {
         let spacing: CGFloat = 5
         let inset: CGFloat = 4
@@ -141,12 +150,73 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
         }
     }
 
+    func testPinnedSymbolLastRowMatchesThreeRowLetterLastRow() {
+        let size = CGSize(width: 390, height: 168)
+        let spacing: CGFloat = 5
+        let letterWeights: [[CGFloat]] = [
+            Array(repeating: 1, count: 10),
+            Array(repeating: 1, count: 9),
+            Array(repeating: 1, count: 9)
+        ]
+        let symbolWeights: [[CGFloat]] = [
+            Array(repeating: 1, count: 10),
+            Array(repeating: 1, count: 10),
+            [2.25, 1, 1, 1, 1, 1, 2.25]
+        ]
+        let lastRowHeight = VoiceOnlyKeyboardPolicy.SymbolGrid.letterAlignedLastRowHeight(
+            in: size.height,
+            rowSpacing: spacing
+        )
+        let letters = VoiceOnlyKeyboardPolicy.SymbolGrid.framesWithPinnedLastRow(
+            for: letterWeights,
+            in: size,
+            spacing: spacing,
+            inset: spacing,
+            rowSpacing: spacing,
+            lastRowHeight: lastRowHeight
+        )
+        let symbols = VoiceOnlyKeyboardPolicy.SymbolGrid.framesWithPinnedLastRow(
+            for: symbolWeights,
+            in: size,
+            spacing: spacing,
+            inset: spacing,
+            rowSpacing: spacing,
+            lastRowHeight: lastRowHeight
+        )
+        XCTAssertEqual(letters.last?.first?.minY, symbols.last?.first?.minY)
+        XCTAssertEqual(letters.last?.first?.height, symbols.last?.first?.height)
+        XCTAssertEqual(letters.last?.first?.height ?? -1, lastRowHeight, accuracy: 0.001)
+    }
+
+    func testPinnedLetterRowsPackAtNativeKeyHeightInsteadOfStretching() {
+        let size = CGSize(width: 390, height: 200)
+        let weights: [[CGFloat]] = [
+            Array(repeating: 1, count: 10),
+            Array(repeating: 1, count: 9),
+            Array(repeating: 1, count: 9)
+        ]
+        let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.framesWithPinnedLastRow(
+            for: weights,
+            in: size,
+            spacing: 6,
+            inset: 3,
+            rowSpacing: 12,
+            lastRowHeight: 44,
+            maxRowHeight: 42
+        )
+        XCTAssertEqual(frames[0][0].height, 42, accuracy: 0.001)
+        XCTAssertEqual(frames[1][0].height, 42, accuracy: 0.001)
+        XCTAssertEqual(frames[1][0].minY - frames[0][0].maxY, 12, accuracy: 0.001)
+        XCTAssertEqual(frames[2][0].minY - frames[1][0].maxY, 12, accuracy: 0.001)
+        XCTAssertEqual(frames.last?.first?.maxY ?? 0, size.height, accuracy: 0.001)
+    }
+
     func testSymbolCommandFramesMatchDictationBoardHitSize() {
         for width in [320.0, 375.0, 390.0, 430.0] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 216)
             let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.fixedEdgeCommandRowFrames(
                 itemCount: KeyboardSymbolsLayout.numbers[2].count,
-                rowFrame: CGRect(x: 6, y: 100, width: layout.surfaceFrame.width - 12, height: 44),
+                rowFrame: CGRect(x: 4, y: 100, width: layout.surfaceFrame.width - 8, height: 44),
                 spacing: 5,
                 commandWidth: 88
             )
@@ -154,7 +224,7 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             XCTAssertEqual(frames.count, KeyboardSymbolsLayout.numbers[2].count)
             XCTAssertEqual(frames.first?.size, VoiceOnlyKeyboardPolicy.actionHitSize)
             XCTAssertEqual(frames.last?.size, VoiceOnlyKeyboardPolicy.actionHitSize)
-            XCTAssertTrue(frames.allSatisfy { $0.maxX <= layout.surfaceFrame.width - 6 })
+            XCTAssertTrue(frames.allSatisfy { $0.maxX <= layout.surfaceFrame.width - 4 })
         }
     }
 

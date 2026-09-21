@@ -31,8 +31,21 @@ public struct HostFieldPolicy: Equatable {
         case webSearch
         case twitter
         case numeric
+        case decimal
         case phone
         case namePhone
+        /// `numbersAndPunctuation`. Stays on the symbol page, not ABC.
+        case symbols
+    }
+
+    /// Which 3×4 pad a number-like host field should open.
+    public enum NumberPadStyle: String, Equatable, Sendable {
+        /// `numberPad`, `asciiCapableNumberPad`, and OTP fields.
+        case digits
+        /// `decimalPad` (amounts).
+        case decimal
+        /// `phonePad`.
+        case phone
     }
 
     /// Platform-neutral projection of UITextContentType.
@@ -109,7 +122,7 @@ public struct HostFieldPolicy: Equatable {
             break
         }
         switch keyboard {
-        case .url, .email, .webSearch, .twitter, .numeric, .phone, .namePhone:
+        case .url, .email, .webSearch, .twitter, .numeric, .decimal, .phone, .namePhone, .symbols:
             return HostFieldPolicy(
                 autocorrectAllowed: false, suggestionsAllowed: false,
                 reason: "keyboardType.\(keyboard.rawValue)"
@@ -124,5 +137,84 @@ public struct HostFieldPolicy: Equatable {
             )
         }
         return .allowed
+    }
+
+    /// PIN, OTP, amount, and phone fields open the 3×4 number pad, not ABC,
+    /// the dictation board, or the 123 symbols page. `namePhone` stays on
+    /// letters because the host still expects names.
+    public static func prefersNumberPad(
+        keyboard: KeyboardKind,
+        content: ContentKind
+    ) -> Bool {
+        numberPadStyle(keyboard: keyboard, content: content) != nil
+    }
+
+    public static func numberPadStyle(
+        keyboard: KeyboardKind,
+        content: ContentKind
+    ) -> NumberPadStyle? {
+        if content == .oneTimeCode {
+            return .digits
+        }
+        switch keyboard {
+        case .numeric:
+            return .digits
+        case .decimal:
+            return .decimal
+        case .phone:
+            return .phone
+        case .standard, .asciiCapable, .url, .email, .webSearch, .twitter, .namePhone, .symbols:
+            return nil
+        }
+    }
+
+    /// Bottom-row keys for the ABC keyboard. Number pads are a separate surface.
+    /// Content type wins when it names an email or URL field and the keyboard
+    /// type is still the default.
+    public struct LetterFieldKeys: Equatable, Sendable {
+        /// Replaces the emoji key. Nil keeps emoji.
+        public var leftInsert: String?
+        /// Replaces the period key. Nil keeps period, including its comma hold.
+        public var rightInsert: String?
+        public var returnTitle: String
+
+        public static let standard = LetterFieldKeys(
+            leftInsert: nil,
+            rightInsert: nil,
+            returnTitle: "return"
+        )
+
+        public init(leftInsert: String?, rightInsert: String?, returnTitle: String) {
+            self.leftInsert = leftInsert
+            self.rightInsert = rightInsert
+            self.returnTitle = returnTitle
+        }
+    }
+
+    public static func letterFieldKeys(
+        keyboard: KeyboardKind,
+        content: ContentKind
+    ) -> LetterFieldKeys {
+        let kind: KeyboardKind = switch content {
+        case .email: .email
+        case .url: .url
+        default: keyboard
+        }
+        switch kind {
+        case .email:
+            return LetterFieldKeys(leftInsert: "@", rightInsert: nil, returnTitle: "return")
+        case .url:
+            return LetterFieldKeys(leftInsert: "/", rightInsert: ".com", returnTitle: "Go")
+        case .twitter:
+            return LetterFieldKeys(leftInsert: "@", rightInsert: "#", returnTitle: "return")
+        case .webSearch:
+            return LetterFieldKeys(leftInsert: nil, rightInsert: nil, returnTitle: "Go")
+        case .standard, .asciiCapable, .numeric, .decimal, .phone, .namePhone, .symbols:
+            return .standard
+        }
+    }
+
+    public static func prefersSymbolPage(keyboard: KeyboardKind) -> Bool {
+        keyboard == .symbols
     }
 }

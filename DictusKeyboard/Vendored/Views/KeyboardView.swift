@@ -12,7 +12,7 @@ protocol GiellaKeyboardViewDelegate: AnyObject {
     func didTriggerKey(_ key: KeyDefinition)
     func didTriggerDoubleTap(forKey key: KeyDefinition)
     func didTriggerHoldKey(_ key: KeyDefinition)
-    func didMoveCursor(_ movement: Int)
+    func didMoveCursor(_ step: KeyboardCursorStep)
 }
 
 protocol GiellaKeyboardViewProvider {
@@ -133,6 +133,8 @@ final internal class GiellaKeyboardView: UIView,
         collectionView = UICollectionView(frame: CGRect.zero, collectionViewLayout: layout)
 
         super.init(frame: CGRect.zero)
+        clipsToBounds = false
+        layer.masksToBounds = false
         update()
 
         collectionView.delegate = self
@@ -141,6 +143,8 @@ final internal class GiellaKeyboardView: UIView,
         collectionView.register(KeyCell.self, forCellWithReuseIdentifier: reuseIdentifier)
         collectionView.isUserInteractionEnabled = false
         collectionView.isScrollEnabled = false
+        collectionView.clipsToBounds = false
+        collectionView.layer.masksToBounds = false
 
         addSubview(collectionView)
         collectionView.topAnchor.constraint(equalTo: topAnchor).enable()
@@ -168,6 +172,10 @@ final internal class GiellaKeyboardView: UIView,
         // Keep the root transparent so the system keyboard backdrop is the single
         // background layer between the native-style key gaps.
         backgroundColor = .clear
+        clipsToBounds = false
+        layer.masksToBounds = false
+        collectionView.clipsToBounds = false
+        collectionView.layer.masksToBounds = false
         calculateRows()
     }
 
@@ -370,7 +378,7 @@ final internal class GiellaKeyboardView: UIView,
     // MARK: - LongPressOverlayDelegate
 
     func longpress(didCreateOverlayContentView contentView: UIView) {
-        HapticFeedback.keyTapped()
+        HapticFeedback.variantPopupPresented()
 
         if overlays.first?.value.overlayContentView == nil {
             if let activeKey = activeKey {
@@ -461,8 +469,8 @@ final internal class GiellaKeyboardView: UIView,
 
     // MARK: - LongPressCursorMovementDelegate
 
-    func longpress(movedCursor: Int) {
-        delegate?.didMoveCursor(movedCursor)
+    func longpress(movedCursor step: KeyboardCursorStep) {
+        delegate?.didMoveCursor(step)
     }
 
     // MARK: - Input handling
@@ -471,7 +479,7 @@ final internal class GiellaKeyboardView: UIView,
         let time: TimeInterval
         let key: KeyDefinition
 
-        static let doubleTapTime: TimeInterval = 0.4
+        static let doubleTapTime: TimeInterval = KeyboardShiftState.doubleTapWindow
     }
 
     var keyTriggerTiming: KeyTriggerTiming?
@@ -554,18 +562,6 @@ final internal class GiellaKeyboardView: UIView,
             touchDownSignpostStates[ObjectIdentifier(touch)] = KeyTapSignposter.beginTouchDown()
         }
 
-        // Fire haptic on touchDown for ALL keys (not just triggersOnTouchDown).
-        // The delegate's didTriggerKey() may fire on touchUp for input keys,
-        // but the user should FEEL the tap immediately on finger contact.
-        // The matching click is played in handleTouches below, as soon as the touch
-        // resolves to a key — it needs the key to pick a category, the haptic does not (#286).
-        HapticFeedback.keyTapped()
-        for touch in touches {
-            if let state = touchDownSignpostStates[ObjectIdentifier(touch)] {
-                KeyTapSignposter.emitHaptic(state)
-            }
-        }
-
         if let longpressController = self.longpressController, let touch = touches.first {
             longpressController.touchesBegan(touch.location(in: collectionView))
             return
@@ -594,6 +590,13 @@ final internal class GiellaKeyboardView: UIView,
             let touchPoint = clampedPoint(touch.location(in: collectionView))
             if let indexPath = collectionView.indexPathForItem(at: touchPoint) {
                 let key = currentPage[indexPath.section][indexPath.row]
+                // Resolve the cell before emitting feedback so gaps and spacer
+                // cells stay silent. The action may still be delivered on
+                // touch-up, but the tactile response stays at touch-down.
+                HapticFeedback.keyTapped()
+                if let state = touchDownSignpostStates[ObjectIdentifier(touch)] {
+                    KeyTapSignposter.emitHaptic(state)
+                }
                 markTouchDownHighlight(for: touch)
 
                 // Click on finger contact, in step with the haptic fired above (#286).
@@ -812,7 +815,6 @@ final internal class GiellaKeyboardView: UIView,
                     longpressController.delegate = self
                     self.longpressController = longpressController
                     collectionView.alpha = 0.4
-                    // Initialize baseline so touchesMoved can compute deltas
                     let startPoint = longpressGestureRecognizer.location(in: collectionView)
                     longpressController.touchesBegan(startPoint)
                 }

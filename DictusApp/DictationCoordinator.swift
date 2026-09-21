@@ -50,11 +50,75 @@ class DictationCoordinator: ObservableObject {
     /// Used by DictusApp to detect "warm but engine-dead" state after Power button stop.
     var isEngineRunning: Bool { audioEngine.isEngineRunning }
 
+    /// Explicit, process-local opt-in. Loading a model or relaunching the app
+    /// never starts a microphone session on its own.
+    @Published private(set) var keyboardSessionEnabled = false
+    @Published private(set) var isPreparingKeyboardSession = false
+    private var keyboardSessionTask: Task<Void, Never>?
+
+    func enableKeyboardSession() {
+        if status == .failed {
+            DictationErrorChannel.clear()
+            updateStatus(.idle)
+        }
+        keyboardSessionEnabled = true
+        defaults.set(true, forKey: SharedKeys.serviceEnabled)
+        guard UIApplication.shared.applicationState == .active else { return }
+        guard keyboardSessionTask == nil, !audioEngine.isEngineRunning else { return }
+        isPreparingKeyboardSession = true
+        keyboardSessionTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.keyboardSessionTask = nil
+                self.isPreparingKeyboardSession = false
+                if Task.isCancelled && self.keyboardSessionEnabled {
+                    self.enableKeyboardSession()
+                }
+            }
+            do {
+                guard try await self.audioEngine.ensureMicrophonePermission() else {
+                    throw AudioEngineError.permissionDenied
+                }
+                try await self.ensureEngineReady()
+                guard !Task.isCancelled, self.keyboardSessionEnabled,
+                      UIApplication.shared.applicationState == .active else { return }
+                try self.audioEngine.configureAudioSession()
+                try self.audioEngine.warmUp()
+                self.setModelLoadState(.ready, reason: "keyboard-session-ready")
+                LiveActivityManager.shared.startStandbyActivity()
+                LiveActivityManager.shared.updateServiceEnabled(true)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.disableKeyboardSession()
+                self.handleError(error.localizedDescription, disposition: .requiresApp)
+            }
+        }
+    }
+
+    func disableKeyboardSession() {
+        keyboardSessionEnabled = false
+        keyboardSessionTask?.cancel()
+        LiveActivityManager.shared.updateServiceEnabled(false, persistSetting: false)
+        // The task clears its own slot on exit, preventing a cancelled model
+        // preparation from clobbering a newer task's ownership.
+        if !audioEngine.isRecording { audioEngine.deactivateIfIdle() }
+    }
+
+    private func collectCompletedRecording() -> [Float] {
+        if keyboardSessionEnabled {
+            // Idle buffers are discarded by the engine; its existing ten-minute
+            // idle timeout bounds microphone ownership between keyboard holds.
+            return audioEngine.collectSamples()
+        }
+        return audioEngine.collectSamplesAndDeactivate()
+    }
+
     /// Release audio resources when the coordinator is not in an active dictation.
     /// A pending/recording session must survive a scene transition so a cold start
     /// can finish or an existing background recording can continue.
     func deactivateAudioIfIdle() {
         guard !DictationSessionLivenessPolicy.isActive(status) else { return }
+        guard !keyboardSessionEnabled else { return }
         audioEngine.deactivateIfIdle()
     }
 
@@ -150,6 +214,10 @@ class DictationCoordinator: ObservableObject {
         engine: .whisperKit,
         modelIdentifier: ""
     )
+    private var issueRecordingDurationMs: Int?
+    private var issueTranscribeMs: Int?
+    private var issuePolishMs: Int?
+    private var issueRawText: String?
 
 #if canImport(Translation)
     @Published private(set) var translationConfiguration: Any?
@@ -164,8 +232,8 @@ class DictationCoordinator: ObservableObject {
         let generation: Int
         let requestGeneration: Int
         let sourceText: String
-        let source: SupportedLanguage?
-        let target: SupportedLanguage
+        let source: String?
+        let target: TranslationLanguage
         let clientIdentifier: String
         let originalText: String
         let continuation: CheckedContinuation<TranslationOutcome, Never>
@@ -244,6 +312,7 @@ class DictationCoordinator: ObservableObject {
                 self.setModelLoadState(.ready, reason: "init-preload-success")
             } catch {
                 PersistentLog.log(.engineWarmUpFailed(context: "init-preload-model", error: error.localizedDescription))
+                self.recordModelLoadFailure(error, context: "init-preload-model")
                 self.setModelLoadState(.idle, reason: "init-preload-failed")
             }
         }
@@ -262,6 +331,7 @@ class DictationCoordinator: ObservableObject {
             Task { @MainActor in
                 // Stop any active dictation first, including transcription or
                 // processing stages that may still own a background assertion.
+                self.disableKeyboardSession()
                 if DictationSessionLivenessPolicy.isActive(self.status) {
                     self.cancelDictation()
                 }
@@ -285,12 +355,9 @@ class DictationCoordinator: ObservableObject {
                 let enabled = self.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
                     || self.defaults.bool(forKey: SharedKeys.serviceEnabled)
                 if enabled {
-                    // Enabling the service controls availability, not microphone
-                    // ownership. Keep the model/activity ready without opening
-                    // AVAudioSession until the user actually dictates.
-                    self.preloadActiveModel()
-                    LiveActivityManager.shared.startStandbyActivity()
+                    self.enableKeyboardSession()
                 } else {
+                    self.disableKeyboardSession()
                     if DictationSessionLivenessPolicy.isActive(self.status) {
                         self.cancelDictation()
                     }
@@ -312,9 +379,16 @@ class DictationCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
+                self?.disableKeyboardSession()
                 self?.handleAudioInterruptionDuringDictation()
             }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .dictusWarmStateReleased, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.disableKeyboardSession() }
         }
 
         memoryWarningObserver = NotificationCenter.default.addObserver(
@@ -357,6 +431,7 @@ class DictationCoordinator: ObservableObject {
                 // touches a pending or active dictation.
                 self.audioEngine.enforceIdleReleaseIfDue()
                 self.deactivateAudioIfIdle()
+                if self.keyboardSessionEnabled { self.enableKeyboardSession() }
 
                 // Recover DI if it was lost (Activity.request fails from background on cold start).
                 // Must happen BEFORE pendingColdStartDictation so transitionToRecording finds an activity.
@@ -400,6 +475,7 @@ class DictationCoordinator: ObservableObject {
                     self.setModelLoadState(.ready, reason: "didBecomeActive-model-preload-success")
                 } catch {
                     PersistentLog.log(.engineWarmUpFailed(context: "didBecomeActive-model-preload", error: error.localizedDescription))
+                    self.recordModelLoadFailure(error, context: "didBecomeActive-model-preload")
                     self.setModelLoadState(.idle, reason: "didBecomeActive-model-preload-failed")
                 }
             }
@@ -463,6 +539,10 @@ class DictationCoordinator: ObservableObject {
         // The old result must be cleared regardless of entry path so
         // RecordingView never shows a stale transcription card.
         lastResult = nil
+        issueRecordingDurationMs = nil
+        issueTranscribeMs = nil
+        issuePolishMs = nil
+        issueRawText = nil
         // Same argument, one process further out (#320): the previous attempt's failure
         // reason is stale the moment a new attempt begins, and this is the only event
         // that makes it so. Clearing here — rather than when a surface reads it — is
@@ -484,13 +564,11 @@ class DictationCoordinator: ObservableObject {
         }
 #endif
         captureLanguageRequest()
-        // WHY this early return (only for Darwin notification path, NOT URL scheme):
-        // iOS forbids starting an audio engine from background. If the engine isn't
-        // running and we're in background (Darwin notification from keyboard), attempting
-        // to start will fail. The keyboard's fallback opens the URL scheme after 500ms.
+        // A background assertion cannot activate a cold microphone. Offer an
+        // explicit recovery action without switching apps during a keyboard hold.
         let appState = UIApplication.shared.applicationState
         if !fromURL && appState != .active && !audioEngine.isEngineRunning {
-            PersistentLog.log(.dictationDeferred(reason: "no engine running, appState=\(appState.rawValue)"))
+            handleError("Keyboard dictation is not enabled. Open sAiity to enable it.", disposition: .requiresApp)
             return
         }
 
@@ -524,9 +602,8 @@ class DictationCoordinator: ObservableObject {
         let currentLoadState = defaults.string(forKey: SharedKeys.modelLoadState) ?? ModelLoadState.idle.rawValue
         if currentLoadState == ModelLoadState.loading.rawValue && !fromURL {
             PersistentLog.log(.dictationDeferred(reason: "model load in flight (state=loading)"))
-            // Keep the keyboard request pending. KeyboardState re-reads the
-            // shared state before its fallback URL and opens the prepare-only
-            // flow instead of showing a refusal message.
+            // The keyboard watchdog re-reads shared state and offers an explicit
+            // recovery action if preparation does not finish in time.
             return
         }
 
@@ -538,9 +615,6 @@ class DictationCoordinator: ObservableObject {
         // WHY before: Once the audio session is configured with .playAndRecord,
         // AudioServicesPlaySystemSound may be suppressed.
         SoundFeedbackService.playRecordStart()
-
-        // Configure audio session NOW while we're in the foreground.
-        try? audioEngine.configureAudioSession()
 
         // The session these start paths belong to. `ensureMicrophonePermission` is
         // an await even when permission is already granted, so a cancel queued on
@@ -562,9 +636,9 @@ class DictationCoordinator: ObservableObject {
                     // capturing for a dictation the user called off -- the orphaned
                     // engine of #60, arrived at from the other end.
                     guard mayReport(session, "warm start") else { return }
+                    try audioEngine.startRecording()
                     updateStatus(.recording)
                     LiveActivityManager.shared.transitionToRecording()
-                    try audioEngine.startRecording()
                     PersistentLog.log(.audioEngineStarted)
                     schedulePolishPrewarm()
                     await verifyAudioFlow()
@@ -642,6 +716,7 @@ class DictationCoordinator: ObservableObject {
                     // on purpose: it describes the model, which outlives any one
                     // dictation, and the next session needs it to be accurate.
                     self.setModelLoadState(.idle, reason: "cold-start-failed")
+                    self.recordModelLoadFailure(error, context: "cold-start-load")
                     guard self.mayReport(session, "cold start failure") else { return }
                     self.handleError(message)
                     // The keyboard has been told. Released here so the assertion ends on
@@ -657,10 +732,12 @@ class DictationCoordinator: ObservableObject {
     private func captureLanguageRequest() {
         let loaded = DictationLanguageRequest.load(from: defaults)
         let mode = loaded.modeForNextDictation(defaultingTo: TranscriptionLanguageMode.active)
+        let outputMode = TranscriptionOutputMode.active
         let requestedModelIdentifier = defaults.string(forKey: SharedKeys.activeModel) ?? ""
         let modelIdentifier = resolveRuntimeModelIdentifier(requestedModelIdentifier)
         let capability = ASRCapability.forModelIdentifier(
-            modelIdentifier, mode: mode, keyboardLanguage: SupportedLanguage.active
+            modelIdentifier, mode: mode, keyboardLanguage: SupportedLanguage.active,
+            outputMode: outputMode
         )
         let isKeyboardRequest = loaded.isBound
             && defaults.string(forKey: SharedKeys.dictationStatus) == DictationStatus.requested.rawValue
@@ -674,7 +751,8 @@ class DictationCoordinator: ObservableObject {
         currentLanguagePolicy = TranscriptionLanguagePolicy(
             mode: mode, keyboardLanguage: SupportedLanguage.active,
             engine: ModelInfo.forIdentifier(modelIdentifier)?.engine ?? .whisperKit,
-            modelIdentifier: modelIdentifier
+            modelIdentifier: modelIdentifier,
+            outputMode: outputMode
         )
         if #available(iOS 26.0, *) { refreshTranslationReadiness(for: currentLanguageRequest) }
     }
@@ -707,9 +785,8 @@ class DictationCoordinator: ObservableObject {
     /// Called when user taps the stop button.
     /// Stops recording and starts transcription using the already-loaded model.
     ///
-    /// Single path: collectSamplesAndDeactivate() → transcribe → done.
-    /// Capture and transcription have separate lifetimes; the microphone is not
-    /// kept open while the already-copied samples are being processed.
+    /// Capture ends before transcription. Only an explicitly enabled keyboard
+    /// session retains audio readiness for the next hold.
 
     /// Minimum audio duration required for transcription (in seconds).
     /// WHY 0.5s: WhisperKit handles clips ≥0.5s reliably for short words (oui, non, ok).
@@ -762,7 +839,7 @@ class DictationCoordinator: ObservableObject {
                 }
             }
             do {
-                let samples = audioEngine.collectSamplesAndDeactivate()
+                let samples = collectCompletedRecording()
 
                 guard !samples.isEmpty else {
                     guard mayReport(session, "empty recording") else { return }
@@ -802,10 +879,22 @@ class DictationCoordinator: ObservableObject {
                 // active the setting is Whisper-only-effective, so every mode
                 // resolves to the historical follow behavior.
                 let languagePolicy = currentLanguagePolicy
+                issueRecordingDurationMs = Int(audioDuration * 1000)
 
-                let rawText = try await transcriptionService.transcribe(
+                let transcribeStarted = Date()
+                let transcriptionOutput = try await transcriptionService.transcribeDetailed(
                     audioSamples: samples,
                     languagePolicy: languagePolicy
+                )
+                issueTranscribeMs = Int(Date().timeIntervalSince(transcribeStarted) * 1000)
+                let rawText = transcriptionOutput.text
+                // Translate before cleanup so the language-agnostic Auto cleanup
+                // operates on the selected output language.
+                let translatedRawText = await processAuthoritativeFinalTranscript(
+                    rawText,
+                    request: capturedLanguageRequest,
+                    regions: transcriptionOutput.regions,
+                    generation: session
                 )
 
                 // Polish layer (#141) — passes raw through only when the toggle is
@@ -816,10 +905,15 @@ class DictationCoordinator: ObservableObject {
                 // about a millisecond, and announcing a stage for them would flash a
                 // label and a new animation for a single frame. `onEngineWillRun`
                 // fires only once an engine worth waiting for is about to run.
-                let text = await PolishCoordinator.shared.polish(
-                    raw: rawText,
+                let polishStarted = Date()
+                let cleaned = await PolishCoordinator.shared.polish(
+                    raw: translatedRawText,
                     languagePolicy: languagePolicy,
                     recordingDuration: audioDuration,
+                    translationTarget: capturedLanguageRequest.translationTarget,
+                    regions: capturedLanguageRequest.translationTarget == nil
+                        ? transcriptionOutput.regions
+                        : [],
                     // Gated like every other write this task makes: the callback
                     // fires from inside `polish`, which a cancel does not interrupt,
                     // so an abandoned dictation would otherwise reopen the keyboard
@@ -831,11 +925,17 @@ class DictationCoordinator: ObservableObject {
                         LiveActivityManager.shared.transitionToProcessing()
                     }
                 )
-
-                let translatedOrOriginal = await processAuthoritativeFinalTranscript(
-                    text,
-                    request: capturedLanguageRequest,
-                    generation: session
+                issuePolishMs = Int(Date().timeIntervalSince(polishStarted) * 1000)
+                issueRawText = translatedRawText
+                // Grammar floor after cleanup/translation. Idempotent, strips ASR
+                // event labels, and is the text the keyboard later offers
+                // next-word predictions from. Multilingual output skips
+                // per-language filler/punctuation rules so mixed speech stays intact.
+                let text = PolishPostpass.grammarFloor(
+                    cleaned,
+                    language: languagePolicy.grammarFloorLanguage(
+                        translationTarget: capturedLanguageRequest.translationTarget
+                    )
                 )
 
                 // Append trailing separator so chained dictations don't stick together.
@@ -845,17 +945,18 @@ class DictationCoordinator: ObservableObject {
                 // explicit modes — and Parakeet in every mode — keep the historical
                 // separator behavior unchanged.
                 let formattedText: String
-                if languagePolicy.insertsTranscriptionAsIs {
-                    formattedText = translatedOrOriginal
-                } else if let last = translatedOrOriginal.last, ".!?…".contains(last) {
-                    formattedText = translatedOrOriginal + " "
+                if languagePolicy.insertsTranscriptionAsIs,
+                   capturedLanguageRequest.translationTarget == nil {
+                    formattedText = text
+                } else if let last = text.last, ".!?…".contains(last) {
+                    formattedText = text + " "
                 } else {
-                    formattedText = translatedOrOriginal + ". "
+                    formattedText = text + ". "
                 }
 
                 let decision = DictationFinalizationDecision.make(
                     transcript: text,
-                    outcome: translatedOrOriginal == text
+                    outcome: translatedRawText == text
                         ? .fallback(formattedText, reason: .unavailable)
                         : .translated(formattedText),
                     request: capturedLanguageRequest,
@@ -876,6 +977,7 @@ class DictationCoordinator: ObservableObject {
                 status = .ready
                 defaults.set(finalText, forKey: SharedKeys.lastTranscription)
                 defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.lastTranscriptionTimestamp)
+                RecentDictations.append(finalText, in: defaults)
                 DictationDelivery.publish(finalText, for: capturedLanguageRequest, to: defaults)
                 defaults.set(DictationStatus.ready.rawValue, forKey: SharedKeys.dictationStatus)
                 defaults.synchronize()
@@ -883,6 +985,11 @@ class DictationCoordinator: ObservableObject {
                 DarwinNotificationCenter.post(DarwinNotificationName.statusChanged)
                 DarwinNotificationCenter.post(DarwinNotificationName.transcriptionReady)
                 LiveActivityManager.shared.endWithResult(preview: finalText)
+                persistLastDictationIssue(
+                    stage: DictationStatus.ready.rawValue,
+                    rawText: translatedRawText,
+                    cleanedText: finalText
+                )
 
                 if #available(iOS 14.0, *) {
                     DictusLogger.app.info("Transcription complete: \(finalText, privacy: .private)")
@@ -892,6 +999,9 @@ class DictationCoordinator: ObservableObject {
             } catch {
                 if #available(iOS 14.0, *) {
                     DictusLogger.app.error("Transcription failed: \(error.localizedDescription, privacy: .public)")
+                }
+                if error is SpeechModelError {
+                    recordModelLoadFailure(error, context: "transcription-load")
                 }
                 // A cancelled task lands here, and so does one that failed for its
                 // own reasons after the session ended. Either way the failure
@@ -906,6 +1016,7 @@ class DictationCoordinator: ObservableObject {
     func processAuthoritativeFinalTranscript(
         _ transcript: String,
         request: DictationLanguageRequest,
+        regions: [SpeechRegionTranscript] = [],
         generation: Int? = nil
     ) async -> String {
         guard let target = request.translationTarget, !transcript.isEmpty else { return transcript }
@@ -918,9 +1029,37 @@ class DictationCoordinator: ObservableObject {
 
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
+            if regions.count > 1 {
+                var translatedRegions: [String] = []
+                translatedRegions.reserveCapacity(regions.count)
+                for region in regions {
+                    guard !Task.isCancelled,
+                          sessionGeneration.mayReport(
+                              from: generation ?? sessionGeneration.current,
+                              request: request,
+                              currentRequest: currentLanguageRequest
+                          ) else {
+                        return transcript
+                    }
+                    let regionText = region.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !regionText.isEmpty else { continue }
+                    let outcome = await translationOutcome(
+                        regionText,
+                        target: target,
+                        sourceHint: region.validatedLanguage ?? region.detectedLanguage,
+                        request: request,
+                        generation: generation ?? sessionGeneration.current
+                    )
+                    translatedRegions.append(outcome.resolvedText)
+                }
+                let merged = SpeechTranscriptMerger.merge(translatedRegions)
+                return merged.isEmpty ? transcript : merged
+            }
+
             let outcome = await translationOutcome(
                 transcript,
                 target: target,
+                sourceHint: regions.first?.validatedLanguage ?? regions.first?.detectedLanguage,
                 request: request,
                 generation: generation ?? sessionGeneration.current
             )
@@ -944,19 +1083,25 @@ class DictationCoordinator: ObservableObject {
             let capability = ASRCapability.forModelIdentifier(
                 self.defaults.string(forKey: SharedKeys.activeModel),
                 mode: request.mode,
-                keyboardLanguage: SupportedLanguage.active
+                keyboardLanguage: SupportedLanguage.active,
+                outputMode: TranscriptionOutputMode.active
             )
-            let sources = capability.sourceLanguage.map { [$0] } ?? SupportedLanguage.allCases
+            let sourceCodes: [String] = capability.sourceLanguage.map { [$0.rawValue] }
+                ?? Array(Set(
+                    TranslationLanguage.allCases.map(\.translationIdentifier)
+                        + SupportedLanguage.allCases.map(\.rawValue)
+                )).sorted()
             let availability = LanguageAvailability()
             var installedTargets = Set<String>()
             var supportedTargets = Set<String>()
 
-            for source in sources {
-                let sourceLocale = Locale.Language(identifier: source.rawValue)
-                for target in SupportedLanguage.allCases where target != source {
+            for sourceCode in sourceCodes {
+                let sourceLocale = Locale.Language(identifier: sourceCode)
+                for target in TranslationLanguage.allCases
+                    where !languageCodesEquivalent(sourceCode, target.translationIdentifier) {
                     let status = await availability.status(
                         from: sourceLocale,
-                        to: Locale.Language(identifier: target.rawValue)
+                        to: target.localeLanguage
                     )
                     switch status {
                     case .installed:
@@ -985,7 +1130,8 @@ class DictationCoordinator: ObservableObject {
     @available(iOS 26.0, *)
     private func translationOutcome(
         _ transcript: String,
-        target: SupportedLanguage,
+        target: TranslationLanguage,
+        sourceHint: String? = nil,
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
@@ -995,18 +1141,18 @@ class DictationCoordinator: ObservableObject {
             return .fallback(transcript, reason: .cancelled)
         }
 
-        let source = translationSource(for: request) ?? detectedLanguage(from: transcript)
-        if source == target {
+        let source = sourceHint ?? translationSource(for: request) ?? detectedLanguage(from: transcript)
+        if languageCodesEquivalent(source, target.translationIdentifier) {
             return .translated(transcript)
         }
-        let targetLocale = Locale.Language(identifier: target.rawValue)
+        let targetLocale = target.localeLanguage
         let availability = LanguageAvailability()
         let status: LanguageAvailability.Status
 
         do {
             if let source {
                 status = await availability.status(
-                    from: Locale.Language(identifier: source.rawValue),
+                    from: Locale.Language(identifier: source),
                     to: targetLocale
                 )
             } else {
@@ -1048,18 +1194,22 @@ class DictationCoordinator: ObservableObject {
         )
     }
 
-    private func detectedLanguage(from transcript: String) -> SupportedLanguage? {
-        guard let raw = NLLanguageRecognizer.dominantLanguage(for: transcript)?.rawValue else {
-            return nil
-        }
-        return SupportedLanguage(rawValue: String(raw.prefix(2)).lowercased())
+    private func detectedLanguage(from transcript: String) -> String? {
+        NLLanguageRecognizer.dominantLanguage(for: transcript)?.rawValue
+    }
+
+    private func languageCodesEquivalent(_ lhs: String?, _ rhs: String) -> Bool {
+        guard let lhs else { return false }
+        let leftBase = lhs.split(separator: "-").first.map(String.init)?.lowercased()
+        let rightBase = rhs.split(separator: "-").first.map(String.init)?.lowercased()
+        return lhs.caseInsensitiveCompare(rhs) == .orderedSame || leftBase == rightBase
     }
 
     @available(iOS 26.0, *)
     private func translateWithHostLimited(
         _ transcript: String,
-        source: SupportedLanguage?,
-        target: SupportedLanguage,
+        source: String?,
+        target: TranslationLanguage,
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
@@ -1087,22 +1237,22 @@ class DictationCoordinator: ObservableObject {
     }
 
     @available(iOS 26.0, *)
-    private func translationSource(for request: DictationLanguageRequest) -> SupportedLanguage? {
+    private func translationSource(for request: DictationLanguageRequest) -> String? {
         switch request.mode {
         case .autoDetect:
             return nil
         case .explicit(let language):
-            return language
+            return language.rawValue
         case .followKeyboard:
-            return request.resolvedSourceLanguage
+            return request.resolvedSourceLanguage?.rawValue
         }
     }
 
     @available(iOS 26.0, *)
     private func translateWithInstalledSource(
         _ transcript: String,
-        source: SupportedLanguage,
-        target: SupportedLanguage,
+        source: String,
+        target: TranslationLanguage,
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
@@ -1113,8 +1263,8 @@ class DictationCoordinator: ObservableObject {
         }
         let clientIdentifier = request.clientIdentifier ?? UUID().uuidString
         let session = TranslationSession(
-            installedSource: Locale.Language(identifier: source.rawValue),
-            target: Locale.Language(identifier: target.rawValue)
+            installedSource: Locale.Language(identifier: source),
+            target: target.localeLanguage
         )
         do {
             let responses = try await session.translations(from: [
@@ -1137,8 +1287,8 @@ class DictationCoordinator: ObservableObject {
     @available(iOS 26.0, *)
     private func translateWithHost(
         _ transcript: String,
-        source: SupportedLanguage?,
-        target: SupportedLanguage,
+        source: String?,
+        target: TranslationLanguage,
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
@@ -1152,8 +1302,8 @@ class DictationCoordinator: ObservableObject {
             await withCheckedContinuation { (continuation: CheckedContinuation<TranslationOutcome, Never>) in
                 cancelPendingTranslation()
                 var configuration = TranslationSession.Configuration(
-                    source: source.map { Locale.Language(identifier: $0.rawValue) },
-                    target: Locale.Language(identifier: target.rawValue)
+                    source: source.map { Locale.Language(identifier: $0) },
+                    target: target.localeLanguage
                 )
                 pendingTranslation = PendingTranslation(
                     id: id,
@@ -1193,13 +1343,13 @@ class DictationCoordinator: ObservableObject {
             let status: LanguageAvailability.Status
             if let source = pending.source {
                 status = await availability.status(
-                    from: Locale.Language(identifier: source.rawValue),
-                    to: Locale.Language(identifier: pending.target.rawValue)
+                    from: Locale.Language(identifier: source),
+                    to: pending.target.localeLanguage
                 )
             } else {
                 status = try await availability.status(
                     for: pending.sourceText,
-                    to: Locale.Language(identifier: pending.target.rawValue)
+                    to: pending.target.localeLanguage
                 )
             }
             guard status == .supported || status == .installed else {
@@ -1286,6 +1436,7 @@ class DictationCoordinator: ObservableObject {
     /// Cancel the current dictation without transcribing.
     /// Called when the keyboard sends a cancel signal via Darwin notification.
     func cancelDictation() {
+        pendingColdStartDictation = false
         DictationDelivery.clear(in: defaults)
         DictationLanguageRequest.load(from: defaults).unbound().persist(to: defaults)
         // FIRST, before anything is cancelled: from here on, the transcription task
@@ -1299,6 +1450,7 @@ class DictationCoordinator: ObservableObject {
             cancelPendingTranslation()
         }
 #endif
+        PolishCoordinator.shared.cancelInflight()
         dictationTask?.cancel()
         dictationTask = nil
         // Reset the transcribe re-entry flag so the next stop/cancel cycle can proceed.
@@ -1306,9 +1458,9 @@ class DictationCoordinator: ObservableObject {
         endTranscriptionAssertion(reason: "cancelled")
         stopStageWatchdog()
 
-        // Discard samples and release the microphone immediately. The next
-        // recording can configure a fresh session on demand.
-        _ = audioEngine.collectSamplesAndDeactivate()
+        // Discard this recording. Explicit keyboard sessions retain readiness;
+        // service disable clears that opt-in before reaching this method.
+        _ = collectCompletedRecording()
 
         // Reset all state
         bufferEnergy = []
@@ -1405,11 +1557,9 @@ class DictationCoordinator: ObservableObject {
     /// Activity (LiveActivityManager handles its own end via the same notification).
     /// Issue #106.
     private func handleAudioInterruptionDuringDictation() {
-        // Same predicate as `resetStatus` and for the same reason (#267).
-        let wasActive = DictationSessionLivenessPolicy.isActive(status)
-        guard wasActive else {
-            // Engine died while idle — nothing to roll back. The standby DI is
-            // dismissed by LiveActivityManager via the same notification.
+        // Only capture depends on the audio session. A pending start handles
+        // activation errors itself; transcription/cleanup already own their audio.
+        guard status == .recording, !pendingColdStartDictation else {
             return
         }
 
@@ -1434,6 +1584,7 @@ class DictationCoordinator: ObservableObject {
 
         // updateStatus(.failed) handles both the App Group write and the Darwin
         // statusChanged post — no manual duplication needed (issue #106 review).
+        DictationErrorChannel.record(String(localized: "Recording interrupted. Please try again."))
         updateStatus(.failed)
 
         if #available(iOS 14.0, *) {
@@ -1454,6 +1605,15 @@ class DictationCoordinator: ObservableObject {
                     self.defaults.synchronize()
                     self.stopDictation()
                 }
+            }
+        }
+
+        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.serviceToggleRequested) {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: Notification.Name("DictusServiceToggleRequested"),
+                    object: nil
+                )
             }
         }
 
@@ -1572,6 +1732,8 @@ class DictationCoordinator: ObservableObject {
             return
         }
         guard transcriptionService.hasLoadedModel || whisperKit != nil || currentModelName != nil else { return }
+
+        disableKeyboardSession()
 
         transcriptionService.releaseLoadedModel()
         whisperKit = nil
@@ -1779,6 +1941,7 @@ class DictationCoordinator: ObservableObject {
     /// until the next dictation starts, so a user who reads it on one surface and then
     /// opens the other is told the same thing twice rather than something else.
     private func handleError(_ message: String, disposition: DictationFailureDisposition = .recoverableRetry) {
+        disableKeyboardSession()
         // Errors can arrive during requested/recording or after capture has
         // stopped. In both cases no microphone resource should survive the
         // terminal state.
@@ -1788,6 +1951,12 @@ class DictationCoordinator: ObservableObject {
             audioEngine.deactivateIfIdle()
         }
         DictationErrorChannel.record(message, disposition: disposition)
+        persistLastDictationIssue(
+            stage: status.rawValue,
+            failureStage: status.rawValue,
+            errorSummary: message,
+            rawText: issueRawText
+        )
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)
         defaults.synchronize()
@@ -1795,6 +1964,37 @@ class DictationCoordinator: ObservableObject {
         LiveActivityManager.shared.endWithFailure()
         // Arm watchdog: safety net if endWithFailure's transition guard rejects.
         LiveActivityManager.shared.startRecordingWatchdog()
+    }
+
+    /// Overwrites the single last-dictation issue slot. Transcript text is stored
+    /// so Settings can offer an opt-in export; nothing is sent automatically.
+    private func persistLastDictationIssue(
+        stage: String,
+        failureStage: String? = nil,
+        errorSummary: String? = nil,
+        rawText: String? = nil,
+        cleanedText: String? = nil
+    ) {
+        LastDictationIssueReport.store(
+            LastDictationIssueSnapshot(
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
+                buildNumber: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0",
+                modelIdentifier: currentLanguagePolicy.modelIdentifier,
+                engineName: currentLanguagePolicy.engine.rawValue,
+                outputMode: currentLanguagePolicy.outputMode.rawValue,
+                transcriptionMode: currentLanguagePolicy.mode.storedValue,
+                translationTarget: currentLanguageRequest.translationTarget?.rawValue,
+                stage: stage,
+                failureStage: failureStage,
+                errorSummary: errorSummary,
+                recordingDurationMs: issueRecordingDurationMs,
+                transcribeMs: issueTranscribeMs,
+                polishMs: issuePolishMs,
+                rawText: rawText,
+                cleanedText: cleanedText
+            ),
+            in: defaults
+        )
     }
 
     // MARK: - Model load orchestration (issue #144)
@@ -1817,6 +2017,11 @@ class DictationCoordinator: ObservableObject {
         // instead of inheriting an old timestamp from a previous app process.
         if newState == .loading {
             defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.modelLoadStateTimestamp)
+            defaults.removeObject(forKey: SharedKeys.modelLoadFailure)
+            defaults.removeObject(forKey: SharedKeys.modelLoadFailureTimestamp)
+        } else if newState == .ready {
+            defaults.removeObject(forKey: SharedKeys.modelLoadFailure)
+            defaults.removeObject(forKey: SharedKeys.modelLoadFailureTimestamp)
         } else {
             defaults.removeObject(forKey: SharedKeys.modelLoadStateTimestamp)
         }
@@ -1833,6 +2038,22 @@ class DictationCoordinator: ObservableObject {
             object: nil,
             userInfo: ["state": newState.rawValue, "reason": reason]
         )
+    }
+
+    /// Keeps recovery actionable after a preload failure without exposing raw
+    /// Core ML or filesystem details in the readiness UI.
+    func recordModelLoadFailure(_ error: Error, context: String) {
+        let message = (error as? SpeechModelError)?.errorDescription
+            ?? "The transcription model could not be loaded. Try again."
+        defaults.set(message, forKey: SharedKeys.modelLoadFailure)
+        defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.modelLoadFailureTimestamp)
+        defaults.synchronize()
+        PersistentLog.log(.diagnosticProbe(
+            component: "ModelRuntime",
+            instanceID: currentLanguagePolicy.modelIdentifier,
+            action: "failurePresented",
+            details: "context=\(context) message=\(message)"
+        ))
     }
 
     /// Eagerly load the active model into RAM. Called from `ModelManager.selectModel`
@@ -1853,6 +2074,7 @@ class DictationCoordinator: ObservableObject {
                     context: "selectModel-proactive",
                     error: error.localizedDescription
                 ))
+                self.recordModelLoadFailure(error, context: "selectModel-proactive")
                 self.setModelLoadState(.idle, reason: "selectModel-proactive-failed")
             }
         }
@@ -1874,6 +2096,13 @@ private extension DictationCoordinator {
     ///
     /// Falls back to the active model from App Group, then to the new-install default.
     func ensureEngineReady(preferredModel: String? = nil) async throws {
+        try await ensureEngineReady(preferredModel: preferredModel, fallbackExclusions: [])
+    }
+
+    private func ensureEngineReady(
+        preferredModel: String?,
+        fallbackExclusions: Set<String>
+    ) async throws {
         let requestedModelName = preferredModel
             ?? defaults.string(forKey: SharedKeys.activeModel)
             ?? ModelInfo.sAiityDefaultIdentifier
@@ -1890,17 +2119,74 @@ private extension DictationCoordinator {
         let modelInfo = ModelInfo.forIdentifier(modelName)
         let engine = modelInfo?.engine ?? .whisperKit
 
-        switch engine {
-        case .parakeet:
-            try await ensureParakeetReady(modelName: modelName)
-        case .whisperKit:
-            try await ensureWhisperKitEngineReady(modelName: modelName)
-        case .qwen3ASR:
-            if #available(iOS 18.0, *) {
-                try await ensureQwenReady(modelName: modelName)
-            } else {
-                try await ensureWhisperKitEngineReady(modelName: "openai_whisper-small")
+        do {
+            switch engine {
+            case .parakeet:
+                try await ensureParakeetReady(modelName: modelName)
+            case .whisperKit:
+                try await ensureWhisperKitEngineReady(modelName: modelName)
             }
+        } catch {
+            guard engine == .whisperKit,
+                  error is SpeechModelError,
+                  let fallback = installedWhisperFallback(
+                      excluding: fallbackExclusions.union([modelName])
+                  ) else {
+                throw error
+            }
+
+            PersistentLog.log(.diagnosticProbe(
+                component: "ModelRuntime",
+                instanceID: modelName,
+                action: "loadFallback",
+                details: "requested=\(requestedModelName) failed=\(modelName) resolved=\(fallback)"
+            ))
+            updateLanguagePolicyForLoadedModel(fallback, replacing: modelName)
+            try await ensureEngineReady(
+                preferredModel: fallback,
+                fallbackExclusions: fallbackExclusions.union([modelName])
+            )
+        }
+    }
+
+    private func updateLanguagePolicyForLoadedModel(_ model: String, replacing failedModel: String) {
+        guard currentLanguagePolicy.modelIdentifier == failedModel else { return }
+        currentLanguagePolicy = TranscriptionLanguagePolicy(
+            mode: currentLanguagePolicy.mode,
+            keyboardLanguage: currentLanguagePolicy.keyboardLanguage,
+            engine: .whisperKit,
+            modelIdentifier: model,
+            outputMode: currentLanguagePolicy.outputMode
+        )
+    }
+
+    /// Returns the first installed multilingual Whisper model that is known to
+    /// fit this device. A failed model must not strand dictation when a usable
+    /// local model is already available; the selected model remains persisted so
+    /// the app can retry it after the user repairs or replaces its files.
+    private func installedWhisperFallback(excluding: Set<String>) -> String? {
+        let capabilities = DeviceCapabilities.current()
+        let installed = Set(readDownloadedModels())
+        var candidates = [ModelInfo.recommendedIdentifier(for: capabilities)]
+        candidates.append(contentsOf: [
+            "openai_whisper-small",
+            "openai_whisper-base",
+            "openai_whisper-tiny"
+        ])
+
+        var seen = Set<String>()
+        return candidates.first { identifier in
+            guard seen.insert(identifier).inserted,
+                  !excluding.contains(identifier),
+                  installed.contains(identifier),
+                  let model = ModelInfo.forIdentifier(identifier),
+                  model.engine == .whisperKit,
+                  model.languageSupport.coverage == .whisperMultilingual,
+                  model.isSupported(on: capabilities),
+                  WhisperModelRepository.installedModelFolderURL(for: identifier) != nil else {
+                return false
+            }
+            return true
         }
     }
 
@@ -2111,65 +2397,4 @@ private extension DictationCoordinator {
         }
     }
 
-    /// Initialize Qwen3-ASR from its local precision-specific cache (iOS 18+).
-    /// Like the Parakeet path, this method never downloads during dictation and
-    /// shares the coordinator's single initialization lock.
-    @available(iOS 18.0, *)
-    func ensureQwenReady(modelName: String) async throws {
-        if currentModelName == modelName, whisperKit == nil {
-            return
-        }
-
-        if let existingTask = initTask {
-            do {
-                try await existingTask.value
-            } catch {
-                throw SpeechModelError.engineLoadFailed(identifier: modelName, underlying: error)
-            }
-            return
-        }
-
-        guard let cacheDirectory = Qwen3AsrEngine.installedModelCacheDirectory(for: modelName) else {
-            let error = SpeechModelError.modelNotInstalled(identifier: modelName)
-            PersistentLog.log(.diagnosticProbe(
-                component: "Qwen3ASRLoad",
-                instanceID: modelName,
-                action: "localModelMissing",
-                details: error.diagnosticDescription
-            ))
-            throw error
-        }
-
-        PersistentLog.log(.diagnosticProbe(
-            component: "Qwen3ASRLoad",
-            instanceID: modelName,
-            action: "localModelResolved",
-            details: "folder=\(cacheDirectory.lastPathComponent) download=false"
-        ))
-
-        let task = Task<Void, Error> {
-            let qwenEngine = Qwen3AsrEngine()
-            try await qwenEngine.prepare(modelIdentifier: modelName)
-
-            self.whisperKit = nil
-            self.currentModelName = modelName
-            self.transcriptionService.prepare(engine: qwenEngine)
-        }
-        initTask = task
-
-        do {
-            try await task.value
-            initTask = nil
-        } catch {
-            initTask = nil
-            let wrapped = SpeechModelError.engineLoadFailed(identifier: modelName, underlying: error)
-            PersistentLog.log(.diagnosticProbe(
-                component: "Qwen3ASRLoad",
-                instanceID: modelName,
-                action: "loadFailed",
-                details: wrapped.diagnosticDescription
-            ))
-            throw wrapped
-        }
-    }
 }

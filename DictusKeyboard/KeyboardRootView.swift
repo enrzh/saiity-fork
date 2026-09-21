@@ -1,6 +1,7 @@
 // DictusKeyboard/KeyboardRootView.swift
 import SwiftUI
 import UIKit
+import Foundation
 import DictusCore
 
 /// Root SwiftUI view for the voice-only keyboard surface.
@@ -19,9 +20,6 @@ struct KeyboardRootView: View {
     @State private var emojiSelectedCategoryID = "recents"
     @State private var emojiCategoryJump: EmojiScrollRequest?
     @State private var lastAppliedEmojiCategoryToken: UUID?
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
     var body: some View {
         GeometryReader { proxy in
@@ -40,10 +38,13 @@ struct KeyboardRootView: View {
                     .allowsHitTesting(false)
                 embeddedSurface(
                     areaSurface(layout: layout, contentFrame: surfaceFrame),
-                    frame: surfaceFrame,
-                    withoutGlassRim: state.areaMode == .emoji
+                    frame: surfaceFrame
                 )
                     .position(x: surfaceFrame.midX, y: surfaceFrame.midY)
+                    // Popups may extend into the suggestion lane. Keep the
+                    // entire surface above that lane's controls so the popup
+                    // is visible without changing the controls' hit targets.
+                    .zIndex(3)
 
                 if state.areaMode == .keys || state.areaMode == .recording {
                     if layout.leftRailWidth > 0 {
@@ -51,14 +52,33 @@ struct KeyboardRootView: View {
                             state.presentNumbersArea()
                         }
                             .position(x: CGFloat(layout.chromeNumbersFrame.midX), y: CGFloat(layout.chromeNumbersFrame.midY))
+                            .zIndex(4)
                         voiceBoardChrome(text: "ABC", label: "Open letter keyboard") {
                             state.presentArea(.letters)
                         }
                             .position(x: CGFloat(layout.chromeLettersFrame.midX), y: CGFloat(layout.chromeLettersFrame.midY))
-                        voiceBoardChrome(systemName: "face.smiling", label: "Emoji") {
+                            .zIndex(4)
+                        voiceBoardChrome(
+                            systemName: "face.smiling",
+                            label: "Emoji",
+                            visualWidth: VoiceOnlyKeyboardPolicy.commandVisualSize(
+                                for: CGSize(
+                                    width: VoiceOnlyKeyboardPolicy.controlSize,
+                                    height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+                                )
+                            ).width,
+                            visualHeight: VoiceOnlyKeyboardPolicy.commandVisualSize(
+                                for: CGSize(
+                                    width: VoiceOnlyKeyboardPolicy.controlSize,
+                                    height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+                                )
+                            ).height,
+                            visualCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius
+                        ) {
                             state.presentArea(.emoji)
                         }
                             .position(x: CGFloat(layout.chromeEmojiFrame.midX), y: CGFloat(layout.chromeEmojiFrame.midY))
+                            .zIndex(4)
                     }
 
                     if layout.rightRailWidth > 0 {
@@ -72,6 +92,7 @@ struct KeyboardRootView: View {
                         )
                             .position(x: CGFloat(layout.boardDeleteFrame.midX), y: CGFloat(layout.boardDeleteFrame.midY))
                             .allowsHitTesting(!voiceBoardUsesUIKitHits)
+                            .zIndex(4)
                         voiceBoardChrome(
                             systemName: "return",
                             label: "Return",
@@ -79,12 +100,49 @@ struct KeyboardRootView: View {
                             height: VoiceOnlyKeyboardPolicy.actionHitSize.height,
                             visualWidth: VoiceOnlyKeyboardPolicy.commandVisualSize(for: VoiceOnlyKeyboardPolicy.actionHitSize).width,
                             visualHeight: VoiceOnlyKeyboardPolicy.commandVisualSize(for: VoiceOnlyKeyboardPolicy.actionHitSize).height,
-                            visualCornerRadius: 18
+                            visualCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius
                         ) {
                             routeProxyCommand(.returnKey)
                         }
                             .position(x: CGFloat(layout.boardReturnFrame.midX), y: CGFloat(layout.boardReturnFrame.midY))
+                            .zIndex(4)
                     }
+                }
+
+                if state.areaMode == .emoji {
+                    EmojiCategoryBar(
+                        sections: CategoryInfo.emojiBarSections,
+                        selectedCategoryID: emojiSelectedCategoryID,
+                        isExpanded: state.emojiCategoryBarExpanded,
+                        contentOffset: Binding(
+                            get: { state.emojiCategoryBarOffset },
+                            set: { state.setEmojiCategoryBarOffset($0) }
+                        )
+                    )
+                    .frame(
+                        width: CGFloat(layout.floatingEmojiCategoryFrame.width),
+                        height: CGFloat(layout.floatingEmojiCategoryFrame.height)
+                    )
+                    .position(
+                        x: CGFloat(layout.floatingEmojiCategoryFrame.midX),
+                        y: CGFloat(layout.floatingEmojiCategoryFrame.midY)
+                    )
+                    .allowsHitTesting(false)
+                    .zIndex(4)
+
+                    KeyboardDeleteButton(
+                        onDelete: { routeProxyCommand(.delete) },
+                        onDeleteWord: routeWordDeletion,
+                        visualWidth: layout.commandKeyVisualSize.width,
+                        visualHeight: layout.commandKeyVisualSize.height,
+                        hitWidth: layout.boardDeleteFrame.width,
+                        hitHeight: layout.boardDeleteFrame.height
+                    )
+                    .position(
+                        x: CGFloat(layout.boardDeleteFrame.midX),
+                        y: CGFloat(layout.boardDeleteFrame.midY)
+                    )
+                    .zIndex(4)
                 }
 
                 accessoryBar(width: proxy.size.width, layout: layout)
@@ -108,10 +166,10 @@ struct KeyboardRootView: View {
             }
         }
         .onAppear {
-            if state.openContainingApp == nil {
-                state.openContainingApp = { url, completion in
-                    openURL(url, completion: completion)
-                }
+            // Keep the SwiftUI URL action available as the fallback when the
+            // extension context declines a recovery handoff.
+            state.openContainingApp = { url, completion in
+                openURL(url, completion: completion)
             }
             HapticFeedback.refreshEnabledState()
             HapticFeedback.warmUp()
@@ -156,17 +214,15 @@ struct KeyboardRootView: View {
                     x: CGFloat(VoiceOnlyKeyboardPolicy.accessoryEdgeInset + VoiceOnlyKeyboardPolicy.languageVisualWidth / 2),
                     y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
                 )
-            if state.areaMode != .emoji {
-                HStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
-                    pasteButton
-                    Spacer(minLength: 0)
-                }
-                .frame(width: max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width), height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
-                .position(
-                    x: categoryFrame.minX + max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width) / 2,
-                    y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
-                )
+            HStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
+                pasteButton
+                Spacer(minLength: 0)
             }
+            .frame(width: max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width), height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+            .position(
+                x: categoryFrame.minX + max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width) / 2,
+                y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
+            )
             if state.areaMode == .letters || state.areaMode == .panel || state.areaMode == .numberPad || state.areaMode == .emoji {
                 dictationBoardButton
                     .position(
@@ -192,7 +248,6 @@ struct KeyboardRootView: View {
     @ViewBuilder
     private func areaSurface(layout: VoiceOnlyKeyboardPolicy.Layout, contentFrame: CGRect) -> some View {
         let surfaceFrame = contentFrame
-        let availableWidth = surfaceFrame.width
         switch state.areaMode {
         case .keys:
             centerSurface(layout: layout)
@@ -210,6 +265,7 @@ struct KeyboardRootView: View {
                 onSymbols: { state.presentNumbersArea() },
                 onEmoji: { state.presentArea(.emoji) },
                 showsSymbolsControl: true,
+                fieldKeys: state.hostLetterFieldKeys,
                 onSpaceCursorBegan: {},
                 onSpaceCursorMoved: routeCursorMovement,
                 onSpaceCursorEnded: routeCursorEnded,
@@ -268,6 +324,7 @@ struct KeyboardRootView: View {
                 style: state.hostNumberPadStyle,
                 availableWidth: surfaceFrame.width,
                 availableHeight: surfaceFrame.height,
+                popupTopOverflow: CGFloat(layout.surfaceFrame.minY),
                 onInsert: { text in routeProxyText(text) },
                 onDelete: { routeProxyCommand(.delete) },
                 onDeleteWord: routeWordDeletion,
@@ -398,32 +455,56 @@ struct KeyboardRootView: View {
     }
 
     private func dictateButton(frame: CGRect) -> some View {
-        ZStack {
+        let appNeedsAppAction = state.appNeedsAppAction
+        let isCancellationStage = state.dictationStatus == .requested
+            || state.dictationStatus == .transcribing
+            || state.dictationStatus == .processing
+        return ZStack {
             dictationControlVisual(frame: frame)
                 .allowsHitTesting(false)
             ImmediateKeyButton(
-                onTouchDown: { state.handleMicPressBegan() },
-                onTouchUp: { state.handleMicPressEnded() },
+                onTouchDown: {
+                    if appNeedsAppAction || state.appNeedsAppAction {
+                        state.openDictusForRecovery()
+                    } else if isCancellationStage
+                        || state.dictationStatus == .requested
+                        || state.dictationStatus == .transcribing
+                        || state.dictationStatus == .processing {
+                        state.cancelActiveDictation()
+                    }
+                },
+                onTouchUp: {
+                    let statusIsCancellationStage = state.dictationStatus == .requested
+                        || state.dictationStatus == .transcribing
+                        || state.dictationStatus == .processing
+                    guard !appNeedsAppAction
+                        && !state.appNeedsAppAction
+                        && !isCancellationStage
+                        && !statusIsCancellationStage else { return }
+                    state.handleMicPressEnded()
+                },
                 highlightCornerRadius: frame.height / 2,
-                highlightSize: CGSize(width: frame.width, height: frame.height)
+                highlightSize: CGSize(width: frame.width, height: frame.height),
+                holdDuration: appNeedsAppAction || isCancellationStage
+                    ? nil
+                    : KeyboardDeletion.dictationHoldRecognitionDuration,
+                onHold: appNeedsAppAction || isCancellationStage
+                    ? nil
+                    : { state.handleMicPressBegan() }
             )
             .frame(width: frame.width, height: frame.height)
         }
         .frame(width: frame.width, height: frame.height)
         .contentShape(Capsule())
         .accessibilityLabel(state.appNeedsAppAction ? "Open sAiity to prepare dictation" : state.dictationActionLabel)
+        .accessibilityAddTraits(.isButton)
     }
 
     private func dictationControlVisual(frame: CGRect) -> some View {
         let capsuleHeight = frame.height
         return ZStack(alignment: .center) {
             VStack(spacing: 1) {
-                Image(systemName: dictationSymbol)
-                    .font(.system(size: 20, weight: .semibold))
-                    .symbolEffect(
-                        .pulse,
-                        isActive: state.dictationStatus == .recording && !reduceMotion
-                    )
+                dictationIcon
                 Text(dictationTitle)
                     .font(.caption2.weight(.semibold))
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -437,20 +518,46 @@ struct KeyboardRootView: View {
         .background {
             ZStack {
                 if KeyboardInteractionPreferences.liquidGlassEnabled {
-                    // Intentional white liquid-glass primary control
                     appleControlSurface(Color.clear, in: Capsule(), role: .control)
-                    Capsule().fill(Color.white.opacity(0.86))
+                    Capsule().fill(dictationButtonBackground.opacity(dictationButtonIsCancellation ? 0.94 : 0.86))
                 } else {
-                    Capsule().fill(Color.white)
+                    Capsule().fill(dictationButtonBackground)
                 }
             }
         }
         .clipShape(Capsule())
         .contentShape(Capsule())
-        .foregroundStyle(.black)
+        .foregroundStyle(dictationButtonForeground)
         .accessibilityIdentifier("dictate-button")
         .accessibilityLabel(state.dictationActionLabel)
         .accessibilityValue(dictationTitle)
+    }
+
+    @ViewBuilder
+    private var dictationIcon: some View {
+        if state.dictationStatus == .recording && !state.isFinishingRecording {
+            ListeningWaveIcon(color: dictationButtonForeground)
+        } else {
+            Image(systemName: dictationSymbol)
+                .font(.system(size: 20, weight: .semibold))
+        }
+    }
+
+    private var dictationButtonIsCancellation: Bool {
+        switch state.dictationStatus {
+        case .requested, .transcribing, .processing:
+            return true
+        case .idle, .recording, .ready, .failed:
+            return false
+        }
+    }
+
+    private var dictationButtonBackground: Color {
+        dictationButtonIsCancellation ? .dictusRecording : .white
+    }
+
+    private var dictationButtonForeground: Color {
+        dictationButtonIsCancellation ? .white : .black
     }
 
     private func spaceBar(frame: CGRect) -> some View {
@@ -479,21 +586,24 @@ struct KeyboardRootView: View {
     private var dictationTitle: String {
         switch state.dictationStatus {
         case .idle, .ready:
+            if state.isOpeningForDictation { return "Opening sAiity…" }
             return state.appNeedsAppAction ? "Open sAiity" : "Hold to dictate"
         case .requested: return "Getting ready..."
-        case .recording: return "Listening..."
-        case .transcribing: return "Transcribing..."
-        case .processing: return "Cleaning up..."
+        case .recording: return state.isFinishingRecording ? "Finishing..." : "Listening..."
+        case .transcribing: return "Cancel transcription"
+        case .processing: return "Cancel cleanup"
         case .failed: return "Hold to dictate"
         }
     }
 
     private var dictationSymbol: String {
         switch state.dictationStatus {
-        case .recording: return "waveform"
-        case .requested, .transcribing, .processing: return "ellipsis"
+        case .recording: return state.isFinishingRecording ? "ellipsis" : "waveform"
+        case .requested: return "ellipsis"
+        case .transcribing, .processing: return "xmark"
         case .failed: return "mic.fill"
         case .idle, .ready:
+            if state.isOpeningForDictation { return "ellipsis" }
             return state.appNeedsAppAction ? "arrow.up.right.square.fill" : "mic.fill"
         }
     }
@@ -513,8 +623,9 @@ struct KeyboardRootView: View {
         withoutGlassRim: Bool = false
     ) -> some View {
         let shape = RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous)
-        // Clip only the chrome. Key and emoji popups must be able to draw above
-        // the top letter row into the rest of the keyboard window.
+        // The content normally remains unclipped so key popups can rise above
+        // the top row. Emoji glyphs are the exception: their rectangular grid
+        // must stop at the same rounded edge as the Liquid Glass inset.
         return ZStack(alignment: .topLeading) {
             appleControlSurface(
                 Color.clear.frame(width: frame.width, height: frame.height),
@@ -523,15 +634,26 @@ struct KeyboardRootView: View {
                 role: .board
             )
             .clipShape(shape)
-            content
-                .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+            if state.areaMode == .emoji {
+                content
+                    .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+                    // Keep emoji glyphs behind the glass edge. A full-size
+                    // clip still lets the rectangular collection view paint
+                    // over the inset rim at the rounded corners.
+                    .clipShape(shape.inset(by: 2))
+            } else {
+                content
+                    .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+            }
         }
         .frame(width: frame.width, height: frame.height)
     }
 
     private var voiceBoardUsesUIKitHits: Bool {
-        (state.areaMode == .keys || state.areaMode == .recording)
-            && KeyboardInteractionPreferences.liquidGlassEnabled
+        // Material is visual only. UIKit owns the same voice-board hit layer for
+        // both glass and solid chrome so changing the preference cannot strand
+        // an old transparent overlay over the SwiftUI controls.
+        state.areaMode == .keys || state.areaMode == .recording
     }
 
     @ViewBuilder
@@ -541,65 +663,49 @@ struct KeyboardRootView: View {
         usesGlass: Bool = true,
         role: KeyboardChromeRole = .control
     ) -> some View {
-        if !usesGlass || !KeyboardInteractionPreferences.liquidGlassEnabled {
-            // Solid keys are tertiary plates. The board itself stays clear so
-            // the native UIInputView backdrop is the only content-layer fill.
-            if role == .board {
-                content
-            } else {
-                content
-                    .background(shape.fill(Color(uiColor: .tertiarySystemFill)))
-            }
-        } else if reduceTransparency || accessibilityContrast == .increased {
+        if usesGlass {
+            content.keyboardGlass(in: shape, role: role)
+        } else if role == .board {
             content
-                .background(shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill)))
-        } else if #available(iOS 26, *), usesGlass {
-            content.glassEffect(.regular.interactive(), in: shape)
         } else {
             content
-                .background(shape.fill(.regularMaterial))
+                .background(shape.fill(Color(uiColor: .tertiarySystemFill)))
+                .allowsHitTesting(false)
         }
     }
 
-    private func utilityGlyph(
-        systemName: String,
-        width: Double = VoiceOnlyKeyboardPolicy.controlSize,
-        height: Double = VoiceOnlyKeyboardPolicy.controlSize,
-        visualSize: Double = VoiceOnlyKeyboardPolicy.utilityVisualSize,
-        visualWidth: Double? = nil,
-        visualHeight: Double? = nil,
-        visualCornerRadius: Double? = nil,
-        usesInteractiveSurface: Bool = true
+    @ViewBuilder
+    private func commandChromeFace<Face: View>(
+        label: String,
+        hit: CGSize,
+        cornerRadius: CGFloat,
+        action: @escaping () -> Void,
+        @ViewBuilder face: () -> Face
     ) -> some View {
         Group {
-            if usesInteractiveSurface {
-                if let visualWidth, let visualHeight, let visualCornerRadius {
-                    appleControlSurface(
-                        Image(systemName: systemName)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: CGFloat(visualWidth), height: CGFloat(visualHeight)),
-                        in: RoundedRectangle(cornerRadius: CGFloat(visualCornerRadius), style: .continuous)
-                    )
-                } else {
-                    appleControlSurface(
-                        Image(systemName: systemName)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: CGFloat(visualSize), height: CGFloat(visualSize)),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            if voiceBoardUsesUIKitHits {
+                face()
+            } else {
+                ZStack {
+                    face()
+                    ImmediateKeyButton(
+                        onTouchDown: {
+                            HapticFeedback.keyTapped()
+                            action()
+                        },
+                        onTouchUp: {},
+                        highlightCornerRadius: cornerRadius
                     )
                 }
-            } else {
-                Image(systemName: systemName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: CGFloat(visualSize), height: CGFloat(visualSize))
+                .contentShape(Rectangle())
+                .accessibilityLabel(label)
+                .accessibilityAddTraits(.isButton)
             }
         }
-        .frame(width: CGFloat(width), height: CGFloat(height))
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .frame(width: hit.width, height: hit.height)
+        .allowsHitTesting(!voiceBoardUsesUIKitHits)
+        .accessibilityHidden(voiceBoardUsesUIKitHits)
+        .zIndex(4)
     }
 
     @ViewBuilder
@@ -608,33 +714,22 @@ struct KeyboardRootView: View {
         label: String,
         action: @escaping () -> Void
     ) -> some View {
-        if voiceBoardUsesUIKitHits {
-            utilityGlyph(text: text)
-        } else {
-            let visual = VoiceOnlyKeyboardPolicy.commandVisualSize(
-                for: CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight)
+        let hit = CGSize(
+            width: VoiceOnlyKeyboardPolicy.controlSize,
+            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+        )
+        let plate = VoiceOnlyKeyboardPolicy.commandVisualSize(for: hit)
+        commandChromeFace(
+            label: label,
+            hit: hit,
+            cornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
+            action: action
+        ) {
+            CommandKeyFace(
+                text: text,
+                plateWidth: plate.width,
+                plateHeight: plate.height
             )
-            ZStack {
-                appleControlSurface(
-                    Text(text)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: visual.width, height: visual.height),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                )
-                ImmediateKeyButton(
-                    onTouchDown: {
-                        HapticFeedback.keyTapped()
-                        action()
-                    },
-                    onTouchUp: {},
-                    highlightCornerRadius: 18
-                )
-            }
-            .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
-            .contentShape(Rectangle())
-            .accessibilityLabel(label)
-            .accessibilityAddTraits(.isButton)
         }
     }
 
@@ -646,70 +741,63 @@ struct KeyboardRootView: View {
         height: Double = VoiceOnlyKeyboardPolicy.bottomActionHitHeight,
         visualWidth: Double? = nil,
         visualHeight: Double? = nil,
-        visualCornerRadius: Double = 18,
+        visualCornerRadius: Double = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
         action: @escaping () -> Void
     ) -> some View {
-        if voiceBoardUsesUIKitHits {
-            utilityGlyph(
+        let hit = CGSize(width: CGFloat(width), height: CGFloat(height))
+        let fallback = VoiceOnlyKeyboardPolicy.commandVisualSize(for: hit)
+        let plate = CGSize(
+            width: visualWidth ?? fallback.width,
+            height: visualHeight ?? fallback.height
+        )
+        commandChromeFace(
+            label: label,
+            hit: hit,
+            cornerRadius: CGFloat(visualCornerRadius),
+            action: action
+        ) {
+            CommandKeyFace(
                 systemName: systemName,
-                width: width,
-                height: height,
-                visualWidth: visualWidth,
-                visualHeight: visualHeight,
-                visualCornerRadius: visualCornerRadius
+                plateWidth: plate.width,
+                plateHeight: plate.height,
+                cornerRadius: CGFloat(visualCornerRadius)
             )
-        } else {
-            let visual = CGSize(
-                width: visualWidth ?? VoiceOnlyKeyboardPolicy.commandVisualSize(
-                    for: CGSize(width: width, height: height)
-                ).width,
-                height: visualHeight ?? VoiceOnlyKeyboardPolicy.commandVisualSize(
-                    for: CGSize(width: width, height: height)
-                ).height
-            )
-            ZStack {
-                appleControlSurface(
-                    Image(systemName: systemName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: CGFloat(visual.width), height: CGFloat(visual.height)),
-                    in: RoundedRectangle(cornerRadius: CGFloat(visualCornerRadius), style: .continuous)
-                )
-                ImmediateKeyButton(
-                    onTouchDown: {
-                        HapticFeedback.keyTapped()
-                        action()
-                    },
-                    onTouchUp: {},
-                    highlightCornerRadius: CGFloat(visualCornerRadius)
-                )
-            }
-            .frame(width: CGFloat(width), height: CGFloat(height))
-            .contentShape(Rectangle())
-            .accessibilityLabel(label)
-            .accessibilityAddTraits(.isButton)
         }
     }
 
-    @ViewBuilder
-    private func utilityGlyph(text: String) -> some View {
-        let visual = VoiceOnlyKeyboardPolicy.commandVisualSize(
-            for: CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight)
-        )
+}
+
+/// Compact live waveform used only while the dictation control is listening.
+/// The static fallback keeps the control calm when Reduce Motion is enabled.
+private struct ListeningWaveIcon: View {
+    let color: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
         Group {
-            appleControlSurface(
-                Text(text)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: visual.width, height: visual.height),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
+            if reduceMotion {
+                bars(phase: 0)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    bars(phase: timeline.date.timeIntervalSinceReferenceDate * 5.5)
+                }
+            }
         }
-        .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.controlSize), height: CGFloat(VoiceOnlyKeyboardPolicy.bottomActionHitHeight))
-        .allowsHitTesting(false)
+        .frame(width: 24, height: 22)
         .accessibilityHidden(true)
     }
 
+    private func bars(phase: Double) -> some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(0..<5, id: \.self) { index in
+                let level = (sin(phase + Double(index) * 0.85) + 1.0) * 0.5
+                Capsule()
+                    .fill(color)
+                    .frame(width: 2.5, height: 6 + CGFloat(level) * 14)
+            }
+        }
+    }
 }
 
 /// SwiftUI-owned letter page. It consumes the same `KeyboardLayouts` definitions
@@ -727,6 +815,7 @@ private struct LetterKeyboardPageView: View {
     let onSymbols: () -> Void
     let onEmoji: () -> Void
     let showsSymbolsControl: Bool
+    var fieldKeys: HostFieldPolicy.LetterFieldKeys = .standard
     let onSpaceCursorBegan: () -> Void
     let onSpaceCursorMoved: (KeyboardCursorStep) -> Void
     let onSpaceCursorEnded: () -> Void
@@ -743,6 +832,10 @@ private struct LetterKeyboardPageView: View {
     @ObservedObject private var suggestionState = SuggestionState.shared
     @AppStorage(SharedKeys.language, store: AppGroup.defaults) private var languageCode = SupportedLanguage.active.rawValue
 
+    private var shiftSymbolName: String {
+        page == .capslock ? "capslock.fill" : page == .shifted ? "shift.fill" : "capslock"
+    }
+
     private let bottomBarHeight: CGFloat = 44
     private let chromeBottomInset: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
     private let commandRowGap: CGFloat = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
@@ -755,10 +848,19 @@ private struct LetterKeyboardPageView: View {
                 let frames = positionedKeys(in: gridSize)
                 ZStack(alignment: .topLeading) {
                     ForEach(frames) { positioned in
-                        letterKey(positioned.key, keyID: positioned.id, frame: positioned.frame, bounds: gridSize)
+                        letterKey(
+                            positioned.key,
+                            keyID: positioned.id,
+                            frame: positioned.frame,
+                            visualFrame: positioned.visualFrame,
+                            bounds: gridSize
+                        )
                             .frame(width: positioned.frame.width, height: positioned.frame.height)
                             .position(x: positioned.frame.midX, y: positioned.frame.midY)
                     }
+                    // Typed-text language detection now drives next-letter priors.
+                    // Adaptive redirects only fire on confident edge priors; gap
+                    // absorption still owns the geometry between plates.
                     AdaptiveLetterTouchRouter(
                         keys: adaptiveTouchKeys(from: frames),
                         probabilities: variantSession == nil ? suggestionState.adaptiveTouchPrediction : nil,
@@ -791,14 +893,19 @@ private struct LetterKeyboardPageView: View {
                 onNumbers: onSymbols,
                 onLetters: {},
                 onEmoji: onEmoji,
-                spaceFrame: surfaceLayout.chromeWideSpaceFrame,
+                spaceFrame: surfaceLayout.letterSpaceFrame,
                 returnFrame: surfaceLayout.chromeReturnFrame,
+                periodFrame: surfaceLayout.letterPeriodFrame,
+                onPeriod: onInsert,
                 onSpace: onSpace,
                 onSpaceCursorBegan: onSpaceCursorBegan,
                 onSpaceCursorMoved: onSpaceCursorMoved,
                 onSpaceCursorEnded: onSpaceCursorEnded,
                 onReturn: onReturn,
-                showsLettersControl: false
+                showsLettersControl: false,
+                showsPeriodKey: true,
+                fieldKeys: fieldKeys,
+                onSymbolInsert: onInsert
             )
             .frame(width: availableWidth, height: bottomBarHeight)
             Color.clear.frame(height: chromeBottomInset)
@@ -901,14 +1008,22 @@ private struct LetterKeyboardPageView: View {
                 }
             }
         }
-        return zip(currentRows.indices, zip(currentRows, frames)).flatMap { rowIndex, rowAndFrames in
-            let (row, rowFrames) = rowAndFrames
-            return zip(row.indices, zip(row, rowFrames)).map { columnIndex, keyAndFrame in
-                let (key, frame) = keyAndFrame
-                return PositionedLetterKey(
+        // Absorb inter-key gaps into hit targets so taps between frosted plates
+        // still land on a key. Plates fill the same cells as hit targets (no visible gaps).
+        let hitFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.expandFramesAbsorbingGaps(
+            frames,
+            horizontalSpacing: keySpacing,
+            verticalSpacing: rowSpacing
+        )
+        return currentRows.indices.flatMap { rowIndex -> [PositionedLetterKey] in
+            let row = currentRows[rowIndex]
+            let rowHits = hitFrames[rowIndex]
+            return row.indices.map { columnIndex in
+                PositionedLetterKey(
                     id: "\(adaptiveTouchScopeID.uuidString)-letter-\(rowIndex)-\(columnIndex)",
-                    key: key,
-                    frame: frame,
+                    key: row[columnIndex],
+                    frame: rowHits[columnIndex],
+                    visualFrame: rowHits[columnIndex],
                     row: rowIndex,
                     column: columnIndex
                 )
@@ -944,7 +1059,13 @@ private struct LetterKeyboardPageView: View {
     }
 
     @ViewBuilder
-    private func letterKey(_ key: KeyDefinition, keyID: String, frame: CGRect, bounds: CGSize) -> some View {
+    private func letterKey(
+        _ key: KeyDefinition,
+        keyID: String,
+        frame: CGRect,
+        visualFrame: CGRect,
+        bounds: CGSize
+    ) -> some View {
         let variants = alternateVariants(for: key)
         let hitExpansion: CGFloat = 6
         Group {
@@ -953,14 +1074,14 @@ private struct LetterKeyboardPageView: View {
                 Color.clear.accessibilityHidden(true)
             case .shift:
                 ZStack {
-                    letterKeyLabel(for: key, frame: frame)
+                    letterKeyLabel(for: key, frame: visualFrame)
                     ImmediateKeyButton(
                         onTouchDown: {
                             HapticFeedback.prepareForNextTap()
                             handleShiftTap()
                         },
                         onTouchUp: {},
-                        highlightCornerRadius: 18,
+                        highlightCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
                         highlightSize: surfaceLayout.commandKeyVisualSize
                     )
                 }
@@ -974,7 +1095,7 @@ private struct LetterKeyboardPageView: View {
                     onDeleteWord: onDeleteWord,
                     visualWidth: visual.width,
                     visualHeight: visual.height,
-                    visualCornerRadius: 18,
+                    visualCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
                     hitWidth: frame.width,
                     hitHeight: frame.height
                 )
@@ -986,14 +1107,14 @@ private struct LetterKeyboardPageView: View {
                     // base letter and the selected accent. Variant keys therefore
                     // have exactly one gesture owner: short release inserts the
                     // base key, long release commits one popup option.
-                    letterKeyLabel(for: key, frame: frame)
+                    letterKeyLabel(for: key, frame: visualFrame)
                         .contentShape(Rectangle().inset(by: -hitExpansion))
                         .overlay {
                             ImmediateVariantKey(
                                 onBegan: { point in
                                     handleLetterVariantBegan(
                                         key: key, keyID: keyID, point: point,
-                                        frame: frame, bounds: bounds
+                                        frame: visualFrame, bounds: bounds
                                     )
                                 },
                                 onMoved: { point in
@@ -1013,10 +1134,10 @@ private struct LetterKeyboardPageView: View {
                         .accessibilityAction { commit(key) }
                 } else {
                     ZStack {
-                        letterKeyLabel(for: key, frame: frame)
+                        letterKeyLabel(for: key, frame: visualFrame)
                         ImmediateKeyButton(
                                 onTouchDown: {
-                                    handleLetterKeyBegan(key: key, frame: frame, bounds: bounds)
+                                    handleLetterKeyBegan(key: key, frame: visualFrame, bounds: bounds)
                                 },
                                 onTouchUp: {
                                     dismissKeyPreview()
@@ -1045,10 +1166,12 @@ private struct LetterKeyboardPageView: View {
         Group {
             if case .shift = key.type {
                 let visual = surfaceLayout.commandKeyVisualSize
-                letterGlyph(for: key)
-                    .frame(width: visual.width, height: visual.height)
-                    .commandKeyPlate(cornerRadius: 18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                CommandKeyFace(
+                    systemName: shiftSymbolName,
+                    plateWidth: visual.width,
+                    plateHeight: visual.height
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 letterGlyph(for: key)
                     .frame(width: max(0, frame.width), height: max(0, frame.height))
@@ -1064,7 +1187,7 @@ private struct LetterKeyboardPageView: View {
             Text(value)
                 .font(.system(size: 22, weight: .light))
         case .shift:
-            Image(systemName: page == .capslock ? "capslock.fill" : page == .shifted ? "shift.fill" : "capslock")
+            Image(systemName: shiftSymbolName)
                 .font(.system(size: 16, weight: .semibold))
         case .symbols:
             Text("123")
@@ -1244,7 +1367,12 @@ private struct LetterKeyboardPageView: View {
         previewSession = KeyPreviewSession(
             text: text,
             sourceFrame: source,
-            popupFrame: KeyPressPreviewHost.frame(for: source, in: bounds)
+            popupFrame: KeyPressPreviewHost.frame(
+                for: source,
+                in: bounds,
+                topOverflow: CGFloat(surfaceLayout.surfaceFrame.minY)
+            ),
+            cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius
         )
     }
 
@@ -1258,7 +1386,8 @@ private struct LetterKeyboardPageView: View {
             for: source,
             optionCount: options.count,
             isEmoji: false,
-            in: bounds
+            in: bounds,
+            topOverflow: CGFloat(surfaceLayout.surfaceFrame.minY)
         )
         return KeyVariantSession(
             options: options,
@@ -1288,7 +1417,10 @@ private struct LetterKeyboardPageView: View {
 private struct PositionedLetterKey: Identifiable {
     let id: String
     let key: KeyDefinition
+    /// Continuous hit target (gaps absorbed).
     let frame: CGRect
+    /// Original drawn plate/glyph rect (inset inside `frame`).
+    let visualFrame: CGRect
     let row: Int
     let column: Int
 }
@@ -1365,6 +1497,7 @@ private struct LiquidNumberPadView: View {
     let style: HostFieldPolicy.NumberPadStyle
     let availableWidth: CGFloat
     let availableHeight: CGFloat
+    let popupTopOverflow: CGFloat
     let onInsert: (String) -> Void
     let onDelete: () -> Void
     let onDeleteWord: () -> Void
@@ -1401,15 +1534,21 @@ private struct LiquidNumberPadView: View {
     }
 
     private func positionedKeys(in size: CGSize) -> [PositionedNumberPadKey] {
-        let geometry = VoiceOnlyKeyboardPolicy.scaledKeyGeometry(for: Double(size.width))
+        let edge = VoiceOnlyKeyboardPolicy.numberPadEdgeInset
+        let content = CGSize(
+            width: max(0, size.width - edge * 2),
+            height: max(0, size.height - edge * 2)
+        )
         let weights = rows.map { row in row.map { CGFloat($0.width) } }
         let frames = VoiceOnlyKeyboardPolicy.SymbolGrid.frames(
             for: weights,
-            in: size,
-            spacing: geometry.keySpacing,
-            inset: geometry.keyGridInset,
-            rowSpacing: geometry.keyRowSpacing
-        )
+            in: content,
+            spacing: VoiceOnlyKeyboardPolicy.numberPadKeySpacing,
+            inset: 0,
+            rowSpacing: VoiceOnlyKeyboardPolicy.numberPadRowSpacing
+        ).map { row in
+            row.map { $0.offsetBy(dx: edge, dy: edge) }
+        }
         return zip(rows, frames).enumerated().flatMap { rowIndex, pair in
             zip(pair.0, pair.1).enumerated().map { columnIndex, item in
                 PositionedNumberPadKey(
@@ -1428,19 +1567,24 @@ private struct LiquidNumberPadView: View {
             Color.clear.accessibilityHidden(true)
         case .letters:
             ZStack {
-                Text("ABC")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .commandKeyPlate(cornerRadius: 12)
+                CommandKeyFace(
+                    text: "ABC",
+                    plateWidth: frame.width,
+                    plateHeight: frame.height,
+                    cornerRadius: VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius,
+                    textPointSize: 16
+                )
                 ImmediateKeyButton(
                     onTouchDown: {
                         HapticFeedback.keyTapped()
                         onKeyboard()
                     },
                     onTouchUp: {},
-                    highlightCornerRadius: 12
+                    highlightCornerRadius: VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius,
+                    highlightSize: frame.size
                 )
             }
+            .frame(width: frame.width, height: frame.height)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Open letter keyboard")
             .accessibilityAddTraits(.isButton)
@@ -1448,9 +1592,9 @@ private struct LiquidNumberPadView: View {
             KeyboardDeleteButton(
                 onDelete: onDelete,
                 onDeleteWord: onDeleteWord,
-                visualWidth: max(0, frame.width - 8),
-                visualHeight: max(0, frame.height - 8),
-                visualCornerRadius: 12,
+                visualWidth: frame.width,
+                visualHeight: frame.height,
+                visualCornerRadius: VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius,
                 hitWidth: frame.width,
                 hitHeight: frame.height
             )
@@ -1466,7 +1610,7 @@ private struct LiquidNumberPadView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .letterKeyPlate()
+                .letterKeyPlate(cornerRadius: VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius)
                 if holdLetters {
                     ImmediateVariantKey(
                         onBegan: { _ in
@@ -1514,7 +1658,12 @@ private struct LiquidNumberPadView: View {
         previewSession = KeyPreviewSession(
             text: text,
             sourceFrame: source,
-            popupFrame: KeyPressPreviewHost.frame(for: source, in: bounds)
+            popupFrame: KeyPressPreviewHost.frame(
+                for: source,
+                in: bounds,
+                topOverflow: popupTopOverflow
+            ),
+            cornerRadius: VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius
         )
     }
 }
@@ -1572,6 +1721,7 @@ private struct LiquidSymbolPageView: View {
                             positionedKey.key,
                             keyID: positionedKey.id,
                             frame: positionedKey.frame,
+                            visualFrame: positionedKey.visualFrame,
                             bounds: gridSize
                         )
                             .frame(width: positionedKey.frame.width, height: positionedKey.frame.height)
@@ -1699,8 +1849,21 @@ private struct LiquidSymbolPageView: View {
                 }
             }
         }
-        return zip(rows, frames).flatMap { row, rowFrames in
-            zip(row, rowFrames).map { PositionedLiquidSymbolKey(key: $0, frame: $1) }
+        let hitFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.expandFramesAbsorbingGaps(
+            frames,
+            horizontalSpacing: keySpacing,
+            verticalSpacing: rowSpacing
+        )
+        return rows.indices.flatMap { rowIndex -> [PositionedLiquidSymbolKey] in
+            let row = rows[rowIndex]
+            let rowHits = hitFrames[rowIndex]
+            return row.indices.map { columnIndex in
+                PositionedLiquidSymbolKey(
+                    key: row[columnIndex],
+                    frame: rowHits[columnIndex],
+                    visualFrame: rowHits[columnIndex]
+                )
+            }
         }
     }
 
@@ -1714,7 +1877,13 @@ private struct LiquidSymbolPageView: View {
     }
 
     @ViewBuilder
-    private func symbolKey(_ key: LiquidSymbolKey, keyID: String, frame: CGRect, bounds: CGSize) -> some View {
+    private func symbolKey(
+        _ key: LiquidSymbolKey,
+        keyID: String,
+        frame: CGRect,
+        visualFrame: CGRect,
+        bounds: CGSize
+    ) -> some View {
         if key.isSpacer {
             Color.clear
                 .accessibilityHidden(true)
@@ -1731,23 +1900,24 @@ private struct LiquidSymbolPageView: View {
             let variants = insertVariants(for: key)
             if variants.count > 1 {
                 ZStack {
-                    keyContent(key, frame: frame)
+                    keyContent(key, frame: visualFrame)
                     ImmediateVariantKey(
                         onBegan: { point in
                             HapticFeedback.prepareForNextTap()
                             guard activeVariantKeyID == nil else {
                                 nonPopupVariantTouchIDs.insert(keyID)
                                 HapticFeedback.keyTapped()
-                                commitSymbolFromTap(key)
+                                commitSymbolFromTap(key, emitsHaptic: false)
                                 return
                             }
                             activeVariantKeyID = keyID
+                            HapticFeedback.keyTapped()
                             variantTouchOrigin = CGPoint(x: frame.minX + point.x, y: frame.minY + point.y)
                             variantTouchCancelled = false
                             if case .insert(let value) = key.action {
-                                presentSymbolPreview(text: value, source: frame, bounds: bounds)
+                                presentSymbolPreview(text: value, source: visualFrame, bounds: bounds)
                             }
-                            scheduleSymbolVariantPopup(variants, source: frame, bounds: bounds)
+                            scheduleSymbolVariantPopup(variants, source: visualFrame, bounds: bounds)
                         },
                         onMoved: { point in
                             let absolutePoint = CGPoint(x: frame.minX + point.x, y: frame.minY + point.y)
@@ -1769,7 +1939,7 @@ private struct LiquidSymbolPageView: View {
                                 return
                             }
                             guard activeVariantKeyID == keyID else {
-                                if !cancelled { commitSymbolFromTap(key) }
+                                if !cancelled { commitSymbolFromTap(key, emitsHaptic: false) }
                                 return
                             }
                             let sessionWasPresented = variantSession != nil
@@ -1785,7 +1955,7 @@ private struct LiquidSymbolPageView: View {
                                 commitVariantSession()
                             } else {
                                 previewSession = nil
-                                commitSymbolFromTap(key)
+                                commitSymbolFromTap(key, emitsHaptic: false)
                             }
                         }
                     )
@@ -1798,11 +1968,11 @@ private struct LiquidSymbolPageView: View {
                 .accessibilityAddTraits(.isButton)
             } else {
                 ZStack {
-                    keyContent(key, frame: frame)
+                    keyContent(key, frame: visualFrame)
                     ImmediateKeyButton(
                         onTouchDown: {
                             if case .insert(let value) = key.action {
-                                presentSymbolPreview(text: value, source: frame, bounds: bounds)
+                                presentSymbolPreview(text: value, source: visualFrame, bounds: bounds)
                             }
                             commit(key)
                         },
@@ -1860,7 +2030,12 @@ private struct LiquidSymbolPageView: View {
         previewSession = KeyPreviewSession(
             text: text,
             sourceFrame: source,
-            popupFrame: KeyPressPreviewHost.frame(for: source, in: bounds)
+            popupFrame: KeyPressPreviewHost.frame(
+                for: source,
+                in: bounds,
+                topOverflow: CGFloat(surfaceLayout.surfaceFrame.minY)
+            ),
+            cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius
         )
     }
 
@@ -1870,7 +2045,8 @@ private struct LiquidSymbolPageView: View {
             for: source,
             optionCount: options.count,
             isEmoji: false,
-            in: bounds
+            in: bounds,
+            topOverflow: CGFloat(surfaceLayout.surfaceFrame.minY)
         )
         return KeyVariantSession(
             options: options,
@@ -1893,8 +2069,8 @@ private struct LiquidSymbolPageView: View {
         previewSession = nil
     }
 
-    private func commitSymbolFromTap(_ key: LiquidSymbolKey) {
-        commit(key)
+    private func commitSymbolFromTap(_ key: LiquidSymbolKey, emitsHaptic: Bool = true) {
+        commit(key, emitsHaptic: emitsHaptic)
     }
 
     @ViewBuilder
@@ -1902,18 +2078,21 @@ private struct LiquidSymbolPageView: View {
         switch key.action {
         case .togglePage:
             let visual = surfaceLayout.commandKeyVisualSize
-            Text(key.label)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: visual.width, height: visual.height)
-                .commandKeyPlate(cornerRadius: 18)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            CommandKeyFace(
+                text: key.label,
+                plateWidth: visual.width,
+                plateHeight: visual.height,
+                textWeight: .medium
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .delete:
             let visual = surfaceLayout.commandKeyVisualSize
-            Image(systemName: "delete.backward")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: visual.width, height: visual.height)
-                .commandKeyPlate(cornerRadius: 18)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            CommandKeyFace(
+                systemName: "delete.backward",
+                plateWidth: visual.width,
+                plateHeight: visual.height
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .insert:
             Text(key.label)
                 .font(.system(size: 22, weight: .light))
@@ -1926,9 +2105,11 @@ private struct LiquidSymbolPageView: View {
         }
     }
 
-    private func commit(_ key: LiquidSymbolKey) {
+    private func commit(_ key: LiquidSymbolKey, emitsHaptic: Bool = true) {
         guard !key.isSpacer else { return }
-        HapticFeedback.keyTapped()
+        if emitsHaptic {
+            HapticFeedback.keyTapped()
+        }
         switch key.action {
         case .insert(let value): onInsert(value)
         case .delete: onDelete()
@@ -2009,7 +2190,10 @@ private struct LiquidSymbolKey: Identifiable {
 
 private struct PositionedLiquidSymbolKey: Identifiable {
     let key: LiquidSymbolKey
+    /// Continuous hit target (gaps absorbed).
     let frame: CGRect
+    /// Original drawn plate/glyph rect.
+    let visualFrame: CGRect
     var id: String { key.id }
 }
 

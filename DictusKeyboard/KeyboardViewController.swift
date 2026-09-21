@@ -8,6 +8,16 @@ import DictusCore
 /// against the host keyboard's edge. The visual frame remains unchanged.
 private class KeyboardActionButton: UIButton {
     var hitExpansion: CGFloat = 8
+    /// Dictation uses its own semantic press haptic; all other action buttons
+    /// can share the native-feeling key tick from this touch owner.
+    var emitsHapticOnTouchDown = true
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        if emitsHapticOnTouchDown {
+            HapticFeedback.keyTapped()
+        }
+    }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         bounds.insetBy(dx: -hitExpansion, dy: -hitExpansion).contains(point)
@@ -17,6 +27,24 @@ private class KeyboardActionButton: UIButton {
 /// VoiceOver activation is a toggle, independent of physical touch-down/up.
 private final class DictationMicButton: KeyboardActionButton {
     var onAccessibilityActivate: (() -> Bool)?
+    var onTouchDown: (() -> Void)?
+    var onTouchUp: (() -> Void)?
+    var onTouchCancelled: (() -> Void)?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        onTouchDown?()
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        onTouchUp?()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        onTouchCancelled?()
+    }
 
     override func accessibilityActivate() -> Bool {
         onAccessibilityActivate?() ?? false
@@ -39,6 +67,7 @@ class KeyboardViewController: UIInputViewController,
     private var voiceBoardButton: UIButton?
     private var pasteButton: UIButton?
     private var languageButton: UIButton?
+    private var serviceToggle: UISwitch?
     private var boardDeleteButton: KeyboardDeleteRepeatControl?
     private var emojiCategoryScrubber: EmojiCategoryScrubControl?
     private var micButton: UIButton?
@@ -56,6 +85,9 @@ class KeyboardViewController: UIInputViewController,
     private var giellaTopConstraint: NSLayoutConstraint?
     private var giellaBottomConstraint: NSLayoutConstraint?
     private var areaModeCancellable: AnyCancellable?
+    private var emojiCategoryOffsetCancellable: AnyCancellable?
+    private var emojiCategorySelectionCancellable: AnyCancellable?
+    private var emojiCategoryExpansionCancellable: AnyCancellable?
     private var modelPreparationCancellable: AnyCancellable?
     private var availabilityRefreshTimer: Timer?
     private var micTouchActive = false
@@ -80,8 +112,28 @@ class KeyboardViewController: UIInputViewController,
         var forwardHitTest: ((CGPoint, UIEvent?) -> UIView?)?
 
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            // Category scrubber must win over neighboring accessory buttons and
-            // the SwiftUI lane; keyboard hosts drop those SwiftUI gestures.
+            // The recovery mic is the visible primary action on the dictation
+            // board. Route it before forwarding misses into SwiftUI so a stale
+            // or overlapping hosted surface cannot consume the tap.
+            if let toggle = subviews.first(where: { $0.accessibilityIdentifier == "dictation-service-toggle" }),
+               !toggle.isHidden,
+               toggle.isUserInteractionEnabled {
+                let localPoint = toggle.convert(point, from: self)
+                if toggle.point(inside: localPoint, with: event) {
+                    return toggle.hitTest(localPoint, with: event) ?? toggle
+                }
+            }
+            if let mic = subviews.first(where: { $0.accessibilityIdentifier == "dictate-button" }),
+               !mic.isHidden,
+               mic.isUserInteractionEnabled {
+                let localPoint = mic.convert(point, from: self)
+                // Route the explicit expanded frame instead of recursing through
+                // UIButton.hitTest. UIKit can reject a transparent expanded hit
+                // while the keyboard host is animating, before the button sees it.
+                if mic.bounds.insetBy(dx: -20, dy: -20).contains(localPoint) {
+                    return mic
+                }
+            }
             if let scrubber = subviews.first(where: { $0.accessibilityIdentifier == "emoji-category-scrubber" }),
                !scrubber.isHidden,
                scrubber.isUserInteractionEnabled {
@@ -96,13 +148,7 @@ class KeyboardViewController: UIInputViewController,
                     return hit
                 }
             }
-            // UIKit keyboard hosts do not reliably fall through a transparent
-            // overlay to a SwiftUI UICollectionView. Forward the miss directly
-            // to the hosted surface so blank emoji cells remain a real swipe area.
-            if let forwarded = forwardHitTest?(point, event) {
-                return forwarded
-            }
-            return nil
+            return forwardHitTest?(point, event)
         }
     }
 
@@ -230,6 +276,8 @@ class KeyboardViewController: UIInputViewController,
         // otherwise the style can leave an opaque rectangular layer behind the
         // inset SwiftUI surface.
         kbInputView.isOpaque = false
+        kbInputView.clipsToBounds = false
+        kbInputView.layer.masksToBounds = false
         kbInputView.layer.backgroundColor = UIColor.clear.cgColor
 
         // KeyboardInputView owns the single semantic native backdrop.
@@ -342,7 +390,9 @@ class KeyboardViewController: UIInputViewController,
         // Attempt to prevent top-row key popup clipping. iOS may re-enforce
         // clipsToBounds -- if so, this is a known limitation of third-party keyboard extensions.
         kbInputView.clipsToBounds = false
+        kbInputView.layer.masksToBounds = false
         hosting.view.clipsToBounds = false
+        hosting.view.layer.masksToBounds = false
 
         // Assign as the controller's inputView -- this activates audio feedback
         self.inputView = kbInputView
@@ -394,13 +444,6 @@ class KeyboardViewController: UIInputViewController,
         // Previously set from KeyboardRootView.onAppear, which held a strong ref → #134.
         KeyboardState.shared.controller = self
         KeyboardState.shared.isOpeningForDictation = false
-        KeyboardState.shared.openContainingApp = { [weak self] url, completion in
-            guard let self, let extensionContext = self.extensionContext else {
-                completion(false)
-                return
-            }
-            extensionContext.open(url, completionHandler: completion)
-        }
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy, applyArea: false)
         KeyboardState.shared.startClipboardMonitoring()
         // Model readiness and the app scene phase can change while this cached
@@ -428,6 +471,9 @@ class KeyboardViewController: UIInputViewController,
         // visible controller is reactive. Assignment is idempotent — the previous
         // AnyCancellable is released on reassignment, which cancels its subscription.
         observeKeyboardAreaMode()
+        observeEmojiCategoryBarOffset()
+        observeEmojiCategorySelection()
+        observeEmojiCategoryExpansion()
         observeModelPreparationState()
         startAvailabilityRefreshTimer()
         micHoldTimer?.invalidate()
@@ -498,8 +544,6 @@ class KeyboardViewController: UIInputViewController,
     }
 
     private func publishFullAccessHandshake() {
-        // The app cannot inspect iOS' Full Access toggle. The extension can,
-        // so publish this real handshake as early and repeatedly as iOS loads it.
         AppGroup.defaults.set(hasFullAccess, forKey: SharedKeys.onboardingFullAccessVerified)
         if let probe = AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe) {
             AppGroup.defaults.set(probe, forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
@@ -688,6 +732,12 @@ class KeyboardViewController: UIInputViewController,
         // viewWillAppear re-subscribes on reattach.
         areaModeCancellable?.cancel()
         areaModeCancellable = nil
+        emojiCategoryOffsetCancellable?.cancel()
+        emojiCategoryOffsetCancellable = nil
+        emojiCategorySelectionCancellable?.cancel()
+        emojiCategorySelectionCancellable = nil
+        emojiCategoryExpansionCancellable?.cancel()
+        emojiCategoryExpansionCancellable = nil
         modelPreparationCancellable?.cancel()
         modelPreparationCancellable = nil
         availabilityRefreshTimer?.invalidate()
@@ -894,6 +944,27 @@ class KeyboardViewController: UIInputViewController,
             // to flash at the top then drop to center.
             .sink { [weak self] mode in
                 self?.applyAreaMode(mode)
+            }
+    }
+
+    private func observeEmojiCategoryBarOffset() {
+        emojiCategoryOffsetCancellable = KeyboardState.shared.$emojiCategoryBarOffset
+            .sink { [weak self] offset in
+                self?.emojiCategoryScrubber?.setScrollOffset(offset)
+            }
+    }
+
+    private func observeEmojiCategorySelection() {
+        emojiCategorySelectionCancellable = KeyboardState.shared.$emojiCategorySelectionIndex
+            .sink { [weak self] index in
+                self?.emojiCategoryScrubber?.setCurrentIndex(index)
+            }
+    }
+
+    private func observeEmojiCategoryExpansion() {
+        emojiCategoryExpansionCancellable = KeyboardState.shared.$emojiCategoryBarExpanded
+            .sink { [weak self] expanded in
+                self?.emojiCategoryScrubber?.setExpanded(expanded)
             }
     }
 
@@ -1210,13 +1281,15 @@ class KeyboardViewController: UIInputViewController,
         hostingController?.view.layer.backgroundColor = UIColor.clear.cgColor
         actionControlsView?.backgroundColor = .clear
         actionControlsView?.isOpaque = false
+        actionControlsView?.clipsToBounds = false
+        actionControlsView?.layer.masksToBounds = false
         actionControlsView?.layer.backgroundColor = UIColor.clear.cgColor
         giellaKeyboard?.backgroundColor = .clear
         giellaKeyboard?.isOpaque = false
+        giellaKeyboard?.clipsToBounds = false
+        giellaKeyboard?.layer.masksToBounds = false
     }
 
-    /// Transparent UIKit controls sit over the SwiftUI glyphs. UIKit owns the
-    /// action and pressed state; SwiftUI only renders the visual surface.
     private func installVoiceActionControls(in inputView: UIView) {
         let controls = PassthroughControlsView(frame: inputView.bounds)
         controls.backgroundColor = .clear
@@ -1233,13 +1306,13 @@ class KeyboardViewController: UIInputViewController,
             controls.bottomAnchor.constraint(equalTo: inputView.bottomAnchor)
         ])
         actionControlsView = controls
-        controls.forwardHitTest = { [weak self, weak controls] point, event in
-            guard KeyboardState.shared.areaMode == .emoji,
-                  let self,
-                  let controls,
-                  let hostingView = self.hostingController?.view else { return nil }
-            let localPoint = hostingView.convert(point, from: controls)
-            return hostingView.hitTest(localPoint, with: event)
+        controls.forwardHitTest = { _, _ in
+            // Misses stay nil on every page, including emoji. Returning the
+            // hosted view from this overlay puts the pager outside the window
+            // hit chain, so its pan never begins and page swipes do nothing.
+            // The window then hit-tests the hosting view behind this overlay.
+            guard KeyboardState.shared.areaMode == .emoji else { return nil }
+            return nil
         }
 
         keyboardModeButton = makeKeyboardActionButton(identifier: "letter-mode", label: "Open letter keyboard") { [weak self] in
@@ -1273,29 +1346,38 @@ class KeyboardViewController: UIInputViewController,
             _ = self
         }
         micButton = makeKeyboardActionButton(identifier: "dictate-button", label: "Hold to dictate", installPrimaryAction: false) { }
-        micButton?.addTarget(self, action: #selector(handleMicTouchDown), for: .touchDown)
-        micButton?.addTarget(self, action: #selector(handleMicTouchUp), for: [.touchUpInside, .touchUpOutside])
-        micButton?.addTarget(self, action: #selector(handleMicTouchCancelled), for: .touchCancel)
+        if let micButton = micButton as? DictationMicButton {
+            micButton.onTouchDown = { [weak self] in self?.handleMicTouchDown() }
+            micButton.onTouchUp = { [weak self] in self?.handleMicTouchUp() }
+            micButton.onTouchCancelled = { [weak self] in self?.handleMicTouchCancelled() }
+        }
         (micButton as? DictationMicButton)?.onAccessibilityActivate = {
             let state = KeyboardState.shared
             switch state.dictationStatus {
             case .requested, .recording:
                 state.handleMicPressEnded()
             case .idle, .ready, .failed:
-                state.handleMicPressBegan()
+                guard state.appNeedsAppAction || state.failedRequiresApp else { return false }
+                state.openDictusForRecovery()
             case .transcribing, .processing:
                 return false
             }
             return true
         }
-        micButton?.accessibilityHint = String(localized: "Double-tap to start or stop dictation.")
+        micButton?.accessibilityHint = String(localized: "Tap to open sAiity when needed. Press and hold to dictate.")
         spaceButton = makeKeyboardActionButton(identifier: "space-key", label: "Space") { [weak self] in
             self?.routeProxyCommand(.space)
         }
         pasteButton = makeKeyboardActionButton(identifier: "paste-clipboard", label: "Paste from clipboard") { [weak self] in
             self?.pasteFromClipboard()
         }
-        let language = UIButton(type: .custom)
+        let serviceSwitch = UISwitch()
+        serviceSwitch.accessibilityIdentifier = "dictation-service-toggle"
+        serviceSwitch.accessibilityLabel = "Keyboard dictation"
+        serviceSwitch.onTintColor = .systemGreen
+        serviceSwitch.addTarget(self, action: #selector(handleServiceToggleChanged(_:)), for: .valueChanged)
+        serviceToggle = serviceSwitch
+        let language = KeyboardActionButton(type: .custom)
         language.accessibilityIdentifier = "output-language"
         language.accessibilityLabel = "Output language"
         language.showsMenuAsPrimaryAction = true
@@ -1314,11 +1396,17 @@ class KeyboardViewController: UIInputViewController,
         boardDeleteButton = boardDelete
         let categoryScrubber = EmojiCategoryScrubControl()
         categoryScrubber.accessibilityIdentifier = "emoji-category-scrubber"
-        categoryScrubber.isAccessibilityElement = false
+        categoryScrubber.categoryNames = CategoryInfo.emojiBarSections.map(\.name)
         categoryScrubber.isExclusiveTouch = false
         categoryScrubber.layer.zPosition = 50
         categoryScrubber.onIndexChanged = { index in
             KeyboardState.shared.selectEmojiCategory(at: index)
+        }
+        categoryScrubber.onScrollOffsetChanged = { offset in
+            KeyboardState.shared.setEmojiCategoryBarOffset(offset)
+        }
+        categoryScrubber.onExpansionChanged = { expanded in
+            KeyboardState.shared.setEmojiCategoryBarExpanded(expanded)
         }
         emojiCategoryScrubber = categoryScrubber
         let cursorGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleSpaceCursorGesture(_:)))
@@ -1333,9 +1421,13 @@ class KeyboardViewController: UIInputViewController,
         cursorController.delegate = self
         spaceCursorController = cursorController
         [keyboardModeButton, emojiButton, numberButton, micButton, spaceButton,
-         returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton, boardDeleteButton]
+         returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton,
+         boardDeleteButton]
             .compactMap { $0 }.forEach {
             controls.addSubview($0)
+        }
+        if let serviceToggle {
+            controls.addSubview(serviceToggle)
         }
         if let categoryScrubber = emojiCategoryScrubber {
             controls.addSubview(categoryScrubber)
@@ -1353,6 +1445,9 @@ class KeyboardViewController: UIInputViewController,
         let button: KeyboardActionButton = identifier == "dictate-button"
             ? DictationMicButton(type: .system)
             : KeyboardActionButton(type: .system)
+        if identifier == "dictate-button" {
+            button.emitsHapticOnTouchDown = false
+        }
         button.accessibilityIdentifier = identifier
         button.accessibilityLabel = label
         button.accessibilityTraits = [.button]
@@ -1383,8 +1478,6 @@ class KeyboardViewController: UIInputViewController,
             button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
         }
         if identifier == "dictate-button" {
-            // The center capsule is the primary keyboard action. Keep its
-            // visual frame unchanged while making edge taps forgiving.
             button.hitExpansion = 20
         }
         _ = minimumHeight
@@ -1426,15 +1519,24 @@ class KeyboardViewController: UIInputViewController,
         let isEmoji = mode == .emoji
         let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad
         let voiceBoardMode = mode == .keys || mode == .recording
-        let uikitOwnsVoiceChrome = voiceBoardMode && KeyboardInteractionPreferences.liquidGlassEnabled
+        // Material changes must never change input ownership. The transparent
+        // UIKit controls remain the hit layer for both visual materials.
+        let uikitOwnsVoiceChrome = voiceBoardMode
         controls.isHidden = false
         controls.isUserInteractionEnabled = true
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
+        let micVisible = uikitOwnsVoiceChrome && !layout.dictateFrame.isEmpty
         micButton?.frame = .zero
         micButton?.isHidden = true
         micButton?.isEnabled = false
         micButton?.isUserInteractionEnabled = false
+        if micVisible {
+            micButton?.frame = layout.dictateFrame
+            micButton?.isHidden = false
+            micButton?.isEnabled = true
+            micButton?.isUserInteractionEnabled = true
+        }
         keyboardModeButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         emojiButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         numberButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
@@ -1445,6 +1547,13 @@ class KeyboardViewController: UIInputViewController,
         pasteButton?.isHidden = isEmoji
         languageButton?.isHidden = false
         boardDeleteButton?.isHidden = !uikitOwnsVoiceChrome || !rightRailVisible
+        let serviceToggleFrame = layout.dictationServiceToggleFrame
+        serviceToggle?.isHidden = !uikitOwnsVoiceChrome || serviceToggleFrame.isEmpty
+        serviceToggle?.isEnabled = uikitOwnsVoiceChrome && !serviceToggleFrame.isEmpty
+        serviceToggle?.isUserInteractionEnabled = uikitOwnsVoiceChrome && !serviceToggleFrame.isEmpty
+        if serviceToggle?.isOn != KeyboardState.shared.keyboardDictationEnabled {
+            serviceToggle?.setOn(KeyboardState.shared.keyboardDictationEnabled, animated: false)
+        }
         hostingController?.view.isUserInteractionEnabled = true
         hostingController?.view.layer.zPosition = 0
         controls.layer.zPosition = 100
@@ -1460,8 +1569,8 @@ class KeyboardViewController: UIInputViewController,
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
         micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
         micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction
-            ? "Opens sAiity and prepares the dictation model."
-            : "Double-tap to start or stop dictation."
+            ? "Tap to open sAiity and prepare dictation. Press and hold to dictate."
+            : "Press and hold to dictate. Release to finish."
         spaceButton?.frame = layout.spaceFrame
         returnButton?.frame = layout.chromeReturnFrame
         dismissButton?.frame = layout.accessoryDismissFrame
@@ -1472,6 +1581,17 @@ class KeyboardViewController: UIInputViewController,
             width: VoiceOnlyKeyboardPolicy.languageVisualWidth,
             height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
         )
+        if let serviceToggle {
+            let fitted = serviceToggle.intrinsicContentSize
+            serviceToggle.frame = CGRect(
+                x: serviceToggleFrame.minX,
+                y: serviceToggleFrame.midY - fitted.height / 2,
+                width: fitted.width,
+                height: fitted.height
+            )
+            serviceToggle.accessibilityValue = KeyboardState.shared.keyboardDictationEnabled ? "On" : "Off"
+            serviceToggle.accessibilityHint = "Turns keyboard dictation on or off."
+        }
         let pasteFrame = layout.pasteFrame
         pasteButton?.frame = pasteFrame.isEmpty
             ? .zero
@@ -1483,12 +1603,18 @@ class KeyboardViewController: UIInputViewController,
             )
         boardDeleteButton?.frame = layout.boardDeleteFrame
         emojiCategoryScrubber?.sectionCount = CategoryInfo.emojiBarSections.count
+        emojiCategoryScrubber?.slotWidth = EmojiCategoryBarMetrics.slotWidth
         emojiCategoryScrubber?.frame = layout.floatingEmojiCategoryFrame
+        emojiCategoryScrubber?.setScrollOffset(KeyboardState.shared.emojiCategoryBarOffset)
+        emojiCategoryScrubber?.setCurrentIndex(KeyboardState.shared.emojiCategorySelectionIndex)
+        emojiCategoryScrubber?.setExpanded(
+            isEmoji && KeyboardState.shared.emojiCategoryBarExpanded
+        )
         emojiCategoryScrubber?.isHidden = !isEmoji
         emojiCategoryScrubber?.isEnabled = isEmoji
         emojiCategoryScrubber?.isUserInteractionEnabled = isEmoji
         emojiCategoryScrubber?.isExclusiveTouch = false
-        emojiCategoryScrubber?.hitExpansion = 10
+        emojiCategoryScrubber?.hitExpansion = 6
         [keyboardModeButton, emojiButton, numberButton, micButton, spaceButton, returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton]
             .compactMap { $0 }
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
@@ -1502,6 +1628,10 @@ class KeyboardViewController: UIInputViewController,
 
     @objc private func handleMicTouchDown() {
         let state = KeyboardState.shared
+        // Preserve the state the user actually saw. A readiness refresh can
+        // complete in the same run-loop turn and otherwise turn a recovery tap
+        // into a short, unrecognized hold.
+        let wasShowingRecovery = state.appNeedsAppAction
         state.refreshFromDefaults()
         // Readiness may change mid-touch. Recovery opens immediately; recording
         // still waits for the shared hold threshold so a tap cannot start audio.
@@ -1509,14 +1639,26 @@ class KeyboardViewController: UIInputViewController,
         micTouchActive = true
         state.accessoryDictationActive = state.areaMode == .letters || state.areaMode == .emoji || state.areaMode == .panel || state.areaMode == .numberPad
         micHoldRecognized = false
-        if state.appNeedsAppAction {
+        if wasShowingRecovery || state.appNeedsAppAction || state.failedRequiresApp {
             // Recovery is a tap action. Waiting for the speaking hold threshold
             // made the visible "Open sAiity" control feel unresponsive.
             openDictusForRecovery()
             return
         }
+        if state.dictationStatus == .requested
+            || state.dictationStatus == .transcribing
+            || state.dictationStatus == .processing {
+            // A second touch is an explicit cancel while the current round is
+            // starting, transcribing, or being cleaned up. Do this on touchDown
+            // so cancellation does not wait for the hold recognizer.
+            state.cancelActiveDictation()
+            micTouchActive = false
+            state.accessoryDictationActive = false
+            layoutVoiceActionControls()
+            return
+        }
         let timer = Timer(
-            timeInterval: KeyboardDeletion.holdRecognitionDuration,
+            timeInterval: KeyboardDeletion.dictationHoldRecognitionDuration,
             repeats: false
         ) { [weak self] _ in
             guard let self, self.micTouchActive else { return }
@@ -1528,20 +1670,33 @@ class KeyboardViewController: UIInputViewController,
         RunLoop.main.add(timer, forMode: .common)
     }
 
+    @objc private func handleServiceToggleChanged(_ sender: UISwitch) {
+        KeyboardState.shared.setKeyboardDictationEnabled(sender.isOn)
+    }
+
     @objc private func handleDismissTouchDown() {
         dismissKeyboard()
     }
 
     @objc private func handleMicTouchUp() {
-        guard micTouchActive else { return }
+        let state = KeyboardState.shared
+        // A foreground handoff can consume touch-up. If UIKit delivered only
+        // the end of a recovery touch, still honor the visible action once.
+        guard micTouchActive else {
+            state.refreshFromDefaults()
+            if !state.isOpeningForDictation && (state.appNeedsAppAction || state.failedRequiresApp) {
+                openDictusForRecovery()
+            }
+            return
+        }
         micHoldTimer?.invalidate()
         micHoldTimer = nil
         micTouchActive = false
         if micHoldRecognized {
-            KeyboardState.shared.handleMicPressEnded()
+            state.handleMicPressEnded()
         }
         micHoldRecognized = false
-        KeyboardState.shared.accessoryDictationActive = false
+        state.accessoryDictationActive = false
         layoutVoiceActionControls()
     }
 
@@ -1881,6 +2036,7 @@ class KeyboardViewController: UIInputViewController,
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy)
+        SuggestionState.shared.reconcilePendingAutocorrection(proxy: textDocumentProxy)
         refreshAdaptiveTouchContext()
         // Re-check the dictation undo offer against the changed document (#266).
         // Deliberately a re-check and not a clear: the keyboard's own insertion is
@@ -1892,6 +2048,7 @@ class KeyboardViewController: UIInputViewController,
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy)
+        SuggestionState.shared.noteSelectionChanged(proxy: textDocumentProxy)
         refreshAdaptiveTouchContext()
         // A caret the user moved is a caret the insertion is no longer behind (#266).
         KeyboardState.shared.revalidateDictationUndo()

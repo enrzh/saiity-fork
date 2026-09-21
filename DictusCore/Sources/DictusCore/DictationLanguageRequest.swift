@@ -19,17 +19,21 @@ public struct ASRCapability: Equatable, Sendable {
     public static func forModelIdentifier(
         _ identifier: String?,
         mode: TranscriptionLanguageMode,
-        keyboardLanguage: SupportedLanguage
+        keyboardLanguage: SupportedLanguage,
+        outputMode: TranscriptionOutputMode? = nil
     ) -> Self {
         guard let model = identifier.flatMap(ModelInfo.forIdentifier) else {
             return Self(supportsAutomaticInputLanguage: false, sourceLanguage: nil)
         }
+        let effectiveOutputMode = outputMode ?? (mode == .autoDetect ? .multilingual : .singleLanguage)
 
         switch model.languageSupport.coverage {
         case .whisperMultilingual:
             switch mode {
             case .autoDetect:
-                return Self(supportsAutomaticInputLanguage: true, sourceLanguage: nil)
+                return effectiveOutputMode == .multilingual
+                    ? Self(supportsAutomaticInputLanguage: true, sourceLanguage: nil)
+                    : Self(supportsAutomaticInputLanguage: false, sourceLanguage: keyboardLanguage)
             case .followKeyboard:
                 return Self(supportsAutomaticInputLanguage: false, sourceLanguage: keyboardLanguage)
             case .explicit(let language):
@@ -44,15 +48,6 @@ public struct ASRCapability: Equatable, Sendable {
             // FluidAudio currently ignores the source-language parameter. Do not
             // present the keyboard choice as a resolved runtime source.
             return Self(supportsAutomaticInputLanguage: false, sourceLanguage: nil)
-        case .qwenMultilingual:
-            switch mode {
-            case .autoDetect:
-                return Self(supportsAutomaticInputLanguage: true, sourceLanguage: nil)
-            case .followKeyboard:
-                return Self(supportsAutomaticInputLanguage: false, sourceLanguage: keyboardLanguage)
-            case .explicit(let language):
-                return Self(supportsAutomaticInputLanguage: false, sourceLanguage: language)
-            }
         }
     }
 }
@@ -60,6 +55,7 @@ public struct ASRCapability: Equatable, Sendable {
 /// Translation readiness is supplied by the translation runtime, independently
 /// of the active ASR model.
 public enum TranslationTargetStatus: String, Equatable, Sendable {
+    case checking
     case installedReady
     case supportedNeedsDownload
     case unavailable
@@ -98,32 +94,38 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
         return try? JSONDecoder().decode(Self.self, from: data)
     }
 
-    public func selectableTargets(for sourceLanguage: SupportedLanguage?) -> [SupportedLanguage] {
-        guard matches(sourceLanguage) else { return [] }
+    public func selectableTargets(forSourceCode sourceCode: String?) -> [TranslationLanguage] {
+        guard matches(sourceCode) else { return [] }
         let available = installedTargets.union(supportedTargets)
-        return SupportedLanguage.allCases.filter { available.contains($0.rawValue) }
+        return TranslationLanguage.allCases.filter { available.contains($0.rawValue) }
     }
 
-    public func readyTargets(for sourceLanguage: SupportedLanguage?) -> [SupportedLanguage] {
-        guard matches(sourceLanguage) else { return [] }
-        return SupportedLanguage.allCases.filter { installedTargets.contains($0.rawValue) }
+    public func readyTargets(forSourceCode sourceCode: String?) -> [TranslationLanguage] {
+        guard matches(sourceCode) else { return [] }
+        return TranslationLanguage.allCases.filter { installedTargets.contains($0.rawValue) }
+    }
+
+    public func matchesSourceCode(_ sourceCode: String?) -> Bool {
+        matches(sourceCode)
     }
 
     public func status(
-        for target: SupportedLanguage,
-        sourceLanguage: SupportedLanguage?
+        for target: TranslationLanguage,
+        sourceCode: String?
     ) -> TranslationTargetStatus {
-        guard matches(sourceLanguage) else { return .unavailable }
+        guard matches(sourceCode) else { return .unavailable }
         if installedTargets.contains(target.rawValue) { return .installedReady }
         if supportedTargets.contains(target.rawValue) { return .supportedNeedsDownload }
         return .unavailable
     }
 
     public func menuLabel(
-        for target: SupportedLanguage,
-        sourceLanguage: SupportedLanguage?
+        for target: TranslationLanguage,
+        sourceCode: String?
     ) -> String {
-        switch status(for: target, sourceLanguage: sourceLanguage) {
+        switch status(for: target, sourceCode: sourceCode) {
+        case .checking:
+            return "Translate to \(target.displayName) (Checking availability)"
         case .installedReady:
             return "Translate to \(target.displayName)"
         case .supportedNeedsDownload:
@@ -134,10 +136,12 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
     }
 
     public func accessibilityLabel(
-        for target: SupportedLanguage,
-        sourceLanguage: SupportedLanguage?
+        for target: TranslationLanguage,
+        sourceCode: String?
     ) -> String {
-        switch status(for: target, sourceLanguage: sourceLanguage) {
+        switch status(for: target, sourceCode: sourceCode) {
+        case .checking:
+            return "Translate to \(target.displayName), checking availability"
         case .installedReady:
             return "Translate to \(target.displayName)"
         case .supportedNeedsDownload:
@@ -147,11 +151,11 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
         }
     }
 
-    private func matches(_ sourceLanguage: SupportedLanguage?) -> Bool {
+    private func matches(_ sourceCode: String?) -> Bool {
         if source == "auto" {
-            return sourceLanguage == nil
+            return sourceCode == nil
         }
-        return sourceLanguage?.rawValue == source
+        return sourceCode == source
     }
 }
 
@@ -267,7 +271,7 @@ public struct DictationCancellationContinuation: Equatable, Sendable {
 /// The cross-process request captured by the app for one dictation.
 public struct DictationLanguageRequest: Codable, Equatable, Sendable {
     public let mode: TranscriptionLanguageMode
-    public let translationTarget: SupportedLanguage?
+    public let translationTarget: TranslationLanguage?
     public let sessionID: String?
     public let generation: Int?
     public let clientIdentifier: String?
@@ -277,7 +281,7 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
 
     public init(
         mode: TranscriptionLanguageMode,
-        translationTarget: SupportedLanguage?,
+        translationTarget: TranslationLanguage?,
         sessionID: String? = nil,
         generation: Int? = nil,
         clientIdentifier: String? = nil,
@@ -398,9 +402,9 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
             return Self(mode: .followKeyboard, translationTarget: nil)
         }
 
-        let target: SupportedLanguage?
+        let target: TranslationLanguage?
         if let value = defaults.object(forKey: targetKey) {
-            guard let raw = value as? String, let language = SupportedLanguage(rawValue: raw) else {
+            guard let raw = value as? String, let language = TranslationLanguage(rawValue: raw) else {
                 return Self(mode: .followKeyboard, translationTarget: nil)
             }
             target = language
@@ -471,7 +475,7 @@ public struct DictationLanguageRequest: Codable, Equatable, Sendable {
         mode = TranscriptionLanguageMode(
             storedValue: try container.decode(String.self, forKey: .mode)
         )
-        translationTarget = try container.decodeIfPresent(SupportedLanguage.self, forKey: .translationTarget)
+        translationTarget = try container.decodeIfPresent(TranslationLanguage.self, forKey: .translationTarget)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
         generation = try container.decodeIfPresent(Int.self, forKey: .generation)
         clientIdentifier = try container.decodeIfPresent(String.self, forKey: .clientIdentifier)

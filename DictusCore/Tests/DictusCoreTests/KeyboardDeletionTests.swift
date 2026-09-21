@@ -10,6 +10,11 @@ final class KeyboardDeletionTests: XCTestCase {
         XCTAssertTrue(KeyboardDeletion.repeatsWords(after: 2.5))
         XCTAssertTrue(KeyboardDeletion.repeatsWords(after: 10))
     }
+
+    func testDictationReleaseTailProtectsTheFinalWord() {
+        XCTAssertEqual(KeyboardDeletion.dictationReleaseTailDuration, 1.0, accuracy: 0.0001)
+    }
+
     func testDeletesWordAndTrailingSeparator() {
         XCTAssertEqual(KeyboardDeletion.previousWordLength(in: "hello world"), 6)
         XCTAssertEqual(KeyboardDeletion.previousWordLength(in: "hello world "), 6)

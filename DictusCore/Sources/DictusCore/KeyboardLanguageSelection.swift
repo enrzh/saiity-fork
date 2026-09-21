@@ -22,8 +22,6 @@ public enum KeyboardLanguageSelection: Equatable, Codable, Sendable {
         if value == "automatic" { return .automatic }
         guard let language = SupportedLanguage(rawValue: value),
               SupportedLanguage.allCases.contains(language) else {
-            // A previously selected French/Spanish value is still readable,
-            // but it must never reappear as an active product language.
             return .explicit(.english)
         }
         return .explicit(language)

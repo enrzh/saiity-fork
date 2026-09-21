@@ -15,7 +15,7 @@ protocol LongPressOverlayDelegate: AnyObject {
 }
 
 protocol LongPressCursorMovementDelegate: AnyObject {
-    func longpress(movedCursor: Int)
+    func longpress(movedCursor step: KeyboardCursorStep)
     func longpressDidCancel()
 }
 
@@ -28,94 +28,55 @@ protocol LongPressBehaviorProvider {
 final class LongPressCursorMovementController: NSObject, LongPressBehaviorProvider {
     public weak var delegate: LongPressCursorMovementDelegate?
 
-    /// Initial touch point when trackpad mode activates.
-    private var baselinePoint: CGPoint?
-
-    /// Dead zone in points -- absorbs finger jitter after activation.
-    /// 8pt matches the feel from the SwiftUI reference implementation.
-    private let deadZone: CGFloat = 8.0
-
-    /// Base delta in points per character movement.
-    /// Smaller = more sensitive. 12pt provides good balance between precision and speed.
-    private let baseDelta: CGFloat = 12.0
-
-    /// Maximum speed multiplier for acceleration.
-    private let maxSpeedMultiplier: CGFloat = 3.0
-
-    /// Distance in points at which maximum speed is reached.
-    private let accelerationRange: CGFloat = 120.0
-
-    /// Whether the dead zone has been crossed (activation confirmed).
-    private var isActive = false
-
-    /// Accumulated fractional movement for sub-delta precision.
-    private var accumulatedMovement: CGFloat = 0.0
-
-    /// Rate limiter: minimum time between cursor moves to avoid overwhelming textDocumentProxy.
-    /// textDocumentProxy.adjustTextPosition is IPC -- too many calls causes lag.
-    private var lastMoveTime: TimeInterval = 0
-    private let minMoveInterval: TimeInterval = 0.016  // ~60Hz max
+    /// Press location used to seed the shared delta sampler. A stationary
+    /// finger never produces synthetic cursor movement.
+    private var joystickOrigin: CGPoint?
+    private var joystickSampler: KeyboardCursorJoystickSampler?
+    private var latestTouchPoint: CGPoint?
 
     public func touchesBegan(_ point: CGPoint) {
-        if baselinePoint == nil {
-            baselinePoint = point
-            isActive = false
-            accumulatedMovement = 0
-            // A new trackpad gesture must not inherit the previous gesture's
-            // rate-limit timestamp.
-            lastMoveTime = 0
+        if joystickOrigin == nil {
+            joystickOrigin = point
+            joystickSampler = KeyboardCursorJoystickSampler(origin: point)
         }
+        latestTouchPoint = point
+        emitJoystickStep(force: true)
     }
 
     public func touchesMoved(_ point: CGPoint) {
-        guard let baseline = baselinePoint else { return }
-
-        let dx = point.x - baseline.x
-
-        // Phase 1: Dead zone -- absorb jitter
-        if !isActive {
-            if abs(dx) > deadZone {
-                isActive = true
-                // Haptic confirmation that trackpad mode is fully active
-                HapticFeedback.trackpadActivated()
-                // Reset baseline to edge of dead zone so movement starts from zero
-                baselinePoint = CGPoint(
-                    x: baseline.x + (dx > 0 ? deadZone : -deadZone),
-                    y: baseline.y
-                )
-                accumulatedMovement = 0
-            }
-            return
-        }
-
-        // Phase 2: Active cursor movement with acceleration
-        let now = Date.timeIntervalSinceReferenceDate
-        guard now - lastMoveTime >= minMoveInterval else { return }
-
-        let currentDx = point.x - (baselinePoint?.x ?? baseline.x)
-
-        // Acceleration: move faster the further from baseline
-        let distance = abs(currentDx)
-        let speedMultiplier = min(maxSpeedMultiplier, 1.0 + (distance / accelerationRange) * (maxSpeedMultiplier - 1.0))
-
-        // Calculate how many characters to move
-        accumulatedMovement += (currentDx / baseDelta) * speedMultiplier
-        let charsToMove = Int(accumulatedMovement)
-
-        if charsToMove != 0 {
-            delegate?.longpress(movedCursor: charsToMove)
-            accumulatedMovement -= CGFloat(charsToMove)
-            lastMoveTime = now
-            // Reset baseline to current position for continuous tracking
-            baselinePoint = point
-        }
+        latestTouchPoint = point
+        emitJoystickStep()
     }
 
     public func touchesEnded(_ point: CGPoint) {
-        baselinePoint = nil
-        isActive = false
-        accumulatedMovement = 0
+        stopJoystick()
         delegate?.longpressDidCancel()
+    }
+
+    deinit {
+        stopJoystick()
+    }
+
+    private func stopJoystick() {
+        joystickOrigin = nil
+        joystickSampler = nil
+        latestTouchPoint = nil
+    }
+
+    private func emitJoystickStep(force: Bool = false) {
+        guard let origin = joystickOrigin, let point = latestTouchPoint else { return }
+        if joystickSampler == nil {
+            joystickSampler = KeyboardCursorJoystickSampler(origin: origin)
+        }
+        var sampler = joystickSampler ?? KeyboardCursorJoystickSampler(origin: origin)
+        let step = sampler.tick(
+            to: point,
+            now: Date.timeIntervalSinceReferenceDate,
+            force: force
+        )
+        joystickSampler = sampler
+        guard !step.isEmpty else { return }
+        delegate?.longpress(movedCursor: step)
     }
 }
 
@@ -359,7 +320,7 @@ class LongPressOverlayController: NSObject,
 
         func deselect(theme: Theme) {
             label.textColor = theme.textColor
-            label.backgroundColor = theme.popupColor
+            label.backgroundColor = .clear
             imageView.tintColor = theme.textColor
             isSelectedKey = false
         }

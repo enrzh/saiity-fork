@@ -73,6 +73,36 @@ final class SpeechRegionSegmentationTests: XCTestCase {
         }
     }
 
+    func testCoverageReportsOverlapWithoutARealGap() {
+        let coverage = SpeechRegionCoverage(
+            regions: [
+                SpeechRegion(startSample: 0, endSample: 100),
+                SpeechRegion(startSample: 80, endSample: 200)
+            ],
+            totalSampleCount: 240
+        )
+
+        XCTAssertEqual(coverage.coveredSampleCount, 200)
+        XCTAssertEqual(coverage.overlapSampleCount, 20)
+        XCTAssertEqual(coverage.uncoveredWithinSpeechSpan, 0)
+        XCTAssertTrue(coverage.hasOverlap)
+        XCTAssertFalse(coverage.hasDroppedSpeech)
+    }
+
+    func testCoverageReportsARealHoleBetweenRegions() {
+        let coverage = SpeechRegionCoverage(
+            regions: [
+                SpeechRegion(startSample: 20, endSample: 100),
+                SpeechRegion(startSample: 120, endSample: 200)
+            ],
+            totalSampleCount: 240
+        )
+
+        XCTAssertEqual(coverage.uncoveredWithinSpeechSpan, 20)
+        XCTAssertEqual(coverage.uncoveredSampleCount, 80)
+        XCTAssertTrue(coverage.hasDroppedSpeech)
+    }
+
     func testVeryShortDictationIsNotDiscarded() {
         let regions = segmenter.regions(in: speech(seconds: 0.1))
         XCTAssertEqual(regions.count, 1)
@@ -203,6 +233,31 @@ final class SpeechRegionSegmentationTests: XCTestCase {
 
     func testLatinSentenceSpacingSurvivesMerge() {
         XCTAssertEqual(SpeechTranscriptMerger.merge(["hello.", "world"]), "hello. world")
+    }
+
+    func testRegionMetadataSurvivesSequentialRunner() async throws {
+        let region = SpeechRegion(startSample: 0, endSample: sampleRate)
+        let results = try await SpeechRegionTranscriptionRunner.run(
+            audioSamples: speech(seconds: 1),
+            regions: [region],
+            decode: { _, _, region in
+                SpeechRegionTranscript(
+                    region: region,
+                    text: "hello",
+                    detectedLanguage: "en",
+                    validatedLanguage: "en",
+                    decodeDurationSeconds: 0.25,
+                    averageLogProbability: -0.12,
+                    fallbackReason: nil
+                )
+            }
+        )
+
+        XCTAssertEqual(results.first?.characterCount, 5)
+        XCTAssertEqual(results.first?.decodeDurationSeconds, 0.25)
+        XCTAssertEqual(results.first?.averageLogProbability, -0.12)
+        XCTAssertNil(results.first?.fallbackReason)
+        XCTAssertEqual(results.first?.validatedLanguage, "en")
     }
 
     func testRunnerDecodesSequentiallyAndHonorsCancellation() async {

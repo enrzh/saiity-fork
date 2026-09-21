@@ -12,7 +12,9 @@ public enum SymbolKeyVariants {
         "$": ["¢", "€", "£", "¥", "₩", "₱"],
         "&": ["§"],
         "\"": ["“", "”", "«", "»", "„"],
-        ".": ["…"],
+        // The period key on the letter surface is a compact punctuation
+        // launcher, matching the useful punctuation row available on iOS.
+        ".": ["…", "?", "!", "&", ",", ":", ";", "'", "\""],
         "?": ["¿"],
         "!": ["¡"],
         "'": ["‘", "’", "`", "′"],

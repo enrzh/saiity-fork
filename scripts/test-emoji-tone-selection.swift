@@ -4,10 +4,11 @@ import Foundation
 
 let source = try String(contentsOfFile: "DictusKeyboard/Views/EmojiPickerView.swift", encoding: .utf8)
 let categoryBar = try String(contentsOfFile: "DictusKeyboard/Views/EmojiCategoryBar.swift", encoding: .utf8)
+let root = try String(contentsOfFile: "DictusKeyboard/KeyboardRootView.swift", encoding: .utf8)
 assert(source.contains("filler.isUserInteractionEnabled = false"), "empty recents fillers must not steal the pager pan")
 assert(source.contains("panHost.isUserInteractionEnabled = true"), "empty recents page hosts pans so the collection view can page")
-assert(source.contains("EmojiCategoryBar("), "category bookmarks float over the emoji grid")
-assert(source.contains("boardDeleteFrame"), "emoji delete uses the shared command frame")
+assert(root.contains("EmojiCategoryBar("), "category bookmarks float over the emoji grid")
+assert(root.contains("boardDeleteFrame"), "emoji delete uses the shared command frame")
 assert(source.contains("EmojiNavigation.landingCategoryID"), "empty recents uses the shared landing policy")
 assert(source.contains("topEdgeEffect.isHidden = true"), "iOS 26 top edge effect is disabled")
 assert(!source.contains(".offset(y: -3)"), "emoji grid is not negatively offset into the top edge")
@@ -15,9 +16,9 @@ assert(source.contains("return max(0, usable / rows)"), "four rows fit without a
 assert(source.contains("availableItemCount: itemCount"), "scroll requests check collection data")
 assert(source.contains("boundsWidth: Double(collectionView.bounds.width)"), "scroll requests check collection layout")
 assert(source.contains("func retryPendingScroll(in collectionView"), "pending scrolls retry from layout")
-assert(categoryBar.contains("interactiveBounds.contains(point)"), "category hit testing stays in the control frame")
+assert(categoryBar.contains("interactionBounds.contains(point)"), "category hit testing stays in the control frame")
 assert(categoryBar.contains("!isHidden, isUserInteractionEnabled, isEnabled, alpha > 0.01"), "category hit testing fails closed")
-assert(categoryBar.contains("accessibilityAction"), "category icons expose VoiceOver activation")
+assert(categoryBar.contains("accessibilityAddTraits(.isButton)"), "category icons expose VoiceOver button semantics")
 assert(!categoryBar.contains("override func touchesBegan"), "category tracking has one touch lifecycle")
 assert(!categoryBar.contains("override func touchesMoved"), "category tracking has one touch lifecycle")
 assert(!categoryBar.contains("override func touchesEnded"), "category tracking has one touch lifecycle")
@@ -36,10 +37,10 @@ for offset in [CGFloat(0), 390, 3900] {
     for index in 0..<6 {
         assert(hit(34 + CGFloat(index) * 44, 68) == index, "Every tone follows the finger")
     }
-    assert(hit(122, 122) == 3, "Recents preserves the original tone at the source")
-    assert(hit(122, 98) == 3, "The corridor does not cancel selection")
-    assert(hit(122, 300) == -1, "Dragging away cancels selection")
-    assert(hit(122, 122) == 3, "Returning after cancellation restores the source tone")
+    assert(hit(122, 122) == 2, "Selection follows the horizontal finger position")
+    assert(hit(122, 98) == 2, "Vertical movement does not cancel selection")
+    assert(hit(122, 300) == 2, "Dragging outside the popup keeps selection active")
+    assert(hit(122, 122) == 2, "Returning after vertical movement keeps selection active")
     assert(hit(0, 68) == 0 && hit(290, 68) == 5, "Horizontal edge slop clamps")
 }
 assert(EmojiToneHitTesting.selectedIndex(at: CGPoint(x: 220, y: 22),

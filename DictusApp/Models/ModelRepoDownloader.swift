@@ -65,10 +65,6 @@ final class ModelRepoDownloader {
         /// Repo-relative paths that must exist on disk after the download —
         /// the final-verification tripwire (see Phase 4 in `download`).
         let requiredPaths: [String]
-        /// Optional remote directory prefix that is already represented by
-        /// `cacheDir` (Qwen's `f32/` or `int8/` folder).
-        let remotePathPrefixToStrip: String?
-
         /// Parakeet v3 repo. Matches FluidAudio's `Repo.parakeet.remotePath`,
         /// its file selection, and mirrors `AsrModels.modelsExist` verification.
         static func parakeet(version: AsrModelVersion = .v3) -> Configuration {
@@ -83,27 +79,7 @@ final class ModelRepoDownloader {
                 repoPath: repo.remotePath,
                 directoryPatterns: ModelNames.ASR.requiredModels.map { "\($0)/" }.sorted(),
                 includesRootMetadata: true,
-                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile],
-                remotePathPrefixToStrip: nil
-            )
-        }
-
-        /// One Qwen3-ASR precision variant. The downloader traverses only the
-        /// selected precision folder and writes its contents into the variant
-        /// cache directory expected by FluidAudio.
-        static func qwen3ASR(variant: Qwen3AsrVariant) -> Configuration {
-            let prefix = "\(variant.rawValue)/"
-            return Configuration(
-                repoPath: variant.repo.remotePath,
-                directoryPatterns: [prefix],
-                includesRootMetadata: false,
-                requiredPaths: [
-                    ModelNames.Qwen3ASR.audioEncoderFile,
-                    ModelNames.Qwen3ASR.decoderStatefulFile,
-                    ModelNames.Qwen3ASR.embeddingsFile,
-                    "vocab.json"
-                ],
-                remotePathPrefixToStrip: prefix
+                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile]
             )
         }
 
@@ -129,8 +105,7 @@ final class ModelRepoDownloader {
                     "\(variant)/AudioEncoder.mlmodelc",
                     "\(variant)/TextDecoder.mlmodelc",
                     "\(variant)/config.json"
-                ],
-                remotePathPrefixToStrip: nil
+                ]
             )
         }
     }
@@ -210,13 +185,10 @@ final class ModelRepoDownloader {
         for file in files {
             try Task.checkCancellation()
 
-            let localPath = configuration.remotePathPrefixToStrip.map {
-                String(file.path.dropFirst($0.count))
-            } ?? file.path
-            let destination = cacheDir.appendingPathComponent(localPath)
+            let destination = cacheDir.appendingPathComponent(file.path)
 
             // Skip complete files — this is what makes retry resumable.
-            if FileManager.default.fileExists(atPath: destination.path) {
+            if Self.isCompleteDownloadedFile(destination, expectedSize: file.size) {
                 reporter.fileCompleted(sizeBytes: Int64(max(0, file.size)))
                 continue
             }
@@ -253,6 +225,17 @@ final class ModelRepoDownloader {
                 throw DownloadError.missingRequiredFile(requiredPath)
             }
         }
+    }
+
+    /// A directory can be left behind by an interrupted Core ML extraction.
+    /// Only skip regular, non-empty payload files; incomplete bundles are repaired.
+    private static func isCompleteDownloadedFile(_ url: URL, expectedSize: Int) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            return false
+        }
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+        return expectedSize >= 0 ? size == expectedSize : size > 0
     }
 
     // MARK: - File listing (HuggingFace tree API)
@@ -374,6 +357,9 @@ final class ModelRepoDownloader {
             do {
                 try await downloadFile(from: url, filePath: file.path, to: destination) { bytesWritten in
                     reporter.currentFileBytes(bytesWritten)
+                }
+                guard Self.isCompleteDownloadedFile(destination, expectedSize: file.size) else {
+                    throw DownloadError.missingRequiredFile(file.path)
                 }
                 return
             } catch {

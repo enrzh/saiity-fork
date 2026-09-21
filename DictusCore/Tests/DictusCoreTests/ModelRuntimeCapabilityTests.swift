@@ -15,29 +15,16 @@ final class ModelRuntimeCapabilityTests: XCTestCase {
         XCTAssertFalse(model.languageSupport.additionalCodes.contains("zh"))
     }
 
-    func testQwenFallsBackOnlyToAnInstalledCompatibleWhisperModelOnOlderOS() {
+    func testUnknownRequestedModelRemainsUnresolvedWithoutInstalledFallback() {
         let resolution = ModelInfo.runtimeResolution(
-            for: "qwen3-asr-0.6b-f32",
-            installedIdentifiers: ["qwen3-asr-0.6b-f32", "openai_whisper-small"],
-            osMajor: 17,
-            capabilities: capabilities(ramGB: 8)
-        )
-
-        XCTAssertEqual(resolution.resolvedIdentifier, "openai_whisper-small")
-        XCTAssertEqual(resolution.fallbackReason, .unavailableOnOS)
-        XCTAssertTrue(resolution.usedFallback)
-    }
-
-    func testUnsupportedRequestedModelRemainsUnresolvedWithoutInstalledFallback() {
-        let resolution = ModelInfo.runtimeResolution(
-            for: "qwen3-asr-0.6b-f32",
-            installedIdentifiers: ["qwen3-asr-0.6b-f32"],
+            for: "removed-speech-engine",
+            installedIdentifiers: ["removed-speech-engine"],
             osMajor: 17,
             capabilities: capabilities(ramGB: 8)
         )
 
         XCTAssertNil(resolution.resolvedIdentifier)
-        XCTAssertEqual(resolution.fallbackReason, .unavailableOnOS)
+        XCTAssertEqual(resolution.fallbackReason, .unknownModel)
     }
 
     private func capabilities(ramGB: Int) -> DeviceCapabilities {
