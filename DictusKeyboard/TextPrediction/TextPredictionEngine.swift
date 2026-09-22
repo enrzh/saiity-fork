@@ -121,8 +121,15 @@ class TextPredictionEngine {
 
     /// CJK text has no useful Latin spell-check path. Returning no correction
     /// is safer and cheaper than applying an English/German dictionary to it.
+    /// True while the trie for the active language is still being mapped in.
+    /// Space must not wait on that load.
+    var dictionaryLoadInFlight: Bool { aospTrieEngine.isLoading }
+
     func shouldSkipTokenPrediction(for word: String) -> Bool {
-        word.unicodeScalars.contains { scalar in
+        if TypingFact.shouldLeaveUntouched(word) || TypingFact.isOpenPrefix(word) {
+            return true
+        }
+        return word.unicodeScalars.contains { scalar in
             switch scalar.value {
             case 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
                  0xAC00...0xD7AF, 0xF900...0xFAFF:
@@ -383,6 +390,9 @@ class TextPredictionEngine {
         isAtSentenceStart: Bool = true
     ) -> (correction: String, alternatives: [String])? {
         guard !word.isEmpty else { return nil }
+        if TypingFact.shouldLeaveUntouched(word) || TypingFact.isOpenPrefix(word) {
+            return nil
+        }
 
         // Language-specific overrides bypass everything — e.g., "ca" is never valid French.
         // Must check before UserDictionary, otherwise typing "ca" twice
@@ -615,12 +625,18 @@ class TextPredictionEngine {
     func nextCharacterProbabilities(
         for partialWord: String,
         after previousWords: [String],
-        isAtSentenceStart: Bool
+        isAtSentenceStart: Bool,
+        recallTokens: [String] = []
     ) -> NextCharacterProbabilities {
         let prefix = partialWord.lowercased()
-        guard !prefix.isEmpty else { return NextCharacterProbabilities([:]) }
+        guard !prefix.isEmpty, !TypingFact.isOpenPrefix(partialWord) else {
+            return NextCharacterProbabilities([:])
+        }
 
         var weights: [String: Double] = [:]
+        for (letter, weight) in TypingFact.recallWeights(prefix: prefix, tokens: recallTokens) {
+            weights[letter, default: 0] += weight
+        }
         // Pull a wider completion list so next-letter priors reflect the active
         // typed-language dictionary, not only the top 3 bar suggestions.
         let completionCandidates = suggestions(for: partialWord, limit: 24)
@@ -644,9 +660,12 @@ class TextPredictionEngine {
 
         // Add the existing local bigram/trigram signal when it knows the
         // preceding words. A sentence boundary deliberately resets that signal.
+        // Fact tokens are context, not failed words, and an empty word-pair
+        // table must not fall back to the most common words in the language.
+        let contextualWords = TypingFact.contextWords(from: previousWords)
         let contextual = isAtSentenceStart
             ? []
-            : predictNextWords(after: previousWords, maxResults: 12)
+            : localContinuationCandidates(after: contextualWords, maxResults: 12)
         for (index, candidate) in contextual.enumerated() {
             let lowered = candidate.lowercased()
             guard lowered.hasPrefix(prefix), lowered.count > prefix.count else { continue }
@@ -660,9 +679,17 @@ class TextPredictionEngine {
         after previousWords: [String],
         isAtSentenceStart: Bool
     ) -> NextCharacterProbabilities {
-        let candidates = isAtSentenceStart
-            ? frequencyDict.topWords(count: 8)
-            : predictNextWords(after: previousWords, maxResults: 8)
+        // A new sentence has no word pair yet. The most common words in the
+        // language ("the", "a", "I") are not a continuation the typist asked for,
+        // so the seam stays on the static key until a real pair exists.
+        guard !isAtSentenceStart else {
+            return NextCharacterProbabilities([:])
+        }
+        let contextualWords = TypingFact.contextWords(from: previousWords)
+        let candidates = localContinuationCandidates(after: contextualWords, maxResults: 8)
+        guard !candidates.isEmpty else {
+            return NextCharacterProbabilities([:])
+        }
         let weights = candidates.enumerated().reduce(into: [String: Double]()) { result, item in
             guard let first = item.element.lowercased().first else { return }
             let weight = Double(8 - min(item.offset, 7))

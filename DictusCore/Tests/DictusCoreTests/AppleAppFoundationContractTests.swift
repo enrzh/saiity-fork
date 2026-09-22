@@ -159,6 +159,15 @@ final class AppleAppFoundationContractTests: XCTestCase {
                       "the dashboard must stay compact and leave full history to its dedicated screen")
         XCTAssertTrue(home.contains(".lineLimit(2)"),
                       "recent dictations must use bounded previews")
+        XCTAssertTrue(home.contains("DictationHistoryEditView(item: item)"),
+                      "a recent row opens the transcript it names")
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+        XCTAssertTrue(settings.contains("Corrects the last word when you press Space."))
+        XCTAssertTrue(settings.contains("follows the language of the sentence"))
+        XCTAssertTrue(settings.contains("KeyboardInteractionPreferences.notifyChanged()"))
+        let overlay = try source("DictusApp/Views/SwipeBackOverlayView.swift")
+        XCTAssertTrue(overlay.contains("Ready to dictate"))
+        XCTAssertFalse(overlay.contains("Ready when you are"))
         XCTAssertTrue(home.contains("Date(timeIntervalSince1970: item.createdAt), style: .relative"),
                       "recent rows should show compact relative metadata")
         XCTAssertFalse(home.contains("SaiityDashboardCard"))

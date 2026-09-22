@@ -61,6 +61,17 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(page.contains("onMoved:"))
     }
 
+    func testLetterAndSymbolPlatesKeepNativeGaps() throws {
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertTrue(root.contains("visualFrame: rowPlates[columnIndex]"),
+                      "plates must use the original key frames, not the gap-absorbed hit cells")
+        XCTAssertFalse(root.contains("visualFrame: rowHits[columnIndex]"),
+                       "drawing on hit cells makes every key the same size and removes native gaps")
+        XCTAssertTrue(root.contains("Gaps stay visible. The enlarged rect is only the touch target."))
+        XCTAssertTrue(root.contains("highlightSize: visualFrame.size"),
+                      "press highlights must match the drawn plate, not the hit cell")
+    }
+
     func testSymbolButtonsUseAStableNativeTapSurface() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let start = try XCTUnwrap(root.range(of: "private func symbolKey"))
@@ -455,6 +466,14 @@ final class KeyboardRegressionTests: XCTestCase {
                       "the hold owner must release without a movement cancellation path")
         XCTAssertTrue(owner.contains("panGestureRecognizer.require(toFail: hold)"),
                       "the pager must wait for the hold to fail instead of resetting it mid-touch")
+        XCTAssertTrue(owner.contains("Receive every touch and fail immediately"),
+                      "empty Recents space must fail the hold so the pager can move")
+        XCTAssertFalse(owner.contains("return canBeginVariantHold(at: touch.location(in: self))"),
+                       "excluding a blank cell from the hold leaves the pager waiting forever")
+        let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
+        XCTAssertTrue(categories.contains("collapsedCircleFrame"))
+        XCTAssertTrue(categories.contains("Swipe left or right to choose an emoji category."))
+        XCTAssertFalse(categories.contains("accept scrub starts"))
         XCTAssertFalse(owner.contains("panGestureRecognizer.isEnabled = false"),
                        "disabling the pager pan after recognition cancels the active hold")
         XCTAssertFalse(owner.contains("guard !isDragging, !isDecelerating"),

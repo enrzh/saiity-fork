@@ -57,7 +57,7 @@ struct SettingsView: View {
                 }
                 DefaultKeyboardModePicker()
                 Toggle("Autocorrection", isOn: $autocorrectEnabled)
-                    .accessibilityHint("Automatically corrects common misspellings.")
+                    .accessibilityHint("Corrects the last word when you press Space.")
                     .onChange(of: autocorrectEnabled) { _, _ in
                         KeyboardInteractionPreferences.notifyChanged()
                     }
@@ -73,7 +73,7 @@ struct SettingsView: View {
             } header: {
                 Text("Keyboard")
             } footer: {
-                Text("Language follows the iPhone.")
+                Text("The keyboard starts in the iPhone language. After a few words, typing follows the language of the sentence until another language takes over.")
             }
 
             Section("Personalization") {
@@ -326,6 +326,7 @@ struct VocabularyView: View {
             Button("Reset", role: .destructive) {
                 UserDictionary.shared.resetAll()
                 reload()
+                KeyboardInteractionPreferences.notifyChanged()
             }
         } message: {
             Text("This removes every word sAiity learned from your typing.")
@@ -346,6 +347,7 @@ struct VocabularyView: View {
         _ = UserDictionary.shared.learn(word)
         newWord = ""
         reload()
+        KeyboardInteractionPreferences.notifyChanged()
     }
 
     private func deleteWords(at offsets: IndexSet) {
@@ -353,6 +355,7 @@ struct VocabularyView: View {
             UserDictionary.shared.forget(words[index])
         }
         reload()
+        KeyboardInteractionPreferences.notifyChanged()
     }
 }
 

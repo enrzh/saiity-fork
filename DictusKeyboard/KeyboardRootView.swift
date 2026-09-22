@@ -1008,8 +1008,7 @@ private struct LetterKeyboardPageView: View {
                 }
             }
         }
-        // Absorb inter-key gaps into hit targets so taps between frosted plates
-        // still land on a key. Plates fill the same cells as hit targets (no visible gaps).
+        // Gaps stay visible. The enlarged rect is only the touch target.
         let hitFrames = VoiceOnlyKeyboardPolicy.SymbolGrid.expandFramesAbsorbingGaps(
             frames,
             horizontalSpacing: keySpacing,
@@ -1018,12 +1017,13 @@ private struct LetterKeyboardPageView: View {
         return currentRows.indices.flatMap { rowIndex -> [PositionedLetterKey] in
             let row = currentRows[rowIndex]
             let rowHits = hitFrames[rowIndex]
+            let rowPlates = frames[rowIndex]
             return row.indices.map { columnIndex in
                 PositionedLetterKey(
                     id: "\(adaptiveTouchScopeID.uuidString)-letter-\(rowIndex)-\(columnIndex)",
                     key: row[columnIndex],
                     frame: rowHits[columnIndex],
-                    visualFrame: rowHits[columnIndex],
+                    visualFrame: rowPlates[columnIndex],
                     row: rowIndex,
                     column: columnIndex
                 )
@@ -1107,14 +1107,13 @@ private struct LetterKeyboardPageView: View {
                     // base letter and the selected accent. Variant keys therefore
                     // have exactly one gesture owner: short release inserts the
                     // base key, long release commits one popup option.
-                    letterKeyLabel(for: key, frame: visualFrame)
-                        .contentShape(Rectangle().inset(by: -hitExpansion))
-                        .overlay {
-                            ImmediateVariantKey(
+                    ZStack {
+                        letterKeyLabel(for: key, frame: visualFrame)
+                        ImmediateVariantKey(
                                 onBegan: { point in
                                     handleLetterVariantBegan(
                                         key: key, keyID: keyID, point: point,
-                                        frame: visualFrame, bounds: bounds
+                                        frame: frame, bounds: bounds
                                     )
                                 },
                                 onMoved: { point in
@@ -1126,7 +1125,8 @@ private struct LetterKeyboardPageView: View {
                                 adaptiveKeyID: keyID,
                                 adaptiveTouchScopeID: adaptiveTouchScopeID.uuidString
                             )
-                        }
+                    }
+                    .contentShape(Rectangle().inset(by: -hitExpansion))
                         .accessibilityLabel(
                             key.accessibilityLabel(for: page) ?? "Keyboard key"
                         )
@@ -1142,6 +1142,8 @@ private struct LetterKeyboardPageView: View {
                                 onTouchUp: {
                                     dismissKeyPreview()
                                 },
+                                highlightCornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius,
+                                highlightSize: visualFrame.size,
                                 adaptiveKeyID: keyID,
                                 adaptiveTouchScopeID: adaptiveTouchScopeID.uuidString
                             )
@@ -1857,11 +1859,12 @@ private struct LiquidSymbolPageView: View {
         return rows.indices.flatMap { rowIndex -> [PositionedLiquidSymbolKey] in
             let row = rows[rowIndex]
             let rowHits = hitFrames[rowIndex]
+            let rowPlates = frames[rowIndex]
             return row.indices.map { columnIndex in
                 PositionedLiquidSymbolKey(
                     key: row[columnIndex],
                     frame: rowHits[columnIndex],
-                    visualFrame: rowHits[columnIndex]
+                    visualFrame: rowPlates[columnIndex]
                 )
             }
         }
@@ -1979,8 +1982,8 @@ private struct LiquidSymbolPageView: View {
                         onTouchUp: {
                             previewSession = nil
                         },
-                        highlightCornerRadius: key.isRoundCommand ? 18 : 13,
-                        highlightSize: key.isRoundCommand ? surfaceLayout.commandKeyVisualSize : nil
+                        highlightCornerRadius: key.isRoundCommand ? 18 : VoiceOnlyKeyboardPolicy.keyCornerRadius,
+                        highlightSize: key.isRoundCommand ? surfaceLayout.commandKeyVisualSize : visualFrame.size
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

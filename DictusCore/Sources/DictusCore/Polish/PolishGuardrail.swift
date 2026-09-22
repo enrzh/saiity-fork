@@ -27,11 +27,19 @@ public enum PolishGuardrail {
         // Spoken self-corrections may drop a superseded number (`2am, oh sorry,
         // 4am` → `4am`); inventing a number that was never dictated still fails.
         let numbers = #"[+−-]?\p{N}+(?:[.,:/-]\p{N}+)*"#
-        let rawNumbers = matches(numbers, in: raw)
         let polishedNumbers = matches(numbers, in: polished)
-        guard preservesNumberTokens(raw: rawNumbers, polished: polishedNumbers, rawText: raw) else {
-            return false
-        }
+        let marker = TypingFact.lastCorrectionMarkerOffset(in: raw)
+        guard TypingFact.preservesSpokenFacts(
+            polishedTokens: polishedNumbers,
+            rawFacts: numberSpans(in: raw),
+            correctionMarkerUTF16: marker
+        ) else { return false }
+        guard preservesAnchoredNames(raw: raw, polished: polished) else { return false }
+        guard TypingFact.preservesSpokenFacts(
+            polishedTokens: TypingFact.atomicFacts(in: polished),
+            rawFacts: TypingFact.atomicFactSpans(in: raw),
+            correctionMarkerUTF16: marker
+        ) else { return false }
         let negation = #"(?i)\b(?:not|never|no|cannot|\p{L}+[’']t|nicht|nie|kein\p{L}*|ohne|pas|jamais|sans|nunca|sin)\b"#
         guard matches(negation, in: raw) == matches(negation, in: polished) else { return false }
         // Dominant-language detection misses a translated minority CJK span.
@@ -141,36 +149,38 @@ public enum PolishGuardrail {
         return top.key.rawValue == expectedCode
     }
 
-    /// Auto may drop a superseded digit group when the speaker corrected
-    /// themselves, and may collapse an immediate duplicate (`4`, `4` → `4`).
-    /// It must not invent a token that never appeared, or silently drop a
-    /// unique amount/id without a correction cue.
-    private static func preservesNumberTokens(raw: [String], polished: [String], rawText: String) -> Bool {
-        if raw == polished { return true }
-        guard isSubsequence(polished, of: raw) else { return false }
-        if collapsingConsecutiveDuplicates(raw) == polished { return true }
-        return containsSpokenCorrectionMarker(rawText)
-    }
-
-    private static func isSubsequence(_ sub: [String], of full: [String]) -> Bool {
-        var index = 0
-        for token in full where index < sub.count && token == sub[index] {
-            index += 1
+    /// Names and acronyms survive cleanup. A later name can replace an earlier
+    /// one only when the speaker corrected themselves between the two.
+    /// Capitalizing the same opening word ("first" → "First") is not a new name.
+    private static func preservesAnchoredNames(raw: String, polished: String) -> Bool {
+        let rawFacts = TypingFact.nameSpans(in: raw)
+        var polishedTokens = TypingFact.nameSpans(in: polished).map(\.token)
+        if let polishedOpening = TypingFact.openingName(in: polished),
+           let rawOpening = TypingFact.openingWord(in: raw),
+           polishedOpening.caseInsensitiveCompare(rawOpening) == .orderedSame,
+           TypingFact.openingName(in: raw) == nil,
+           let index = polishedTokens.firstIndex(where: {
+               $0.caseInsensitiveCompare(polishedOpening) == .orderedSame
+           }) {
+            polishedTokens.remove(at: index)
         }
-        return index == sub.count
+        return TypingFact.preservesSpokenFacts(
+            polishedTokens: polishedTokens,
+            rawFacts: rawFacts,
+            correctionMarkerUTF16: TypingFact.lastCorrectionMarkerOffset(in: raw)
+        )
     }
 
-    private static func collapsingConsecutiveDuplicates(_ tokens: [String]) -> [String] {
-        tokens.reduce(into: [String]()) { result, token in
-            if result.last != token { result.append(token) }
+    private static func numberSpans(in text: String) -> [TypingFact.SpokenFact] {
+        let pattern = #"[+−-]?\p{N}+(?:[.,:/-]\p{N}+)*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let source = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
+            TypingFact.SpokenFact(
+                token: source.substring(with: match.range).lowercased(),
+                utf16Offset: match.range.location
+            )
         }
-    }
-
-    private static func containsSpokenCorrectionMarker(_ text: String) -> Bool {
-        text.range(
-            of: #"(?i)\b(?:oh\s+sorry|sorry|actually|i mean|wait|rather)\b"#,
-            options: .regularExpression
-        ) != nil
     }
 
     private static func listMarkerCount(in lines: [Substring]) -> Int {

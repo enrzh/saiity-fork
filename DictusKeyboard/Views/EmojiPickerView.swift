@@ -885,11 +885,12 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         return false
     }
 
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        // Blank Recent cells must never enter the hold recognizer, otherwise
-        // `pan.require(toFail: hold)` stalls horizontal paging from empty space.
-        guard gestureRecognizer === hold else { return true }
-        return canBeginVariantHold(at: touch.location(in: self))
+    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UITouch) -> Bool {
+        // The pager pan waits until this hold fails. A touch the hold never
+        // receives never fails, so a swipe that starts on empty Recents space
+        // would sit still. Receive every touch and fail immediately unless the
+        // finger is on an emoji that actually has variants.
+        return true
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

@@ -275,7 +275,7 @@ final class EmojiCategoryScrubControl: UIControl {
         isAccessibilityElement = true
         accessibilityTraits = [.button, .adjustable]
         accessibilityLabel = "Emoji category"
-        accessibilityHint = "Swipe up or down to choose an emoji category."
+        accessibilityHint = "Swipe left or right to choose an emoji category."
         isUserInteractionEnabled = true
     }
 
@@ -415,11 +415,32 @@ final class EmojiCategoryScrubControl: UIControl {
     }
 
     private var interactionBounds: CGRect {
-        if isExpanded { return bounds.insetBy(dx: -hitExpansion, dy: -hitExpansion) }
-        // Floating chrome is an invisible full-width track above the spacebar.
-        // Keep the collapsed artwork as a circle, but accept scrub starts
-        // anywhere on the track so category paging stays reachable.
-        return bounds.insetBy(dx: 0, dy: -hitExpansion)
+        let target = isExpanded ? expandedHandleFrame : collapsedCircleFrame
+        return target.insetBy(dx: -hitExpansion, dy: -hitExpansion)
+    }
+
+    /// The visible circle. A drag has to start here so the rest of the track
+    /// does not take swipes that belong to the emoji grid.
+    private var collapsedCircleFrame: CGRect {
+        let side = min(bounds.width, bounds.height)
+        return CGRect(
+            x: bounds.midX - side / 2,
+            y: bounds.midY - side / 2,
+            width: side,
+            height: side
+        )
+    }
+
+    /// The glass capsule that is on screen while scrubbing.
+    private var expandedHandleFrame: CGRect {
+        let width = handleWidth
+        let offset = min(max(scrollOffset, 0), maximumScrollOffset)
+        return CGRect(
+            x: EmojiCategoryBarMetrics.railInset + offset,
+            y: contentInset.top,
+            width: width,
+            height: max(0, bounds.height - contentInset.top - contentInset.bottom)
+        )
     }
 
     private var handleWidth: CGFloat {

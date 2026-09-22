@@ -110,7 +110,16 @@ class SuggestionState: ObservableObject {
     /// all running to completion. With coalescing, only the latest keystroke runs.
     private var currentSuggestionWork: DispatchWorkItem?
     private var suggestionRequestGate = SuggestionRequestGate()
+    private struct SpaceCommit {
+        let word: String
+        let correction: String
+        let contextKey: String
+    }
+
     private var pendingAutocorrection: PendingAutocorrection?
+    /// Correction prepared on the suggestion queue for the word currently
+    /// being typed. Space reads it instead of waiting on a dictionary load.
+    private var spaceCommit: SpaceCommit?
     private var suppressNextAutocorrectionBoundary = false
     private var adaptiveTouchWork: DispatchWorkItem?
     private var adaptiveTouchRequestGate = SuggestionRequestGate()
@@ -160,26 +169,46 @@ class SuggestionState: ObservableObject {
            !word.unicodeScalars.contains(where: { CharacterSet.decimalDigits.contains($0) }),
            !engine.shouldSkipTokenPrediction(for: word),
            !rejectedWords.contains(word.lowercased()) {
-            let previousWord = extractPreviousWord(from: context, currentWord: word)
-            let sentenceStart = isAtSentenceStart(context: context, word: word)
-            if let result = performSpellCheck(word, previousWord: previousWord, isAtSentenceStart: sentenceStart),
-               result.correction.lowercased() != word.lowercased() {
+            let contextKey = String(context.suffix(240))
+            let prepared = spaceCommit
+            let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
+                && prepared?.contextKey == contextKey
+            let queueIsFree = adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight
+            let correction: String?
+            let checkedSynchronously: Bool
+            if let prepared, snapshotMatches,
+               TypingCommit.accepts(typed: word, correction: prepared.correction) {
+                correction = prepared.correction
+                checkedSynchronously = false
+            } else if queueIsFree {
+                let previousWord = extractPreviousWord(from: context, currentWord: word)
+                let sentenceStart = isAtSentenceStart(context: context, word: word)
+                if let result = performSpellCheck(word, previousWord: previousWord, isAtSentenceStart: sentenceStart),
+                   TypingCommit.accepts(typed: word, correction: result.correction) {
+                    correction = result.correction
+                } else {
+                    correction = nil
+                }
+                checkedSynchronously = true
+            } else {
+                correction = nil
+                checkedSynchronously = false
+            }
+            if let correction {
                 let prefix = prefixBeforeWord(in: context, word: word)
                 let pending = PendingAutocorrection(
                     originalWord: word,
-                    correctedWord: result.correction,
+                    correctedWord: correction,
                     prefixContext: prefix,
-                    expectedContext: prefix + result.correction + " ",
+                    expectedContext: prefix + correction + " ",
                     afterContext: proxy.documentContextAfterInput ?? ""
                 )
                 for _ in word { proxy.deleteBackward() }
-                proxy.insertText(result.correction)
+                proxy.insertText(correction)
                 pendingAutocorrection = pending
                 suppressNextAutocorrectionBoundary = true
-            } else {
-                if !word.isEmpty {
-                    _ = UserDictionary.shared.recordUsage(word)
-                }
+            } else if checkedSynchronously {
+                _ = UserDictionary.shared.recordUsage(word)
             }
         } else {
             pendingUndo = nil
@@ -384,6 +413,7 @@ class SuggestionState: ObservableObject {
         adaptiveTouchWork?.cancel()
         let requestToken = adaptiveTouchRequestGate.begin()
         adaptiveTouchPrediction = nil
+        spaceCommit = nil
 
         guard hostPolicy.suggestionsAllowed,
               let inputContext = context,
@@ -407,6 +437,7 @@ class SuggestionState: ObservableObject {
             : isAtSentenceStart(context: inputContext, word: partial)
         guard isBoundary || !partial.isEmpty else { return }
 
+        let allowsAutocorrect = hostPolicy.autocorrectAllowed && autocorrectEnabled
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             // Keep the serialized engine anchored to the selected keyboard
@@ -417,46 +448,119 @@ class SuggestionState: ObservableObject {
                 self.adaptiveSelectedLanguage = selectedLanguage
                 self.engine.setSelectedLanguage(selectedLanguage)
             }
-            guard !self.engine.shouldAbstainFromPrediction(for: inputContext) else { return }
+            guard !self.engine.shouldAbstainFromPrediction(for: inputContext) else {
+                self.publishSpaceCommit(nil, token: requestToken)
+                return
+            }
             self.engine.setLanguage(forRecentText: inputContext)
+            let recall = self.touchRecallTokens(partial: partial, context: inputContext)
             let cacheKey = [
                 selectedLanguage,
                 String(inputContext.suffix(240)),
                 partial,
                 isBoundary ? "boundary" : "word",
-                atSentenceStart ? "sentence-start" : "sentence-body"
+                atSentenceStart ? "sentence-start" : "sentence-body",
+                recall.joined(separator: "\u{1E}")
             ].joined(separator: "\u{1F}")
+            let restored = !partial.isEmpty && self.rejectedWords.contains(partial.lowercased())
+            if restored {
+                self.publishSpaceCommit(nil, token: requestToken)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self,
+                          self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
+                    self.adaptiveTouchPrediction = nil
+                }
+                return
+            }
             if let cached = self.adaptivePredictionCache.value(for: cacheKey) {
                 DispatchQueue.main.async { [weak self] in
                     guard let self,
                           self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
                     self.adaptiveTouchPrediction = cached
                 }
-                return
-            }
-            let prediction: NextCharacterProbabilities
-            if isBoundary {
-                prediction = self.engine.nextCharacterProbabilities(
-                    after: previousWords,
-                    isAtSentenceStart: atSentenceStart
-                )
             } else {
-                prediction = self.engine.nextCharacterProbabilities(
-                    for: partial,
-                    after: previousWords,
-                    isAtSentenceStart: atSentenceStart
-                )
+                let prediction: NextCharacterProbabilities
+                if isBoundary {
+                    prediction = self.engine.nextCharacterProbabilities(
+                        after: previousWords,
+                        isAtSentenceStart: atSentenceStart
+                    )
+                } else {
+                    prediction = self.engine.nextCharacterProbabilities(
+                        for: partial,
+                        after: previousWords,
+                        isAtSentenceStart: atSentenceStart,
+                        recallTokens: recall
+                    )
+                }
+                if !prediction.isEmpty {
+                    self.adaptivePredictionCache.insert(prediction, for: cacheKey)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self,
+                              self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
+                        self.adaptiveTouchPrediction = prediction
+                    }
+                }
             }
-            guard !prediction.isEmpty else { return }
-            self.adaptivePredictionCache.insert(prediction, for: cacheKey)
-            DispatchQueue.main.async { [weak self] in
-                guard let self,
-                      self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
-                self.adaptiveTouchPrediction = prediction
-            }
+            let commit = self.preparedSpaceCommit(
+                partial: partial,
+                context: inputContext,
+                previousWord: previousWords.last,
+                isAtSentenceStart: atSentenceStart,
+                isBoundary: isBoundary,
+                allowsAutocorrect: allowsAutocorrect
+            )
+            self.publishSpaceCommit(commit, token: requestToken)
         }
         adaptiveTouchWork = work
         suggestionQueue.async(execute: work)
+    }
+
+    private func preparedSpaceCommit(
+        partial: String,
+        context: String,
+        previousWord: String?,
+        isAtSentenceStart: Bool,
+        isBoundary: Bool,
+        allowsAutocorrect: Bool
+    ) -> SpaceCommit? {
+        guard allowsAutocorrect, !isBoundary, !partial.isEmpty,
+              !engine.dictionaryLoadInFlight,
+              !engine.shouldSkipTokenPrediction(for: partial),
+              !rejectedWords.contains(partial.lowercased()) else { return nil }
+        guard let result = engine.spellCheck(
+            partial,
+            previousWord: previousWord,
+            isAtSentenceStart: isAtSentenceStart
+        ), TypingCommit.accepts(typed: partial, correction: result.correction) else { return nil }
+        return SpaceCommit(
+            word: partial,
+            correction: result.correction,
+            contextKey: String(context.suffix(240))
+        )
+    }
+
+    private func publishSpaceCommit(_ commit: SpaceCommit?, token: SuggestionRequestGate.Token) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.adaptiveTouchRequestGate.isCurrent(token) else { return }
+            self.spaceCommit = commit
+        }
+    }
+
+    /// Names already in the field, plus spellings the user has kept, so the
+    /// next letter of "Pe" can lean toward "Peter" before a common dictionary word.
+    private func touchRecallTokens(partial: String, context: String) -> [String] {
+        guard !partial.isEmpty, !TypingFact.isOpenPrefix(partial) else { return [] }
+        let prefix = partial.lowercased()
+        var tokens = TypingFact.anchoredNames(in: context)
+        if let opening = TypingFact.openingName(in: context) {
+            tokens.append(opening)
+        }
+        for word in UserDictionary.shared.allLearnedWords.keys
+        where word.hasPrefix(prefix) && word.count > prefix.count {
+            tokens.append(word)
+        }
+        return tokens
     }
 
     /// Drops only the invisible routing cache, leaving the suggestion lane intact.
@@ -491,6 +595,7 @@ class SuggestionState: ObservableObject {
     /// Resets the suggestion state to idle.
     func clear() {
         _ = beginSuggestionRequest()
+        spaceCommit = nil
         clearAdaptiveTouchPrediction()
         suggestions = []
         mode = .idle
@@ -505,6 +610,9 @@ class SuggestionState: ObservableObject {
     /// Re-read preference-backed behavior after the app changes a setting while
     /// the keyboard extension is cached.
     func refreshPreferences() {
+        UserDictionary.shared.reload()
+        spaceCommit = nil
+        clearAdaptiveTouchPrediction()
         guard !autocorrectEnabled else { return }
         pendingUndo = nil
         pendingAutocorrection = nil

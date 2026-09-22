@@ -46,9 +46,10 @@ final class AdaptiveTouchControlRegistry {
 }
 
 enum KeyHitTarget {
-    /// A fully clear control is skipped when an opaque plate is behind it.
+    /// Hit testing is owned by `point(inside:)`. The control stays clear so the
+    /// expanded hit target is not drawn as a box behind the glyph.
     static func prepare(_ control: UIControl) {
-        control.backgroundColor = UIColor.label.withAlphaComponent(0.01)
+        control.backgroundColor = .clear
         control.isMultipleTouchEnabled = true
         control.isExclusiveTouch = false
     }
@@ -898,13 +899,14 @@ private final class ImmediateKeyControl: UIControl {
         didSet {
             // Keep feedback local to this control. The parent SwiftUI view does
             // not need to redraw every key when another finger lands.
-            highlightLayer.backgroundColor = isHighlighted
+            // A press may darken an explicit visual plate. It must not stroke
+            // the expanded hit bounds, which read as a hitbox hint.
+            let paintsPlate = isHighlighted && highlightSize != nil
+            highlightLayer.backgroundColor = paintsPlate
                 ? UIColor.label.withAlphaComponent(0.12).cgColor
                 : UIColor.clear.cgColor
-            highlightLayer.borderWidth = isHighlighted ? 1 : 0
-            highlightLayer.borderColor = isHighlighted
-                ? UIColor.label.withAlphaComponent(0.16).cgColor
-                : nil
+            highlightLayer.borderWidth = 0
+            highlightLayer.borderColor = nil
             highlightLayer.cornerRadius = highlightCornerRadius
         }
     }
@@ -1058,13 +1060,11 @@ struct ImmediateVariantKey: UIViewRepresentable {
 
         override var isHighlighted: Bool {
             didSet {
-                backgroundColor = isHighlighted
-                    ? UIColor.label.withAlphaComponent(0.12)
-                    : .clear
-                layer.borderWidth = isHighlighted ? 1 : 0
-                layer.borderColor = isHighlighted
-                    ? UIColor.label.withAlphaComponent(0.16).cgColor
-                    : nil
+                // The control fills the hit target. Painting that rect, or
+                // stroking it, shows the hitbox. Press feedback stays on the glyph.
+                backgroundColor = .clear
+                layer.borderWidth = 0
+                layer.borderColor = nil
             }
         }
     }

@@ -145,6 +145,39 @@ final class AdaptiveTouchRoutingTests: XCTestCase {
         ))
     }
 
+    func testConfidentPredictionExtendsTheInvisibleTargetWithoutTakingTheCenter() {
+        let adjacent = [
+            AdaptiveTouchKey(
+                id: "a", label: "a", frame: CGRect(x: 0, y: 0, width: 40, height: 40),
+                row: 0, column: 0, isCommand: false, hasVariants: false
+            ),
+            AdaptiveTouchKey(
+                id: "s", label: "s", frame: CGRect(x: 40, y: 0, width: 40, height: 40),
+                row: 0, column: 1, isCommand: false, hasVariants: false
+            )
+        ]
+        let strong = NextCharacterProbabilities(["s": 0.9, "a": 0.1])
+
+        XCTAssertEqual(
+            AdaptiveTouchResolver.redirectedKey(
+                at: CGPoint(x: 32, y: 20), keys: adjacent, probabilities: strong
+            ),
+            "s"
+        )
+        XCTAssertNil(
+            AdaptiveTouchResolver.redirectedKey(
+                at: CGPoint(x: 20, y: 20), keys: adjacent, probabilities: strong
+            )
+        )
+
+        let mild = NextCharacterProbabilities(["s": 0.62, "a": 0.38])
+        XCTAssertNil(
+            AdaptiveTouchResolver.redirectedKey(
+                at: CGPoint(x: 32, y: 20), keys: adjacent, probabilities: mild
+            )
+        )
+    }
+
     func testCustomConfidenceGuardRequiresBothFloorAndProbabilityLead() {
         let prediction = NextCharacterProbabilities(["a": 0.44, "s": 0.56])
 

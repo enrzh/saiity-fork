@@ -88,20 +88,29 @@ public enum AdaptiveTouchResolver {
             }) else { continue }
 
             let boundary = (left.frame.maxX + right.frame.minX) / 2
-            guard abs(point.x - boundary) <= boundaryWidth,
+            let alternateForZone = point.x <= boundary ? right : left
+            let staticForZone = point.x <= boundary ? left : right
+            let alternateProbability = probabilities[alternateForZone.label]
+            let staticProbability = probabilities[staticForZone.label]
+            // A confident next letter owns a wider invisible slice of the
+            // neighbor. The neighbor's center still types the neighbor.
+            let confidentHit = alternateProbability >= 0.75
+                && alternateProbability - staticProbability >= 0.25
+            let activeBoundary = confidentHit
+                ? max(boundaryWidth, min(left.frame.width, right.frame.width) * 0.46)
+                : boundaryWidth
+            guard abs(point.x - boundary) <= activeBoundary,
                   point.y >= max(left.frame.minY, right.frame.minY),
                   point.y <= min(left.frame.maxY, right.frame.maxY) else {
                 continue
             }
 
-            let staticKey = point.x <= boundary ? left : right
-            let alternateKey = point.x <= boundary ? right : left
-            // The center third of either key is never an adaptive touch zone.
-            guard abs(point.x - staticKey.frame.midX) > staticKey.frame.width * 0.34,
+            let staticKey = staticForZone
+            let alternateKey = alternateForZone
+            let staticCenterRatio: CGFloat = confidentHit ? 0.24 : 0.34
+            guard abs(point.x - staticKey.frame.midX) > staticKey.frame.width * staticCenterRatio,
                   abs(point.x - alternateKey.frame.midX) > alternateKey.frame.width * 0.34 else { continue }
 
-            let alternateProbability = probabilities[alternateKey.label]
-            let staticProbability = probabilities[staticKey.label]
             guard alternateProbability >= confidenceFloor else {
                 return .keep(staticKey.id)
             }
@@ -109,6 +118,9 @@ public enum AdaptiveTouchResolver {
             // manufacture confidence from equal or near-equal priors.
             guard alternateProbability - staticProbability >= requiredLead else {
                 return .keep(staticKey.id)
+            }
+            if confidentHit {
+                return .redirect(alternateKey.id)
             }
 
             let sigma = max(Double(min(left.frame.width, right.frame.width)) * 0.42, 1)

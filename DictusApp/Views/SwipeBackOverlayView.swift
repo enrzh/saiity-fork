@@ -49,7 +49,7 @@ struct SwipeBackOverlayView: View {
 
     private var statusTitle: LocalizedStringKey {
         switch coordinator.status {
-        case .idle: return "Ready when you are"
+        case .idle: return "Ready to dictate"
         case .requested: return "Starting the microphone"
         case .recording: return "Listening to you"
         case .transcribing: return "Writing your words"

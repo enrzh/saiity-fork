@@ -38,6 +38,18 @@ final class PolishFactPreservationTests: XCTestCase {
         XCTAssertFalse(PolishGuardrail.preservesFacts(
             raw: "Please send invoice AB-120 tomorrow, 17.50 EUR, 3 kg",
             polished: "Please send invoice AB-210 tomorrow, 17.50 EUR, 3 kg.", mode: .auto))
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "Please send Peter the invoice tomorrow",
+            polished: "Please send Paul the invoice tomorrow.", mode: .auto))
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "Please send invoice AB-120 tomorrow",
+            polished: "Please send invoice XY-120 tomorrow.", mode: .auto))
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "Meet Peter at 4am",
+            polished: "Meet Peter at 4pm.", mode: .auto))
+        XCTAssertTrue(PolishGuardrail.preservesFacts(
+            raw: "Peter called about invoice AB-120",
+            polished: "Peter called about invoice AB-120.", mode: .auto))
     }
 
     func testNumericSelfCorrectionKeepsTheCorrectedTime() {
@@ -54,6 +66,20 @@ final class PolishFactPreservationTests: XCTestCase {
             polished: "Meet at 5am.",
             mode: .auto),
                        "invented times must still fail")
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "I actually want 125.50 euros",
+            polished: "I want the euros.",
+            mode: .auto),
+                       "a filler must not delete the only amount")
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "Sorry, send Peter and Jack the invoice",
+            polished: "Send Jack the invoice.",
+            mode: .auto),
+                       "a greeting sorry must not drop a later name")
+        XCTAssertTrue(PolishGuardrail.preservesFacts(
+            raw: "Send Peter, oh sorry, Jack the invoice",
+            polished: "Send Jack the invoice.",
+            mode: .auto))
     }
 
     func testAutoAcceptsShortenedSpokenCleanup() {

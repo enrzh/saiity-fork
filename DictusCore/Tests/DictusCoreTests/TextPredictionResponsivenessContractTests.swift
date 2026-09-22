@@ -69,8 +69,25 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
 
     func testSynchronousAutocorrectAndTrieMaintenanceShareThePredictionQueue() throws {
         let state = try source("DictusKeyboard/TextPrediction/SuggestionState.swift")
+        XCTAssertTrue(state.contains("recallTokens: recall"))
+        XCTAssertTrue(state.contains("TypingCommit.accepts(typed: word, correction: prepared.correction)"))
+        XCTAssertTrue(state.contains("adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight"))
+        XCTAssertTrue(state.contains("UserDictionary.shared.reload()"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.spellCheck(word) }"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.isUnknownToDictionary(word) }"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.pruneUserDictionaryIfPossible(trigger: trigger) }"))
+    }
+
+    func testTouchPriorsDoNotInventCommonWordsAfterAFact() throws {
+        let engine = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
+        let boundary = try XCTUnwrap(engine.range(of: "func nextCharacterProbabilities(\n        after previousWords: [String]"))
+        let body = String(engine[boundary.lowerBound...])
+        XCTAssertTrue(engine.contains("TypingFact.isOpenPrefix(partialWord)"))
+        XCTAssertTrue(engine.contains("localContinuationCandidates(after: contextualWords, maxResults: 12)"))
+        XCTAssertTrue(body.contains("localContinuationCandidates(after: contextualWords, maxResults: 8)"))
+        XCTAssertTrue(body.contains("TypingFact.contextWords(from: previousWords)"))
+        XCTAssertFalse(body.contains("predictNextWords(after: previousWords, maxResults: 8)"))
+        XCTAssertFalse(body.contains("frequencyDict.topWords"),
+                       "A touch prior must not fall back to the most common words")
     }
 }

@@ -197,16 +197,22 @@ struct HomeView: View {
     private func recentActivity(items: [RecentDictation]) -> some View {
         ForEach(items) { item in
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(item.text)
-                        .font(.body)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(Date(timeIntervalSince1970: item.createdAt), style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                NavigationLink {
+                    DictationHistoryEditView(item: item) { edited in
+                        RecentDictations.update(edited, in: AppGroup.defaults)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(item.text)
+                            .font(.body)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(Date(timeIntervalSince1970: item.createdAt), style: .relative)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer(minLength: 4)
+                .accessibilityHint("Opens the full dictation")
                 HStack(spacing: 4) {
                     Button { copy(item.text) } label: {
                         Image(systemName: "doc.on.doc")
