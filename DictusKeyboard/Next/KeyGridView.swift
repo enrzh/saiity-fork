@@ -170,11 +170,10 @@ final class KeyGridView: UIView {
     }
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
-        // Spacers and any key with nothing to draw are skipped entirely.
-        guard case .none = item.key.action else {
-            drawLabel(for: item.key, in: item.plate, pressed: pressed)
-            return
-        }
+        // A key with no action is a spacer: it carries width so the row indents and
+        // draws nothing at all. Legacy spacers were invisible, and the way to get
+        // that right is to draw nothing rather than to draw an empty plate.
+        if case .none = item.key.action { return }
         // Letter plates have no container in the legacy design — the
         // `keyContainersEnabled` preference defaulted to off, so only the glyph
         // showed. Drawing a filled plate behind every letter is the single most
@@ -184,13 +183,15 @@ final class KeyGridView: UIView {
             || KeyboardInteractionPreferences.keyContainersEnabled
         if showPlate {
             let radius = item.key.isPill
-                ? item.plate.height / 2
+                ? min(item.plate.height / 2, KeyGridPlacement.commandCornerRadius)
                 : (item.key.isCommand
                     ? KeyGridPlacement.commandCornerRadius
                     : KeyGridPlacement.keyCornerRadius)
             let path = UIBezierPath(roundedRect: item.plate, cornerRadius: radius)
             context.saveGState()
-            context.setFillColor(plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor)
+            context.setFillColor(
+                plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor
+            )
             context.addPath(path.cgPath)
             context.fillPath()
             context.restoreGState()
