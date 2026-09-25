@@ -64,13 +64,15 @@ enum KeyGridPageFactory {
                 KeyGridKey(id: "shift", action: .shift, weight: 1.5,
                            label: "⇧", systemImage: "shift.fill",
                            isCommand: true,
-                           glyphSize: 17, glyphWeight: .semibold),
+                           glyphSize: CommandKeyStyle.glyphSize,
+                           glyphWeight: CommandKeyStyle.glyphWeight),
                 at: 0
             )
             lowest.append(
                 KeyGridKey(id: "delete", action: .deleteRepeating, weight: 1.5,
                            label: "⌫", isCommand: true,
-                           glyphSize: 18, glyphWeight: .regular)
+                           glyphSize: CommandKeyStyle.glyphSize,
+                           glyphWeight: CommandKeyStyle.glyphWeight)
             )
             built[built.count - 1] = lowest
         }
@@ -91,9 +93,18 @@ enum KeyGridPageFactory {
         glyphSize: CGFloat,
         glyphWeight: KeyGlyphWeight
     ) -> [[KeyGridKey]] {
-        rows.map { row in
+        // Spacers go as well as the keys in `dropping`.
+        //
+        // The layout data pads the home row with two half-width spacers, which was
+        // the right idea under a solver that shared width out by key count and the
+        // wrong one here: they turned nine letters into an eleven-key row, and
+        // eleven keys is what the standard letter width was then derived from. Nine
+        // keys at the standard width, centred, is exactly what the platform draws —
+        // measured at x=26.5..375 with 33.5pt keys against x=7..395 above it.
+        let skip = dropping.union(["spacer"])
+        return rows.map { row in
             row.enumerated().compactMap { column, key in
-                guard !dropping.contains(key.type.identity) else { return nil }
+                guard !skip.contains(key.type.identity) else { return nil }
                 return makeKey(
                     key,
                     row: 0,
@@ -162,8 +173,8 @@ enum KeyGridPageFactory {
                     weight: 2.25,
                     label: "⌫",
                     isCommand: true,
-                    glyphSize: 18,
-                    glyphWeight: .regular
+                    glyphSize: CommandKeyStyle.glyphSize,
+                    glyphWeight: CommandKeyStyle.glyphWeight
                 )
             )
             built[built.count - 1] = last
@@ -218,7 +229,8 @@ enum KeyGridPageFactory {
                        glyphWeight: .regular),
             digitKey(label: "0", row: 3, column: 1),
             KeyGridKey(id: "pad-delete", action: .delete, isCommand: true,
-                       glyphSize: 18, glyphWeight: .regular)
+                       glyphSize: CommandKeyStyle.glyphSize,
+                       glyphWeight: CommandKeyStyle.glyphWeight)
         ])
         // Taller keys than the letter grid, because the pad has four rows and spends
         // none of its height on a bottom bar. Measured: 48pt against the letters' 43.

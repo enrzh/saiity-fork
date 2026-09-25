@@ -164,8 +164,38 @@ final class KeyGridView: UIView {
         guard bounds.size != solvedSize, let page else { return }
         solvedSize = bounds.size
         layout = KeyGridPlacement.solve(page, in: bounds.size)
+        logSolvedGeometry()
         onGlassLayoutChanged?(glassSpecs)
         setNeedsDisplay()
+    }
+
+    /// Records the solved plates, so a render can be compared with the arithmetic
+    /// that produced it instead of guessed at.
+    ///
+    /// This exists because the two disagreed silently for a while. The solver
+    /// reported 33.4pt letter keys and the screen showed 29.8pt ones, and nothing
+    /// said so: the code was correct by inspection, the unit tests were correct
+    /// because they built their own page, and only measuring the actual render
+    /// found that the row reaching the solver was not the row being drawn. One log
+    /// line per solve turned that into a two-minute check.
+    ///
+    /// Solves happen on size change only, not per keystroke, so this is cheap. It
+    /// records geometry and key counts, never what was typed.
+    private func logSolvedGeometry() {
+        guard let page else { return }
+        var parts: [String] = ["page=\(page.id) size=\(Int(bounds.width))x\(Int(bounds.height))"]
+        for (index, row) in layout.rows.enumerated() {
+            let first = row.first?.plate
+            let last = row.last?.plate
+            let glyph = row.first(where: { $0.key.label?.isEmpty == false })?.plate
+            parts.append("r\(index)n=\(row.count)"
+                + " x=\(Int(first?.minX ?? -1))..\(Int(last?.maxX ?? -1))"
+                + " w=\(String(format: "%.1f", first?.width ?? 0))"
+                + " h=\(String(format: "%.1f", first?.height ?? 0))"
+                + " y=\(String(format: "%.1f", first?.minY ?? 0))"
+                + (glyph.map { " glyphCx=\(String(format: "%.1f", $0.midX))" } ?? ""))
+        }
+        PersistentLog.log(.keyboardGridGeometryProbe(details: parts.joined(separator: " | ")))
     }
 
     /// Drops any gesture in flight and clears the shift latches.
@@ -234,7 +264,7 @@ final class KeyGridView: UIView {
             for item in row {
                 guard showsPlate(for: item.key) else { continue }
                 specs.append(GlassSpec(rect: item.plate,
-                                       radius: cornerRadius(for: item.key, in: item.plate)))
+                                       radius: cornerRadius(for: item.key)))
             }
         }
         return specs
@@ -253,8 +283,8 @@ final class KeyGridView: UIView {
         return !key.isInvisiblePlate || KeyboardInteractionPreferences.keyContainersEnabled
     }
 
-    private func cornerRadius(for key: KeyGridKey, in plate: CGRect) -> CGFloat {
-        key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyGridPlacement.keyCornerRadius
+    private func cornerRadius(for key: KeyGridKey) -> CGFloat {
+        key.isCommand ? CommandKeyStyle.cornerRadius : KeyGridPlacement.keyCornerRadius
     }
 
     private var usesLiveMaterial: Bool {
@@ -264,31 +294,49 @@ final class KeyGridView: UIView {
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
         if case .none = item.key.action { return }
-        if showsPlate(for: item.key) {
+        guard showsPlate(for: item.key) else {
+            drawLabel(for: item.key, in: item.plate, pressed: pressed)
+            return
+        }
+        let radius = cornerRadius(for: item.key)
+        if item.key.isCommand {
+            // The shared command treatment, so a command key on this grid and one in
+            // the bottom bar or the emoji page are the same button.
+            //
+            // `CommandKeyFace` expresses it in SwiftUI as a 0.94 scale and a 0.72
+            // opacity. Core Graphics cannot dim a sibling `UIGlassEffect` — it belongs
+            // to another view — so the same numbers are spent here as a scaled plate
+            // and a lightening wash inside it. Fading a dark glass plate over a dark
+            // keyboard reads as a lightening, which is what the wash does.
+            //
+            // The wash is drawn only while held. Painting it unconditionally would
+            // put an 18% white film over every command key at rest.
+            let plate = CommandKeyStyle.pressedPlate(item.plate, pressed: pressed)
+            if !usesLiveMaterial {
+                fill(plate, radius: radius,
+                     color: plateColor(pressed: pressed,
+                                       isLetter: item.key.isInvisiblePlate), in: context)
+            } else if pressed {
+                fill(plate, radius: radius,
+                     color: UIColor.label.withAlphaComponent(CommandKeyStyle.pressWashAlpha),
+                     in: context)
+            }
+        } else if !usesLiveMaterial {
             // With live material the sibling glass layer already carries the face.
             // Filling here as well would paint a solid slab over it.
-            if !usesLiveMaterial {
-                let path = UIBezierPath(roundedRect: item.plate,
-                                        cornerRadius: cornerRadius(for: item.key, in: item.plate))
-                context.saveGState()
-                context.setFillColor(
-                    plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor
-                )
-                context.addPath(path.cgPath)
-                context.fillPath()
-                context.restoreGState()
-            } else if pressed {
-                // A press still needs to read on glass, which has no fill of its own.
-                let path = UIBezierPath(roundedRect: item.plate,
-                                        cornerRadius: cornerRadius(for: item.key, in: item.plate))
-                context.saveGState()
-                context.setFillColor(UIColor.label.withAlphaComponent(0.18).cgColor)
-                context.addPath(path.cgPath)
-                context.fillPath()
-                context.restoreGState()
-            }
+            fill(item.plate, radius: radius,
+                 color: plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate),
+                 in: context)
         }
         drawLabel(for: item.key, in: item.plate, pressed: pressed)
+    }
+
+    private func fill(_ rect: CGRect, radius: CGFloat, color: UIColor, in context: CGContext) {
+        context.saveGState()
+        context.setFillColor(color.cgColor)
+        context.addPath(UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath)
+        context.fillPath()
+        context.restoreGState()
     }
 
     /// Plate fill. The material preference is visual only and is resolved here, so
@@ -310,7 +358,13 @@ final class KeyGridView: UIView {
     }
 
     private func drawLabel(for key: KeyGridKey, in plate: CGRect, pressed: Bool) {
-        let color = UIColor.label.withAlphaComponent(pressed ? 0.55 : 1)
+        // A command key dims by the shared amount, so its glyph fades with its plate.
+        // Letter keys keep their own lighter dim: they have no plate to darken, so the
+        // glyph is the only thing that can react.
+        let dim = key.isCommand
+            ? CommandKeyStyle.pressOpacity
+            : 0.55
+        let color = UIColor.label.withAlphaComponent(pressed ? dim : 1)
         // The period key carries a comma hint beneath its dot, as the legacy
         // control did, so punctuation was reachable without a second key.
         if key.id == "bar-period" {

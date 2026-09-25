@@ -286,6 +286,46 @@ struct SuggestionBarIconButton: View {
     }
 }
 
+/// What the space bar is doing under the finger, published so the face can show it.
+///
+/// The tracking control is UIKit and the face is SwiftUI, and until this existed
+/// nothing crossed between them: the caret moved and the key looked untouched. On
+/// the system keyboard a held space bar stops saying "space" and shows a horizontal
+/// arrow that leans with the drag — the only cue that the finger is steering the
+/// caret rather than pressing a key.
+final class SpaceDragState: ObservableObject {
+    /// True from the moment cursor tracking starts until the finger lifts.
+    @Published private(set) var isTracking = false
+    /// Horizontal travel since tracking began, in points, already clamped.
+    @Published private(set) var offset: CGFloat = 0
+    /// How far the arrow may lean before it stops. Past the edge of the plate a
+    /// larger travel would read as the glyph escaping the key.
+    static let travel: CGFloat = 22
+
+    private var originX: CGFloat = 0
+
+    func begin(atX x: CGFloat) {
+        originX = x
+        offset = 0
+        isTracking = true
+    }
+
+    func update(toX x: CGFloat) {
+        guard isTracking else { return }
+        let raw = x - originX
+        let clamped = min(max(raw, -Self.travel), Self.travel)
+        // Skip the publish when nothing moved. This fires on every touch sample, and
+        // a redundant `objectWillChange` redraws the whole bar mid-gesture.
+        guard clamped != offset else { return }
+        offset = clamped
+    }
+
+    func end() {
+        isTracking = false
+        offset = 0
+    }
+}
+
 /// Shared spacebar gesture for every SwiftUI keyboard page. A quick tap inserts
 /// a space; a held press tracks finger travel like the native spacebar.
 struct SpaceBarControl: View {
@@ -293,14 +333,25 @@ struct SpaceBarControl: View {
     let onCursorBegan: () -> Void
     let onCursorMoved: (KeyboardCursorStep) -> Void
     let onCursorEnded: () -> Void
+    @StateObject private var drag = SpaceDragState()
 
     var body: some View {
         ZStack {
             CommandKeyFace(
                 text: "space",
-                plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+                plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                isPressed: drag.isTracking
             )
+            // The label hands over to a steering arrow, the way the platform's does,
+            // and the arrow leans with the finger.
+            Image(systemName: "arrow.left.and.right")
+                .font(.system(size: CommandKeyStyle.glyphSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .offset(x: drag.offset)
+                .opacity(drag.isTracking ? CommandKeyStyle.pressOpacity : 0)
+                .allowsHitTesting(false)
             SpaceTrackingButton(
+                drag: drag,
                 onTap: onTap,
                 onCursorBegan: onCursorBegan,
                 onCursorMoved: onCursorMoved,
@@ -318,6 +369,7 @@ struct SpaceBarControl: View {
 /// deltas move the caret immediately, including after the finger leaves the
 /// visible capsule; a stationary finger is inert.
 private struct SpaceTrackingButton: UIViewRepresentable {
+    let drag: SpaceDragState
     let onTap: () -> Void
     let onCursorBegan: () -> Void
     let onCursorMoved: (KeyboardCursorStep) -> Void
@@ -325,6 +377,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
 
     func makeUIView(context: Context) -> TrackingControl {
         let control = TrackingControl()
+        control.drag = drag
         control.onTap = onTap
         control.onCursorBegan = onCursorBegan
         control.onCursorMoved = onCursorMoved
@@ -333,6 +386,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: TrackingControl, context: Context) {
+        uiView.drag = drag
         uiView.onTap = onTap
         uiView.onCursorBegan = onCursorBegan
         uiView.onCursorMoved = onCursorMoved
@@ -340,6 +394,8 @@ private struct SpaceTrackingButton: UIViewRepresentable {
     }
 
     final class TrackingControl: UIControl {
+        /// The drag state the SwiftUI face renders. The view owns it; this only writes.
+        var drag: SpaceDragState?
         var onTap: (() -> Void)?
         var onCursorBegan: (() -> Void)?
         var onCursorMoved: ((KeyboardCursorStep) -> Void)?
@@ -473,6 +529,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
                Date().timeIntervalSince(startedAt ?? .distantPast) >= KeyboardDeletion.cursorHoldDuration {
                 activateCursorTracking()
             }
+            if isCursorTracking { drag?.update(toX: point.x) }
             emitJoystickStep()
         }
 
@@ -486,6 +543,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
                 joystickSampler = nil
                 latestTouchPoint = nil
                 isCursorTracking = false
+                drag?.end()
             }
             if isCursorTracking {
                 onCursorEnded?()
@@ -500,6 +558,8 @@ private struct SpaceTrackingButton: UIViewRepresentable {
             isCursorTracking = true
             if let origin = joystickOrigin {
                 joystickSampler = KeyboardCursorJoystickSampler(origin: origin)
+                // The arrow starts under the finger, not under the key's centre.
+                drag?.begin(atX: origin.x)
             }
             onCursorBegan?()
             emitJoystickStep(force: true)

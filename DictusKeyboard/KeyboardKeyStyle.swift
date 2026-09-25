@@ -107,8 +107,8 @@ struct CommandKeyFace: View {
         systemName: String,
         plateWidth: CGFloat? = nil,
         plateHeight: CGFloat,
-        cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
-        symbolPointSize: CGFloat = 16,
+        cornerRadius: CGFloat = CommandKeyStyle.cornerRadius,
+        symbolPointSize: CGFloat = CommandKeyStyle.glyphSize,
         isPressed: Bool = false
     ) {
         self.systemName = systemName
@@ -160,10 +160,15 @@ struct CommandKeyFace: View {
             maxHeight: plateHeight
         )
         .commandKeyPlate(cornerRadius: cornerRadius)
-        .scaleEffect(isPressed && !reduceMotion ? 0.94 : 1)
-        .opacity(isPressed ? 0.72 : 1)
+        // The numbers come from the shared command-key treatment, which the UIKit
+        // grid reads too. Hardcoding them here is how the two drifted apart.
+        .scaleEffect(isPressed && !reduceMotion ? CommandKeyStyle.pressScale : 1)
+        .opacity(isPressed ? CommandKeyStyle.pressOpacity : 1)
         .animation(
-            reduceMotion ? nil : .easeOut(duration: isPressed ? 0.08 : 0.16),
+            reduceMotion
+                ? nil
+                : .easeOut(duration: isPressed ? CommandKeyStyle.pressDurationIn
+                                                : CommandKeyStyle.pressDurationOut),
             value: isPressed
         )
     }

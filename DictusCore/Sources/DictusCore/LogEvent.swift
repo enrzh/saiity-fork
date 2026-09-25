@@ -104,6 +104,11 @@ public enum LogEvent: Sendable {
     case keyboardDidDisappear
     case keyboardMicTapped
     case keyboardTextInserted  // No content parameter -- privacy by design
+    /// The plates the key grid solved for a page, as geometry. One line per solve.
+    ///
+    /// Recorded because a render and the arithmetic that produced it can disagree
+    /// with nothing failing, and this is how that gets noticed. Carries no text.
+    case keyboardGridGeometryProbe(details: String)
 
     // MARK: Keyboard status message (#261)
     /// The toolbar message was assigned. `reason` names what asked for it.
@@ -283,6 +288,7 @@ public enum LogEvent: Sendable {
              .modelDownloadProgress, .modelDownloadStalled:
             return .model
         case .keyboardDidAppear, .keyboardDidDisappear, .keyboardMicTapped, .keyboardTextInserted,
+             .keyboardGridGeometryProbe,
              .overlayShown, .overlayHidden, .rapidTapRejected,
              .dictationMessageSet, .dictationMessageDisplayed, .dictationMessageCleared,
              .waveformAppeared, .waveformDisappeared, .waveformHeartbeat, .waveformStall,
@@ -360,7 +366,7 @@ public enum LogEvent: Sendable {
              .modelSelected, .modelCompilationStarted, .modelCompilationCompleted,
              .modelDeleted, .modelPrewarmStarted, .modelCleanupPerformed,
              .modelPrewarmPeakMemory, .modelLoadStateChanged, .transcriptionPerformance,
-             .keyboardDidAppear, .keyboardMicTapped,
+             .keyboardDidAppear, .keyboardMicTapped, .keyboardGridGeometryProbe,
              .dictationMessageSet, .dictationMessageDisplayed,
              .appLaunched, .appWhisperKitLoaded, .logExportCompleted,
              .deviceCapabilitySnapshot,
@@ -441,6 +447,7 @@ public enum LogEvent: Sendable {
         case .modelDeleteFailed: return "modelDeleteFailed"
         case .modelPrewarmStarted: return "modelPrewarmStarted"
         case .modelCleanupPerformed: return "modelCleanupPerformed"
+        case .keyboardGridGeometryProbe: return "keyboardGridGeometryProbe"
         case .keyboardDidAppear: return "keyboardDidAppear"
         case .keyboardDidDisappear: return "keyboardDidDisappear"
         case .keyboardMicTapped: return "keyboardMicTapped"
@@ -598,6 +605,8 @@ public enum LogEvent: Sendable {
         case .keyboardDidAppear, .keyboardDidDisappear,
              .keyboardMicTapped, .keyboardTextInserted:
             return ""
+        case .keyboardGridGeometryProbe(let details):
+            return details
 
         // Engine Diagnostics
         case .engineWarmUpAttempt(let context):

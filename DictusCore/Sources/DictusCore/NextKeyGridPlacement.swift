@@ -46,7 +46,9 @@ public enum KeyGridPlacement {
     /// oversized keys.
     public static let maximumRowHeight: CGFloat = 43
     public static let keyCornerRadius: CGFloat = 8
-    public static let commandCornerRadius: CGFloat = 18
+    /// Command keys take their radius from `CommandKeyStyle`, which owns every other
+    /// part of how a command button looks. It used to be a second literal `18` here.
+    public static let commandCornerRadius: CGFloat = CommandKeyStyle.cornerRadius
     /// Bottom-bar lane metrics, matching the legacy bar exactly.
 
     /// Solves `page` for a container of `size`.
@@ -84,8 +86,7 @@ public enum KeyGridPlacement {
         // Short rows are centred and keep the width of a standard key rather than
         // stretching to fill. A nine-key row made of nine full-width keys looks
         // wrong next to a ten-key row; this is how a native keyboard draws them.
-        let widestRow = page.rows.reduce(0) { max($0, $1.count) }
-        let standardWidth = standardKeyWidth(for: widestRow, in: size.width)
+        let standardWidth = standardKeyWidth(for: page, in: size.width)
 
         var placed: [PlacedKey] = []
         for (rowIndex, row) in page.rows.enumerated() {
@@ -140,12 +141,29 @@ public enum KeyGridPlacement {
         return size.width > neededWidth && size.height >= neededHeight
     }
 
-    /// Width of one standard key in the widest row, which every other row is
-    /// measured against.
-    private static func standardKeyWidth(for count: Int, in width: CGFloat) -> CGFloat {
-        guard count > 0 else { return 0 }
-        let gaps = keySpacing * CGFloat(count - 1)
-        return max(1, (width - edgeInset * 2 - gaps) / CGFloat(count))
+    /// Width of one standard key, the unit every other row is measured against.
+    ///
+    /// Derived from the heaviest row's total **weight**, not from its key count. The
+    /// two disagree on every row that carries a spacer or a double-width control, and
+    /// getting it wrong is invisible in the arithmetic and obvious on screen.
+    ///
+    /// The home row is the case that was measured and then got this wrong. It is nine
+    /// letters between two half-width spacers, so counting keys made it the "widest"
+    /// row on the page at eleven entries. Every letter was then sized as one eleventh
+    /// of the row — 29.8pt instead of the platform's 33.4 — and the whole letter grid
+    /// sat 17pt in from each edge while the row above it filled the width. Weighting
+    /// counts the same row as ten letters, which is what it is.
+    private static func standardKeyWidth(for page: KeyGridPage, in width: CGFloat) -> CGFloat {
+        var widest = (weight: CGFloat(0), count: 0)
+        for row in page.rows {
+            let weight = row.reduce(CGFloat(0)) { $0 + max(0.01, $1.weight) }
+            if weight > widest.weight {
+                widest = (weight, row.count)
+            }
+        }
+        guard widest.weight > 0, widest.count > 0 else { return 0 }
+        let gaps = keySpacing * CGFloat(widest.count - 1)
+        return max(1, (width - edgeInset * 2 - gaps) / widest.weight)
     }
 
     /// Distributes a row across the width in proportion to each key's weight.

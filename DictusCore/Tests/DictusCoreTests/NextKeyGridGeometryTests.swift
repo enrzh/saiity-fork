@@ -496,4 +496,92 @@ final class NextKeyGridGeometryTests: XCTestCase {
         )
         XCTAssertNotEqual(plain.fingerprint, withVariants.fingerprint)
     }
+
+    // MARK: - Spacer-padded rows
+
+    /// A row padded with half-width spacers must not change the width of a letter.
+    ///
+    /// This is the bug that put the whole letter grid 17pt in from each edge, and it
+    /// is worth a test precisely because the layout data still ships those spacers.
+    /// The home row is nine letters between two half-width entries, so counting keys
+    /// made it the widest row on the page at eleven entries, and every letter was
+    /// then sized as one eleventh of the row: 29.8pt instead of the platform's 33.4.
+    ///
+    /// The standard width comes from total weight, so a spacer's half unit is half a
+    /// letter rather than a whole one. The factory drops the spacers as well — this
+    /// test covers the half of the fix that has to hold even if one survives.
+    func testHalfWeightSpacersDoNotNarrowTheLettersAroundThem() {
+        func letters(_ chars: String, _ prefix: String) -> [KeyGridKey] {
+            chars.map { KeyGridKey(id: "\(prefix)\($0)", action: .insert("a")) }
+        }
+        func spacer(_ id: String) -> KeyGridKey {
+            KeyGridKey(id: id, action: .none, weight: 0.5)
+        }
+        var bottom: [KeyGridKey] = [KeyGridKey(id: "shift", action: .shift, isCommand: true)]
+        bottom += letters("zxcvbnm", "b")
+        bottom.append(KeyGridKey(id: "delete", action: .delete, isCommand: true))
+
+        let page = KeyGridPage(id: "padded", rows: [
+            letters("qwertyuiop", "t"),
+            [spacer("lead")] + letters("asdfghjkl", "h") + [spacer("trail")],
+            bottom
+        ], pinnedLastRow: true)
+        let layout = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 170))
+
+        // The ten-key row fills the width, exactly as it does with no spacers present.
+        // This is the assertion that pins the user-visible symptom: before the fix
+        // this row ran x=24..377 with 29.8pt keys.
+        let top = layout.rows[0]
+        XCTAssertEqual(top.count, 10)
+        XCTAssertEqual(top.first?.plate.minX ?? .nan, 7, accuracy: 0.5)
+        XCTAssertEqual(402 - (top.last?.plate.maxX ?? .nan), 7, accuracy: 0.5)
+        XCTAssertEqual(top.first?.plate.width ?? .nan, 33.5, accuracy: 1.0)
+
+        // Each spacer is half a letter, and each of the nine letters beside them is
+        // still a full standard key rather than one eleventh of the row.
+        let home = layout.rows[1]
+        XCTAssertEqual(home.count, 11)
+        XCTAssertEqual(home.first?.plate.width ?? .nan, 16.75, accuracy: 0.5)
+        XCTAssertEqual(home.last?.plate.width ?? .nan, 16.75, accuracy: 0.5)
+        for key in home.dropFirst().dropLast() {
+            XCTAssertEqual(key.plate.width, 33.5, accuracy: 1.0)
+        }
+
+        // The letters are still 6pt apart, so the row's internal rhythm is the
+        // platform's regardless of what pads its ends.
+        let firstLetter = home[1]
+        let secondLetter = home[2]
+        XCTAssertEqual(secondLetter.plate.minX - firstLetter.plate.maxX, 6, accuracy: 0.5)
+    }
+
+    /// Adding a half-weight entry must not move the row above it.
+    ///
+    /// A companion to the test above, and the assertion that actually pins the cause:
+    /// the same page with and without the spacers has to place its ten-key row
+    /// identically. If the standard width were still count-derived, these two would
+    /// differ by 3.6pt per key and the failure would be obvious.
+    func testSpacersLeaveTheOtherRowsWhereTheyWere() {
+        func letters(_ chars: String, _ prefix: String) -> [KeyGridKey] {
+            chars.map { KeyGridKey(id: "\(prefix)\($0)", action: .insert("a")) }
+        }
+        let bare = KeyGridPage(id: "bare", rows: [
+            letters("qwertyuiop", "t"),
+            letters("asdfghjkl", "h")
+        ])
+        let padded = KeyGridPage(id: "padded", rows: [
+            letters("qwertyuiop", "t"),
+            [KeyGridKey(id: "lead", action: .none, weight: 0.5)]
+                + letters("asdfghjkl", "h")
+                + [KeyGridKey(id: "trail", action: .none, weight: 0.5)]
+        ])
+        let size = CGSize(width: 402, height: 120)
+        let bareLayout = KeyGridPlacement.solve(bare, in: size)
+        let paddedLayout = KeyGridPlacement.solve(padded, in: size)
+
+        for (index, key) in bareLayout.rows[0].enumerated() {
+            let other = paddedLayout.rows[0][index]
+            XCTAssertEqual(key.plate.minX, other.plate.minX, accuracy: 0.01)
+            XCTAssertEqual(key.plate.width, other.plate.width, accuracy: 0.01)
+        }
+    }
 }
