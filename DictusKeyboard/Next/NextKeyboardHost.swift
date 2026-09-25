@@ -202,10 +202,13 @@ final class NextKeyboardHost: NSObject {
     /// The lane is the same three bands the emoji picker stacks below its content:
     /// `chromeCommandRowGap`, the bar itself, then `chromeBottomInset`.
     ///
-    /// The letter page is additionally inset from the top by
-    /// `letterKeyboardHeaderHeight`. That band is not decoration: it is what keeps
-    /// the rows from stretching to fill the surface, and its absence is most of why
-    /// the rebuilt page read as too airy next to the legacy one.
+    /// The letter page used to be inset from the top by `letterKeyboardHeaderHeight`,
+    /// a 44pt band from the legacy layout. It is gone, and deliberately: the legacy
+    /// band only made sense while rows were free to grow, because it was what stopped
+    /// them stretching. Now that rows are capped at the platform's own 43pt key
+    /// height, keeping the band as well squeezed them to 34.7pt — a third smaller
+    /// than every key on the system keyboard. The space the band held now collects
+    /// as ordinary slack above the block.
     static func gridFrame(
         for layout: VoiceOnlyKeyboardPolicy.Layout,
         surfaceHeight: CGFloat,
@@ -216,10 +219,9 @@ final class NextKeyboardHost: NSObject {
         let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
             + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
             + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
-        let available = page == .letters ? layout.letterKeyboardFrame : surface
-        let height = max(0, available.height - lane)
-        return CGRect(x: available.minX, y: available.minY,
-                      width: available.width, height: height)
+        let height = max(0, surface.height - lane)
+        return CGRect(x: surface.minX, y: surface.minY,
+                      width: surface.width, height: height)
     }
 }
 

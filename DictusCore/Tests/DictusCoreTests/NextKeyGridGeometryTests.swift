@@ -173,15 +173,27 @@ final class NextKeyGridGeometryTests: XCTestCase {
                 XCTFail("no keys placed for \(rowCount) rows")
                 continue
             }
-            // Either the block reaches the top, or what is left above it is less
-            // than a single row gap — anything more reads as dead space.
-            let leftover = top
-            XCTAssertLessThanOrEqual(
-                leftover, KeyGridPlacement.rowSpacing + 0.5,
-                "\(rowCount) rows left \(leftover)pt empty above the first key"
-            )
+            // Rows are never taller than the platform's own key height, whatever
+            // the container offers. Spending leftover space on taller keys is what
+            // made the rebuilt grid stop lining up with the system keyboard: every
+            // row below the first drifted out of alignment with it.
+            for row in layout.rows {
+                for item in row {
+                    XCTAssertLessThanOrEqual(
+                        item.plate.height, KeyGridPlacement.maximumRowHeight + 0.5,
+                        "\(rowCount) rows produced a \(item.plate.height)pt key"
+                    )
+                }
+            }
             XCTAssertEqual(bottom, size.height, accuracy: 0.5,
                            "the block must sit against the bottom of the grid")
+            // The slack above the first plate is still owned by a target. Leaving it
+            // unowned would reintroduce the dead band that took four builds to find,
+            // so the rule is about targets tiling the grid, not about plates filling
+            // it.
+            let owner = layout.placed.first { $0.target.contains(CGPoint(x: size.width / 2, y: top / 2)) }
+            XCTAssertNotNil(owner,
+                            "\(rowCount) rows left \(top)pt that no target owns")
         }
     }
 
@@ -209,6 +221,82 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(shortInset, shortRightGap, accuracy: 0.5,
                        "a short row must be centred, not left-aligned")
         XCTAssertGreaterThan(topRightGap, 0)
+    }
+
+    // MARK: - Platform parity
+
+    /// The grid lines up with the system keyboard, measured not guessed.
+    ///
+    /// The numbers come from probing the rendered iOS keyboard on an iPhone 18 Pro
+    /// (402pt wide): a ten-key row runs x=7..395, its plates are 33.5pt wide with
+    /// 6pt between them, the plates are 43pt tall, and the rows are 11pt apart. Those
+    /// are the platform's values, so they are the ones to hold — a grid that is
+    /// merely "close" is visibly not the keyboard it replaced, because every row
+    /// below the first drifts by the accumulated error.
+    func testLetterGridMatchesTheMeasuredSystemKeyboard() {
+        func letters(_ chars: String, _ prefix: String) -> [KeyGridKey] {
+            chars.map { KeyGridKey(id: "\(prefix)\($0)", action: .insert("a")) }
+        }
+        var bottom: [KeyGridKey] = [KeyGridKey(id: "shift", action: .shift, isCommand: true)]
+        bottom += letters("zxcvbnm", "b")
+        bottom.append(KeyGridKey(id: "delete", action: .delete, isCommand: true))
+
+        let rows: [[KeyGridKey]] = [
+            letters("qwertyuiop", "t"),
+            letters("asdfghjkl", "h"),
+            bottom
+        ]
+        let page = KeyGridPage(id: "parity", rows: rows, pinnedLastRow: true)
+        let screen = CGSize(width: 402, height: 170)
+        let layout = KeyGridPlacement.solve(page, in: screen)
+
+        // Side margins, taken from the widest row.
+        let top = layout.rows[0]
+        guard let topFirst = top.first, let topLast = top.last,
+              let topSecond = top.count > 1 ? top[1] : nil else {
+            XCTFail("no top row keys")
+            return
+        }
+        XCTAssertEqual(topFirst.plate.minX, 7, accuracy: 0.5)
+        XCTAssertEqual(402 - topLast.plate.maxX, 7, accuracy: 0.5)
+
+        // Letter plates: standard width, 6pt apart, 43pt tall.
+        XCTAssertEqual(topFirst.plate.width, 33.5, accuracy: 1.0)
+        XCTAssertEqual(topSecond.plate.minX - topFirst.plate.maxX, 6, accuracy: 0.5)
+        for row in layout.rows {
+            XCTAssertEqual(row.first?.plate.height ?? .nan, 43, accuracy: 0.5)
+        }
+
+        // Rows are 11pt apart.
+        let rowTops = layout.rows.map { $0.first?.plate.minY ?? .nan }
+        XCTAssertEqual(rowTops[1] - rowTops[0], 54, accuracy: 0.5)
+        XCTAssertEqual(rowTops[2] - rowTops[1], 54, accuracy: 0.5)
+
+        // The bottom row's letters keep the standard width and the 6pt gap, and the
+        // block is centred between the two edge keys. It is deliberately NOT aligned
+        // with the row above: the system keyboard pushes it right, because the wider
+        // shift eats the space on the left. Measured, z starts at x=66 there.
+        let lastRow = layout.rows[2]
+        guard let shift = lastRow.first, let z = lastRow.count > 1 ? lastRow[1] : nil,
+              let del = lastRow.last else {
+            XCTFail("no bottom row keys")
+            return
+        }
+        XCTAssertEqual(z.plate.width, 33.5, accuracy: 1.0)
+        XCTAssertEqual(z.plate.minX, 66, accuracy: 1.5,
+                       "the middle block must be centred between the edge keys")
+        for (a, b) in zip(lastRow, lastRow.dropFirst()) {
+            XCTAssertGreaterThan(b.plate.minX - a.plate.maxX, 0, "keys must not overlap")
+        }
+        // Equal gaps either side of the centred block.
+        let leftGap = z.plate.minX - shift.plate.maxX
+        let rightGap = del.plate.minX - lastRow[lastRow.count - 2].plate.maxX
+        XCTAssertEqual(leftGap, rightGap, accuracy: 1.0,
+                       "the slack belongs equally beside shift and delete")
+
+        // Shift and delete are about 1.36x a letter, as the system keyboard draws them.
+        XCTAssertEqual(shift.plate.width / 33.5, 1.36, accuracy: 0.05)
+        XCTAssertEqual(del.plate.width / 33.5, 1.36, accuracy: 0.05)
     }
 
     // MARK: - The bottom bar is not ours

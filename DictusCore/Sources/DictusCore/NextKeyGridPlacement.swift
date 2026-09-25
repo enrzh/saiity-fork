@@ -28,17 +28,23 @@ public enum KeyGridPlacement {
     /// Spacing between rows of plates.
     public static let rowSpacing: CGFloat = 11
     /// Margin between the grid and the left/right edges of its container.
-    public static let edgeInset: CGFloat = 6.5
-    /// Height of a letter plate. Rows are allowed to be shorter when the container
-    /// is cramped; this is the height they get when there is room.
-    public static let preferredRowHeight: CGFloat = 45
-    /// Rows grow past `preferredRowHeight` to fill the surface, up to this.
     ///
-    /// A hard cap at 45pt left most of a three-row page empty above the first row,
-    /// which read as a broken layout rather than as breathing room. The cap only
-    /// exists to stop a very tall container producing absurd keys; at 66pt a
-    /// three-row page fills a 216pt keyboard exactly.
-    public static let maximumRowHeight: CGFloat = 66
+    /// Measured off the system keyboard rather than chosen: a ten-key row on a 402pt
+    /// screen runs x=7..395, so 7pt is what the platform uses. At 6.5 every key was
+    /// half a point narrow and the row did not line up with the one above it.
+    public static let edgeInset: CGFloat = 7
+    /// Height of a key plate.
+    ///
+    /// Also measured: the system keyboard's letter plates are 43pt tall on an 18 Pro,
+    /// with 11pt between rows. Rows are allowed to be shorter when the container is
+    /// cramped, but never taller — a taller key is the single most obvious way a
+    /// rebuilt grid stops lining up with the keyboard it replaced, because every
+    /// row below it drifts.
+    public static let preferredRowHeight: CGFloat = 43
+    /// Rows never grow past the platform's own key height, whatever the container
+    /// offers. Leftover space collects above the block instead of being spent on
+    /// oversized keys.
+    public static let maximumRowHeight: CGFloat = 43
     public static let keyCornerRadius: CGFloat = 8
     public static let commandCornerRadius: CGFloat = 18
     /// Bottom-bar lane metrics, matching the legacy bar exactly.
@@ -83,7 +89,9 @@ public enum KeyGridPlacement {
             guard !row.isEmpty else { continue }
             let rowTop = originY + CGFloat(rowIndex) * (rowHeight + rowSpacing)
             let plates = (rowIndex == page.rows.count - 1 && page.pinnedLastRow)
-                ? edgePinnedPlates(for: row, width: size.width, top: rowTop, height: rowHeight)
+                ? edgePinnedPlates(for: row, width: size.width, top: rowTop,
+                                   height: rowHeight,
+                                   standardKeyWidth: standardWidth)
                 : weightedPlates(
                     for: row,
                     width: size.width,
@@ -174,14 +182,17 @@ public enum KeyGridPlacement {
         for row: [KeyGridKey],
         width: CGFloat,
         top: CGFloat,
-        height: CGFloat
+        height: CGFloat,
+        standardKeyWidth: CGFloat
     ) -> [CGRect] {
         guard !row.isEmpty else { return [] }
         if row.count == 1 {
             return [CGRect(x: edgeInset, y: top,
                            width: max(0, width - edgeInset * 2), height: height)]
         }
-        let commandWidth = commandPlateWidth(for: row, width: width)
+        let middle = Array(row[1..<(row.count - 1)])
+        let commandWidth = commandPlateWidth(for: row, width: width,
+                                             standardWidth: standardKeyWidth)
         // Filled by column so the order cannot drift: the first and last keys are
         // pinned, and the middle keys fill the space between them.
         var frames = [CGRect](repeating: .null, count: row.count)
@@ -190,18 +201,39 @@ public enum KeyGridPlacement {
         frames[last] = CGRect(x: width - edgeInset - commandWidth, y: top,
                               width: commandWidth, height: height)
 
-        let middle = Array(row[1..<last])
         if !middle.isEmpty {
+            // The middle keys keep the standard key width, so z x c v b n m sit on
+            // exactly the same pitch as q w e r t y u i o p above them.
+            //
+            // Dividing the leftover space instead — which is what this did — made
+            // every middle key a different width from the row above, and then capped
+            // shift and delete at that same even share, leaving them 8pt narrower
+            // than the system keyboard's. The system keyboard widens only the two
+            // edge keys and spends what is left on the outer gaps, and that is what
+            // this reproduces.
             let middleStart = frames[0].maxX + keySpacing
             let middleEnd = frames[last].minX - keySpacing
             let available = max(
                 0,
                 middleEnd - middleStart - keySpacing * CGFloat(middle.count - 1)
             )
+            let standard = standardKeyWidth
             let totalWeight = middle.reduce(CGFloat(0)) { $0 + max(0.01, $1.weight) }
-            var x = middleStart
+            // Standard width when the row has room for it; weighted shares only when
+            // it genuinely does not, so a cramped keyboard still fits.
+            let useStandard = standard * CGFloat(middle.count) <= available
+            // Whatever the standard widths do not use is split evenly into the two
+            // outer gaps rather than all dumped at the right. The system keyboard's
+            // bottom row has ~14pt beside shift and ~13.5pt before delete, against
+            // 6pt between the letters; centring is what reproduces that.
+            let slack = useStandard
+                ? max(0, available - standard * CGFloat(middle.count)) / 2
+                : 0
+            var x = middleStart + slack
             for (offset, key) in middle.enumerated() {
-                let plateWidth = available * max(0.01, key.weight) / totalWeight
+                let plateWidth = useStandard
+                    ? standard
+                    : available * max(0.01, key.weight) / totalWeight
                 frames[offset + 1] = CGRect(x: x, y: top, width: plateWidth, height: height)
                 x += plateWidth + keySpacing
             }
@@ -209,13 +241,28 @@ public enum KeyGridPlacement {
         return frames
     }
 
-    /// Width of a pinned command plate: a share of the row, never wider than a
-    /// standard key would be, so a narrow keyboard still fits its letters.
-    private static func commandPlateWidth(for row: [KeyGridKey], width: CGFloat) -> CGFloat {
+    /// Width of a pinned command plate.
+    ///
+    /// Sized against the standard key rather than an even share of the row. The
+    /// system keyboard's shift and delete measure about 1.36x a letter key, which
+    /// is the ratio used here; capping at an even share instead made them narrower
+    /// than the letters they sit beside.
+    private static func commandPlateWidth(
+        for row: [KeyGridKey],
+        width: CGFloat,
+        standardWidth: CGFloat
+    ) -> CGFloat {
         let gaps = keySpacing * CGFloat(max(0, row.count - 1))
         let usable = max(0, width - edgeInset * 2 - gaps)
-        let evenShare = usable / CGFloat(max(1, row.count))
-        return min(max(0, width * 0.22), evenShare)
+        // The cap is "does the row still fit", not "an even share of the row".
+        // Dividing the row evenly looks safe and is not: on a nine-key row it gives
+        // 37.8pt, which is narrower than the letter keys beside it, so shift and
+        // delete came out smaller than the letters they are meant to stand out from.
+        // What actually has to fit is two command keys plus the middles at their
+        // standard width.
+        let middleCount = CGFloat(max(0, row.count - 2))
+        let fit = (usable - standardWidth * middleCount) / 2
+        return max(0, min(standardWidth * 1.36, fit))
     }
 
     /// One key's target: its plate widened to the contiguous tile that owns it.
