@@ -51,20 +51,6 @@ public enum KeyGlyphWeight: String, Sendable {
     case semibold
 }
 
-/// Width slot for a key in the bottom bar.
-///
-/// The legacy bar was not a weighted row. Each control had a fixed lane and only
-/// the space key absorbed whatever was left, which is why its neighbours never
-/// shifted as the return label changed length.
-public enum KeyBarWidth: Equatable, Sendable {
-    /// A standard 44pt control.
-    case compact
-    /// Takes all remaining width. Exactly one per bar.
-    case flex
-    /// The 88pt return key.
-    case wide
-}
-
 /// One key, as data.
 public struct KeyGridKey: Equatable {
     public var id: String
@@ -77,17 +63,8 @@ public struct KeyGridKey: Equatable {
     public var systemImage: String?
     /// Command-sized plates get the wider corner radius and the heavier weight.
     public var isCommand: Bool
-    /// Drawn as a full pill rather than a rounded rectangle.
-    public var isPill: Bool
-    /// The visible face is inset inside the key's hit frame.
-    ///
-    /// The legacy command keys occupied a 44pt lane but drew a smaller face inside
-    /// it, so the glass did not run edge to edge.
-    public var faceInset: CGSize
     public var glyphSize: CGFloat
     public var glyphWeight: KeyGlyphWeight
-    /// Bottom-bar slot. Ignored for keys in a row.
-    public var barWidth: KeyBarWidth
     /// True when the legacy design drew no plate behind this key at rest.
     ///
     /// Letter keys had no visible container by default — the `keyContainersEnabled`
@@ -103,11 +80,8 @@ public struct KeyGridKey: Equatable {
         label: String? = nil,
         systemImage: String? = nil,
         isCommand: Bool = false,
-        isPill: Bool = false,
-        faceInset: CGSize = .zero,
         glyphSize: CGFloat = 22,
         glyphWeight: KeyGlyphWeight = .light,
-        barWidth: KeyBarWidth = .compact,
         isInvisiblePlate: Bool = false
     ) {
         self.id = id
@@ -116,11 +90,8 @@ public struct KeyGridKey: Equatable {
         self.label = label
         self.systemImage = systemImage
         self.isCommand = isCommand
-        self.isPill = isPill
-        self.faceInset = faceInset
         self.glyphSize = glyphSize
         self.glyphWeight = glyphWeight
-        self.barWidth = barWidth
         self.isInvisiblePlate = isInvisiblePlate
     }
 
@@ -162,24 +133,11 @@ public struct KeyGridPage: Equatable {
     /// pinned: its space key is wide and sits between 123 and return, so it is
     /// distributed by weight like any other row.
     public var pinnedLastRow: Bool
-    /// The bottom bar, laid out in its own lane rather than as a grid row.
-    ///
-    /// The legacy bar was a fixed sequence of 44pt lanes with the space key
-    /// absorbing the remainder, drawn below the grid with its own inset faces.
-    /// Treating it as another weighted row is what made the rebuilt bar look
-    /// crowded and shifted its neighbours when the return label changed.
-    public var bottomBar: [KeyGridKey]
 
-    public init(
-        id: String,
-        rows: [[KeyGridKey]],
-        pinnedLastRow: Bool = false,
-        bottomBar: [KeyGridKey] = []
-    ) {
+    public init(id: String, rows: [[KeyGridKey]], pinnedLastRow: Bool = false) {
         self.id = id
         self.rows = rows
         self.pinnedLastRow = pinnedLastRow
-        self.bottomBar = bottomBar
     }
 
     public var isEmpty: Bool { rows.allSatisfy(\.isEmpty) }
@@ -202,14 +160,6 @@ public struct KeyGridPage: Equatable {
             }
             parts.append(rowPart)
         }
-        var barPart = ""
-        for key in bottomBar {
-            barPart += key.id
-            barPart += ":"
-            barPart += key.resolvedLabel
-            barPart += "|"
-        }
-        parts.append(barPart)
         return parts.joined(separator: "/")
     }
 }

@@ -216,10 +216,7 @@ final class KeyGridView: UIView {
     }
 
     private func cornerRadius(for key: KeyGridKey, in plate: CGRect) -> CGFloat {
-        if key.isPill {
-            return min(plate.height / 2, KeyGridPlacement.commandCornerRadius)
-        }
-        return key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyGridPlacement.keyCornerRadius
+        key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyGridPlacement.keyCornerRadius
     }
 
     private var usesLiveMaterial: Bool {

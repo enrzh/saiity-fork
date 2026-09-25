@@ -192,30 +192,34 @@ final class NextKeyboardHost: NSObject {
 
     /// The container rect the grid should occupy for a given surface.
     ///
-    /// Derived from the shared page layout rather than hard-coded, so the new
-    /// keyboard sits in the same place as the voice board's chrome and leaves the
-    /// same space at the bottom.
+    /// The bottom bar is **not** the grid's to draw. `AuxiliaryBottomBar` is the
+    /// one bottom bar this project has, and the emoji, symbol and legacy letter
+    /// surfaces all use it. The rebuilt pages were carrying a second, hand-rolled
+    /// bar, which is why the same keyboard showed two different bars depending on
+    /// the page. So the grid is given only the rows' share of the surface and the
+    /// bar lane is left to that shared component.
     ///
-    /// The letter page is inset from the top of the surface by
+    /// The lane is the same three bands the emoji picker stacks below its content:
+    /// `chromeCommandRowGap`, the bar itself, then `chromeBottomInset`.
+    ///
+    /// The letter page is additionally inset from the top by
     /// `letterKeyboardHeaderHeight`. That band is not decoration: it is what keeps
-    /// the rows at their 45pt height instead of letting them stretch to fill the
-    /// surface, and its absence is most of why the rebuilt page read as too airy
-    /// next to the legacy one. `letterKeyboardFrame` already carries the inset, so
-    /// the grid reuses the policy's own frame rather than re-deriving it.
-    ///
-    /// The symbol and number pages take the whole surface, as they did before.
+    /// the rows from stretching to fill the surface, and its absence is most of why
+    /// the rebuilt page read as too airy next to the legacy one.
     static func gridFrame(
         for layout: VoiceOnlyKeyboardPolicy.Layout,
         surfaceHeight: CGFloat,
         bottomBarHeight: CGFloat,
         page: Page
     ) -> CGRect {
-        if page == .letters {
-            return layout.letterKeyboardFrame
-        }
         let surface = layout.surfaceFrame
-        let height = max(0, surface.height - bottomBarHeight)
-        return CGRect(x: surface.minX, y: surface.minY, width: surface.width, height: height)
+        let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
+            + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
+            + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
+        let available = page == .letters ? layout.letterKeyboardFrame : surface
+        let height = max(0, available.height - lane)
+        return CGRect(x: available.minX, y: available.minY,
+                      width: available.width, height: height)
     }
 }
 

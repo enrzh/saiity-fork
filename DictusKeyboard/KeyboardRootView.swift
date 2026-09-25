@@ -252,19 +252,79 @@ struct KeyboardRootView: View {
     @ViewBuilder
     private func areaSurface(layout: VoiceOnlyKeyboardPolicy.Layout, contentFrame: CGRect) -> some View {
         let surfaceFrame = contentFrame
-        // Pages owned by the rebuilt UIKit grid render nothing here.
+        // Pages owned by the rebuilt UIKit grid render only the shared bottom bar
+        // here.
         //
-        // The grid draws its own keys and its own bottom bar in a real `UIView`
-        // mounted on the input view. Leaving the SwiftUI surface underneath is what
-        // produced a double bottom bar, and leaving SwiftUI hit-testable on top is
-        // what swallowed every touch.
+        // The grid draws its own keys in a real `UIView` mounted on the input view,
+        // and `NextKeyboardHost.gridFrame` gives it a rect that stops above the bar
+        // lane. So the two describe disjoint regions — nothing is drawn twice and
+        // nothing overlaps, which is what let the SwiftUI layer stay non-interactive
+        // over the rows. That matters: leaving SwiftUI hit-testable on top of the
+        // grid is what swallowed every touch in the first place.
         if KeyboardViewController.nextKeyboardModes.contains(state.areaMode) {
-            Color.clear
-                .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-                .allowsHitTesting(false)
+            sharedBottomBar(layout: layout, surfaceFrame: surfaceFrame)
         } else {
             surfaceContent(layout: layout, surfaceFrame: surfaceFrame)
         }
+    }
+
+    /// The one bottom bar, mounted in the lane the grid leaves free.
+    ///
+    /// Deliberately the same component the emoji picker, symbol surface and legacy
+    /// letter surface use, so a bar change lands on every page at once. The grid
+    /// pages used to carry their own, which is how the same keyboard ended up with
+    /// two different bars depending on which page you were on.
+    @ViewBuilder
+    private func sharedBottomBar(
+        layout: VoiceOnlyKeyboardPolicy.Layout,
+        surfaceFrame: CGRect
+    ) -> some View {
+        let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
+            + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
+            + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
+        let barHeight = CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
+        let isLetterPage = state.areaMode == .letters
+        VStack(spacing: 0) {
+            // The grid's share. Transparent and untouchable: it only reserves the
+            // space so the bar lands in the lane the host left for it.
+            Color.clear
+                .frame(width: surfaceFrame.width, height: max(0, surfaceFrame.height - lane))
+                .allowsHitTesting(false)
+            Color.clear
+                .frame(height: CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap))
+                .allowsHitTesting(false)
+            // Flag-for-flag the same call `LetterKeyboardSurface` and
+            // `SymbolKeyboardSurface` make. The letter page is the only one with a
+            // period key and the only one that hides its own layer control; the
+            // symbol page hides 123 because it carries a #+/123 toggle of its own.
+            AuxiliaryBottomBar(
+                layout: layout,
+                numbersTitle: "123",
+                onNumbers: { state.presentNumbersArea() },
+                onLetters: { state.presentArea(.letters) },
+                onEmoji: { state.presentArea(.emoji) },
+                spaceFrame: isLetterPage ? layout.letterSpaceFrame : layout.chromeWideSpaceFrame,
+                returnFrame: layout.chromeReturnFrame,
+                periodFrame: isLetterPage ? layout.letterPeriodFrame : .zero,
+                onPeriod: { routeText($0) },
+                onSpace: { routeProxyCommand(.space) },
+                onSpaceCursorBegan: {},
+                onSpaceCursorMoved: routeCursorMovement,
+                onSpaceCursorEnded: routeCursorEnded,
+                onReturn: { routeProxyCommand(.returnKey) },
+                showsNumbersControl: true,
+                showsLettersControl: !isLetterPage,
+                showsEmojiControl: true,
+                showsPeriodKey: isLetterPage,
+                fieldKeys: state.hostLetterFieldKeys,
+                onSymbolInsert: { routeText($0) }
+            )
+            .frame(width: surfaceFrame.width, height: barHeight)
+            Color.clear
+                .frame(height: CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset))
+                .allowsHitTesting(false)
+        }
+        .frame(width: surfaceFrame.width, height: surfaceFrame.height, alignment: .topLeading)
     }
 
     @ViewBuilder

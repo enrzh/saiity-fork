@@ -58,10 +58,7 @@ enum KeyGridPageFactory {
         if built.count >= 2 {
             var lowest = built[built.count - 1]
             guard !lowest.isEmpty else {
-                return KeyGridPage(
-                    id: "letters", rows: built, pinnedLastRow: true,
-                    bottomBar: bottomBar()
-                )
+                return KeyGridPage(id: "letters", rows: built, pinnedLastRow: true)
             }
             lowest.insert(
                 KeyGridKey(id: "shift", action: .shift, weight: 1.5,
@@ -77,12 +74,7 @@ enum KeyGridPageFactory {
             built[built.count - 1] = lowest
         }
 
-        return KeyGridPage(
-            id: "letters",
-            rows: built,
-            pinnedLastRow: true,
-            bottomBar: bottomBar()
-        )
+        return KeyGridPage(id: "letters", rows: built, pinnedLastRow: true)
     }
 
     /// 123, space, emoji, return — the same four controls every system keyboard
@@ -112,62 +104,6 @@ enum KeyGridPageFactory {
         }
     }
 
-    /// The bottom bar, in the legacy order: 123, emoji, space, period, return.
-    ///
-    /// Five controls, not four. The period key sits between space and return and
-    /// carries a comma hint beneath its dot, which is how the legacy design offered
-    /// punctuation without a second key. Its action is the period, matching the
-    /// control it replaces.
-    private static func bottomBar(
-        layerLabel: String = "123",
-        pageToggle: KeyGridKey? = nil
-    ) -> [KeyGridKey] {
-        var keys: [KeyGridKey] = []
-        if let pageToggle { keys.append(pageToggle) }
-        keys.append(contentsOf: [
-            KeyGridKey(
-                id: "bar-layer", action: .symbols,
-                label: layerLabel, systemImage: nil,
-                isCommand: true, isPill: true,
-                faceInset: CGSize(width: 8, height: 8),
-                glyphSize: 14, glyphWeight: .semibold,
-                barWidth: .compact
-            ),
-            KeyGridKey(
-                id: "bar-emoji", action: .emoji,
-                label: nil, systemImage: "face.smiling",
-                isCommand: true, isPill: true,
-                faceInset: CGSize(width: 8, height: 8),
-                glyphSize: 16, glyphWeight: .semibold,
-                barWidth: .compact
-            ),
-            KeyGridKey(
-                id: "bar-space", action: .space,
-                label: spaceLabel,
-                isCommand: true, isPill: true,
-                faceInset: CGSize(width: 0, height: 4),
-                glyphSize: 14, glyphWeight: .semibold,
-                barWidth: .flex
-            ),
-            KeyGridKey(
-                id: "bar-period", action: .insert("."),
-                label: ".",
-                isCommand: false, isPill: false,
-                faceInset: CGSize(width: 10, height: 8),
-                glyphSize: 19, glyphWeight: .light,
-                barWidth: .compact
-            ),
-            KeyGridKey(
-                id: "bar-return", action: .newline,
-                label: nil, systemImage: "return",
-                isCommand: true, isPill: true,
-                faceInset: CGSize(width: 8, height: 8),
-                glyphSize: 16, glyphWeight: .semibold,
-                barWidth: .wide
-            )
-        ])
-        return keys
-    }
 
     private static var spaceLabel: String {
         SupportedLanguage.active.spaceName
@@ -215,25 +151,26 @@ enum KeyGridPageFactory {
             )
             built[built.count - 1] = last
         }
-        // The page toggle lives on the bottom bar rather than stealing a grid row,
-        // so the symbol keys keep the same places on both pages. The bar's layer key
-        // reads ABC here, which is what distinguishes the two pages at a glance.
-        let toggle = KeyGridKey(
-            id: "symbolPageToggle",
-            action: .page(page == .symbolsNumbers ? "#+=" : "123"),
-            weight: 1.2,
-            label: page == .symbolsNumbers ? "#+=" : "123",
-            isCommand: true,
-            isPill: true,
-            glyphSize: 15,
-            glyphWeight: .medium
-        )
-        return KeyGridPage(
-            id: id,
-            rows: built,
-            pinnedLastRow: true,
-            bottomBar: bottomBar(layerLabel: "ABC", pageToggle: toggle)
-        )
+        // The page toggle leads the last row rather than stealing a slot from the
+        // symbol keys. `AuxiliaryBottomBar` is shared with the letter and emoji
+        // pages and cannot draw a "#+=" label, so the toggle stays here — which is
+        // also where `SymbolKeyboardSurface` keeps its own equivalent.
+        if var last = built.last, !last.isEmpty {
+            last.insert(
+                KeyGridKey(
+                    id: "symbolPageToggle",
+                    action: .page(page == .symbolsNumbers ? "#+=" : "123"),
+                    weight: 1.4,
+                    label: page == .symbolsNumbers ? "#+=" : "123",
+                    isCommand: true,
+                    glyphSize: 15,
+                    glyphWeight: .medium
+                ),
+                at: 0
+            )
+            built[built.count - 1] = last
+        }
+        return KeyGridPage(id: id, rows: built, pinnedLastRow: true)
     }
 
     // MARK: - Number pad
