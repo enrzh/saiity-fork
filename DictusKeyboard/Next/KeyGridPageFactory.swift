@@ -149,14 +149,21 @@ enum KeyGridPageFactory {
             glyphWeight: .regular
         )
         if var last = built.last, !last.isEmpty {
-            last[last.count - 1] = KeyGridKey(
-                id: "delete",
-                action: .deleteRepeating,
-                weight: 1.5,
-                label: "⌫",
-                isCommand: true,
-                glyphSize: 18,
-                glyphWeight: .regular
+            // Appended, not substituted. `translate` *removes* the layout's own
+            // page toggle and delete, so this row is already short by two keys and
+            // has to gain them back. Overwriting the last cell instead destroyed
+            // the apostrophe, which is how the row came out one key short of the
+            // system's seven.
+            last.append(
+                KeyGridKey(
+                    id: "delete",
+                    action: .deleteRepeating,
+                    weight: 2.25,
+                    label: "⌫",
+                    isCommand: true,
+                    glyphSize: 18,
+                    glyphWeight: .regular
+                )
             )
             built[built.count - 1] = last
         }

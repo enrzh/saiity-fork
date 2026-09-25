@@ -50,8 +50,46 @@ final class KeyGridView: UIView {
 
     /// Caps lock, when the user has double-tapped shift.
     private(set) var isCapsLocked = false
-    /// True while shift is held down by an active touch.
+    /// True while shift is armed for exactly the next character.
     private var shiftLatched = false
+
+    /// The shift touch currently down, if any.
+    ///
+    /// The shift key has to be tracked like every other key. Without an entry here
+    /// `touchesEnded` bails on its first `guard` and the release logic below is
+    /// never reached — which is why a second tap could never engage caps lock.
+    private var shiftTouch: ObjectIdentifier?
+    /// When shift was last released, for the double-tap window.
+    private var lastShiftRelease: TimeInterval = 0
+
+    /// Two taps closer together than this mean caps lock, as on the system keyboard.
+    private static let capsLockWindow: TimeInterval = 0.35
+
+    /// Whether the next character should be uppercased.
+    private var shiftActive: Bool { isCapsLocked || shiftLatched }
+
+    /// A one-shot shift is spent by the first character; caps lock is not.
+    private func consumeOneShotShift() {
+        if shiftLatched && !isCapsLocked { shiftLatched = false }
+    }
+
+    /// Decide what a shift tap meant, once it is released.
+    ///
+    /// One tap arms the next character. Two taps inside the window lock caps, and a
+    /// third tap inside it unlocks — the same three-state cycle the system keyboard
+    /// uses, and the reason the old release handler (which could only ever unlatch)
+    /// never once produced a locked state.
+    private func resolveShiftTap() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastShiftRelease < Self.capsLockWindow {
+            isCapsLocked.toggle()
+            shiftLatched = false
+        } else {
+            isCapsLocked = false
+            shiftLatched = true
+        }
+        lastShiftRelease = now
+    }
 
     // MARK: - Touch state
 
@@ -345,13 +383,26 @@ final class KeyGridView: UIView {
         return paragraph
     }
 
+    /// The character a key contributes, with shift applied.
+    ///
+    /// Applies to plain inserts as well as accent keys. The factory only builds a
+    /// `.character` action for letters that *have* accents, so restricting the shift
+    /// to that case left every other letter — most of QWERTY — stuck in lower case
+    /// while caps was on, both on the plate and in the text that reached the field.
+    private func shiftedText(_ text: String) -> String {
+        guard shiftActive, text.count == 1 else { return text }
+        return text.uppercased()
+    }
+
     private func displayText(for key: KeyGridKey) -> String {
-        var text = key.resolvedLabel
-        guard case .character(let base, _) = key.action else { return text }
-        if isCapsLocked || shiftLatched {
-            text = base.uppercased()
+        switch key.action {
+        case .character(let base, _):
+            return shiftActive ? base.uppercased() : base
+        case .insert(let text):
+            return shiftedText(text)
+        default:
+            return key.resolvedLabel
         }
-        return text
     }
 
     private func drawVariantPopupIfNeeded() {
@@ -411,9 +462,10 @@ final class KeyGridView: UIView {
 
             switch action {
             case .shift:
-                // Held shift stays on for exactly one character unless the user
-                // double-taps it for caps lock.
-                shiftLatched = true
+                // Nothing is latched on press. The decision belongs to the release,
+                // because a double tap can only be recognised once the first one has
+                // finished. Latching here is what made the second tap a no-op.
+                shiftTouch = identity
                 HapticFeedback.playInputClick()
                 setNeedsDisplay()
 
@@ -422,6 +474,20 @@ final class KeyGridView: UIView {
                 delegate?.keyGrid(self, perform: .delete, key: item.key)
                 delegate?.keyGridDidBeginRepeat(self, key: item.key)
                 repeatingKey = item.key
+                presses[identity] = Press(
+                    key: item.key, row: item.row, column: item.column,
+                    waitsForRelease: false, variants: [],
+                    popupVisible: false, selectedVariant: 0, popupWork: nil
+                )
+
+            case .insert(let text):
+                // Inserted on press, with the shift applied. This is the branch
+                // that carries most of the alphabet: the factory only builds a
+                // `.character` action for letters that have accents, so without
+                // handling shift here most keys typed lower case while caps was on.
+                HapticFeedback.playInputClick()
+                delegate?.keyGrid(self, perform: .insert(shiftedText(text)), key: item.key)
+                consumeOneShotShift()
                 presses[identity] = Press(
                     key: item.key, row: item.row, column: item.column,
                     waitsForRelease: false, variants: [],
@@ -509,6 +575,14 @@ final class KeyGridView: UIView {
     private func finish(_ touches: Set<UITouch>, cancelled: Bool) {
         for touch in touches {
             let identity = ObjectIdentifier(touch)
+            // Shift is handled before the press table, because it is the one key
+            // that is not stored there.
+            if shiftTouch == identity {
+                shiftTouch = nil
+                if !cancelled { resolveShiftTap() }
+                setNeedsDisplay()
+                continue
+            }
             guard let press = presses.removeValue(forKey: identity) else { continue }
             press.popupWork?.cancel()
             if popupOwner == identity { popupOwner = nil }
@@ -518,20 +592,13 @@ final class KeyGridView: UIView {
             }
             if cancelled { continue }
             switch press.key.action {
-            case .shift:
-                // A short tap releases shift; a second tap within the window locks.
-                if isCapsLocked {
-                    isCapsLocked = false
-                } else {
-                    shiftLatched = false
-                }
             case .character(let base, _):
                 if press.popupVisible, press.variants.indices.contains(press.selectedVariant) {
                     commit(press.variants[press.selectedVariant])
                 } else if !press.waitsForRelease {
                     // Already committed on press.
                 } else {
-                    commit(base)
+                    commit(shiftedText(base))
                 }
             default:
                 break
@@ -565,10 +632,10 @@ final class KeyGridView: UIView {
     /// Sends a character through the same path whether it was typed, held or
     /// tapped, so casing is applied in exactly one place.
     private func commit(_ character: String) {
-        let text = (isCapsLocked || shiftLatched) ? character.uppercased() : character
+        let text = shiftedText(character)
         delegate?.keyGrid(self, perform: .insert(text), key: KeyGridKey(id: "", action: .none))
         // Shift applies to one character. Leaving it latched is how a forgotten
-        // shift turns a whole word uppercase.
-        if shiftLatched { shiftLatched = false }
+        // shift turns a whole word uppercase. Caps lock is not consumed.
+        consumeOneShotShift()
     }
 }
