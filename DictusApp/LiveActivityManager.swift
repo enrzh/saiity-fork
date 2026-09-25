@@ -426,8 +426,10 @@ class LiveActivityManager {
         }
 
         let attributes = DictusLiveActivityAttributes()
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted,
-                                                             serviceEnabled: AppGroup.defaults.bool(forKey: SharedKeys.keyboardAudioReady))
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         // staleDate: if app is killed without willTerminate firing, iOS auto-removes
         // the DI after this interval. 30s is short enough to clear ghosts quickly (#84).
         let staleDate = Date().addingTimeInterval(staleInterval)
@@ -965,8 +967,10 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: currentPhase.rawValue, to: "standby"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         syncStateMachine(to: .standby)
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted,
-                                                             serviceEnabled: AppGroup.defaults.bool(forKey: SharedKeys.keyboardAudioReady))
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         // Refresh staleDate on each return to standby (#84: 30s clears ghosts after force-quit)
         let staleDate = Date().addingTimeInterval(staleInterval)
         await activity.update(.init(state: state, staleDate: staleDate))
@@ -1014,8 +1018,10 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: abandoned.rawValue, to: "standby-abandoned"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         Task {
-            let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted,
-                                                                 serviceEnabled: AppGroup.defaults.bool(forKey: SharedKeys.keyboardAudioReady))
+            let state = LiveActivityStateMapper.standby(
+                detectionMuted: self.detectionMuted,
+                defaults: AppGroup.defaults
+            )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> standby (abandoned \(abandoned.rawValue, privacy: .public))")
         }
@@ -1042,8 +1048,10 @@ class LiveActivityManager {
 
                 await activity.end(
                     .init(
-                        state: DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted,
-                                                                        serviceEnabled: AppGroup.defaults.bool(forKey: SharedKeys.keyboardAudioReady)),
+                        state: LiveActivityStateMapper.standby(
+                            detectionMuted: self.detectionMuted,
+                            defaults: AppGroup.defaults
+                        ),
                         staleDate: nil
                     ),
                     dismissalPolicy: .immediate
@@ -1068,8 +1076,10 @@ class LiveActivityManager {
         let activities = Activity<DictusLiveActivityAttributes>.activities
         guard !activities.isEmpty else { return }
 
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted,
-                                                             serviceEnabled: AppGroup.defaults.bool(forKey: SharedKeys.keyboardAudioReady))
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         for activity in activities {
             Task {
                 await activity.end(

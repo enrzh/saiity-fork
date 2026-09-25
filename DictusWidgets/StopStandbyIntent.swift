@@ -33,8 +33,7 @@ struct StopStandbyIntent: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         if toggleDetection {
             let defaults = UserDefaults(suiteName: AppGroup.identifier)
-            let enabled = !(defaults?.object(forKey: SharedKeys.serviceEnabled) == nil
-                || defaults?.bool(forKey: SharedKeys.serviceEnabled) == true)
+            let enabled = !KeyboardDictationService.isEnabled(in: defaults)
             defaults?.set(enabled, forKey: SharedKeys.serviceEnabled)
             defaults?.synchronize()
 

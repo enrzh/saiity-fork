@@ -136,6 +136,10 @@ struct KeyPreviewSession {
     let sourceFrame: CGRect
     let popupFrame: CGRect
     var cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.keyCornerRadius
+    /// Which key owns this popup. There is one popup, so with two fingers the
+    /// first press keeps it and later presses do not steal it; only the owner
+    /// may dismiss it.
+    var ownerKeyID: String?
 }
 
 /// Hosts either the balloon popup or the zoom-out popout for a pressed key.
@@ -166,14 +170,6 @@ struct KeyPressPreviewHost: View {
                 cornerRadius: preview.cornerRadius,
                 reduceMotion: reduceMotion
             )
-            .onAppear {
-                let token = preview.text
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
-                    if session?.text == token {
-                        session = nil
-                    }
-                }
-            }
         }
     }
 
@@ -210,7 +206,7 @@ struct KeyPopoutPreview: View {
             // size inside that frame, then grow to the frame itself so the
             // transform cannot escape and be clipped by the keyboard canvas.
             .scaleEffect(expanded && !reduceMotion ? 1 : 1 / Self.expansionScale)
-            .opacity(expanded ? 0 : 1)
+            .opacity(1)
             .onAppear {
                 withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.32)) {
                     expanded = true

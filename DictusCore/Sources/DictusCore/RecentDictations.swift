@@ -51,6 +51,7 @@ public enum RecentDictations {
     /// a legacy single-result value from being migrated after the preference is re-enabled.
     public static func disable(in defaults: UserDefaults) {
         ensureTombstone(in: defaults)
+        LastDictationIssueReport.removeTranscriptFields(in: defaults)
     }
 
     public static func remove(_ id: UUID, from defaults: UserDefaults) {

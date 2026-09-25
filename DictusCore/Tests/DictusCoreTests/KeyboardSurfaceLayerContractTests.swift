@@ -43,8 +43,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testSymbolsUseExplicitGridHeightWithoutOverlayWidthCompensation() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(source.contains("let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)"))
-        XCTAssertTrue(source.contains(".frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains(".frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)"))
         XCTAssertFalse(source.contains("leadingReservedWidths"))
         XCTAssertFalse(source.contains("positionedKeys(in: gridSize).filter"))
     }
@@ -52,10 +52,11 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testSymbolButtonsCommitTapsAndPageToggleRemainsAvailable() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(source.contains("ImmediateVariantKey("))
+        // Symbol keys are faces only; the shared UIKit owner owns their touches.
+        XCTAssertTrue((try relocatedKeyboardSource()).contains(".keyGridInput("))
         XCTAssertFalse(source.contains("simultaneousGesture(symbolDragGesture(frames: frames))"))
-        XCTAssertTrue(source.contains("case .symbols2ToSymbols1:"))
-        XCTAssertTrue(source.contains("case .togglePage:"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .symbols2ToSymbols1:"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage:"))
     }
 
     func testAuxiliaryPagesUseOneTransparentSharedSurfaceAndNativeBottomLane() throws {
@@ -83,7 +84,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
 
     func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
         let root = try read("DictusKeyboard/KeyboardRootView.swift")
-        let plates = try read("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+        let plates = try read("DictusKeyboard/KeyboardKeyStyle.swift")
 
         XCTAssertTrue(plates.contains("if reduceTransparency || accessibilityContrast == .increased"))
         XCTAssertTrue(plates.contains("shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))"))
@@ -91,7 +92,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(plates.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
         XCTAssertTrue(plates.contains("Color(uiColor: .tertiarySystemFill)"))
         XCTAssertTrue(root.contains("background(Color.clear)"))
-        XCTAssertTrue(root.contains("keyboardGlass(in: shape, role: role)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("keyboardGlass(in: shape, role: role)"))
         XCTAssertFalse(root.contains("glassEffect("),
                        "material branches live in KeyboardGlassSurface")
         XCTAssertFalse(root.contains("systemGroupedBackground"),
@@ -107,7 +108,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
                       "the shared surface remains above the suggestion lane for key popups")
         XCTAssertTrue(source.contains(".zIndex(4)"),
                       "dictation-board controls must render above the shared surface")
-        XCTAssertTrue(source.contains("Group {\n            if voiceBoardUsesUIKitHits"),
+        let chrome = try read("DictusKeyboard/KeyboardChrome.swift")
+        XCTAssertTrue(chrome.contains("Group {\n            if voiceBoardUsesUIKitHits"),
                       "both visual and SwiftUI-owned board chrome must share the elevated layer")
     }
 
@@ -133,11 +135,12 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
 
         XCTAssertTrue(bar.contains("Image(systemName: section.icon)"))
         XCTAssertTrue(bar.contains("EmojiCategoryScrubControl"))
-        XCTAssertTrue(bar.contains("continueTracking"))
-        XCTAssertTrue(bar.contains("beginTracking"))
-        XCTAssertTrue(bar.contains("dragActivationDistance"))
-        XCTAssertTrue(bar.contains("onExpansionChanged"))
-        XCTAssertTrue(bar.contains("final class EmojiCategoryScrubControl: UIControl"))
+        let control = try read("DictusKeyboard/Views/EmojiCategoryControl.swift")
+        XCTAssertTrue(control.contains("continueTracking"))
+        XCTAssertTrue(control.contains("beginTracking"))
+        XCTAssertTrue(control.contains("dragActivationDistance"))
+        XCTAssertTrue(control.contains("onExpansionChanged"))
+        XCTAssertTrue(control.contains("final class EmojiCategoryControl: UIControl"))
         XCTAssertFalse(bar.contains("section.icon.contains"))
         XCTAssertFalse(bar.contains("Text(section.icon)"))
         XCTAssertTrue(data.contains("icon: \"face.smiling\""))
@@ -150,6 +153,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
 
     func testSharedBottomBarUsesNativeChromeInsteadOfMicrophoneReturn() throws {
         let source = try read("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+        let style = try read("DictusKeyboard/KeyboardKeyStyle.swift")
 
         XCTAssertTrue(source.contains("chromeNumbersFrame"))
         XCTAssertTrue(source.contains("chromeLettersFrame"))
@@ -160,10 +164,10 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(source.contains("Text(\"|\")"))
         XCTAssertTrue(source.contains("commandHitSize"))
         XCTAssertTrue(source.contains("Open letter keyboard"))
-        XCTAssertTrue(source.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(source.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
-        XCTAssertTrue(source.contains("Color(uiColor: .tertiarySystemFill)"))
-        XCTAssertFalse(source.contains("systemGroupedBackground"),
+        XCTAssertTrue(style.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertTrue(style.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
+        XCTAssertTrue(style.contains("Color(uiColor: .tertiarySystemFill)"))
+        XCTAssertFalse(style.contains("systemGroupedBackground"),
                        "solid key plates use tertiary fill, not a grouped board slab")
         XCTAssertFalse(source.contains("layout.leftUtilityFrames"))
     }
@@ -201,15 +205,30 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testUIKitOverlayOnlyReceivesTouchesOnVoiceModes() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = true"))
+        // The overlay is transparent, so hiding it is the only thing that stops its
+        // buttons eating touches meant for the visible SwiftUI surface. This test
+        // previously asserted `isUserInteractionEnabled = true` unconditionally,
+        // which is the exact opposite of its own name and the cause of letter keys
+        // being swallowed by an invisible `return-to-dictation-board`.
+        XCTAssertTrue(source.contains("let overlayVisible = uikitOwnsVoiceChrome || mode == .emoji"),
+                      "overlay interaction must be gated on the modes where UIKit owns the surface")
+        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = overlayVisible"),
+                      "the overlay must not be interactive while SwiftUI owns the surface")
+        XCTAssertFalse(source.contains("controls.isUserInteractionEnabled = true\n"),
+                       "an unconditional enable lets invisible chrome eat letter-grid touches")
         XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
 
     func testAuxiliaryUIKitControlsAreHiddenDisabledAndNonInteractive() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("controls.isHidden = false"))
-        XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = true"))
+        // Was `controls.isHidden = false`, which undid the hide that `applyLayout`
+        // had just performed and left transparent buttons hit-testing the letter
+        // grid. Visibility now follows the same rule as the controls inside it.
+        XCTAssertTrue(source.contains("controls.isHidden = !overlayVisible"),
+                      "the overlay must hide whenever SwiftUI owns the visible surface")
+        XCTAssertFalse(source.contains("controls.isHidden = false"),
+                       "forcing the overlay visible leaves invisible buttons eating letter-grid touches")
         XCTAssertTrue(source.contains("$0.isEnabled = !$0.isHidden"))
         XCTAssertTrue(source.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("accessory row"))
@@ -225,7 +244,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testSymbolBottomLaneUsesSharedBottomInsetForItsAnchor() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(source.contains(".frame(width: availableWidth, height: availableHeight)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains(".frame(width: availableWidth, height: availableHeight)"))
     }
 
     func testLayoutUsesStableInputViewHeightAndNativeFallbackForEveryMode() throws {
@@ -259,6 +278,28 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(source.contains("let height = computeKeyboardHeight(for: KeyboardState.shared.areaMode)"))
         XCTAssertTrue(source.contains("heightConstraint?.constant = liveHeight"))
         XCTAssertFalse(source.contains("heightConstraint?.constant = fullHeight"))
+    }
+
+
+    private func relocatedKeyboardSource() throws -> String {
+        let paths = [
+            "DictusKeyboard/KeyboardRootView.swift",
+            "DictusKeyboard/KeyboardChrome.swift",
+            "DictusKeyboard/KeyboardKeyStyle.swift",
+            "DictusKeyboard/KeyboardKeyInput.swift",
+            "DictusKeyboard/VoiceBoardSurface.swift",
+            "DictusKeyboard/LetterKeyboardSurface.swift",
+            "DictusKeyboard/NumberKeyboardSurface.swift",
+            "DictusKeyboard/SymbolKeyboardSurface.swift",
+            "DictusKeyboard/KeyboardState.swift",
+            "DictusKeyboard/Views/EmojiPickerView.swift",
+            "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
+            "DictusKeyboard/Views/EmojiCategoryBar.swift",
+            "DictusKeyboard/Views/EmojiCategoryControl.swift",
+            "DictusCore/Sources/DictusCore/KeyboardSurfaceState.swift",
+            "DictusCore/Sources/DictusCore/EmojiSurfaceModel.swift",
+        ]
+        return try paths.map { try read($0) }.joined(separator: "\n")
     }
 
     private func read(_ path: String) throws -> String {

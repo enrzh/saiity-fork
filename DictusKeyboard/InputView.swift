@@ -1,5 +1,6 @@
 // DictusKeyboard/InputView.swift
 import UIKit
+import DictusCore
 
 /// Custom UIInputView that enables the system keyboard click sound.
 /// UIInputViewAudioFeedback protocol must be adopted by a UIView subclass,
@@ -42,6 +43,20 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
     override func layoutSubviews() {
         super.layoutSubviews()
         reassertTransparentBackdrop()
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        #if DEBUG
+        // Arrival counting lives in `PassthroughControlsView.traceArrival`, which
+        // every routed touch must pass through. An earlier gate here tested
+        // `phase == .began` and logged exactly zero lines for an entire typing
+        // session: UIKit does not expose the touch list in the expected state at
+        // this point in hit-testing, so the condition was never true. A stage that
+        // cannot fail loudly is worse than no stage, because "no lines" looked
+        // like a finding rather than a broken probe.
+        #endif
+        return hit
     }
 
     private func reassertTransparentBackdrop() {

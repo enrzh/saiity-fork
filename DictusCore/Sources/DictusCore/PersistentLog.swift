@@ -136,9 +136,48 @@ public enum PersistentLog {
     /// Cross-process safety is handled by NSFileCoordinator.
     private static let writeQueue = DispatchQueue(label: "de.aiity.saiity.persistentlog", qos: .utility)
 
-    private static var fileURL: URL? {
-        AppGroup.containerURL?.appendingPathComponent(fileName)
+    /// Redirects the log file so a test can drive the real append/read/trim path
+    /// without depending on the App Group container.
+    ///
+    /// WHY this exists: the user-dictionary logging tests need to prove that a
+    /// lifecycle event actually reaches a *file* with the right shape, not merely
+    /// that `LogEvent.payload()` formats correctly. They used to point themselves at
+    /// `AppGroup.containerURL`, which fails two ways off-device — macOS TCC refuses
+    /// reads under `~/Library/Group Containers/`, so every assertion saw an empty
+    /// log, and on a shared simulator the file is written by the app and the keyboard
+    /// extension too, so the suite was reading another process's lines. Both are
+    /// environment facts, not product defects, and neither belongs in a test result.
+    ///
+    /// Set it for the duration of a test and clear it in teardown; every other
+    /// `*ForTesting` helper here is scoped the same way.
+    static var fileURLOverrideForTesting: URL?
+
+    /// The file every append goes to. `AutocorrectDebugLog` writes the
+    /// word-naming lines here too, so the Developer-toggle detail and the
+    /// structured events land in one export — which is the whole point of having
+    /// a single file to hand someone. It used to rebuild this path from
+    /// `AppGroup.containerURL` in its own `appendToLogFile`, which meant the two
+    /// writers could silently diverge whenever one of them resolved a path the
+    /// other did not.
+    static var fileURL: URL? {
+        if let override = fileURLOverrideForTesting { return override }
+        return AppGroup.containerURL?.appendingPathComponent(fileName)
     }
+
+    #if DEBUG
+    /// Debug-only mirror of every line into `<group>/Library/`.
+    ///
+    /// WHY: the App Group *root* is not readable by `devicectl device copy from`
+    /// on a physical device — the service rejects any path outside the allowed
+    /// `Library` / `Documents` / `tmp` subdirectories. That made the touch-path
+    /// trace unreadable from a real iPhone, which is the only place third-party
+    /// keyboards actually receive touches. Mirroring into `Library/` makes the
+    /// same lines pullable without touching release behaviour.
+    static var debugMirrorURL: URL? {
+        AppGroup.containerURL?.appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent(fileName)
+    }
+    #endif
 
     // MARK: - Public API (Structured)
 
@@ -363,6 +402,12 @@ public enum PersistentLog {
 
         coordinatedAppend(text, to: url)
         coordinatedTrim(url: url)
+        #if DEBUG
+        if let mirror = debugMirrorURL, mirror != url {
+            coordinatedAppend(text, to: mirror)
+            coordinatedTrim(url: mirror)
+        }
+        #endif
     }
 
     /// The closing line for an open run, or nil when no duplicate was suppressed.

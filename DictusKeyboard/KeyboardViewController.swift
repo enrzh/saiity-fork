@@ -15,7 +15,7 @@ private class KeyboardActionButton: UIButton {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesBegan(touches, with: event)
         if emitsHapticOnTouchDown {
-            HapticFeedback.keyTapped()
+            HapticFeedback.playInputClick()
         }
     }
 
@@ -33,16 +33,34 @@ private final class DictationMicButton: KeyboardActionButton {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesBegan(touches, with: event)
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardHitTrace",
+            instanceID: "dictate-button",
+            action: "touchesBegan",
+            details: "frame=\(frame) enabled=\(isEnabled) hidden=\(isHidden) inWindow=\(window != nil)"
+        ))
         onTouchDown?()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesEnded(touches, with: event)
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardHitTrace",
+            instanceID: "dictate-button",
+            action: "touchesEnded",
+            details: "frame=\(frame) enabled=\(isEnabled) hidden=\(isHidden)"
+        ))
         onTouchUp?()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesCancelled(touches, with: event)
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardHitTrace",
+            instanceID: "dictate-button",
+            action: "touchesCancelled",
+            details: "frame=\(frame) enabled=\(isEnabled) hidden=\(isHidden)"
+        ))
         onTouchCancelled?()
     }
 
@@ -53,12 +71,30 @@ private final class DictationMicButton: KeyboardActionButton {
 
 class KeyboardViewController: UIInputViewController,
     LongPressCursorMovementDelegate,
-    GiellaKeyboardViewDelegate,
-    UIGestureRecognizerDelegate {
+    UIGestureRecognizerDelegate,
+    NextKeyboardHostDelegate {
     let controllerID = String(UUID().uuidString.prefix(8))
 
     private var hostingController: UIHostingController<KeyboardRootView>?
     private var actionControlsView: UIView?
+    /// The single touch owner for the active key grid. It lives on the input view,
+    /// not inside `actionControlsView`, because that overlay hides itself on the
+    /// letter page and would take the owner down with it.
+    /// Touch owner for the symbol and number pages.
+    ///
+    /// Letters no longer use this: they are drawn and owned by `letterGridView`.
+    /// The symbol and number surfaces still publish their geometry through
+    /// `KeyGridTouchBus`, and that path is left alone here rather than being
+    /// rewritten in the same change as the letter grid.
+    private var keyGridOwner: KeyGridTouchOwner?
+    /// The letter keyboard's grid: one UIKit view that draws the keys and hit-tests
+    /// them from the same geometry.
+    ///
+    /// It is mounted on the input view, above the SwiftUI hosting view, and it is
+    /// the only thing that owns letter touches while the letter page is showing.
+    /// There is no global registry and no shared bus: the controller owns this
+    /// instance, so a stale controller can only ever revoke its own.
+    private var letterGridView: LetterKeyGridView?
     private var keyboardModeButton: UIButton?
     private var emojiButton: UIButton?
     private var numberButton: UIButton?
@@ -71,19 +107,15 @@ class KeyboardViewController: UIInputViewController,
     private var boardDeleteButton: KeyboardDeleteRepeatControl?
     private var emojiCategoryScrubber: EmojiCategoryScrubControl?
     private var micButton: UIButton?
+    /// Separate hit owner for the app handoff, mutually exclusive with
+    /// `micButton` and sharing its frame.
+    private var recoveryButton: UIButton?
     private var spaceButton: UIButton?
     private var spaceCursorController: LongPressCursorMovementController?
     private var spaceCursorRecognizer: UILongPressGestureRecognizer?
     private var spaceCursorPressOrigin: CGPoint?
     private var cursorPreferredColumn: Int?
     private var lastCursorStepTime: TimeInterval = 0
-    private var giellaKeyboard: GiellaKeyboardView?
-    private var giellaLayoutType: LayoutType?
-    private var giellaAccessoryOrder: KeyboardAccessoryOrder?
-    private var giellaLeadingConstraint: NSLayoutConstraint?
-    private var giellaTrailingConstraint: NSLayoutConstraint?
-    private var giellaTopConstraint: NSLayoutConstraint?
-    private var giellaBottomConstraint: NSLayoutConstraint?
     private var areaModeCancellable: AnyCancellable?
     private var emojiCategoryOffsetCancellable: AnyCancellable?
     private var emojiCategorySelectionCancellable: AnyCancellable?
@@ -95,14 +127,6 @@ class KeyboardViewController: UIInputViewController,
     private var micHoldRecognized = false
     private var adaptiveContextGeneration: UInt = 0
 
-    private struct ThemeCacheKey: Equatable {
-        let style: UIUserInterfaceStyle
-        let idiom: UIUserInterfaceIdiom
-        let isLandscape: Bool
-        let isPad: Bool
-    }
-
-    private var lastThemeCacheKey: ThemeCacheKey?
     private var lastLayoutSize: CGSize?
     private var lastLayoutHeight: CGFloat?
     private var lastLayoutMode: KeyboardAreaMode?
@@ -111,7 +135,16 @@ class KeyboardViewController: UIInputViewController,
     private final class PassthroughControlsView: UIView {
         var forwardHitTest: ((CGPoint, UIEvent?) -> UIView?)?
 
+
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            // This override does not call `super`, so UIKit's own eligibility
+            // checks are bypassed: a hidden or non-interactive overlay would still
+            // claim touches. That is how the `letter-mode` chrome button swallowed
+            // taps aimed at the `123` key during the brief window where the board
+            // is still switching to the letter surface. Restore the contract
+            // `super` would have applied.
+            guard !isHidden, isUserInteractionEnabled, alpha > 0.01 else { return nil }
+            let mic = subviews.first(where: { $0.accessibilityIdentifier == "dictate-button" })
             // The recovery mic is the visible primary action on the dictation
             // board. Route it before forwarding misses into SwiftUI so a stale
             // or overlapping hosted surface cannot consume the tap.
@@ -123,7 +156,7 @@ class KeyboardViewController: UIInputViewController,
                     return toggle.hitTest(localPoint, with: event) ?? toggle
                 }
             }
-            if let mic = subviews.first(where: { $0.accessibilityIdentifier == "dictate-button" }),
+            if let mic,
                !mic.isHidden,
                mic.isUserInteractionEnabled {
                 let localPoint = mic.convert(point, from: self)
@@ -134,6 +167,27 @@ class KeyboardViewController: UIInputViewController,
                     return mic
                 }
             }
+            // The recovery control shares the mic's frame and is never visible at
+            // the same time, so it gets identical routing priority.
+            if let recovery = subviews.first(where: { $0.accessibilityIdentifier == "open-saiity-button" }),
+               !recovery.isHidden,
+               recovery.isUserInteractionEnabled {
+                let localPoint = recovery.convert(point, from: self)
+                if recovery.bounds.insetBy(dx: -20, dy: -20).contains(localPoint) {
+                    return recovery
+                }
+            }
+            // Other visible controls are offered the point first. The category
+            // scrubber spans the full width of the bar, so it overlaps delete in
+            // the top-right corner; checking it last means delete keeps that
+            // corner without the bar having to be shortened, which would move
+            // the selected-category marker off the horizontal centre.
+            for subview in subviews.reversed() where !subview.isHidden && subview.alpha > 0 && subview.isUserInteractionEnabled {
+                let localPoint = subview.convert(point, from: self)
+                if let hit = subview.hitTest(localPoint, with: event) {
+                    return hit
+                }
+            }
             if let scrubber = subviews.first(where: { $0.accessibilityIdentifier == "emoji-category-scrubber" }),
                !scrubber.isHidden,
                scrubber.isUserInteractionEnabled {
@@ -142,18 +196,14 @@ class KeyboardViewController: UIInputViewController,
                     return hit
                 }
             }
-            for subview in subviews.reversed() where !subview.isHidden && subview.alpha > 0 && subview.isUserInteractionEnabled {
-                let localPoint = subview.convert(point, from: self)
-                if let hit = subview.hitTest(localPoint, with: event) {
-                    return hit
-                }
-            }
-            return forwardHitTest?(point, event)
+            let forwarded = forwardHitTest?(point, event)
+            return forwarded
         }
+
+
     }
 
-    /// Explicit height constraint on inputView to prevent layout issues after app switch.
-    /// WHY: Without this, iOS may not recalculate the keyboard height correctly when the
+    /// Explicit height constraint on inputView to prevent layout issues after app switch.    /// WHY: Without this, iOS may not recalculate the keyboard height correctly when the
     /// extension is brought back to foreground after a URL scheme app switch. The system
     /// keyboard row bleeds through and the recording overlay gets compressed.
     private var heightConstraint: NSLayoutConstraint?
@@ -286,8 +336,24 @@ class KeyboardViewController: UIInputViewController,
         // Pass weak callbacks rather than the controller itself. This keeps the
         // SwiftUI root owned by hosting without making a stale controller the
         // routing authority after iOS rebuilds the keyboard.
+        // The letter grid, mounted before the hosting view exists so the SwiftUI
+        // tree can be handed a reference to it.
+        //
+        // It replaces the old shared touch owner for letters. That owner resolved
+        // touches against geometry SwiftUI published through a process-wide bus,
+        // which meant the keys that were drawn and the keys that could be pressed
+        // were described by two different systems. Here a single view does both.
+        if let inputView {
+            let grid = LetterKeyGridView(frame: inputView.bounds)
+            grid.autoresizingMask = []
+            grid.layer.zPosition = 200
+            inputView.addSubview(grid)
+            letterGridView = grid
+        }
+
         let rootView = KeyboardRootView(
             controllerID: controllerID,
+            letterGridView: letterGridView,
             routeText: { [weak self] text in self?.routeProxyText(text) },
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
             routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
@@ -332,7 +398,8 @@ class KeyboardViewController: UIInputViewController,
         // The voice surface owns the entire input view.
         kbInputView.addSubview(hosting.view)
         hosting.didMove(toParent: self)
-        installLetterKeyboard(in: kbInputView)
+        // Per-key UIKit controls own input inside the hosted surface; this
+        // overlay routes board actions and forwards misses to those controls.
         installVoiceActionControls(in: kbInputView)
 
         // --- 5. Set up Auto Layout constraints ---
@@ -418,6 +485,15 @@ class KeyboardViewController: UIInputViewController,
         super.viewWillAppear(animated)
         publishFullAccessHandshake()
 
+        // Forget the layout memo so a returning keyboard re-applies its layout
+        // even though the mode and height are unchanged. Without this the
+        // idempotence guard in `applyLayout` would treat the second appearance as
+        // already laid out and skip the work entirely.
+        lastLayoutSize = nil
+        lastLayoutHeight = nil
+        lastLayoutMode = nil
+        lastLayoutAccessoryOrder = nil
+
         // CRITICAL: Disable touch delay on system gesture recognizers.
         // iOS attaches gesture recognizers to the keyboard's UIWindow that have
         // delaysTouchesBegan=true (for system gesture disambiguation at screen edges).
@@ -438,6 +514,22 @@ class KeyboardViewController: UIInputViewController,
             details: "animated=\(animated) status=\(entryStatus) storedStatus=\(entryStoredStatus) coldStart=\(entryColdStart) inputBounds=\(Int(entryBounds.width))x\(Int(entryBounds.height)) hostingConst=\(hostingHeightConstraint?.constant ?? -1) heightConst=\(heightConstraint?.constant ?? -1) memMB=\(MemoryFootprint.residentMB())"
         ))
         PersistentLog.log(.keyboardDidAppear)
+        // Captured before registration, which marks this controller visible.
+        // A replacement built while the user is already typing must not reset
+        // the page; see `shouldApplyOpeningPreference`.
+        let applyOpeningPreference = KeyboardAreaMode.shouldApplyOpeningPreference(
+            keyboardAlreadyVisible: KeyboardState.shared.isKeyboardVisible,
+            appearingControllerID: controllerID,
+            activeControllerID: KeyboardState.shared.activeControllerID
+        )
+        if !applyOpeningPreference {
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "keptSurfaceAcrossControllerSwap",
+                details: "mode=\(KeyboardState.shared.areaMode.rawValue) previous=\(KeyboardState.shared.activeControllerID ?? "none")"
+            ))
+        }
         KeyboardState.shared.registerControllerAppearance(controllerID: controllerID)
         // Point KeyboardState's weak controller ref at the currently-visible controller
         // so call sites in KeyboardRootView and KeyboardState can access textDocumentProxy.
@@ -454,12 +546,11 @@ class KeyboardViewController: UIInputViewController,
         HapticFeedback.warmUp()
         hasAppeared = true
         isAttached = true
-        refreshLetterKeyboardIfNeeded()
-        giellaKeyboard?.page = .normal
 
         // Opening uses the saved dictation/keyboard preference, except number
-        // and phone fields which open the 3×4 number pad.
-        if !KeyboardState.shared.dictationStatus.ownsKeyboardArea {
+        // and phone fields which open the 3×4 number pad. Skipped when this
+        // appearance is a controller swap of a keyboard that is already up.
+        if applyOpeningPreference, !KeyboardState.shared.dictationStatus.ownsKeyboardArea {
             KeyboardState.shared.presentPreferredOpeningArea()
         }
 
@@ -499,6 +590,13 @@ class KeyboardViewController: UIInputViewController,
         // Registration precedes the geometry update so the constraint and SwiftUI
         // content change together.
         let statusBeforeHandle = KeyboardState.shared.dictationStatus.rawValue
+        // Apply the saved default after subscriptions and trait refresh. A
+        // cached controller otherwise keeps the page from its previous host.
+        // The same call must not run for a live swap: that is what put the
+        // dictation board back over the letter keys mid-word.
+        if applyOpeningPreference, !KeyboardState.shared.dictationStatus.ownsKeyboardArea {
+            KeyboardState.shared.presentPreferredOpeningArea()
+        }
 
         applyAreaMode(KeyboardState.shared.areaMode)
         PersistentLog.log(.diagnosticProbe(
@@ -608,7 +706,6 @@ class KeyboardViewController: UIInputViewController,
             hostingHeightConstraint?.constant = liveHeight
             heightConstraint?.constant = liveHeight
             layoutVoiceActionControls(surfaceHeight: liveHeight)
-            layoutLetterKeyboard(surfaceHeight: liveHeight)
             lastLayoutSize = size
             lastLayoutHeight = liveHeight
             lastLayoutMode = mode
@@ -678,11 +775,22 @@ class KeyboardViewController: UIInputViewController,
         let inputBounds = inputView?.bounds.size ?? .zero
         let hostingFrame = hostingController?.view.frame.size ?? .zero
         let viewBounds = view.bounds.size
+        let window = inputView?.window ?? viewIfLoaded?.window
+        let micWindowFrame = micButton.flatMap { mic in
+            window.map { mic.convert(mic.bounds, to: $0) }
+        }
+        let windowScreenFrame = window.map { $0.convert($0.bounds, to: $0.screen.coordinateSpace) }
+        let inputScreenFrame = inputView.flatMap { input in
+            input.window.map { input.convert(input.bounds, to: $0.screen.coordinateSpace) }
+        }
+        let micScreenFrame = micButton.flatMap { mic in
+            mic.window.map { mic.convert(mic.bounds, to: $0.screen.coordinateSpace) }
+        }
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardViewController",
             instanceID: controllerID,
             action: action,
-            details: "inputBounds=\(Int(inputBounds.width))x\(Int(inputBounds.height)) viewBounds=\(Int(viewBounds.width))x\(Int(viewBounds.height)) hostingFrame=\(Int(hostingFrame.width))x\(Int(hostingFrame.height)) hostingConst=\(hostingHeightConstraint?.constant ?? -1) heightConst=\(heightConstraint?.constant ?? -1) status=\(KeyboardState.shared.dictationStatus.rawValue) mode=\(KeyboardState.shared.areaMode.rawValue) onScreen=\(isOnScreen) \(windowAttachmentProbeDetails) memMB=\(MemoryFootprint.residentMB())"
+            details: "inputBounds=\(Int(inputBounds.width))x\(Int(inputBounds.height)) viewBounds=\(Int(viewBounds.width))x\(Int(viewBounds.height)) hostingFrame=\(Int(hostingFrame.width))x\(Int(hostingFrame.height)) inputFrame=\(inputView?.frame ?? .zero) inputScreenFrame=\(inputScreenFrame ?? .zero) controlsFrame=\(actionControlsView?.frame ?? .zero) hostFrame=\(hostingController?.view.frame ?? .zero) windowFrame=\(window?.frame ?? .zero) windowScreenFrame=\(windowScreenFrame ?? .zero) micFrame=\(micButton?.frame ?? .zero) micWindowFrame=\(micWindowFrame ?? .zero) micScreenFrame=\(micScreenFrame ?? .zero) hostingConst=\(hostingHeightConstraint?.constant ?? -1) heightConst=\(heightConstraint?.constant ?? -1) status=\(KeyboardState.shared.dictationStatus.rawValue) mode=\(KeyboardState.shared.areaMode.rawValue) onScreen=\(isOnScreen) \(windowAttachmentProbeDetails) memMB=\(MemoryFootprint.residentMB())"
         ))
     }
 
@@ -696,7 +804,7 @@ class KeyboardViewController: UIInputViewController,
         isAttached = false
         adaptiveContextGeneration &+= 1
         if KeyboardState.shared.activeControllerID == controllerID {
-            SuggestionState.shared.updateAdaptiveTouchPrediction(context: nil)
+            SuggestionState.shared.clearAdaptiveTouchPrediction()
         }
 
         if KeyboardState.shared.controller === self {
@@ -723,6 +831,20 @@ class KeyboardViewController: UIInputViewController,
                 // round trip to the host app on a teardown path.
                 + " \(AppScenePhaseProbe.describe())"
         ))
+        // One line per session, not per touch. Per-touch tracing cost roughly twenty
+        // file writes per keystroke, so the hot path now only increments two
+        // counters; this reports the totals once, which is enough to tell "no
+        // touches reached the keyboard" apart from "they arrived and every one
+        // came back" — the distinction that per-event tracing was being used for
+        // and that no amount of guessing has resolved.
+        if let owner = keyGridOwner {
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController",
+                instanceID: controllerID,
+                action: "gridSessionTotals",
+                details: owner.sessionSummary()
+            ))
+        }
         PersistentLog.log(.keyboardDidDisappear)
 
         // Tear down the area mode subscription so this (now-detached) controller
@@ -800,7 +922,6 @@ class KeyboardViewController: UIInputViewController,
         let hadColorChange = traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection)
         if hadColorChange || previousTraitCollection == nil {
             reassertTransparentSurfaceLayers()
-            refreshLetterKeyboardIfNeeded()
             lastLayoutSize = nil
         }
         PersistentLog.log(.diagnosticProbe(
@@ -1015,6 +1136,23 @@ class KeyboardViewController: UIInputViewController,
         // viewWillAppear — the guard stays as a cheap invariant on that ordering.
         guard hasAppeared else { return }
 
+        // The key-grid touch owner may only claim touches while a surface that uses
+        // it is actually mounted.
+        //
+        // Releasing it was left to each surface's own `onDisappear`, which is the
+        // wrong owner of that decision: SwiftUI's teardown ordering is not something
+        // a surface can guarantee, and the overlay's `forwardHitTest` consults the
+        // grid owner *before* anything else on every mode. A claim left over from
+        // the letter page therefore swallowed taps belonging to whichever surface
+        // came next — which is how the emoji page stopped inserting.
+        //
+        // The controller is the only party that reliably knows which surface is
+        // showing, so it is the only party that may revoke the claim.
+        let modeUsesKeyGrid = mode == .letters || mode == .panel || mode == .numberPad
+        if !modeUsesKeyGrid {
+            KeyGridTouchBus.deactivate()
+        }
+
         // #260: a dictation can be left with no owning controller at all.
         // Ownership is last-writer-wins on appearance, so under churn an instance
         // iOS is about to throw away can hold the area, and when it is deallocated
@@ -1081,15 +1219,30 @@ class KeyboardViewController: UIInputViewController,
     ///
     /// Each branch applies one resolved live height to both UIKit and SwiftUI.
     private func applyLayout(for mode: KeyboardAreaMode) {
+        let liveHeight = computeKeyboardHeight(for: mode)
+
+        // Assigning an Auto Layout constant is NOT a no-op even when the new value
+        // equals the old one: it invalidates layout and forces a full re-layout of
+        // the hosting view, which re-lays-out every SwiftUI key control.
+        // `viewDidLayoutSubviews` has always guarded this; `applyLayout` did not,
+        // and it is the path the availability timer drives — that timer calls
+        // `refreshFromDefaults`, which republishes the area mode every two
+        // seconds. So the keyboard rebuilt its own geometry under the user's
+        // fingers twice a second, indefinitely, and a key whose control was
+        // rebuilt mid-gesture silently stopped responding. The device trace shows
+        // `hostingSet_letters` with `old` equal to `new` every two seconds, which
+        // is the signature of exactly this.
+        //
+        // The memo is shared with `viewDidLayoutSubviews` so the two paths cannot
+        // disagree about what the current layout is.
+        guard lastLayoutMode != mode || lastLayoutHeight != liveHeight else { return }
+        lastLayoutMode = mode
+        lastLayoutHeight = liveHeight
+
         refreshAdaptiveTouchContext()
         let oldHosting = hostingHeightConstraint?.constant ?? -1
         let status = KeyboardState.shared.dictationStatus.rawValue
-        let liveHeight = computeKeyboardHeight(for: mode)
         setVoiceActionControlsHidden(mode == .panel || mode == .letters || mode == .numberPad)
-        // The letter page is SwiftUI-owned. Keep the vendored renderer installed
-        // for layout compatibility, but never let it compete for touches or pixels.
-        giellaKeyboard?.isHidden = true
-
         switch mode {
         case .keys:
             heightConstraint?.constant = liveHeight
@@ -1175,68 +1328,6 @@ class KeyboardViewController: UIInputViewController,
 
     // MARK: - UIKit action controls
 
-    /// The letter grid is UIKit-owned so key hit testing, long-press variants and
-    /// cursor movement stay on the same low-latency path as the vendored keyboard.
-    private func installLetterKeyboard(in inputView: UIView) {
-        let theme = Theme.current(for: traitCollection)
-        let keyboard = GiellaKeyboardView(
-            definition: KeyboardLayouts.current(),
-            theme: theme
-        )
-        keyboard.translatesAutoresizingMaskIntoConstraints = false
-        keyboard.delegate = self
-        keyboard.isHidden = true
-        inputView.addSubview(keyboard)
-
-        let leading = keyboard.leadingAnchor.constraint(equalTo: inputView.leadingAnchor)
-        let trailing = keyboard.trailingAnchor.constraint(equalTo: inputView.trailingAnchor)
-        let top = keyboard.topAnchor.constraint(equalTo: inputView.topAnchor)
-        let bottom = keyboard.bottomAnchor.constraint(equalTo: inputView.bottomAnchor)
-        NSLayoutConstraint.activate([leading, trailing, top, bottom])
-
-        giellaKeyboard = keyboard
-        giellaLayoutType = LayoutType.active
-        giellaAccessoryOrder = KeyboardAccessoryOrder.current
-        giellaLeadingConstraint = leading
-        giellaTrailingConstraint = trailing
-        giellaTopConstraint = top
-        giellaBottomConstraint = bottom
-        lastThemeCacheKey = currentThemeCacheKey()
-    }
-
-    private func refreshLetterKeyboardIfNeeded() {
-        guard let inputView else { return }
-        let requestedLayout = LayoutType.active
-        let requestedAccessoryOrder = KeyboardAccessoryOrder.current
-        let themeKey = currentThemeCacheKey()
-        guard giellaLayoutType != requestedLayout || giellaAccessoryOrder != requestedAccessoryOrder else {
-            if lastThemeCacheKey != themeKey {
-                giellaKeyboard?.updateTheme(theme: Theme.current(for: traitCollection))
-                lastThemeCacheKey = themeKey
-            }
-            return
-        }
-
-        giellaKeyboard?.delegate = nil
-        giellaKeyboard?.removeFromSuperview()
-        [giellaLeadingConstraint, giellaTrailingConstraint, giellaTopConstraint, giellaBottomConstraint]
-            .compactMap { $0 }
-            .forEach { $0.isActive = false }
-        giellaKeyboard = nil
-        installLetterKeyboard(in: inputView)
-        layoutLetterKeyboard()
-    }
-
-    private func currentThemeCacheKey() -> ThemeCacheKey {
-        let device = DeviceContext.current
-        return ThemeCacheKey(
-            style: traitCollection.userInterfaceStyle,
-            idiom: traitCollection.userInterfaceIdiom,
-            isLandscape: device.isLandscape,
-            isPad: device.isPad
-        )
-    }
-
     private func suggestionLaneHeight(for mode: KeyboardAreaMode) -> Double {
         VoiceOnlyKeyboardPolicy.suggestionLaneHeight
     }
@@ -1247,29 +1338,6 @@ class KeyboardViewController: UIInputViewController,
 
     private var currentSuggestionLaneHeight: Double {
         suggestionLaneHeight(for: KeyboardState.shared.areaMode)
-    }
-
-    private func layoutLetterKeyboard(surfaceHeight: CGFloat? = nil) {
-        guard let inputView,
-              let keyboard = giellaKeyboard,
-              inputView.bounds.width > 0 else { return }
-        let resolvedHeight = surfaceHeight ?? computeKeyboardHeight(for: KeyboardState.shared.areaMode)
-        let layout = VoiceOnlyKeyboardPolicy.layout(
-            for: Double(inputView.bounds.width),
-            surfaceHeight: Double(max(1, resolvedHeight)),
-            controlOrder: KeyboardAccessoryOrder.current,
-            topAccessoryHeight: currentSuggestionLaneHeight
-        )
-        let frame = layout.letterKeyboardFrame
-        guard !frame.isEmpty else {
-            keyboard.isHidden = true
-            return
-        }
-        giellaLeadingConstraint?.constant = frame.minX
-        giellaTrailingConstraint?.constant = -(inputView.bounds.width - frame.maxX)
-        giellaTopConstraint?.constant = frame.minY
-        giellaBottomConstraint?.constant = -(resolvedHeight - frame.maxY)
-        keyboard.isHidden = true
     }
 
     private func reassertTransparentSurfaceLayers() {
@@ -1284,10 +1352,6 @@ class KeyboardViewController: UIInputViewController,
         actionControlsView?.clipsToBounds = false
         actionControlsView?.layer.masksToBounds = false
         actionControlsView?.layer.backgroundColor = UIColor.clear.cgColor
-        giellaKeyboard?.backgroundColor = .clear
-        giellaKeyboard?.isOpaque = false
-        giellaKeyboard?.clipsToBounds = false
-        giellaKeyboard?.layer.masksToBounds = false
     }
 
     private func installVoiceActionControls(in inputView: UIView) {
@@ -1306,13 +1370,46 @@ class KeyboardViewController: UIInputViewController,
             controls.bottomAnchor.constraint(equalTo: inputView.bottomAnchor)
         ])
         actionControlsView = controls
-        controls.forwardHitTest = { _, _ in
-            // Misses stay nil on every page, including emoji. Returning the
-            // hosted view from this overlay puts the pager outside the window
-            // hit chain, so its pan never begins and page swipes do nothing.
-            // The window then hit-tests the hosting view behind this overlay.
-            guard KeyboardState.shared.areaMode == .emoji else { return nil }
-            return nil
+
+        // The key grid's single touch owner.
+        //
+        // It is added to the input view itself, as a sibling of the voice-control
+        // overlay, rather than inside that overlay. This is the whole reason the
+        // letter grid was dead for four builds: the overlay hides itself whenever
+        // the area mode is `.letters`, `.panel` or `.numberPad`, and a subview of
+        // a hidden view is itself hidden, so an owner placed inside it never
+        // received a touch on the letter page. The emoji page was unaffected
+        // because its overlay is visible, which is the only reason the two pages
+        // behaved differently from identical code.
+        //
+        // Mounted here, its visibility is independent of the voice chrome, and
+        // `claimsRect` still limits it to the grid so it cannot swallow the space
+        // and return keys in the bottom bar.
+        let keyOwner = KeyGridTouchOwner(frame: inputView.bounds)
+        keyOwner.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // Below the letter grid. Both are mounted on the input view, and when the
+        // letter page is showing the owner is hidden and deactivated rather than
+        // left to compete for the same touches.
+        keyOwner.layer.zPosition = 150
+        inputView.addSubview(keyOwner)
+        keyGridOwner = keyOwner
+        KeyGridTouchBus.attach(keyOwner)
+
+        controls.forwardHitTest = { [weak self, weak controls] point, event in
+            guard let hostingView = self?.hostingController?.view,
+                  let controls else { return nil }
+            // Layout brings the chrome overlay to the front. Its misses must
+            // visit the grid owner before SwiftUI, whose letter faces have no
+            // insertion handler. CALayer.zPosition only controls rendering.
+            if let owner = self?.keyGridOwner,
+               let hit = owner.hitTest(owner.convert(point, from: controls), with: event) {
+                return hit
+            }
+            let hostedPoint = hostingView.convert(point, from: controls)
+            // Let UIKit and the hosting hierarchy choose the real target. The
+            // material views are independently non-hit-testable decorations.
+            let resolved = hostingView.hitTest(hostedPoint, with: event)
+            return resolved
         }
 
         keyboardModeButton = makeKeyboardActionButton(identifier: "letter-mode", label: "Open letter keyboard") { [weak self] in
@@ -1357,14 +1454,26 @@ class KeyboardViewController: UIInputViewController,
             case .requested, .recording:
                 state.handleMicPressEnded()
             case .idle, .ready, .failed:
-                guard state.appNeedsAppAction || state.failedRequiresApp else { return false }
-                state.openDictusForRecovery()
+                // The recovery control owns the app handoff now. Dictation never
+                // silently opens the app, so this only ever finishes a session.
+                state.handleMicPressEnded()
             case .transcribing, .processing:
                 return false
             }
             return true
         }
-        micButton?.accessibilityHint = String(localized: "Tap to open sAiity when needed. Press and hold to dictate.")
+        micButton?.accessibilityHint = String(localized: "Press and hold to dictate. Release to finish.")
+        // Separate owner for the app handoff. It occupies the same frame as the
+        // mic and exactly one of the two is ever visible, so the slot keeps a
+        // single hit target and neither control has to interpret the other's
+        // state.
+        recoveryButton = makeKeyboardActionButton(
+            identifier: "open-saiity-button",
+            label: "Open sAiity to prepare dictation"
+        ) { [weak self] in
+            self?.openDictusForRecovery()
+        }
+        recoveryButton?.accessibilityHint = String(localized: "Opens sAiity so dictation can be prepared.")
         spaceButton = makeKeyboardActionButton(identifier: "space-key", label: "Space") { [weak self] in
             self?.routeProxyCommand(.space)
         }
@@ -1420,9 +1529,9 @@ class KeyboardViewController: UIInputViewController,
         let cursorController = LongPressCursorMovementController()
         cursorController.delegate = self
         spaceCursorController = cursorController
-        [keyboardModeButton, emojiButton, numberButton, micButton, spaceButton,
-         returnButton, dismissButton, voiceBoardButton, pasteButton, languageButton,
-         boardDeleteButton]
+        [keyboardModeButton, emojiButton, numberButton, micButton, recoveryButton,
+         spaceButton, returnButton, dismissButton, voiceBoardButton, pasteButton,
+         languageButton, boardDeleteButton]
             .compactMap { $0 }.forEach {
             controls.addSubview($0)
         }
@@ -1447,6 +1556,11 @@ class KeyboardViewController: UIInputViewController,
             : KeyboardActionButton(type: .system)
         if identifier == "dictate-button" {
             button.emitsHapticOnTouchDown = false
+        }
+        if identifier == "return-to-dictation-board" {
+            // A text bubble, not a microphone, so this is not iOS system Dictate.
+            button.setImage(UIImage(systemName: "text.bubble"), for: .normal)
+            button.accessibilityIdentifier = "return-to-dictation-board"
         }
         button.accessibilityIdentifier = identifier
         button.accessibilityLabel = label
@@ -1519,23 +1633,93 @@ class KeyboardViewController: UIInputViewController,
         let isEmoji = mode == .emoji
         let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad
         let voiceBoardMode = mode == .keys || mode == .recording
+
+        // The new keyboard grid. Mounted here, in the same place the frame is
+        // computed, so the rectangle it draws into and the rectangle it resolves
+        // touches in are literally the same `CGRect`.
+        //
+        // It owns the whole letter page including its bottom bar, so the SwiftUI
+        // surface is asked to render nothing for that mode. Mounting it anywhere
+        // else — or letting SwiftUI draw over it — is what left the previous
+        // attempt blank while every log insisted the grid was alive.
+        switch mode {
+        case .letters:
+            mountNextKeyboard(mode: .letters, layout: layout)
+        case .panel:
+            mountNextKeyboard(mode: .symbols, layout: layout)
+        case .numberPad:
+            mountNextKeyboard(
+                mode: .numberPad(KeyboardState.shared.hostNumberPadStyle),
+                layout: layout
+            )
+        default:
+            unmountNextKeyboard()
+        }
+
         // Material changes must never change input ownership. The transparent
         // UIKit controls remain the hit layer for both visual materials.
         let uikitOwnsVoiceChrome = voiceBoardMode
-        controls.isHidden = false
-        controls.isUserInteractionEnabled = true
+
+        // The overlay is a transparent hit layer, so hiding it is the only thing
+        // that stops its buttons from eating touches meant for the visible surface.
+        //
+        // This used to force `isHidden = false` unconditionally, which undid the
+        // `setVoiceActionControlsHidden` call `applyLayout` had just made for the
+        // letter page. The result was invisible chrome buttons sitting on top of
+        // the letter grid: a tap on the top row was swallowed by
+        // `return-to-dictation-board` and switched the user straight back to the
+        // dictation board, so the keyboard looked like it ignored every press.
+        // Visibility has to follow the same rule as the controls inside it.
+        let overlayVisible = uikitOwnsVoiceChrome || mode == .emoji
+        controls.isHidden = !overlayVisible
+        controls.isUserInteractionEnabled = overlayVisible
+        // The letter grid draws and owns letter touches itself, so it is shown only
+        // on the letter page. Everywhere else it is removed from hit testing
+        // entirely, which is the failure mode the old shared owner had: a grid that
+        // stayed live over a page it no longer described.
+        letterGridView?.isHidden = mode != .letters
+        letterGridView?.isUserInteractionEnabled = mode == .letters
+        // The old shared owner is the reverse case, and it is the one that actually
+        // broke the letter page: it is mounted at the same layer as the new grid and
+        // was added later, so it sat *above* it while still holding the last symbol
+        // page's geometry. Every letter touch was claimed by that stale geometry
+        // before the new grid was ever consulted, which is why the ABC page drew
+        // nothing and answered nothing. While letters own the page, the owner is
+        // taken out of the hierarchy and its registration is dropped, so it cannot
+        // outlive the page that described it.
+        let letterPageOwnsInput = mode == .letters
+        keyGridOwner?.isHidden = letterPageOwnsInput
+        keyGridOwner?.isUserInteractionEnabled = !letterPageOwnsInput
+        if letterPageOwnsInput {
+            KeyGridTouchBus.deactivate()
+        }
         let leftRailVisible = layout.leftRailWidth > 0
         let rightRailVisible = layout.rightRailWidth > 0
         let micVisible = uikitOwnsVoiceChrome && !layout.dictateFrame.isEmpty
+        // Exactly one primary control owns this slot. `showsRecoveryAction` is the
+        // single gate, so the hit owner can never contradict the SwiftUI face
+        // that is mounted beside it.
+        let recoveryVisible = micVisible && KeyboardState.shared.showsRecoveryAction
+        let dictateVisible = micVisible && !recoveryVisible
         micButton?.frame = .zero
         micButton?.isHidden = true
         micButton?.isEnabled = false
         micButton?.isUserInteractionEnabled = false
-        if micVisible {
+        if dictateVisible {
             micButton?.frame = layout.dictateFrame
             micButton?.isHidden = false
             micButton?.isEnabled = true
             micButton?.isUserInteractionEnabled = true
+        }
+        recoveryButton?.frame = .zero
+        recoveryButton?.isHidden = true
+        recoveryButton?.isEnabled = false
+        recoveryButton?.isUserInteractionEnabled = false
+        if recoveryVisible {
+            recoveryButton?.frame = layout.dictateFrame
+            recoveryButton?.isHidden = false
+            recoveryButton?.isEnabled = true
+            recoveryButton?.isUserInteractionEnabled = true
         }
         keyboardModeButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         emojiButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
@@ -1567,7 +1751,8 @@ class KeyboardViewController: UIInputViewController,
         emojiButton?.frame = layout.chromeEmojiFrame
         numberButton?.frame = layout.chromeNumbersFrame
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
-        micButton?.accessibilityLabel = KeyboardState.shared.dictationActionLabel
+        micButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
+        recoveryButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction
             ? "Tap to open sAiity and prepare dictation. Press and hold to dictate."
             : "Press and hold to dictate. Release to finish."
@@ -1605,11 +1790,14 @@ class KeyboardViewController: UIInputViewController,
         emojiCategoryScrubber?.sectionCount = CategoryInfo.emojiBarSections.count
         emojiCategoryScrubber?.slotWidth = EmojiCategoryBarMetrics.slotWidth
         emojiCategoryScrubber?.frame = layout.floatingEmojiCategoryFrame
-        emojiCategoryScrubber?.setScrollOffset(KeyboardState.shared.emojiCategoryBarOffset)
-        emojiCategoryScrubber?.setCurrentIndex(KeyboardState.shared.emojiCategorySelectionIndex)
-        emojiCategoryScrubber?.setExpanded(
-            isEmoji && KeyboardState.shared.emojiCategoryBarExpanded
-        )
+        // A layout pass during a drag must not snap the handle back or collapse it.
+        if emojiCategoryScrubber?.isTracking != true {
+            emojiCategoryScrubber?.setScrollOffset(KeyboardState.shared.emojiCategoryBarOffset)
+            emojiCategoryScrubber?.setCurrentIndex(KeyboardState.shared.emojiCategorySelectionIndex)
+            emojiCategoryScrubber?.setExpanded(
+                isEmoji && KeyboardState.shared.emojiCategoryBarExpanded
+            )
+        }
         emojiCategoryScrubber?.isHidden = !isEmoji
         emojiCategoryScrubber?.isEnabled = isEmoji
         emojiCategoryScrubber?.isUserInteractionEnabled = isEmoji
@@ -1633,10 +1821,20 @@ class KeyboardViewController: UIInputViewController,
         // into a short, unrecognized hold.
         let wasShowingRecovery = state.appNeedsAppAction
         state.refreshFromDefaults()
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardHitTrace",
+            instanceID: controllerID,
+            action: "handleMicTouchDown",
+            details: "wasShowingRecovery=\(wasShowingRecovery) needsAppAction=\(state.appNeedsAppAction) failedRequiresApp=\(state.failedRequiresApp) status=\(state.dictationStatus.rawValue)"
+        ))
         // Readiness may change mid-touch. Recovery opens immediately; recording
         // still waits for the shared hold threshold so a tap cannot start audio.
         guard !micTouchActive else { return }
         micTouchActive = true
+        // Feedback is the touch. Opening the app is checked after that, so a
+        // refused URL cannot make the press itself feel dead.
+        HapticFeedback.playInputClick()
+        micButton?.isHighlighted = true
         state.accessoryDictationActive = state.areaMode == .letters || state.areaMode == .emoji || state.areaMode == .panel || state.areaMode == .numberPad
         micHoldRecognized = false
         if wasShowingRecovery || state.appNeedsAppAction || state.failedRequiresApp {
@@ -1653,21 +1851,15 @@ class KeyboardViewController: UIInputViewController,
             // so cancellation does not wait for the hold recognizer.
             state.cancelActiveDictation()
             micTouchActive = false
+            micButton?.isHighlighted = false
             state.accessoryDictationActive = false
             layoutVoiceActionControls()
             return
         }
-        let timer = Timer(
-            timeInterval: KeyboardDeletion.dictationHoldRecognitionDuration,
-            repeats: false
-        ) { [weak self] _ in
-            guard let self, self.micTouchActive else { return }
-            self.micHoldRecognized = true
-            let state = KeyboardState.shared
-            state.handleMicPressBegan()
-        }
-        micHoldTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
+        // Ready-state dictation starts with the finger. The old hold timer made
+        // a real press feel late and was easy to miss in a three-second hold.
+        self.micHoldRecognized = true
+        state.handleMicPressBegan()
     }
 
     @objc private func handleServiceToggleChanged(_ sender: UISwitch) {
@@ -1692,6 +1884,7 @@ class KeyboardViewController: UIInputViewController,
         micHoldTimer?.invalidate()
         micHoldTimer = nil
         micTouchActive = false
+        micButton?.isHighlighted = false
         if micHoldRecognized {
             state.handleMicPressEnded()
         }
@@ -1708,6 +1901,7 @@ class KeyboardViewController: UIInputViewController,
             micHoldTimer = nil
             micTouchActive = false
             micHoldRecognized = false
+            micButton?.isHighlighted = false
             return
         }
         handleMicTouchUp()
@@ -1765,9 +1959,96 @@ class KeyboardViewController: UIInputViewController,
         KeyboardState.shared.presentArea(mode)
     }
 
+    // MARK: - New keyboard
+
+    /// The rebuilt key grid, when the user is on a page it owns.
+    ///
+    /// Owned by the controller and created with it, never registered globally. A
+    /// controller iOS has cached and then discarded tears this down with itself,
+    /// which is the structural difference from the shared touch bus it replaces.
+    private var nextKeyboardHost: NextKeyboardHost?
+
+    /// The pages the new grid draws, so the SwiftUI tree can stand aside.
+    static let nextKeyboardModes: Set<KeyboardAreaMode> = [.letters, .panel, .numberPad]
+
+    private func mountNextKeyboard(
+        mode: NextKeyboardHost.Page,
+        layout: VoiceOnlyKeyboardPolicy.Layout
+    ) {
+        guard let inputView else { return }
+        let host = nextKeyboardHost ?? {
+            let created = NextKeyboardHost()
+            created.delegate = self
+            nextKeyboardHost = created
+            return created
+        }()
+        // Above the hosted SwiftUI content and the voice-control overlay. The
+        // overlay is transparent input, so anything above it wins the touch.
+        host.gridView.layer.zPosition = 500
+        let frame = NextKeyboardHost.gridFrame(
+            for: layout,
+            surfaceHeight: layout.surfaceFrame.height,
+            // The new grid draws its own bottom bar, so it takes the whole surface.
+            bottomBarHeight: 0
+        )
+        host.mount(in: inputView, frame: frame, page: mode)
+    }
+
+    private func unmountNextKeyboard() {
+        nextKeyboardHost?.unmount()
+    }
+
+    // MARK: - Letter grid
+
+    func letterGrid(_ view: LetterKeyGridView, didInsert text: String) {
+        routeProxyText(text)
+    }
+
+    func letterGridDidTapDelete(_ view: LetterKeyGridView) {
+        routeProxyCommand(.delete)
+    }
+
+    func letterGridDidTapSymbols(_ view: LetterKeyGridView) {
+        presentNumbersArea()
+    }
+
+    // MARK: - New keyboard host
+
+    func nextKeyboardHost(_ host: NextKeyboardHost, perform command: KeyboardCommand) {
+        routeProxyCommand(command)
+    }
+
+    func nextKeyboardHost(_ host: NextKeyboardHost, insert text: String) {
+        routeProxyText(text)
+    }
+
+    func nextKeyboardHostDidRequestLetters(_ host: NextKeyboardHost) {
+        KeyboardState.shared.presentArea(.letters)
+    }
+
+    func nextKeyboardHostDidRequestSymbols(_ host: NextKeyboardHost) {
+        presentNumbersArea()
+    }
+
+    func nextKeyboardHostDidRequestEmoji(_ host: NextKeyboardHost) {
+        KeyboardState.shared.presentArea(.emoji)
+    }
+
+    func nextKeyboardHost(_ host: NextKeyboardHost, didSelectSymbolPage id: String) {
+        // The host has already switched its own page; the state only needs to know
+        // the area is still the symbol panel.
+        if KeyboardState.shared.areaMode != .panel {
+            KeyboardState.shared.presentArea(.panel)
+        }
+    }
+
     func routeProxyCommand(_ command: KeyboardCommand) {
-        let ownerAvailable = isAttached && isOnScreen
-            && KeyboardState.shared.activeControllerID == controllerID
+        let ownerAvailable = KeyboardInputRouter.canRoute(
+            isAttached: isAttached,
+            isOnScreen: isOnScreen,
+            activeControllerID: KeyboardState.shared.activeControllerID,
+            controllerID: controllerID
+        )
         guard ownerAvailable else {
             DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
             PersistentLog.log(.diagnosticProbe(
@@ -1798,19 +2079,30 @@ class KeyboardViewController: UIInputViewController,
     }
 
     func routeProxyText(_ text: String) {
-        let ownerAvailable = isAttached && isOnScreen
-            && KeyboardState.shared.activeControllerID == controllerID
+        let ownerAvailable = KeyboardInputRouter.canRoute(
+            isAttached: isAttached,
+            isOnScreen: isOnScreen,
+            activeControllerID: KeyboardState.shared.activeControllerID,
+            controllerID: controllerID
+        )
         guard ownerAvailable else {
             DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardViewController",
                 instanceID: controllerID,
                 action: "proxyTextRejected",
-                details: "textLength=\(text.count) ownerAvailable=false"
+                details: "textLength=\(text.count) ownerAvailable=false attached=\(isAttached) onScreen=\(isOnScreen) active=\(KeyboardState.shared.activeControllerID ?? "none") self=\(controllerID)"
             ))
             return
         }
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardViewController",
+            instanceID: controllerID,
+            action: "proxyTextInserted",
+            details: "textLength=\(text.count) attached=\(isAttached) onScreen=\(isOnScreen)"
+        ))
         textDocumentProxy.insertText(text)
+        SuggestionState.shared.noteTypedCharacter(text)
         refreshAdaptiveTouchContext()
     }
 
@@ -1820,7 +2112,6 @@ class KeyboardViewController: UIInputViewController,
         guard KeyboardState.shared.activeControllerID == controllerID else { return }
         adaptiveContextGeneration &+= 1
         let generation = adaptiveContextGeneration
-        SuggestionState.shared.updateAdaptiveTouchPrediction(context: nil)
         guard isAttached, isOnScreen, KeyboardState.shared.areaMode == .letters else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self,
@@ -1828,12 +2119,16 @@ class KeyboardViewController: UIInputViewController,
                   self.isAttached, self.isOnScreen,
                   KeyboardState.shared.activeControllerID == self.controllerID,
                   KeyboardState.shared.areaMode == .letters else { return }
+            let totalStart = CFAbsoluteTimeGetCurrent()
             let policy = HostInputTraits.policy(for: self.textDocumentProxy)
+            let afterPolicy = CFAbsoluteTimeGetCurrent()
             SuggestionState.shared.hostPolicy = policy
             let context = policy.suggestionsAllowed
                 ? self.textDocumentProxy.documentContextBeforeInput.map { String($0.suffix(240)) }
                 : nil
+            let afterContext = CFAbsoluteTimeGetCurrent()
             SuggestionState.shared.updateAdaptiveTouchPrediction(context: context)
+            let afterPredict = CFAbsoluteTimeGetCurrent()
         }
     }
 
@@ -1857,7 +2152,7 @@ class KeyboardViewController: UIInputViewController,
             return
         }
         routeProxyText(value)
-        HapticFeedback.keyTapped()
+        HapticFeedback.playInputClick()
     }
 
     static func routeProxyCommand(
@@ -1909,9 +2204,6 @@ class KeyboardViewController: UIInputViewController,
                 presentArea(.emoji)
             } else {
                 routeProxyText(value)
-                if giellaKeyboard?.page == .shifted {
-                    giellaKeyboard?.page = .normal
-                }
             }
         case .backspace:
             routeProxyCommand(.delete)
@@ -1938,7 +2230,6 @@ class KeyboardViewController: UIInputViewController,
 
     func didTriggerDoubleTap(forKey key: KeyDefinition) {
         guard case .shift = key.type else { return }
-        giellaKeyboard?.page = .capslock
         KeyboardState.shared.lastShiftTapDate = .distantPast
     }
 
@@ -2006,23 +2297,13 @@ class KeyboardViewController: UIInputViewController,
     }
 
     private func toggleLetterShift() {
-        guard let keyboard = giellaKeyboard else { return }
         let now = Date()
         if now.timeIntervalSince(KeyboardState.shared.lastShiftTapDate) < KeyboardShiftState.doubleTapWindow {
-            keyboard.page = .capslock
             KeyboardState.shared.lastShiftTapDate = .distantPast
             return
         }
 
         KeyboardState.shared.lastShiftTapDate = now
-        switch keyboard.page {
-        case .normal:
-            keyboard.page = .shifted
-        case .shifted, .capslock:
-            keyboard.page = .normal
-        case .symbols1, .symbols2:
-            break
-        }
     }
 
     func longpress(movedCursor step: KeyboardCursorStep) {

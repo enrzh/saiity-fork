@@ -69,7 +69,8 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
 
     func testSynchronousAutocorrectAndTrieMaintenanceShareThePredictionQueue() throws {
         let state = try source("DictusKeyboard/TextPrediction/SuggestionState.swift")
-        XCTAssertTrue(state.contains("recallTokens: recall"))
+        XCTAssertFalse(state.contains("touchRecallTokens"),
+                       "touch routing must not depend on dictionary/name recall")
         XCTAssertTrue(state.contains("TypingCommit.accepts(typed: word, correction: prepared.correction)"))
         XCTAssertTrue(state.contains("adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight"))
         XCTAssertTrue(state.contains("UserDictionary.shared.reload()"))
@@ -89,5 +90,28 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
         XCTAssertFalse(body.contains("predictNextWords(after: previousWords, maxResults: 8)"))
         XCTAssertFalse(body.contains("frequencyDict.topWords"),
                        "A touch prior must not fall back to the most common words")
+    }
+
+    func testAdaptiveTouchPriorsUseLocalContextOffTheTouchPath() throws {
+        let state = try source("DictusKeyboard/TextPrediction/SuggestionState.swift")
+        let start = try XCTUnwrap(state.range(of: "func updateAdaptiveTouchPrediction"))
+        let end = try XCTUnwrap(state.range(of: "    private func preparedSpaceCommit", range: start.upperBound..<state.endIndex))
+        let body = String(state[start.lowerBound..<end.lowerBound])
+        let workStart = try XCTUnwrap(body.range(of: "let work = DispatchWorkItem"))
+        XCTAssertFalse(body[..<workStart.lowerBound].contains("engine.nextCharacterProbabilities"),
+                       "dictionary lookup must never run during touch delivery")
+
+        XCTAssertTrue(body.contains("self.engine.nextCharacterProbabilities("))
+        XCTAssertTrue(body.contains("suggestionQueue.async(execute: work)"))
+        XCTAssertTrue(body.contains("self.adaptiveTouchRequestGate.isCurrent(requestToken)"),
+                      "a stale worker must never move a current hit target")
+        XCTAssertTrue(body.contains("probabilities.isEmpty ? nil : probabilities"),
+                      "uncertain context leaves the gap neutral")
+        XCTAssertFalse(body.contains("StaticLetterTouchPrediction.nextCharacterProbabilities"),
+                       "static English-like frequencies must not bias multilingual typing")
+        XCTAssertTrue(body.contains("guard hostPolicy.suggestionsAllowed else"),
+                      "protected fields must drop a stale touch prior")
+        XCTAssertTrue(body.contains("self.engine.shouldAbstainFromPrediction(for: inputContext)"),
+                      "code-like or uncertain context should not bias a key")
     }
 }

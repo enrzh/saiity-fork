@@ -31,6 +31,19 @@ public enum DictationStatus: String, Codable, CaseIterable, Sendable {
     case ready        // Transcription result available in shared storage
     case failed       // Something went wrong
 
+    /// True while the board's primary control cancels rather than dictates.
+    ///
+    /// This triple was inlined in three places and drifted: the touch-down
+    /// branch, the release guard, and the visual all spelled it out separately.
+    public var isCancellationStage: Bool {
+        switch self {
+        case .requested, .transcribing, .processing:
+            return true
+        case .idle, .recording, .ready, .failed:
+            return false
+        }
+    }
+
     /// The truthful label for the app's recording surface.
     public var recordingLabel: String {
         switch self {

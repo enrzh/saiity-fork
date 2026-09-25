@@ -14,6 +14,22 @@
 		AA000003 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* KeyboardViewController.swift */; };
 		AA000004 /* KeyboardRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* KeyboardRootView.swift */; };
 		AA000005 /* DictationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* DictationCoordinator.swift */; };
+		RR000010 /* CleanupPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100010 /* CleanupPipeline.swift */; };
+		RR000011 /* ModelPreparationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100011 /* ModelPreparationCoordinator.swift */; };
+		RR000020 /* LetterKeyboardSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100020 /* LetterKeyboardSurface.swift */; };
+		RR000022 /* NumberKeyboardSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100022 /* NumberKeyboardSurface.swift */; };
+		RR000023 /* SymbolKeyboardSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100023 /* SymbolKeyboardSurface.swift */; };
+		RR000024 /* KeyboardChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100024 /* KeyboardChrome.swift */; };
+		RR000025 /* VoiceBoardSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100025 /* VoiceBoardSurface.swift */; };
+		RR000026 /* EmojiGestureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100026 /* EmojiGestureCoordinator.swift */; };
+		RR000027 /* EmojiCategoryControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100027 /* EmojiCategoryControl.swift */; };
+		RR000029 /* KeyboardKeyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100029 /* KeyboardKeyInput.swift */; };
+		RR000099 /* KeyGridTouchOwner.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100099 /* KeyGridTouchOwner.swift */; };
+		RR000100 /* LetterKeyGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100100 /* LetterKeyGridView.swift */; };
+		RR000103 /* KeyGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100103 /* KeyGridView.swift */; };
+		RR000104 /* KeyGridPageFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100104 /* KeyGridPageFactory.swift */; };
+		RR000105 /* NextKeyboardHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100105 /* NextKeyboardHost.swift */; };
+		RR000030 /* KeyboardKeyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100030 /* KeyboardKeyStyle.swift */; };
 		AA000006 /* DictationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000A /* DictationView.swift */; };
 		AA000007 /* KeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000B /* KeyboardState.swift */; };
 		AA000008 /* MicButtonDisabled.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000C /* MicButtonDisabled.swift */; };
@@ -103,20 +119,12 @@
 		BB000003 /* StopStandbyIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100005 /* StopStandbyIntent.swift */; };
 		BB000010 /* DictusCore in Frameworks */ = {isa = PBXBuildFile; productRef = BB900010 /* DictusCore */; };
 		BB000020 /* DictusWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB200001 /* DictusWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		CC000001 /* GiellaUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100001 /* GiellaUtils.swift */; };
 		CC000002 /* KeyDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100002 /* KeyDefinition.swift */; };
 		CC000003 /* KeyboardDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100003 /* KeyboardDefinition.swift */; };
-		CC000004 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100004 /* Theme.swift */; };
 		CC000005 /* DeviceContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100005 /* DeviceContext.swift */; };
 		CC000006 /* KeyboardHeightProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100006 /* KeyboardHeightProvider.swift */; };
-		CC000007 /* InputContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100007 /* InputContext.swift */; };
 		CC000008 /* SystemKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100008 /* SystemKeys.swift */; };
-		CC000009 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100009 /* KeyboardView.swift */; };
-		CC00000A /* KeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000A /* KeyView.swift */; };
-		CC00000B /* KeyOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000B /* KeyOverlayView.swift */; };
 		CC00000C /* LongPressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000C /* LongPressController.swift */; };
-		CC00000D /* DeadKeyHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000D /* DeadKeyHandler.swift */; };
-		CC00000E /* Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10000E /* Audio.swift */; };
 		CC00000F /* DeviceKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC900001 /* DeviceKit */; };
 		CC000010 /* KeyboardLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100010 /* KeyboardLayouts.swift */; };
 		CC000030 /* KeyboardMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100030 /* KeyboardMetrics.swift */; };
@@ -184,6 +192,22 @@
 		AA100007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA100008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA100009 /* DictationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationCoordinator.swift; sourceTree = "<group>"; };
+		RR100010 /* CleanupPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupPipeline.swift; sourceTree = "<group>"; };
+		RR100011 /* ModelPreparationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPreparationCoordinator.swift; sourceTree = "<group>"; };
+		RR100020 /* LetterKeyboardSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterKeyboardSurface.swift; sourceTree = "<group>"; };
+		RR100022 /* NumberKeyboardSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberKeyboardSurface.swift; sourceTree = "<group>"; };
+		RR100023 /* SymbolKeyboardSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymbolKeyboardSurface.swift; sourceTree = "<group>"; };
+		RR100024 /* KeyboardChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardChrome.swift; sourceTree = "<group>"; };
+		RR100025 /* VoiceBoardSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceBoardSurface.swift; sourceTree = "<group>"; };
+		RR100026 /* EmojiGestureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiGestureCoordinator.swift; sourceTree = "<group>"; };
+		RR100027 /* EmojiCategoryControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiCategoryControl.swift; sourceTree = "<group>"; };
+		RR100029 /* KeyboardKeyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardKeyInput.swift; sourceTree = "<group>"; };
+		RR100099 /* KeyGridTouchOwner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyGridTouchOwner.swift; sourceTree = "<group>"; };
+		RR100100 /* LetterKeyGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterKeyGridView.swift; sourceTree = "<group>"; };
+		RR100103 /* KeyGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridView.swift; sourceTree = "<group>"; };
+		RR100104 /* KeyGridPageFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridPageFactory.swift; sourceTree = "<group>"; };
+		RR100105 /* NextKeyboardHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/NextKeyboardHost.swift; sourceTree = "<group>"; };
+		RR100030 /* KeyboardKeyStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardKeyStyle.swift; sourceTree = "<group>"; };
 		AA10000A /* DictationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationView.swift; sourceTree = "<group>"; };
 		AA10000B /* KeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardState.swift; sourceTree = "<group>"; };
 		AA10000C /* MicButtonDisabled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicButtonDisabled.swift; sourceTree = "<group>"; };
@@ -275,20 +299,12 @@
 		BB100004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB100005 /* StopStandbyIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopStandbyIntent.swift; sourceTree = "<group>"; };
 		BB200001 /* DictusWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DictusWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		CC100001 /* GiellaUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiellaUtils.swift; sourceTree = "<group>"; };
 		CC100002 /* KeyDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDefinition.swift; sourceTree = "<group>"; };
 		CC100003 /* KeyboardDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDefinition.swift; sourceTree = "<group>"; };
-		CC100004 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		CC100005 /* DeviceContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceContext.swift; sourceTree = "<group>"; };
 		CC100006 /* KeyboardHeightProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardHeightProvider.swift; sourceTree = "<group>"; };
-		CC100007 /* InputContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputContext.swift; sourceTree = "<group>"; };
 		CC100008 /* SystemKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemKeys.swift; sourceTree = "<group>"; };
-		CC100009 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
-		CC10000A /* KeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyView.swift; sourceTree = "<group>"; };
-		CC10000B /* KeyOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyOverlayView.swift; sourceTree = "<group>"; };
 		CC10000C /* LongPressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongPressController.swift; sourceTree = "<group>"; };
-		CC10000D /* DeadKeyHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadKeyHandler.swift; sourceTree = "<group>"; };
-		CC10000E /* Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Audio.swift; sourceTree = "<group>"; };
 		CC100010 /* KeyboardLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayouts.swift; sourceTree = "<group>"; };
 		CC100030 /* KeyboardMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMetrics.swift; sourceTree = "<group>"; };
 		CC100040 /* HostInputTraits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostInputTraits.swift; sourceTree = "<group>"; };
@@ -372,6 +388,7 @@
 				AA100320 /* PerformanceMetrics.swift */,
 				AA100002 /* ContentView.swift */,
 				AA100009 /* DictationCoordinator.swift */,
+				RR400010 /* Dictation */,
 				AA100264 /* ColdStartLaunch.swift */,
 				AA100311 /* ColdStartResolution.swift */,
 				AA10000A /* DictationView.swift */,
@@ -400,6 +417,18 @@
 			children = (
 				AA100003 /* KeyboardViewController.swift */,
 				AA100004 /* KeyboardRootView.swift */,
+				RR100020 /* LetterKeyboardSurface.swift */,
+				RR100022 /* NumberKeyboardSurface.swift */,
+				RR100023 /* SymbolKeyboardSurface.swift */,
+				RR100024 /* KeyboardChrome.swift */,
+				RR100025 /* VoiceBoardSurface.swift */,
+				RR100029 /* KeyboardKeyInput.swift */,
+				RR100099 /* KeyGridTouchOwner.swift */,
+				RR100100 /* LetterKeyGridView.swift */,
+				RR100103 /* KeyGridView.swift */,
+				RR100104 /* KeyGridPageFactory.swift */,
+				RR100105 /* NextKeyboardHost.swift */,
+				RR100030 /* KeyboardKeyStyle.swift */,
 				AA10000B /* KeyboardState.swift */,
 				AA1000F6 /* KeyboardLifecycleProbe.swift */,
 				AA357001 /* AppleFMExtensionProbe.swift */,
@@ -450,7 +479,9 @@
 				AA100061 /* RecordingOverlay.swift */,
 				AA100062 /* KeyboardWaveformView.swift */,
 				AA1000B2 /* EmojiPickerView.swift */,
+				RR100026 /* EmojiGestureCoordinator.swift */,
 				AA1000B3 /* EmojiCategoryBar.swift */,
+				RR100027 /* EmojiCategoryControl.swift */,
 				AA1000B5 /* AuxiliaryBottomBar.swift */,
 				AA1000B6 /* KeyVariantPopup.swift */,
 				AA1000D4 /* SuggestionBarView.swift */,
@@ -518,6 +549,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100050 /* ModelManager.swift */,
+				RR100011 /* ModelPreparationCoordinator.swift */,
 				AA100052 /* ModelRepoDownloader.swift */,
 			);
 			path = Models;
@@ -591,6 +623,14 @@
 			path = TouchHandling;
 			sourceTree = "<group>";
 		};
+		RR400010 /* Dictation */ = {
+			isa = PBXGroup;
+			children = (
+				RR100010 /* CleanupPipeline.swift */,
+			);
+			path = Dictation;
+			sourceTree = "<group>";
+		};
 		AA40P200 /* Polish */ = {
 			isa = PBXGroup;
 			children = (
@@ -626,7 +666,6 @@
 		CC400001 /* Vendored */ = {
 			isa = PBXGroup;
 			children = (
-				CC100001 /* GiellaUtils.swift */,
 				CC400002 /* Views */,
 				CC400003 /* Models */,
 				CC400004 /* Controllers */,
@@ -638,9 +677,6 @@
 		CC400002 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				CC100009 /* KeyboardView.swift */,
-				CC10000A /* KeyView.swift */,
-				CC10000B /* KeyOverlayView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -650,10 +686,8 @@
 			children = (
 				CC100002 /* KeyDefinition.swift */,
 				CC100003 /* KeyboardDefinition.swift */,
-				CC100004 /* Theme.swift */,
 				CC100005 /* DeviceContext.swift */,
 				CC100006 /* KeyboardHeightProvider.swift */,
-				CC100007 /* InputContext.swift */,
 				CC100008 /* SystemKeys.swift */,
 			);
 			path = Models;
@@ -663,8 +697,6 @@
 			isa = PBXGroup;
 			children = (
 				CC10000C /* LongPressController.swift */,
-				CC10000D /* DeadKeyHandler.swift */,
-				CC10000E /* Audio.swift */,
 			);
 			path = Controllers;
 			sourceTree = "<group>";
@@ -950,6 +982,8 @@
 				AA000001 /* DictusApp.swift in Sources */,
 				AA000002 /* ContentView.swift in Sources */,
 				AA000005 /* DictationCoordinator.swift in Sources */,
+				RR000010 /* CleanupPipeline.swift in Sources */,
+				RR000011 /* ModelPreparationCoordinator.swift in Sources */,
 				AA000264 /* ColdStartLaunch.swift in Sources */,
 				AA000311 /* ColdStartResolution.swift in Sources */,
 				AA000320 /* PerformanceMetrics.swift in Sources */,
@@ -1011,6 +1045,20 @@
 			files = (
 				AA000003 /* KeyboardViewController.swift in Sources */,
 				AA000004 /* KeyboardRootView.swift in Sources */,
+				RR000020 /* LetterKeyboardSurface.swift in Sources */,
+				RR000022 /* NumberKeyboardSurface.swift in Sources */,
+				RR000023 /* SymbolKeyboardSurface.swift in Sources */,
+				RR000024 /* KeyboardChrome.swift in Sources */,
+				RR000025 /* VoiceBoardSurface.swift in Sources */,
+				RR000029 /* KeyboardKeyInput.swift in Sources */,
+				RR000099 /* KeyGridTouchOwner.swift in Sources */,
+				RR000100 /* LetterKeyGridView.swift in Sources */,
+				RR000103 /* KeyGridView.swift in Sources */,
+				RR000104 /* KeyGridPageFactory.swift in Sources */,
+				RR000105 /* NextKeyboardHost.swift in Sources */,
+				RR000030 /* KeyboardKeyStyle.swift in Sources */,
+				RR000026 /* EmojiGestureCoordinator.swift in Sources */,
+				RR000027 /* EmojiCategoryControl.swift in Sources */,
 				AA000007 /* KeyboardState.swift in Sources */,
 				AA0000F7 /* KeyboardLifecycleProbe.swift in Sources */,
 				AA357002 /* AppleFMExtensionProbe.swift in Sources */,
@@ -1037,20 +1085,12 @@
 				CC000050 /* KeySoundPolicy.swift in Sources */,
 				CC000010 /* KeyboardLayouts.swift in Sources */,
 				CC000040 /* HostInputTraits.swift in Sources */,
-				CC000001 /* GiellaUtils.swift in Sources */,
 				CC000002 /* KeyDefinition.swift in Sources */,
 				CC000003 /* KeyboardDefinition.swift in Sources */,
-				CC000004 /* Theme.swift in Sources */,
 				CC000005 /* DeviceContext.swift in Sources */,
 				CC000006 /* KeyboardHeightProvider.swift in Sources */,
-				CC000007 /* InputContext.swift in Sources */,
 				CC000008 /* SystemKeys.swift in Sources */,
-				CC000009 /* KeyboardView.swift in Sources */,
-				CC00000A /* KeyView.swift in Sources */,
-				CC00000B /* KeyOverlayView.swift in Sources */,
 				CC00000C /* LongPressController.swift in Sources */,
-				CC00000D /* DeadKeyHandler.swift in Sources */,
-				CC00000E /* Audio.swift in Sources */,
 				EE000001 /* dictus_trie.cpp in Sources */,
 				EE000002 /* dictus_scorer.cpp in Sources */,
 				EE000003 /* dictus_proximity.cpp in Sources */,
@@ -1207,7 +1247,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1230,7 +1270,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1252,7 +1292,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1280,7 +1320,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1308,7 +1348,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
@@ -1330,7 +1370,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 201;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;

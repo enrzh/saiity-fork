@@ -2,52 +2,8 @@
 import SwiftUI
 import DictusCore
 
-/// Stable weak references used only by the invisible letter-boundary router.
-/// The router forwards to these existing controls so UIKit keeps their normal
-/// press, hold, cancellation, haptic, and accessibility behavior.
-final class AdaptiveTouchControlRegistry {
-    static let shared = AdaptiveTouchControlRegistry()
-
-    private final class Entry {
-        weak var control: UIView?
-        let scopeID: String
-
-        init(_ control: UIView, scopeID: String) {
-            self.control = control
-            self.scopeID = scopeID
-        }
-    }
-
-    private var entries: [String: Entry] = [:]
-
-    func register(_ control: UIView, for keyID: String, scopeID: String) {
-        entries[keyID] = Entry(control, scopeID: scopeID)
-    }
-
-    func unregister(_ keyID: String, control: UIView) {
-        guard entries[keyID]?.control === control else { return }
-        entries.removeValue(forKey: keyID)
-    }
-
-    func control(for keyID: String, in window: UIWindow, scopeID: String) -> UIView? {
-        guard let entry = entries[keyID],
-              entry.scopeID == scopeID,
-              let control = entry.control,
-              control.window === window else {
-            return nil
-        }
-        var view: UIView? = control
-        while let current = view {
-            guard !current.isHidden, current.alpha > 0 else { return nil }
-            view = current.superview
-        }
-        return control
-    }
-}
-
 enum KeyHitTarget {
-    /// Hit testing is owned by `point(inside:)`. The control stays clear so the
-    /// expanded hit target is not drawn as a box behind the glyph.
+    /// Visual plates are independent from this persistent control.
     static func prepare(_ control: UIControl) {
         control.backgroundColor = .clear
         control.isMultipleTouchEnabled = true
@@ -150,6 +106,7 @@ struct AuxiliaryBottomBar: View {
                     .frame(width: periodSourceFrame.width, height: periodSourceFrame.height)
                     .offset(x: periodSourceFrame.minX, y: periodSourceFrame.minY)
             }
+
             if fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle {
                 wideControl(systemName: "return", label: "Return", action: onReturn)
                     .position(x: localX(returnFrame), y: localY(returnFrame))
@@ -184,21 +141,26 @@ struct AuxiliaryBottomBar: View {
     }
 
     private func periodKey(source: CGRect, bounds: CGSize, topOverflow: CGFloat) -> some View {
-        let plateHeight = VoiceOnlyKeyboardPolicy.commandVisualSize(
+        let visual = VoiceOnlyKeyboardPolicy.commandVisualSize(
             for: CGSize(width: source.width, height: source.height)
-        ).height
+        )
+        let plateWidth = min(VoiceOnlyKeyboardPolicy.periodKeyPlateWidth, source.width)
         return ZStack {
-            VStack(spacing: 1) {
+            // WHY a VStack and not two independently aligned Texts: the old layout
+            // pinned the comma to the bottom of a `plateHeight` box and *then*
+            // stretched that box to the full hit height, so the plate no longer
+            // matched the box the glyphs were laid out against and the hint drifted
+            // outside the key. One stack, one frame, one plate: the period sits
+            // directly above its comma hint and both stay inside the container.
+            VStack(spacing: 0) {
                 Text(".")
-                    .font(.system(size: 22, weight: .light))
+                    .font(.system(size: 19, weight: .light))
                 Text(",")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-            .frame(
-                width: min(VoiceOnlyKeyboardPolicy.periodKeyPlateWidth, source.width),
-                height: plateHeight
-            )
+            .fixedSize(horizontal: true, vertical: true)
+            .frame(width: plateWidth, height: visual.height)
             .letterKeyPlate()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
@@ -213,17 +175,18 @@ struct AuxiliaryBottomBar: View {
                     periodEnded(cancelled: cancelled)
                 }
             )
+            .frame(width: source.width, height: source.height)
         }
         .frame(width: source.width, height: source.height)
         .contentShape(Rectangle())
+        .accessibilityIdentifier("period-key")
         .accessibilityLabel("Period")
         .accessibilityHint("Hold for punctuation options.")
         .accessibilityAddTraits(.isButton)
     }
 
     private func periodBegan(at _: CGPoint, source: CGRect, bounds: CGSize, topOverflow: CGFloat) {
-        HapticFeedback.prepareForNextTap()
-        HapticFeedback.keyTapped()
+        HapticFeedback.playInputClick()
         periodPreviewSession = KeyPreviewSession(
             text: ".",
             sourceFrame: source,
@@ -308,7 +271,7 @@ struct SuggestionBarIconButton: View {
                 .keyboardGlass(in: Circle())
             ImmediateKeyButton(
                 onTouchDown: {
-                    HapticFeedback.keyTapped()
+                    HapticFeedback.playInputClick()
                     action()
                 },
                 onTouchUp: {},
@@ -443,7 +406,6 @@ private struct SpaceTrackingButton: UIViewRepresentable {
             joystickSampler = nil
             latestTouchPoint = point
             isCursorTracking = false
-            HapticFeedback.prepareForNextTap()
             stopJoystickClock()
             let holdTimer = Timer(
                 timeInterval: KeyboardDeletion.cursorHoldDuration,
@@ -528,7 +490,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
             if isCursorTracking {
                 onCursorEnded?()
             } else if !wasCancelled {
-                HapticFeedback.keyTapped()
+                HapticFeedback.playInputClick()
                 onTap?()
             }
         }
@@ -573,6 +535,8 @@ private struct SpaceTrackingButton: UIViewRepresentable {
 }
 
 struct KeyboardDeleteButton: View {
+    /// Publishes the touch owner's press to the sibling key face.
+    @StateObject private var pressState = KeyboardPressState()
     let onDelete: () -> Void
     let onDeleteWord: () -> Void
     let visualWidth: CGFloat
@@ -605,11 +569,13 @@ struct KeyboardDeleteButton: View {
                 systemName: "delete.backward",
                 plateWidth: visualWidth,
                 plateHeight: visualHeight,
-                cornerRadius: visualCornerRadius
+                cornerRadius: visualCornerRadius,
+                isPressed: pressState.isPressed
             )
             DeleteRepeatControl(
                 onDelete: onDelete,
-                onDeleteWord: onDeleteWord
+                onDeleteWord: onDeleteWord,
+                pressState: pressState
             )
         }
         .frame(width: hitWidth, height: hitHeight)
@@ -626,15 +592,19 @@ struct KeyboardDeleteButton: View {
 private struct DeleteRepeatControl: UIViewRepresentable {
     let onDelete: () -> Void
     let onDeleteWord: () -> Void
+    /// Sink for the sibling key face. See `KeyboardPressState`.
+    var pressState: KeyboardPressState? = nil
 
     func makeUIView(context: Context) -> KeyboardDeleteRepeatControl {
         let control = KeyboardDeleteRepeatControl()
+        control.pressState = pressState
         control.onDelete = onDelete
         control.onDeleteWord = onDeleteWord
         return control
     }
 
     func updateUIView(_ uiView: KeyboardDeleteRepeatControl, context: Context) {
+        uiView.pressState = pressState
         uiView.onDelete = onDelete
         uiView.onDeleteWord = onDeleteWord
     }
@@ -644,6 +614,9 @@ private struct DeleteRepeatControl: UIViewRepresentable {
 final class KeyboardDeleteRepeatControl: UIControl {
     var onDelete: (() -> Void)?
     var onDeleteWord: (() -> Void)?
+    /// Sink for a sibling SwiftUI face. The control draws nothing itself, so
+    /// without this the delete key registered every press while looking inert.
+    var pressState: KeyboardPressState?
 
     private var isDeleting = false
     private var startedAt = Date.distantPast
@@ -666,8 +639,12 @@ final class KeyboardDeleteRepeatControl: UIControl {
         accessibilityTraits = .button
     }
 
+    override var isHighlighted: Bool {
+        didSet { pressState?.isPressed = isHighlighted }
+    }
+
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        bounds.insetBy(dx: -2, dy: -2).contains(point)
+        bounds.contains(point)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -696,7 +673,6 @@ final class KeyboardDeleteRepeatControl: UIControl {
 
     private func repeatDelete() {
         guard isDeleting else { return }
-        HapticFeedback.prepareForNextTap()
         HapticFeedback.keyTapped()
         switch KeyboardDeletion.repeatAction(after: Date().timeIntervalSince(startedAt)) {
         case .word:
@@ -720,356 +696,6 @@ final class KeyboardDeleteRepeatControl: UIControl {
     }
 }
 
-/// Lightweight UIKit touch routing for ordinary keyboard keys.
-/// SwiftUI buttons wait for their gesture resolver before invoking the action;
-/// this adapter delivers the action directly from the control's touch-down.
-struct ImmediateKeyButton: UIViewRepresentable {
-    let onTouchDown: () -> Void
-    let onTouchUp: () -> Void
-    var highlightCornerRadius: CGFloat = 13
-    var highlightSize: CGSize?
-    var adaptiveKeyID: String?
-    var adaptiveTouchScopeID: String?
-    var holdDuration: TimeInterval? = nil
-    var onHold: (() -> Void)? = nil
-
-    func makeUIView(context: Context) -> UIView {
-        let button = ImmediateKeyControl(frame: .zero)
-        button.highlightCornerRadius = highlightCornerRadius
-        button.highlightSize = highlightSize
-        button.isMultipleTouchEnabled = true
-        button.isExclusiveTouch = false
-        button.hitExpansion = 6
-        button.adaptiveTouchScopeID = adaptiveTouchScopeID
-        button.adaptiveKeyID = adaptiveKeyID
-        button.holdDuration = holdDuration
-        button.onHold = onHold
-        button.onTouchDown = onTouchDown
-        button.onTouchUp = onTouchUp
-        return button
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        guard let uiView = uiView as? ImmediateKeyControl else { return }
-        uiView.highlightCornerRadius = highlightCornerRadius
-        uiView.highlightSize = highlightSize
-        uiView.isMultipleTouchEnabled = true
-        uiView.isExclusiveTouch = false
-        uiView.hitExpansion = 6
-        uiView.adaptiveTouchScopeID = adaptiveTouchScopeID
-        uiView.adaptiveKeyID = adaptiveKeyID
-        uiView.holdDuration = holdDuration
-        uiView.onHold = onHold
-        uiView.onTouchDown = onTouchDown
-        uiView.onTouchUp = onTouchUp
-    }
-}
-
-private final class ImmediateKeyControl: UIControl {
-    var highlightCornerRadius: CGFloat = 13
-    var highlightSize: CGSize? {
-        didSet {
-            setNeedsLayout()
-            invalidateIntrinsicContentSize()
-        }
-    }
-    private let highlightLayer = CALayer()
-    var hitExpansion: CGFloat = 6
-    var adaptiveTouchScopeID: String? {
-        willSet {
-            guard adaptiveKeyID != nil, adaptiveTouchScopeID != newValue,
-                  let adaptiveKeyID else { return }
-            AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-        }
-        didSet { registerAdaptiveKey() }
-    }
-    var adaptiveKeyID: String? {
-        willSet {
-            if let adaptiveKeyID, adaptiveKeyID != newValue {
-                AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-            }
-        }
-        didSet { registerAdaptiveKey() }
-    }
-    var onTouchDown: (() -> Void)?
-    var onTouchUp: (() -> Void)?
-    var holdDuration: TimeInterval? = nil
-    var onHold: (() -> Void)? = nil
-    private var holdTimer: Timer?
-    private var holdActive = false
-    private var holdRecognized = false
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        KeyHitTarget.prepare(self)
-        layer.addSublayer(highlightLayer)
-    }
-
-    deinit {
-        if let adaptiveKeyID {
-            AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-        }
-        holdTimer?.invalidate()
-    }
-
-    private func registerAdaptiveKey() {
-        guard let adaptiveKeyID, let adaptiveTouchScopeID else { return }
-        AdaptiveTouchControlRegistry.shared.register(
-            self, for: adaptiveKeyID, scopeID: adaptiveTouchScopeID
-        )
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        KeyHitTarget.prepare(self)
-        layer.addSublayer(highlightLayer)
-    }
-
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        self.point(inside: point, with: event) ? self : nil
-    }
-
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        bounds.insetBy(dx: -hitExpansion, dy: -hitExpansion).contains(point)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        isHighlighted = true
-        if let holdDuration {
-            guard !holdActive else { return }
-            holdActive = true
-            holdRecognized = false
-            let timer = Timer(timeInterval: holdDuration, repeats: false) { [weak self] _ in
-                guard let self, self.holdActive else { return }
-                self.holdRecognized = true
-                self.onHold?()
-            }
-            holdTimer = timer
-            RunLoop.main.add(timer, forMode: .common)
-        } else {
-            for _ in touches {
-                onTouchDown?()
-            }
-        }
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        updateHighlight(using: event)
-        if !hasActiveTouches(in: event) {
-            finishHoldIfNeeded()
-        }
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        updateHighlight(using: event)
-        if !hasActiveTouches(in: event) {
-            finishHoldIfNeeded()
-        }
-    }
-
-    private func finishHoldIfNeeded() {
-        guard holdDuration != nil else {
-            onTouchUp?()
-            return
-        }
-        holdTimer?.invalidate()
-        holdTimer = nil
-        let recognized = holdRecognized
-        holdActive = false
-        holdRecognized = false
-        if recognized {
-            onTouchUp?()
-        }
-    }
-
-    private func hasActiveTouches(in event: UIEvent?) -> Bool {
-        event?.touches(for: self)?.contains { touch in
-            switch touch.phase {
-            case .began, .moved, .stationary: return true
-            default: return false
-            }
-        } ?? false
-    }
-
-    private func updateHighlight(using event: UIEvent?) {
-        isHighlighted = hasActiveTouches(in: event)
-    }
-
-    override var isHighlighted: Bool {
-        didSet {
-            // Keep feedback local to this control. The parent SwiftUI view does
-            // not need to redraw every key when another finger lands.
-            // A press may darken an explicit visual plate. It must not stroke
-            // the expanded hit bounds, which read as a hitbox hint.
-            let paintsPlate = isHighlighted && highlightSize != nil
-            highlightLayer.backgroundColor = paintsPlate
-                ? UIColor.label.withAlphaComponent(0.12).cgColor
-                : UIColor.clear.cgColor
-            highlightLayer.borderWidth = 0
-            highlightLayer.borderColor = nil
-            highlightLayer.cornerRadius = highlightCornerRadius
-        }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        let size = highlightSize ?? bounds.size
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        highlightLayer.frame = CGRect(x: bounds.midX - size.width / 2,
-                                      y: bounds.midY - size.height / 2,
-                                      width: size.width, height: size.height)
-        CATransaction.commit()
-    }
-
-    override var intrinsicContentSize: CGSize {
-        // highlightSize is only for the press chrome. Returning it here shrinks
-        // the UIKit control inside SwiftUI frames and leaves dead gaps around
-        // command plates (shift/delete/123/etc).
-        CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
-    }
-}
-
-/// A single UIKit tracking owner delivers accent-key input without waiting for
-/// SwiftUI's drag recognizer. Movement continues outside the original key.
-struct ImmediateVariantKey: UIViewRepresentable {
-    let onBegan: (CGPoint) -> Void
-    let onMoved: (CGPoint) -> Void
-    let onEnded: (Bool) -> Void
-    var adaptiveKeyID: String?
-    var adaptiveTouchScopeID: String?
-
-    func makeUIView(context: Context) -> TrackingKey {
-        let view = TrackingKey()
-        view.adaptiveTouchScopeID = adaptiveTouchScopeID
-        view.adaptiveKeyID = adaptiveKeyID
-        return view
-    }
-
-    func updateUIView(_ view: TrackingKey, context: Context) {
-        view.onBegan = onBegan
-        view.onMoved = onMoved
-        view.onEnded = onEnded
-        view.adaptiveTouchScopeID = adaptiveTouchScopeID
-        view.adaptiveKeyID = adaptiveKeyID
-    }
-
-    final class TrackingKey: UIControl {
-        var onBegan: ((CGPoint) -> Void)?
-        var onMoved: ((CGPoint) -> Void)?
-        var onEnded: ((Bool) -> Void)?
-        var hitExpansion: CGFloat = 6
-        var adaptiveTouchScopeID: String? {
-            willSet {
-                guard adaptiveKeyID != nil, adaptiveTouchScopeID != newValue,
-                      let adaptiveKeyID else { return }
-                AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-            }
-            didSet { registerAdaptiveKey() }
-        }
-        var adaptiveKeyID: String? {
-            willSet {
-                if let adaptiveKeyID, adaptiveKeyID != newValue {
-                    AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-                }
-            }
-            didSet { registerAdaptiveKey() }
-        }
-        private var activeMove: ((CGPoint) -> Void)?
-        private var activeEnd: ((Bool) -> Void)?
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            KeyHitTarget.prepare(self)
-        }
-
-        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            self.point(inside: point, with: event) ? self : nil
-        }
-
-        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-            bounds.insetBy(dx: -hitExpansion, dy: -hitExpansion).contains(point)
-        }
-
-        required init?(coder: NSCoder) {
-            super.init(coder: coder)
-            KeyHitTarget.prepare(self)
-        }
-
-        deinit {
-            if let adaptiveKeyID {
-                AdaptiveTouchControlRegistry.shared.unregister(adaptiveKeyID, control: self)
-            }
-        }
-
-        private func registerAdaptiveKey() {
-            guard let adaptiveKeyID, let adaptiveTouchScopeID else { return }
-            AdaptiveTouchControlRegistry.shared.register(
-                self, for: adaptiveKeyID, scopeID: adaptiveTouchScopeID
-            )
-        }
-
-        private var activeTouches: [ObjectIdentifier: UITouch] = [:]
-
-        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-            for touch in touches {
-                let id = ObjectIdentifier(touch)
-                guard activeTouches[id] == nil else { continue }
-                activeTouches[id] = touch
-                if activeTouches.count == 1 {
-                    activeMove = onMoved
-                    activeEnd = onEnded
-                    isHighlighted = true
-                    layer.cornerRadius = 13
-                }
-                onBegan?(touch.location(in: self))
-            }
-        }
-
-        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-            guard let primary = activeTouches.values.first else { return }
-            activeMove?(primary.location(in: self))
-        }
-
-        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-            for touch in touches {
-                activeTouches.removeValue(forKey: ObjectIdentifier(touch))
-            }
-            if activeTouches.isEmpty {
-                finish(cancelled: false)
-            }
-        }
-
-        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-            for touch in touches {
-                activeTouches.removeValue(forKey: ObjectIdentifier(touch))
-            }
-            if activeTouches.isEmpty {
-                finish(cancelled: true)
-            }
-        }
-
-        private func finish(cancelled: Bool) {
-            let completion = activeEnd
-            activeEnd = nil
-            activeMove = nil
-            activeTouches.removeAll()
-            isHighlighted = false
-            completion?(cancelled)
-        }
-
-        override var isHighlighted: Bool {
-            didSet {
-                // The control fills the hit target. Painting that rect, or
-                // stroking it, shows the hitbox. Press feedback stays on the glyph.
-                backgroundColor = .clear
-                layer.borderWidth = 0
-                layer.borderColor = nil
-            }
-        }
-    }
-}
-
 private extension AuxiliaryBottomBar {
     private var commandHitSize: CGSize {
         CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight)
@@ -1080,11 +706,12 @@ private extension AuxiliaryBottomBar {
     }
 
     private func roundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) {
+        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) { pressed in
             CommandKeyFace(
                 systemName: systemName,
                 plateWidth: commandVisual.width,
-                plateHeight: commandVisual.height
+                plateHeight: commandVisual.height,
+                isPressed: pressed
             )
         }
     }
@@ -1095,12 +722,13 @@ private extension AuxiliaryBottomBar {
         textPointSize: CGFloat = 14,
         action: @escaping () -> Void
     ) -> some View {
-        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) {
+        chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) { pressed in
             CommandKeyFace(
                 text: text,
                 plateWidth: commandVisual.width,
                 plateHeight: commandVisual.height,
-                textPointSize: textPointSize
+                textPointSize: textPointSize,
+                isPressed: pressed
             )
         }
     }
@@ -1110,35 +738,25 @@ private extension AuxiliaryBottomBar {
         action: @escaping () -> Void,
         hit: CGSize,
         highlightSize: CGSize,
-        @ViewBuilder face: () -> Face
+        @ViewBuilder face: @escaping (Bool) -> Face
     ) -> some View {
-        ZStack {
-            face()
-            ImmediateKeyButton(
-                onTouchDown: {
-                    HapticFeedback.keyTapped()
-                    action()
-                },
-                onTouchUp: {},
-                highlightCornerRadius: VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
-                highlightSize: highlightSize
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: hit.width, height: hit.height)
-        .contentShape(Rectangle())
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isButton)
+        // The UIKit control owns the touch; the face is its sibling. Publishing
+        // the press state through KeyboardPressState is what lets the visible
+        // key react at all — previously the control highlighted invisibly.
+        PressLinkedKeyFace(face: face, hit: hit, highlightSize: highlightSize, action: action)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(.isButton)
     }
 
     private func wideControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
         let hit = VoiceOnlyKeyboardPolicy.actionHitSize
         let plate = widePlateSize(hitWidth: hit.width, hitHeight: hit.height)
-        return chromeControl(label: label, action: action, hit: hit, highlightSize: hit) {
+        return chromeControl(label: label, action: action, hit: hit, highlightSize: hit) { pressed in
             CommandKeyFace(
                 systemName: systemName,
                 plateWidth: plate.width,
-                plateHeight: plate.height
+                plateHeight: plate.height,
+                isPressed: pressed
             )
         }
     }
@@ -1156,11 +774,12 @@ private extension AuxiliaryBottomBar {
             action: action,
             hit: CGSize(width: hitWidth, height: hitHeight),
             highlightSize: CGSize(width: hitWidth, height: hitHeight)
-        ) {
+        ) { pressed in
             CommandKeyFace(
                 text: text,
                 plateWidth: plate.width,
-                plateHeight: plate.height
+                plateHeight: plate.height,
+                isPressed: pressed
             )
         }
     }
@@ -1172,157 +791,4 @@ private extension AuxiliaryBottomBar {
         )
     }
 
-}
-
-/// Whether keyboard chrome is a floating control or the large board behind it.
-enum KeyboardChromeRole {
-    case control
-    case board
-}
-
-/// Liquid-glass chrome matching the voice-page utility controls.
-struct KeyboardGlassSurface<S: Shape>: ViewModifier {
-    let shape: S
-    var interactive: Bool = true
-    var role: KeyboardChromeRole = .control
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
-
-    func body(content: Content) -> some View {
-        // Plates are visual. A hittable solid fill sits behind the clear key
-        // control and swallows the tap; glass does not, which is why solid
-        // mode felt dead.
-        plate(content)
-            .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private func plate(_ content: Content) -> some View {
-        if !KeyboardInteractionPreferences.liquidGlassEnabled {
-            if role == .board {
-                content
-            } else {
-                content.background { shape.fill(solidFill).allowsHitTesting(false) }
-            }
-        } else if reduceTransparency || accessibilityContrast == .increased {
-            content.background {
-                shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill)).allowsHitTesting(false)
-            }
-        } else if #available(iOS 26, *) {
-            if interactive {
-                content.glassEffect(.regular.interactive(), in: shape)
-            } else {
-                content.glassEffect(.regular, in: shape)
-            }
-        } else {
-            content.background { shape.fill(.regularMaterial).allowsHitTesting(false) }
-        }
-    }
-
-    private var solidFill: Color {
-        Color(uiColor: .tertiarySystemFill)
-    }
-}
-
-extension View {
-    func keyboardGlass<S: Shape>(
-        in shape: S,
-        interactive: Bool = true,
-        role: KeyboardChromeRole = .control
-    ) -> some View {
-        modifier(KeyboardGlassSurface(shape: shape, interactive: interactive, role: role))
-    }
-
-    /// Optional per-key plate. Off by default so letters sit on the shared inset.
-    func letterKeyPlate(cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.keyCornerRadius) -> some View {
-        modifier(LetterKeyPlateModifier(cornerRadius: cornerRadius))
-    }
-
-    /// Always-on plate for 123 / ABC / emoji / shift / delete / space / return.
-    func commandKeyPlate(cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius) -> some View {
-        keyboardGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-    }
-}
-
-/// Symbol or short label on a command plate. The hit target stays on the caller.
-struct CommandKeyFace: View {
-    private let systemName: String?
-    private let text: String?
-    private let textWeight: Font.Weight
-    private let symbolPointSize: CGFloat
-    private let textPointSize: CGFloat
-    private let plateWidth: CGFloat?
-    private let plateHeight: CGFloat
-    private let cornerRadius: CGFloat
-
-    init(
-        systemName: String,
-        plateWidth: CGFloat? = nil,
-        plateHeight: CGFloat,
-        cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
-        symbolPointSize: CGFloat = 16
-    ) {
-        self.systemName = systemName
-        self.text = nil
-        self.textWeight = .semibold
-        self.symbolPointSize = symbolPointSize
-        self.textPointSize = 14
-        self.plateWidth = plateWidth
-        self.plateHeight = plateHeight
-        self.cornerRadius = cornerRadius
-    }
-
-    init(
-        text: String,
-        plateWidth: CGFloat? = nil,
-        plateHeight: CGFloat,
-        cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
-        textPointSize: CGFloat = 14,
-        textWeight: Font.Weight = .semibold
-    ) {
-        self.systemName = nil
-        self.text = text
-        self.textWeight = textWeight
-        self.symbolPointSize = 16
-        self.textPointSize = textPointSize
-        self.plateWidth = plateWidth
-        self.plateHeight = plateHeight
-        self.cornerRadius = cornerRadius
-    }
-
-    var body: some View {
-        Group {
-            if let systemName {
-                Image(systemName: systemName)
-                    .font(.system(size: symbolPointSize, weight: .semibold))
-            } else if let text {
-                Text(text)
-                    .font(.system(size: textPointSize, weight: textWeight))
-            }
-        }
-        .foregroundStyle(.primary)
-        .frame(
-            minWidth: plateWidth,
-            maxWidth: plateWidth ?? .infinity,
-            minHeight: plateHeight,
-            maxHeight: plateHeight
-        )
-        .commandKeyPlate(cornerRadius: cornerRadius)
-    }
-}
-
-private struct LetterKeyPlateModifier: ViewModifier {
-    let cornerRadius: CGFloat
-
-    func body(content: Content) -> some View {
-        if KeyboardInteractionPreferences.keyContainersEnabled {
-            // Visual only — interactive glass must not compete with ImmediateKeyButton.
-            content.keyboardGlass(
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                interactive: false
-            )
-        } else {
-            content
-        }
-    }
 }

@@ -82,6 +82,14 @@ public enum LastDictationIssueReport {
         defaults.removeObject(forKey: SharedKeys.lastDictationIssueSnapshot)
     }
 
+    /// History-off keeps timings and errors, and drops the transcript fields.
+    public static func removeTranscriptFields(in defaults: UserDefaults) {
+        guard var snapshot = load(from: defaults) else { return }
+        snapshot.rawText = nil
+        snapshot.cleanedText = nil
+        store(snapshot, in: defaults)
+    }
+
     /// Export payload. Transcript fields are present only when `includeText` is true.
     public static func exportSnapshot(
         _ snapshot: LastDictationIssueSnapshot,

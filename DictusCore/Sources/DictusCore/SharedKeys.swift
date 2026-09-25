@@ -119,6 +119,9 @@ public enum SharedKeys {
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
     /// Off / popup-above-key / popout-from-key. Migrates from `keyPopupsEnabled`.
     public static let keyPopupMode = "dictus.keyPopupMode"
+
+    /// Enable/disable adaptive hit-target prediction (default: on).
+    public static let adaptiveHitPredictionEnabled = "dictus.adaptiveHitPredictionEnabled"
     /// Whether keyboard chrome uses liquid glass. Off is fully opaque, with no glass rim.
     public static let liquidGlassEnabled = "dictus.liquidGlassEnabled"
     /// Whether letter/symbol insert keys draw their own plates. Default off: keys sit in the inset.

@@ -99,7 +99,7 @@ class ModelManager: ObservableObject {
     /// Serial prewarm lock — only one CoreML compilation at a time.
     /// The Neural Engine cannot handle multiple models compiling simultaneously
     /// (causes ANE "E5 bundle" errors). Downloads are parallel, prewarms are serial.
-    private var isPrewarming = false
+    private let preparation = ModelPreparationCoordinator()
 
     /// Directory inside the App Group container where model files are stored.
     /// Using the shared container means the keyboard extension could also access
@@ -324,12 +324,10 @@ class ModelManager: ObservableObject {
             lastLoggedDeciles.removeValue(forKey: identifier)
 
             // Wait for any other prewarm to finish (poll on MainActor is safe)
-            while isPrewarming {
-                try await Task.sleep(nanoseconds: 500_000_000) // 500ms
-            }
+            try await preparation.waitUntilIdle()
 
-            isPrewarming = true
-            defer { isPrewarming = false }
+            preparation.beginPrewarm()
+            defer { preparation.endPrewarm() }
 
             PersistentLog.log(.modelCompilationStarted(name: identifier))
 
@@ -361,8 +359,24 @@ class ModelManager: ObservableObject {
             // false-positive on legitimately long prewarms.
             let prewarmTimeoutSeconds = 120
             do {
-                _ = try await withPrewarmTimeout(seconds: prewarmTimeoutSeconds) {
+                let outcome = await IsolatedDeadline.race(seconds: TimeInterval(prewarmTimeoutSeconds)) {
                     try await WhisperKit(config)
+                }
+                switch outcome {
+                case .success(let kit):
+                    _ = kit
+                case .failure(let error):
+                    throw error
+                case .timedOut(let releaseWhenFinished):
+                    preparation.quarantineFailedPrewarm(identifier, releaseWhenFinished: releaseWhenFinished) {
+                        self.cleanupModelFiles($0)
+                    }
+                    throw ModelManagerError.prewarmTimeout(seconds: prewarmTimeoutSeconds)
+                case .cancelled(let releaseWhenFinished):
+                    preparation.quarantineFailedPrewarm(identifier, releaseWhenFinished: releaseWhenFinished) {
+                        self.cleanupModelFiles($0)
+                    }
+                    throw CancellationError()
                 }
             } catch let err as ModelManagerError {
                 if case .prewarmTimeout(let s) = err {
@@ -404,10 +418,12 @@ class ModelManager: ObservableObject {
             downloadByteInfo.removeValue(forKey: identifier)
             lastLoggedDeciles.removeValue(forKey: identifier)
 
-            if downloadPhaseCompleted {
+            if downloadPhaseCompleted && !preparation.prewarmQuarantined {
                 // Prewarm failure: clean up. ANE compilation failures (E5 bundle
                 // errors) leave behind unusable cached files that prevent
-                // re-download from working correctly.
+                // re-download from working correctly. A timed-out or cancelled
+                // initializer still has those files open; its quarantine task
+                // deletes them after the initializer exits.
                 cleanupModelFiles(identifier)
             }
             // Download failure: deliberately NO cleanup (issue #210, same policy as
@@ -455,19 +471,19 @@ class ModelManager: ObservableObject {
                 }
             }
 
-            // Step 2: Wait for any other prewarm to finish (ANE conflict avoidance)
-            while isPrewarming {
-                try await Task.sleep(nanoseconds: 500_000_000)
-            }
+            // Step 2: Wait for any other prewarm to finish (ANE conflict avoidance).
+            // A timed-out Whisper initializer still owns its files; do not compile
+            // Parakeet over that work.
+            try await preparation.waitUntilIdle()
 
             // Step 3: Switch to prewarming state — download is done, CoreML compilation starts.
-            isPrewarming = true
+            preparation.beginPrewarm()
             modelStates[identifier] = .prewarming
             downloadProgress.removeValue(forKey: identifier)
             downloadByteInfo.removeValue(forKey: identifier)
             lastLoggedDeciles.removeValue(forKey: identifier)
             PersistentLog.log(.modelPrewarmStarted(name: identifier))
-            defer { isPrewarming = false }
+            defer { preparation.endPrewarm() }
 
             // Step 4: Load and compile CoreML models.
             // ParakeetEngine.prepare() loads the files step 1 just downloaded and compiles
@@ -754,6 +770,7 @@ enum ModelManagerError: Error, LocalizedError {
     case noContainer
     case parakeetUnavailable
     case prewarmTimeout(seconds: Int)
+    case prewarmBusy
 
     var errorDescription: String? {
         switch self {
@@ -765,38 +782,8 @@ enum ModelManagerError: Error, LocalizedError {
             return "Parakeet requires iOS 17+ or FluidAudio is not linked"
         case .prewarmTimeout(let seconds):
             return "Model optimization did not complete within \(seconds)s"
+        case .prewarmBusy:
+            return "A previous model optimization is still finishing. Wait until it ends before starting another."
         }
-    }
-}
-
-/// Races an async operation against a timeout. Cancels the operation and throws
-/// `.prewarmTimeout` if the deadline expires first.
-///
-/// WHY: WhisperKit's async init for certain model variants on iPhone ANE can hang
-/// indefinitely when CoreML fails to compile the model (see issue #104,
-/// 2026-04-22 on-device test: `ANE model load has failed … Must re-compile the E5
-/// bundle` followed by `await WhisperKit(config)` never returning). Without a
-/// timeout, ModelManager stays stuck in `.prewarming` forever and the Settings
-/// UI shows the optimization spinner indefinitely, forcing the user to force-quit.
-@MainActor
-func withPrewarmTimeout<T: Sendable>(
-    seconds: Int,
-    _ operation: @escaping @Sendable () async throws -> T
-) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await operation() }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
-            throw ModelManagerError.prewarmTimeout(seconds: seconds)
-        }
-        // First to finish wins. Cancel the other before returning.
-        //
-        // WHY the force unwrap cannot trap: `next()` returns nil only when the
-        // group has no unfinished child tasks. Two were just added above and
-        // none has been awaited yet, so there is always one result to take.
-        // swiftlint:disable:next force_unwrapping
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
     }
 }

@@ -19,6 +19,33 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         }
     }
 
+    /// The selected-category marker must sit on the horizontal centre above the
+    /// spacebar on every device. Shortening the bar to dodge the delete key
+    /// silently moved that marker off-centre, so the frame stays symmetric and
+    /// the delete corner is resolved by hit-test order instead.
+    func testEmojiCategoryBarStaysHorizontallyCentredOnEveryDevice() {
+        for width in [320.0, 375, 390, 402, 430] {
+            for surfaceHeight in [260.0, 280, 300] {
+                let layout = VoiceOnlyKeyboardPolicy.layout(
+                    for: width,
+                    surfaceHeight: surfaceHeight,
+                    topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+                )
+                let bar = layout.floatingEmojiCategoryFrame
+                XCTAssertFalse(bar.isEmpty, "width=\(width) height=\(surfaceHeight)")
+                XCTAssertEqual(bar.midX, layout.surfaceFrame.midX, accuracy: 0.001,
+                               "category bar must be centred, width=\(width) height=\(surfaceHeight)")
+                XCTAssertEqual(bar.minX,
+                               layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+                               accuracy: 0.001)
+                XCTAssertEqual(bar.maxX,
+                               layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
+                               accuracy: 0.001)
+                XCTAssertTrue(layout.surfaceFrame.contains(bar))
+            }
+        }
+    }
+
     func testBoardFramesAre44PointHitTargetsInsideTheSurface() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 280, topAccessoryHeight: 44)
 
@@ -71,6 +98,9 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         XCTAssertEqual(layout.floatingEmojiCategoryFrame.minX,
                        layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
                        accuracy: 0.001)
+        // The bar keeps a symmetric inset so the selected marker stays centred;
+        // delete keeps the shared corner by winning the hit test, not by the bar
+        // being shortened.
         XCTAssertEqual(layout.floatingEmojiCategoryFrame.maxX,
                        layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
                        accuracy: 0.001)

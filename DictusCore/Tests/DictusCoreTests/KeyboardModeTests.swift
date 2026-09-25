@@ -126,6 +126,33 @@ final class KeyboardModeTests: XCTestCase {
         XCTAssertEqual(DefaultKeyboardMode.active, .keyboard)
     }
 
+    func testControllerSwapDoesNotResetAnAlreadyVisibleKeyboard() {
+        XCTAssertFalse(
+            KeyboardAreaMode.shouldApplyOpeningPreference(
+                keyboardAlreadyVisible: true,
+                appearingControllerID: "new",
+                activeControllerID: "old"
+            )
+        )
+    }
+
+    func testFreshAppearanceStillAppliesTheOpeningPreference() {
+        XCTAssertTrue(
+            KeyboardAreaMode.shouldApplyOpeningPreference(
+                keyboardAlreadyVisible: false,
+                appearingControllerID: "new",
+                activeControllerID: nil
+            )
+        )
+        XCTAssertTrue(
+            KeyboardAreaMode.shouldApplyOpeningPreference(
+                keyboardAlreadyVisible: true,
+                appearingControllerID: "same",
+                activeControllerID: "same"
+            )
+        )
+    }
+
     func testOldLayerChoiceMigratesToKeyboardSurface() {
         defaults?.removeObject(forKey: SharedKeys.defaultKeyboardMode)
         defaults?.set(DefaultKeyboardLayer.letters.rawValue, forKey: SharedKeys.defaultKeyboardLayer)

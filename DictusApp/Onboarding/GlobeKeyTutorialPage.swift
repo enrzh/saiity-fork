@@ -57,6 +57,8 @@ struct GlobeKeyTutorialPage: View {
                     Button("Return to setup", action: onReturnToSetup)
                         .buttonStyle(.bordered)
                 }
+                Button("Finish setup without dictating", action: finishOnboarding)
+                    .buttonStyle(.bordered)
             }
         }
         .padding(.vertical, 20)

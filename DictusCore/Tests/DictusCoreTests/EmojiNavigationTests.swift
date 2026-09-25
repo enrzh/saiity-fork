@@ -105,13 +105,15 @@ final class EmojiNavigationTests: XCTestCase {
         )
     }
 
-    func testEmptyRecentsDoesNotCreateAnEmptyPage() {
+    func testEmptyRecentsRemainsAReachablePagerPage() {
         let pages = [
+            EmojiNavigationPage(id: "recents", categoryID: "recents", itemCategoryIDs: []),
             EmojiNavigationPage(id: "page-0", categoryID: "smileys", itemCategoryIDs: ["smileys"])
         ]
 
-        XCTAssertNil(EmojiNavigation.anchorPageIDs(for: pages)["recents"])
-        XCTAssertEqual(EmojiNavigation.pageIndex(for: "smileys", in: pages), 0)
+        XCTAssertEqual(EmojiNavigation.anchorPageIDs(for: pages)["recents"], "recents")
+        XCTAssertEqual(EmojiNavigation.pageIndex(for: "recents", in: pages), 0)
+        XCTAssertEqual(EmojiNavigation.pageIndex(for: "smileys", in: pages), 1)
     }
 
     func testScrollRequestRemainsPendingUntilLayoutAndDataAreReady() {

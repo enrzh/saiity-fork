@@ -26,6 +26,13 @@ public enum KeyboardInteractionPreferences {
         AppGroup.defaults.object(forKey: SharedKeys.keyContainersEnabled) as? Bool ?? false
     }
 
+    /// Adaptive hit-target prediction nudges the seam between adjacent keys
+    /// toward the more likely next letter. On by default; turning it off uses
+    /// neutral seams, which is more predictable but gives slightly less help.
+    public static var adaptiveHitPredictionEnabled: Bool {
+        AppGroup.defaults.object(forKey: SharedKeys.adaptiveHitPredictionEnabled) as? Bool ?? true
+    }
+
     /// Tell the keyboard extension to reload App Group interaction preferences.
     public static func notifyChanged() {
         DarwinNotificationCenter.post(DarwinNotificationName.keyboardPreferencesChanged)

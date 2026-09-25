@@ -105,9 +105,14 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
             encoding: .utf8
         )
+        let symbols = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/SymbolKeyboardSurface.swift"),
+            encoding: .utf8
+        )
 
-        XCTAssertTrue(root.contains("KeyboardSymbolsLayout"))
+        XCTAssertTrue(symbols.contains("KeyboardSymbolsLayout"))
         XCTAssertFalse(root.contains("symbolBottomControlBudget"))
+        XCTAssertFalse(symbols.contains("symbolBottomControlBudget"))
     }
 
     func testSymbolGridReservesLeadingLanePerRow() {
@@ -238,10 +243,15 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
             encoding: .utf8
         )
+        let symbols = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/SymbolKeyboardSurface.swift"),
+            encoding: .utf8
+        )
 
         XCTAssertFalse(root.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
+        XCTAssertFalse(symbols.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
         XCTAssertTrue(root.contains("case .emoji:"))
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
+        XCTAssertTrue(symbols.contains("AuxiliaryBottomBar("))
     }
 
     func testActionFramesStayInsideTheSharedSurfaceAtNativeHeights() {

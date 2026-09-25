@@ -30,7 +30,8 @@ struct MicPermissionPage: View {
                 if permissionGranted == true {
                     Label("Microphone authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
                 } else if permissionGranted == false {
-                    Text("Microphone access is required for dictation").foregroundStyle(.secondary)
+                    Text("Dictation needs the microphone. You can still set up the keyboard and turn the microphone on later in Settings.")
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
@@ -44,6 +45,8 @@ struct MicPermissionPage: View {
             } else {
                 Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
                     .buttonStyle(.borderedProminent).controlSize(.large)
+                Button("Continue without microphone", action: onNext)
+                    .buttonStyle(.bordered).controlSize(.large)
             }
         }
         .onChange(of: scenePhase) { _, newPhase in

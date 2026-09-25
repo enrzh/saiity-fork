@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.on.rawValue
     @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = false
     @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var autocorrectEnabled = true
+    @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var adaptiveHitPredictionEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
     @ObservedObject var modelManager: ModelManager
     @State private var diagnosticResult = AppGroupDiagnostic.run()
@@ -21,11 +22,6 @@ struct SettingsView: View {
                 if PolishAvailability.isToggleVisible {
                     Toggle("Automatic cleanup", isOn: $polishEnabled)
                         .accessibilityHint("Cleans up dictation after speech recognition.")
-                    NavigationLink {
-                        CleanupSettingsView(modelManager: modelManager)
-                    } label: {
-                        Label("Cleanup options", systemImage: "sparkles")
-                    }
                 }
                 Picker("Dictation output", selection: $transcriptionOutputModeRaw) {
                     ForEach(TranscriptionOutputMode.allCases, id: \.rawValue) { mode in
@@ -66,6 +62,11 @@ struct SettingsView: View {
                 Toggle("Key containers", isOn: $keyContainersEnabled)
                     .accessibilityHint("Draws a plate behind letter and symbol keys. Command keys keep their plates.")
                     .onChange(of: keyContainersEnabled) { _, _ in
+                        KeyboardInteractionPreferences.notifyChanged()
+                    }
+                Toggle("Adaptive hit prediction", isOn: $adaptiveHitPredictionEnabled)
+                    .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter. Off uses neutral seams.")
+                    .onChange(of: adaptiveHitPredictionEnabled) { _, _ in
                         KeyboardInteractionPreferences.notifyChanged()
                     }
                 KeyPopupPicker()
@@ -246,33 +247,6 @@ struct SettingsView: View {
         case .available: return ""
         default: return PolishAvailability.guidance(for: state)
         }
-    }
-}
-
-private struct CleanupSettingsView: View {
-    @ObservedObject var modelManager: ModelManager
-    @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
-
-    private var backend: Binding<PolishCleanupBackend> {
-        Binding(get: { modelManager.cleanupBackend }, set: { modelManager.selectCleanupBackend($0) })
-    }
-
-    var body: some View {
-        List {
-            Section {
-                Toggle("Automatic cleanup", isOn: $polishEnabled)
-                Picker("Cleanup model", selection: backend) {
-                    Text(PolishCleanupBackend.appleIntelligence.displayName)
-                        .tag(PolishCleanupBackend.appleIntelligence)
-                    ForEach(PolishCleanupBackend.validOllamaCleanupModels(from: modelManager.customModels)) { model in
-                        Text(model.name).tag(PolishCleanupBackend.ollama(model.id))
-                    }
-                }
-            } footer: {
-                Text(PolishAvailability.guidance(for: PolishAvailability.state))
-            }
-        }
-        .navigationTitle("Cleanup")
     }
 }
 

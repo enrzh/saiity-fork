@@ -28,4 +28,31 @@ final class DictationStatusTests: XCTestCase {
         XCTAssertFalse(DictationStatus.processing.ownsKeyboardArea)
         XCTAssertFalse(DictationStatus.ready.ownsKeyboardArea)
     }
+
+    /// The cancel-versus-dictate decision used to be spelled out inline in three
+    /// places and drifted between them. Pin the single definition.
+    func testCancellationStageIsExactlyTheThreeCancellablePhases() {
+        let cancellable: Set<DictationStatus> = [.requested, .transcribing, .processing]
+        for status in DictationStatus.allCases {
+            XCTAssertEqual(
+                status.isCancellationStage,
+                cancellable.contains(status),
+                "\(status.rawValue) disagreed about being a cancellation stage"
+            )
+        }
+    }
+
+    /// A live session must never be displaced by the recovery control, so the
+    /// phases that own the keyboard area are exactly the ones that keep the
+    /// dictate control. `showsRecoveryAction` gates on this, so pin the overlap.
+    func testPhasesThatOwnTheKeyboardAreaKeepTheDictateControl() {
+        for status in DictationStatus.allCases where status.ownsKeyboardArea {
+            XCTAssertTrue(
+                status == .requested || status == .recording,
+                "\(status.rawValue) unexpectedly owns the keyboard area"
+            )
+        }
+        XCTAssertTrue(DictationStatus.requested.ownsKeyboardArea)
+        XCTAssertTrue(DictationStatus.recording.ownsKeyboardArea)
+    }
 }

@@ -192,19 +192,31 @@ public enum HapticFeedback {
         #endif
     }
 
-    /// Short rigid impulse for keyboard key taps and discrete controls.
+    /// Short rigid impulse for held-delete repeats.
     ///
-    /// Public UIKit has no keyboard-click generator. A dedicated rigid impact
-    /// is the closest public API match to the native keyboard's sharp tick.
+    /// `prepare()` before `impactOccurred()` delays the tick. Prime after the
+    /// impulse so the next repeat is already warm.
     public static func keyTapped() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        keyGenerator.prepare()
-        // Use the generator's full rigid impulse. A reduced intensity reads as
-        // soft on a phone, especially during rapid typing, while .rigid keeps
-        // the short native-style click distinct from recording feedback.
         keyGenerator.impactOccurred()
         keyGenerator.prepare()
+        #endif
+    }
+
+    /// Native-style key tap: a short Taptic tick plus the system click sound.
+    ///
+    /// `playInputClick()` alone is only a sound, and only when keyboard clicks
+    /// are enabled. The system keyboard's feel is the tick. A full-strength
+    /// rigid impact reads as a thunk, so the tick stays light.
+    public static func playInputClick() {
+        #if canImport(UIKit) && !os(macOS)
+        if isEnabled() {
+            keyGenerator.impactOccurred(intensity: 0.42)
+            keyGenerator.prepare()
+        }
+        // Keyboard clicks follow the system sound setting, not the vibration switch.
+        UIDevice.current.playInputClick()
         #endif
     }
 

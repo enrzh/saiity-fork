@@ -375,7 +375,7 @@ struct DictationHistoryView: View {
                             RecentDictations.disable(in: AppGroup.defaults)
                         }
                     }
-                Text("Saved text stays on this iPhone. Turning saving off keeps existing entries and stops adding new ones.")
+                Text("Saved text stays on this iPhone. Turning saving off keeps existing entries, stops adding new ones, and removes the transcript from the diagnostic snapshot.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

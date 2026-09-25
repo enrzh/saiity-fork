@@ -224,6 +224,13 @@ Tap by accessibility label rather than by coordinate wherever the label is stabl
 axe tap --label "Commencer" --udid <udid>
 ```
 
+`--label`/`--id` **locate** the element and then deliver a real touch at its activation point; they are not accessibility activation. Always pass `--tap-style physical` to get a HID touch-down/up, which is the only way to test hit testing honestly — activation will happily report success for a control that no finger can reach.
+
+Two coordinate traps, both of which silently produce nonsense results:
+
+- **Never scale screenshot pixels to decide a tap.** `axe tap -x/-y` lives in the same space as the `AXFrame`s, and that space is *not* the screenshot's pixel grid. Dividing a screenshot by 3 lands hundreds of points off and taps whatever happens to be there — a neighbouring key, the Home indicator, or nothing. Read the frame, tap its centre.
+- **A keyboard extension's controls are absent from the tree.** Its SwiftUI content contributes no nodes, so `--label` cannot reach its keys and `AXFrame`s do not exist for them. Derive the offset once from the extension's own logs (it reports the local point each touch arrived at), then add that fixed offset. On the iPhone 18 Pro, `axe_y = extension_local_y + 530`, verified against a logged `point=(58.0, 68.0)` from a tap at `y=598`.
+
 ```
 ✓ Tap at resolved tap point at (201.0, 716.0) completed successfully
 ```
@@ -342,9 +349,42 @@ Note the format: a third-party keyboard is a bare bundle identifier, not the `lo
 
 iOS loads the extension too. `pkd` logs `Created plugin` for `com.pivi.dictus.keyboard(1.8.0)`, and SpringBoard lists it under `com.apple.keyboard-service`.
 
-**What is not proven is the keyboard rendering.** With it enabled, tapping the globe key cycled French → English → French and never reached Dictus, and `dictus_debug.log` gained no `<KBD>` line, so the extension's own code never ran. Undiagnosed: it may want Full Access, it may need selecting from the globe long-press picker rather than the cycle, or it may be failing to launch. Start there, with the log open.
+**Rendering needs two separate switches, and only one of them is `Connect Hardware Keyboard`.** With the third-party keyboard enabled *and* Full Access granted, the extension does run and present. Proven 2026-09-24: process `de.aiity.saiity.ios.beta.keyboard` came up, and `dictus_debug.log` gained 29 `<KBD>` lines including `inputContext_settled details=fullAccess=true` and `layoutSnapshot_2000ms … status=idle mode=keys onScreen=true hasWindow=true memMB=28`, with no errors.
 
-Enabling is solved. Rendering is the open question. Neither is impossible.
+**`AutomaticMinimizationEnabled` is the switch that hides every keyboard.** This is the cause of "the field is focused, the caret blinks, and no keyboard appears at all", and it is invisible in screenshots taken before focus. iOS auto-minimizes the software keyboard because a hardware keyboard has been seen. `ConnectHardwareKeyboard` is a *different*, host-side setting and is not the culprit — but it is easy to blame, because both are off by the time you look:
+
+```bash
+xcrun simctl spawn <udid> defaults write com.apple.keyboard.preferences \
+  AutomaticMinimizationEnabled -bool false
+xcrun simctl spawn <udid> defaults write com.apple.keyboard.preferences \
+  HardwareKeyboardLastSeen -int 0
+```
+
+With `AutomaticMinimizationEnabled = 1`, every software keyboard is suppressed; with it `false`, the full layout appears immediately. Always set this before concluding that tapping a field does nothing.
+
+**Selection must go through Settings; preference writes only set the list.** `AppleKeyboards` can be edited with `plistlib` while shut down (below) and it lands, but iOS still refuses to *present* a third-party keyboard that the user never added through Settings, and it repoints `KeyboardLastUsed` at a system layout. `KeyboardsCurrentAndNext` and `KeyboardLastUsed` in `com.apple.keyboard.preferences` are caches, not the selection: writing them changes nothing. Re-adding the keyboard in Settings and re-granting Full Access after every reinstall is mandatory, and an uninstall silently loses both.
+
+**Reinstalls are not safe mid-session.** `simctl uninstall` and a fresh `simctl install` drop the App Group container (new UUID, `dictus_debug.log` gone) and the Full Access grant. Re-resolve the group path rather than caching it, and expect to redo the Settings taps.
+
+Enabling and rendering are both solved. **Touch delivery is not, and it is not the app's fault.**
+
+Measured 2026-09-24 with a purpose-built four-stage trace (`TouchPath`, DEBUG-only) that logs `hitTest` on the input view, on the UIKit overlay, inside the SwiftUI-host fallback, and in the per-key `UIControl`, plus the `extensionContext.open` result. The keyboard was fully presented and stable — `keyboardDidAppear`, `viewDidAppear_settled`, `inputContext_settled fullAccess=true`, `layoutSnapshot_2000ms` — and then **six taps across the surface produced zero log lines of any kind**, not even the periodic state refreshes that run on a timer.
+
+Stage 1 (`KeyboardInputView.hitTest`) never fires, so UIKit is not hit-testing the extension's view hierarchy at all. Ruled out along the way:
+
+- **Not a system keyboard stealing the input.** With `AppleKeyboards` set to the third-party bundle id *only*, so no native keyboard existed as a fallback, taps still produced nothing.
+- **Not the injection method.** Physical HID drag, physical HID tap, and `--tap-style simulator` (`FBSimulator tapAt`) all behaved identically.
+- **Not a hidden or stale frame.** The extension process was alive, `onScreen=true hasWindow=true hasInputWindow=true`, and no `viewDidDisappear` had fired.
+- **Not the input stack.** Tapping ordinary app UI worked, and `axe type "Hello"` into a normal text field worked.
+- **Not the old logging gate.** Earlier traces were gated to a `40...220` y band, which made "no log lines" indistinguishable from "no touch". Conclusions drawn from a missing trace before that gate was removed are unsound — this is the second time that mistake nearly cost a diagnosis.
+
+**Consequence: the simulator can verify layout and visuals, and nothing about touch.** Judge key responsiveness, popups, press animation, swipes, and the app handoff on a device. A third-party keyboard that renders but never receives `hitTest` looks exactly like a dead keyboard, and no amount of app-side code will change that.
+
+**Reinstalls are not safe mid-session.** `simctl uninstall` and a fresh `simctl install` drop the App Group container (new UUID, `dictus_debug.log` gone) and the Full Access grant. Re-resolve the group path rather than caching it, and expect to redo the Settings taps.
+
+**A stray UI-test runner uninstalls the app.** `com.aiity.haiity.uitests.xctrunner` was found alive on the device and had removed the app between runs, which looks identical to "the build didn't install". Check `simctl listapps` for it and uninstall it before trusting any state on a shared simulator.
+
+Enabling and rendering are both solved. What remains untested on a simulator is anything that depends on real touch latency, memory, or the microphone.
 
 **The software keyboard appears, and `Connect Hardware Keyboard` did not stop it.** A widely repeated claim says a connected hardware keyboard suppresses the on-screen one and that this is why keyboard testing fails in simulators. Measured here with `ConnectHardwareKeyboard = 1`: tapping Safari's address bar brought up the full AZERTY keyboard, globe key included. The setting is real and headless-controllable —
 

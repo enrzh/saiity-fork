@@ -13,7 +13,7 @@ struct LastDictationIssueReportView: View {
         List {
             if let snapshot {
                 Section {
-                    Text("Review the last dictation, then share a report if something went wrong. Nothing is sent unless you use Share.")
+                    Text("The report includes model, engine, stage, and timing. Transcript text is included only if you turn that on, and nothing is sent unless you use Share.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

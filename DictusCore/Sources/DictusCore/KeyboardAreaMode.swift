@@ -54,6 +54,26 @@ public enum KeyboardAreaMode: String, Equatable, CaseIterable, Sendable {
         prefersNumberPad ? .numberPad : .panel
     }
 
+    /// Whether a newly appearing controller may replace the current surface
+    /// with the saved opening page.
+    ///
+    /// iOS builds a replacement `UIInputViewController` while the previous one
+    /// is still on screen. That appearance is not a new keyboard session:
+    /// applying the opening preference there throws the user off the page they
+    /// are typing on, and the following taps land on the dictation board
+    /// instead of a key. A true open is a controller appearing while nothing
+    /// is visible, or the same controller becoming visible again.
+    public static func shouldApplyOpeningPreference(
+        keyboardAlreadyVisible: Bool,
+        appearingControllerID: String,
+        activeControllerID: String?
+    ) -> Bool {
+        let replacingVisibleKeyboard = keyboardAlreadyVisible
+            && activeControllerID != nil
+            && activeControllerID != appearingControllerID
+        return !replacingVisibleKeyboard
+    }
+
     /// Surface to open when the keyboard appears, or when the host field type
     /// changes. Number/phone fields open the 3×4 pad, not the 123 symbols page.
     public static func openingMode(

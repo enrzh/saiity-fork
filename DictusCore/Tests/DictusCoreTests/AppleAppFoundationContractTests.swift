@@ -404,10 +404,13 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains(".listStyle(.insetGrouped)"))
         XCTAssertFalse(settings.contains("settingsPanel("))
         XCTAssertTrue(settings.contains("Automatic cleanup"))
-        XCTAssertTrue(settings.contains("CleanupSettingsView(modelManager: modelManager)"))
-        XCTAssertTrue(settings.contains("PolishCleanupBackend.validOllamaCleanupModels(from: modelManager.customModels)"))
-        XCTAssertTrue(settings.contains("Picker(\"Cleanup model\""))
-        XCTAssertTrue(settings.contains("set: { modelManager.selectCleanupBackend($0) }"))
+        // The "Cleanup options" sub-page was removed from Settings on request.
+        // The automatic-cleanup toggle stays; backend selection moved to Model Manager.
+        XCTAssertFalse(settings.contains("CleanupSettingsView"))
+        XCTAssertFalse(settings.contains("Cleanup options"))
+        let modelManagerView = try source("DictusApp/Views/ModelManagerView.swift")
+        XCTAssertTrue(modelManagerView.contains("modelManager.selectCleanupBackend("),
+                      "cleanup backend must stay selectable from Model Manager")
         XCTAssertTrue(settings.contains("Privacy Policy"))
         XCTAssertFalse(settings.contains("moreGroup("))
         XCTAssertFalse(settings.contains("settingsExternalRow"))
@@ -587,8 +590,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(audio.contains("AppGroup.defaults.set(isHealthy, forKey: SharedKeys.keyboardAudioReady)"))
         XCTAssertTrue(keyboard.contains("openDictusForRecovery()"),
                       "the visible recovery target must use the same URL handoff as the Link")
-        XCTAssertTrue(root.contains("ImmediateKeyButton("))
-        XCTAssertTrue(root.contains("highlightSize: CGSize(width: frame.width, height: frame.height)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("ImmediateKeyButton("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("highlightSize: frame.size"))
         XCTAssertFalse(root.contains("Link(destination: preparationURL)"))
         XCTAssertTrue(root.contains("SuggestionBarIconButton("))
         XCTAssertTrue(root.contains("action: routeDismiss"))
@@ -629,7 +632,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(categories.contains("contentOffset"),
                       "category scrolling must move one continuous horizontal strip")
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
-        XCTAssertTrue(categories.contains("emojiCategoryHorizontalInset"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("emojiCategoryHorizontalInset"))
         XCTAssertTrue(categories.contains("isExpanded"))
         XCTAssertFalse(categories.contains("magnifyingglass"))
     }
@@ -701,6 +704,28 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(manager.contains("AVPictureInPicture"))
         XCTAssertFalse(manager.contains("DictationPictureInPicture"))
         XCTAssertFalse(mode.contains("case pictureInPicture"))
+    }
+
+
+    private func relocatedKeyboardSource() throws -> String {
+        let paths = [
+            "DictusKeyboard/KeyboardRootView.swift",
+            "DictusKeyboard/KeyboardChrome.swift",
+            "DictusKeyboard/KeyboardKeyStyle.swift",
+            "DictusKeyboard/KeyboardKeyInput.swift",
+            "DictusKeyboard/VoiceBoardSurface.swift",
+            "DictusKeyboard/LetterKeyboardSurface.swift",
+            "DictusKeyboard/NumberKeyboardSurface.swift",
+            "DictusKeyboard/SymbolKeyboardSurface.swift",
+            "DictusKeyboard/KeyboardState.swift",
+            "DictusKeyboard/Views/EmojiPickerView.swift",
+            "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
+            "DictusKeyboard/Views/EmojiCategoryBar.swift",
+            "DictusKeyboard/Views/EmojiCategoryControl.swift",
+            "DictusCore/Sources/DictusCore/KeyboardSurfaceState.swift",
+            "DictusCore/Sources/DictusCore/EmojiSurfaceModel.swift",
+        ]
+        return try paths.map { try source($0) }.joined(separator: "\n")
     }
 
     private func source(_ path: String) throws -> String {

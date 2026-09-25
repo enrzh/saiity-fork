@@ -22,9 +22,9 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertFalse(root.contains("auxiliaryContentFrame"), "all modes must use the shared surfaceFrame")
         XCTAssertFalse(root.contains(".offset(x: surfaceFrame.minX, y: surfaceFrame.minY)"))
         XCTAssertFalse(root.contains("Color.clear.frame(height: max(0, contentFrame.minY))"))
-        XCTAssertTrue(root.contains("EmojiPickerView("))
-        XCTAssertTrue(root.contains("LiquidSymbolPageView("))
-        XCTAssertTrue(root.contains("LiquidNumberPadView("))
+        XCTAssertTrue(root.contains("EmojiKeyboardSurface("))
+        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
+        XCTAssertTrue(root.contains("NumberKeyboardSurface("))
     }
 
     func testAllFourPagesRenderInsideTheSameInsetSurface() throws {
@@ -72,9 +72,10 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertFalse(categories.contains("Text(emoji)"))
         XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"))
         XCTAssertTrue(categories.contains("contentOffset"))
-        XCTAssertTrue(categories.contains("final class EmojiCategoryScrubControl: UIControl"),
+        let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
+        XCTAssertTrue(control.contains("final class EmojiCategoryControl: UIControl"),
                        "the UIKit scrubber remains the single hit owner for the floating strip")
-        XCTAssertTrue(categories.contains("continueTracking"))
+        XCTAssertTrue(control.contains("continueTracking"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
         XCTAssertFalse(categories.contains("Color.secondary"), "category icons must keep the primary semantic tint")
         XCTAssertFalse(data.contains("representativeEmoji"), "category navigation must not retain emoji-only icon data")
@@ -97,7 +98,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertEqual(layouts.components(separatedBy: "private static func symbolsPage").count - 1, 1)
         XCTAssertTrue(symbolsLayout.contains("public static let numbers: [[Key]"))
         XCTAssertTrue(symbolsLayout.contains("public static let symbols: [[Key]"))
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("))
         XCTAssertTrue(root.contains("onSpace: { routeProxyCommand(.space) }"))
         XCTAssertTrue(symbolsLayout.contains("bottomRow()"))
         XCTAssertFalse(symbolsLayout.contains("bottomRow(toggle:"))
@@ -106,8 +107,8 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onReturn: { routeProxyCommand(.returnKey) }"))
         XCTAssertTrue(root.contains("onTogglePage: { nextPage in symbolPage = nextPage }"))
         XCTAssertFalse(root.contains("leadingReservedWidths:"))
-        XCTAssertTrue(root.contains("spaceFrame: surfaceLayout.chromeWideSpaceFrame"))
-        XCTAssertTrue(root.contains("onLetters: onKeyboard"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("spaceFrame: surfaceLayout.chromeWideSpaceFrame"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("onLetters: onKeyboard"))
     }
 
     func testSymbolGridDoesNotDuplicateBottomPageToggleControl() throws {
@@ -123,7 +124,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertEqual(KeyboardSymbolsLayout.symbols.count, 3)
 
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(root.contains("showsNumbersControl: false"),
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("showsNumbersControl: false"),
                       "123/#+= pages keep page toggle on the key row and use compact ABC in the bottom bar")
         XCTAssertFalse(root.contains("numbersTitle: page == .symbols1 ? \"#+=\" : \"123\""),
                        "the bottom bar must not also host #+=/123")
@@ -144,16 +145,16 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         }
 
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
-        XCTAssertTrue(root.contains("onReturn: onReturn"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("onReturn: onReturn"))
     }
 
     func testLetterAndSymbolBottomBarsUseTheDedicatedRightSideSwitchSlot() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
 
-        XCTAssertTrue(root.contains("spaceFrame: surfaceLayout.chromeWideSpaceFrame"))
-        XCTAssertTrue(root.contains("returnFrame: surfaceLayout.chromeReturnFrame"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("spaceFrame: surfaceLayout.chromeWideSpaceFrame"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("returnFrame: surfaceLayout.chromeReturnFrame"))
         XCTAssertTrue(bar.contains("roundControl(text: numbersTitle, label: \"Open symbols keyboard\", action: onNumbers)"))
         XCTAssertTrue(bar.contains("roundControl(text: \"ABC\", label: \"Open letter keyboard\", action: onLetters)"))
         XCTAssertTrue(bar.contains("showsNumbersControl"))
@@ -163,8 +164,8 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(bar.contains("chromeLettersFrame"))
         XCTAssertFalse(bar.contains("chromeEmojiFrame"),
                        "ABC/123 emoji uses the compact letters slot, not the voice-page right-of-space slot")
-        XCTAssertTrue(root.contains("showsNumbersControl: false"))
-        XCTAssertTrue(root.contains("showsLettersControl: false"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("showsNumbersControl: false"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("showsLettersControl: false"))
         XCTAssertFalse(bar.contains("roundControl(systemName: \"mic.fill\", label: \"Back to dictation board\", action: onVoice)"))
     }
 
@@ -180,15 +181,15 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testSymbolsToggleUsesPageSpecificTransitionIncludingReturnToNumbers() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("case .togglePage:"))
-        XCTAssertTrue(root.contains("onTogglePage(.symbols2)"))
-        XCTAssertTrue(root.contains("onTogglePage(.symbols1)"))
-        XCTAssertTrue(root.contains("case .symbols2ToSymbols1:"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage:"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("onTogglePage(.symbols2)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("onTogglePage(.symbols1)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .symbols2ToSymbols1:"))
     }
 
     func testSymbolPageDoesNotAttachAncestorHitShapeToInteractiveKeys() throws {
-        let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        let symbolPageStart = try XCTUnwrap(root.range(of: "private struct LiquidSymbolPageView"))
+        let root = try source("DictusKeyboard/SymbolKeyboardSurface.swift")
+        let symbolPageStart = try XCTUnwrap(root.range(of: "struct SymbolKeyboardSurface"))
         let symbolPage = String(root[symbolPageStart.lowerBound...])
 
         XCTAssertFalse(
@@ -199,16 +200,16 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
             symbolPage.contains("variantOverlay"),
             "the long-press overlay may own a hit shape only while a variant popup is visible"
         )
-        XCTAssertTrue(
-            symbolPage.contains(".contentShape(Rectangle().inset(by: -6))"),
-            "symbol keys must keep the complete rectangular edge hit target"
-        )
+        XCTAssertTrue(symbolPage.contains("KeyboardKeyHitGeometry.frames(for: frames)"),
+                      "touch cells are allocated once from visible key geometry")
+        XCTAssertFalse(symbolPage.contains("inset(by: -6)"),
+                       "individual controls must not add a second overlapping hit expansion")
     }
 
     func testSymbolsSecondPageToggleDisplaysNumbersLabel() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("page == .symbols1 ? \"#+=\" : \"123\""))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("page == .symbols1 ? \"#+=\" : \"123\""))
         XCTAssertFalse(root.contains("page == .symbols1 ? \"#+=\" : \"ABC\""))
     }
 
@@ -220,9 +221,9 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onDelete: { routeProxyCommand(.delete) }"))
         XCTAssertTrue(root.contains("onReturn: { routeProxyCommand(.returnKey) }"))
         XCTAssertTrue(root.contains("onTogglePage: { nextPage in symbolPage = nextPage }"))
-        XCTAssertTrue(root.contains("case .togglePage"))
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
-        XCTAssertTrue(root.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
         XCTAssertTrue(root.contains("onEmoji: { state.presentArea(.emoji) }"))
     }
 
@@ -233,11 +234,11 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertEqual(layout.alternateContentFrame, layout.surfaceFrame)
         XCTAssertTrue(root.contains("availableHeight: surfaceFrame.height"))
         XCTAssertFalse(root.contains("availableHeight: contentFrame.height"))
-        XCTAssertTrue(root.contains("let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)"))
-        XCTAssertTrue(root.contains("SymbolGrid.framesWithPinnedLastRow("))
-        XCTAssertTrue(root.contains("letterAlignedLastRowHeight("))
-        XCTAssertTrue(root.contains("in: size,"))
-        XCTAssertTrue(root.contains("spacing: keySpacing,"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("SymbolGrid.framesWithPinnedLastRow("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("letterAlignedLastRowHeight("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("in: size,"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("spacing: keySpacing,"))
     }
 
     func testEmojiBarAnchorsToSurfaceBottomAndKeepsMicrophoneFixed() throws {
@@ -255,7 +256,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(picker.contains("showsEmojiControl: false"))
         XCTAssertTrue(picker.contains("chromeWideSpaceFrame"))
         XCTAssertFalse(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue(categories.contains("emojiCategoryHorizontalInset"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("emojiCategoryHorizontalInset"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
     }
 
@@ -270,22 +271,44 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testSymbolControlLabelsFollowPurposeAndPage() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("case .togglePage: return label == \"#+=\" ? \"More symbols\" : \"Return to numbers keyboard\""))
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage: return label == \"#+=\" ? \"More symbols\" : \"Return to numbers keyboard\""))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("))
     }
 
     func testSymbolsEmojiControlUsesTheNativeFaceSymbol() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("),
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("),
                       "the symbols page must use the shared bottom control bar")
     }
 
     func testSymbolsReturnControlUsesACompactNativeSymbolAndKeepsReturnLabel() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("AuxiliaryBottomBar("))
-        XCTAssertTrue(root.contains("onReturn: onReturn"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("AuxiliaryBottomBar("))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("onReturn: onReturn"))
+    }
+
+
+    private func relocatedKeyboardSource() throws -> String {
+        let paths = [
+            "DictusKeyboard/KeyboardRootView.swift",
+            "DictusKeyboard/KeyboardChrome.swift",
+            "DictusKeyboard/KeyboardKeyStyle.swift",
+            "DictusKeyboard/KeyboardKeyInput.swift",
+            "DictusKeyboard/VoiceBoardSurface.swift",
+            "DictusKeyboard/LetterKeyboardSurface.swift",
+            "DictusKeyboard/NumberKeyboardSurface.swift",
+            "DictusKeyboard/SymbolKeyboardSurface.swift",
+            "DictusKeyboard/KeyboardState.swift",
+            "DictusKeyboard/Views/EmojiPickerView.swift",
+            "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
+            "DictusKeyboard/Views/EmojiCategoryBar.swift",
+            "DictusKeyboard/Views/EmojiCategoryControl.swift",
+            "DictusCore/Sources/DictusCore/KeyboardSurfaceState.swift",
+            "DictusCore/Sources/DictusCore/EmojiSurfaceModel.swift",
+        ]
+        return try paths.map { try source($0) }.joined(separator: "\n")
     }
 
     private func source(_ path: String) throws -> String {

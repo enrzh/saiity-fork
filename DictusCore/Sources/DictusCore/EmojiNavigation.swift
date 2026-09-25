@@ -24,8 +24,8 @@ public enum EmojiNavigation {
         case ready(index: Int)
     }
 
-    /// Recents is useful as the initial page only when it contains an item.
-    /// Empty recents should open on the first standard category instead.
+    /// Empty Recents opens on the first standard category, but Recents remains
+    /// a real pager page so a later blank-area swipe still works.
     public static func landingCategoryID(recents: [String], firstCategoryID: String?) -> String {
         recents.isEmpty ? (firstCategoryID ?? "smileys") : "recents"
     }

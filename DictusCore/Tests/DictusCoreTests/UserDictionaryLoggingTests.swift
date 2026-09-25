@@ -29,13 +29,24 @@ final class UserDictionaryLoggingTests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        let container = try XCTUnwrap(AppGroup.containerURL, "No App Group container URL")
-        do {
-            try FileManager.default.createDirectory(
-                at: container, withIntermediateDirectories: true
-            )
-        } catch {
-            throw XCTSkip("Cannot create the App Group container on this host: \(error)")
+        // Drive the real log file, but a private one.
+        //
+        // WHY not `AppGroup.containerURL` directly: off-device that path is
+        // TCC-protected, so `String(contentsOf:)` fails and every assertion here
+        // sees an empty log regardless of the code under test. On a shared
+        // simulator it is also written by the app and the keyboard extension, so
+        // the suite would be asserting on another process's lines. A temp file
+        // exercises the identical append/read/trim path with no environment
+        // dependency and no chance of a cross-process collision.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("UserDictionaryLoggingTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        tempLogURL = directory.appendingPathComponent("dictus_debug.log")
+        PersistentLog.fileURLOverrideForTesting = tempLogURL
+        addTeardownBlock {
+            PersistentLog.fileURLOverrideForTesting = nil
+            PersistentLog.resetCollapseStateForTesting()
+            try? FileManager.default.removeItem(at: directory)
         }
         setDeveloperToggle(false)
         UserDictionary.shared.resetAll()
@@ -43,18 +54,7 @@ final class UserDictionaryLoggingTests: XCTestCase {
         clearLog()
     }
 
-    override func tearDown() {
-        setDeveloperToggle(false)
-        UserDictionary.shared.resetAll()
-        AppGroup.defaults.removeObject(forKey: UserDictionary.prunedTrieDuplicatesKey)
-        clearLog()
-        // Leave nothing behind on the host: this file is a test artifact here,
-        // unlike on device where it is the log the maintainer exports.
-        if let url = AppGroup.containerURL?.appendingPathComponent("dictus_debug.log") {
-            try? FileManager.default.removeItem(at: url)
-        }
-        super.tearDown()
-    }
+    private var tempLogURL: URL?
 
     // MARK: - Helpers
 

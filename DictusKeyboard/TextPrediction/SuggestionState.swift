@@ -90,10 +90,6 @@ class SuggestionState: ObservableObject {
     /// Shared engine — heavy resources (frequency dict, trie) are process-wide singletons
     /// to avoid the per-controller leak documented in #134.
     private let engine = TextPredictionEngine.shared
-    /// Reuses identical context maps without doing dictionary work on the next
-    /// touch. The cache is bounded and never affects visible suggestions.
-    private let adaptivePredictionCache = NextCharacterPredictionCache(capacity: 24)
-
     private init() {}
 
     /// Serial background queue for suggestion computation.
@@ -143,12 +139,14 @@ class SuggestionState: ObservableObject {
         if context.isEmpty {
             proxy.insertText(" ")
             clear()
+            noteTypedCharacter(" ")
             return
         }
 
         if let last = context.last, last.isWhitespace || last.isNewline {
             proxy.insertText(" ")
-            clear()
+            clear(resetLanguage: false)
+            noteTypedCharacter(" ")
             return
         }
 
@@ -159,8 +157,9 @@ class SuggestionState: ObservableObject {
             proxy.insertText(" ")
             rejectedWords.removeAll()
             pendingUndo = nil
-            clear()
-            HapticFeedback.keyTapped()
+            clear(resetLanguage: false)
+            noteTypedCharacter(" ")
+            HapticFeedback.playInputClick()
             return
         }
         if hostPolicy.autocorrectAllowed,
@@ -217,7 +216,19 @@ class SuggestionState: ObservableObject {
         proxy.insertText(" ")
         rejectedWords.removeAll()
         pendingUndo = nil
-        clear()
+        // A space ends the word. It does not end the sentence language.
+        clear(resetLanguage: false)
+        noteTypedCharacter(" ")
+    }
+
+    /// Drop a stale hit bias immediately; the contextual replacement is computed
+    /// off the main thread by updateAdaptiveTouchPrediction.
+    func noteTypedCharacter(_ _: String) {
+        adaptiveTouchWork?.cancel()
+        _ = adaptiveTouchRequestGate.begin()
+        if adaptiveTouchPrediction != nil {
+            adaptiveTouchPrediction = nil
+        }
     }
 
     /// Updates suggestions based on the current text input state.
@@ -412,17 +423,17 @@ class SuggestionState: ObservableObject {
         }
         adaptiveTouchWork?.cancel()
         let requestToken = adaptiveTouchRequestGate.begin()
-        adaptiveTouchPrediction = nil
         spaceCommit = nil
 
-        guard hostPolicy.suggestionsAllowed,
-              let inputContext = context,
-              !inputContext.isEmpty else {
-            // Nil/empty context means the field was cleared — reset sticky
-            // typed-language detection for the next keystrokes.
-            suggestionQueue.async { [weak self] in
-                self?.engine.resetTypedLanguageDetection()
-            }
+        guard hostPolicy.suggestionsAllowed else {
+            // URL, email, search, and the other protected fields must not keep
+            // a prior computed in the previous field.
+            adaptiveTouchPrediction = nil
+            return
+        }
+        guard let inputContext = context, !inputContext.isEmpty else {
+            // The host may withhold context; no guess is safer than an old field's bias.
+            if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
             return
         }
 
@@ -437,70 +448,30 @@ class SuggestionState: ObservableObject {
             : isAtSentenceStart(context: inputContext, word: partial)
         guard isBoundary || !partial.isEmpty else { return }
 
+        let rejected = !partial.isEmpty && rejectedWords.contains(partial.lowercased())
+        if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
+
         let allowsAutocorrect = hostPolicy.autocorrectAllowed && autocorrectEnabled
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            // Keep the serialized engine anchored to the selected keyboard
-            // language, but reset it only on the first request or a real setting
-            // change. Strong recent-text detection may then refine it.
-            let selectedLanguage = SupportedLanguage.active.rawValue
-            if self.adaptiveSelectedLanguage != selectedLanguage {
-                self.adaptiveSelectedLanguage = selectedLanguage
-                self.engine.setSelectedLanguage(selectedLanguage)
+            let abstains = self.engine.shouldAbstainFromPrediction(for: inputContext)
+            let probabilities = rejected || abstains
+                ? NextCharacterProbabilities([:])
+                : isBoundary
+                    ? self.engine.nextCharacterProbabilities(
+                        after: previousWords, isAtSentenceStart: atSentenceStart)
+                    : self.engine.nextCharacterProbabilities(
+                        for: partial, after: previousWords, isAtSentenceStart: atSentenceStart)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.adaptiveTouchRequestGate.isCurrent(requestToken),
+                      self.hostPolicy.suggestionsAllowed else { return }
+                self.adaptiveTouchPrediction = probabilities.isEmpty ? nil : probabilities
             }
-            guard !self.engine.shouldAbstainFromPrediction(for: inputContext) else {
+            // Space may still autocorrect. Detecting a language here used to
+            // run on every key and is not allowed to choose the next key.
+            guard !abstains else {
                 self.publishSpaceCommit(nil, token: requestToken)
                 return
-            }
-            self.engine.setLanguage(forRecentText: inputContext)
-            let recall = self.touchRecallTokens(partial: partial, context: inputContext)
-            let cacheKey = [
-                selectedLanguage,
-                String(inputContext.suffix(240)),
-                partial,
-                isBoundary ? "boundary" : "word",
-                atSentenceStart ? "sentence-start" : "sentence-body",
-                recall.joined(separator: "\u{1E}")
-            ].joined(separator: "\u{1F}")
-            let restored = !partial.isEmpty && self.rejectedWords.contains(partial.lowercased())
-            if restored {
-                self.publishSpaceCommit(nil, token: requestToken)
-                DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
-                    self.adaptiveTouchPrediction = nil
-                }
-                return
-            }
-            if let cached = self.adaptivePredictionCache.value(for: cacheKey) {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
-                    self.adaptiveTouchPrediction = cached
-                }
-            } else {
-                let prediction: NextCharacterProbabilities
-                if isBoundary {
-                    prediction = self.engine.nextCharacterProbabilities(
-                        after: previousWords,
-                        isAtSentenceStart: atSentenceStart
-                    )
-                } else {
-                    prediction = self.engine.nextCharacterProbabilities(
-                        for: partial,
-                        after: previousWords,
-                        isAtSentenceStart: atSentenceStart,
-                        recallTokens: recall
-                    )
-                }
-                if !prediction.isEmpty {
-                    self.adaptivePredictionCache.insert(prediction, for: cacheKey)
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self,
-                              self.adaptiveTouchRequestGate.isCurrent(requestToken) else { return }
-                        self.adaptiveTouchPrediction = prediction
-                    }
-                }
             }
             let commit = self.preparedSpaceCommit(
                 partial: partial,
@@ -544,23 +515,8 @@ class SuggestionState: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.adaptiveTouchRequestGate.isCurrent(token) else { return }
             self.spaceCommit = commit
+            self.adaptiveTouchWork = nil
         }
-    }
-
-    /// Names already in the field, plus spellings the user has kept, so the
-    /// next letter of "Pe" can lean toward "Peter" before a common dictionary word.
-    private func touchRecallTokens(partial: String, context: String) -> [String] {
-        guard !partial.isEmpty, !TypingFact.isOpenPrefix(partial) else { return [] }
-        let prefix = partial.lowercased()
-        var tokens = TypingFact.anchoredNames(in: context)
-        if let opening = TypingFact.openingName(in: context) {
-            tokens.append(opening)
-        }
-        for word in UserDictionary.shared.allLearnedWords.keys
-        where word.hasPrefix(prefix) && word.count > prefix.count {
-            tokens.append(word)
-        }
-        return tokens
     }
 
     /// Drops only the invisible routing cache, leaving the suggestion lane intact.
@@ -569,7 +525,6 @@ class SuggestionState: ObservableObject {
         adaptiveTouchWork = nil
         _ = adaptiveTouchRequestGate.begin()
         adaptiveTouchPrediction = nil
-        adaptivePredictionCache.removeAll()
     }
 
     /// Delegates spell-checking to the engine.
@@ -593,7 +548,7 @@ class SuggestionState: ObservableObject {
     }
 
     /// Resets the suggestion state to idle.
-    func clear() {
+    func clear(resetLanguage: Bool = true) {
         _ = beginSuggestionRequest()
         spaceCommit = nil
         clearAdaptiveTouchPrediction()
@@ -601,7 +556,8 @@ class SuggestionState: ObservableObject {
         mode = .idle
         currentWord = ""
         // Fully deleted input: drop sticky typed-language so plates/priors
-        // return to the selected keyboard language.
+        // return to the selected keyboard language. A space is not that.
+        guard resetLanguage else { return }
         suggestionQueue.async { [weak self] in
             self?.engine.resetTypedLanguageDetection()
         }

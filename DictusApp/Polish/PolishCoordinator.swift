@@ -209,6 +209,10 @@ public final class PolishCoordinator {
         }
         let engine = activeEngine
         let writingStyle = WritingStyle.active(from: defaults)
+        let cacheEligible = PolishResultCache.Admission.isEligible(
+            recordingDuration: recordingDuration,
+            minimumDuration: Self.engineMinDuration
+        )
         let key = PolishResultCache.Key(
             raw: raw,
             engine: engine.identifier,
@@ -216,9 +220,13 @@ public final class PolishCoordinator {
             spanAware: languagePolicy.skipsModelPolish(translationTarget: translationTarget)
                 && PolishSpanPipeline.isEnabled(in: defaults),
             regionSignature: regionSignature(for: regions),
-            writingStyle: writingStyle.rawValue
+            writingStyle: writingStyle.rawValue,
+            modelIdentifier: languagePolicy.modelIdentifier,
+            transcriptionMode: languagePolicy.mode.storedValue,
+            outputMode: languagePolicy.outputMode.rawValue,
+            keyboardLanguage: languagePolicy.keyboardLanguage.rawValue
         )
-        if let cached = resultCache.value(for: key) {
+        if cacheEligible, let cached = resultCache.value(for: key) {
             PersistentLog.log(.diagnosticProbe(
                 component: "PolishCoordinator",
                 instanceID: "resultCache",
@@ -227,6 +235,7 @@ public final class PolishCoordinator {
             ))
             return cached
         }
+        var engineSucceeded = false
         let result = await polishUncached(
             raw: raw,
             languagePolicy: languagePolicy,
@@ -234,9 +243,16 @@ public final class PolishCoordinator {
             translationTarget: translationTarget,
             regions: regions,
             writingStyle: writingStyle,
-            onEngineWillRun: onEngineWillRun
+            onEngineWillRun: onEngineWillRun,
+            onCacheableSuccess: { engineSucceeded = true }
         )
-        resultCache.insert(result, for: key)
+        if PolishResultCache.Admission.shouldStore(
+            eligible: cacheEligible,
+            succeeded: engineSucceeded,
+            cancelled: Task.isCancelled
+        ) {
+            resultCache.insert(result, for: key)
+        }
         return result
     }
 
@@ -246,7 +262,8 @@ public final class PolishCoordinator {
                        translationTarget: TranslationLanguage? = nil,
                        regions: [SpeechRegionTranscript] = [],
                        writingStyle: WritingStyle = .balanced,
-                       onEngineWillRun: (() -> Void)? = nil) async -> String {
+                       onEngineWillRun: (() -> Void)? = nil,
+                       onCacheableSuccess: (() -> Void)? = nil) async -> String {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else {
             return raw
         }
@@ -258,7 +275,8 @@ public final class PolishCoordinator {
                     recordingDuration: recordingDuration,
                     regions: regions,
                     writingStyle: writingStyle,
-                    onEngineWillRun: onEngineWillRun
+                    onEngineWillRun: onEngineWillRun,
+                    onCacheableSuccess: onCacheableSuccess
                 )
             }
             return PolishPostpass.cleanupFloor(raw, language: nil)
@@ -311,13 +329,15 @@ public final class PolishCoordinator {
                 request,
                 target: target,
                 writingStyle: writingStyle,
-                onEngineWillRun: onEngineWillRun
+                onEngineWillRun: onEngineWillRun,
+                onCacheableSuccess: onCacheableSuccess
             )
         case .autoDetected:
             return await polishAutoDetected(
                 request,
                 writingStyle: writingStyle,
-                onEngineWillRun: onEngineWillRun
+                onEngineWillRun: onEngineWillRun,
+                onCacheableSuccess: onCacheableSuccess
             )
         }
     }
@@ -358,7 +378,8 @@ public final class PolishCoordinator {
     private func polishTargeted(_ request: Request,
                                 target: SupportedLanguage,
                                 writingStyle: WritingStyle,
-                                onEngineWillRun: (() -> Void)?) async -> String {
+                                onEngineWillRun: (() -> Void)?,
+                                onCacheableSuccess: (() -> Void)? = nil) async -> String {
         let raw = request.raw
         let languagePolicy = request.languagePolicy
         let methodStart = request.methodStart
@@ -505,7 +526,9 @@ public final class PolishCoordinator {
             languageResolution: resolution
         )
         await emit(m, raw: raw, polished: bundle.engineOutput)
-
+        if bundle.outcome == .success {
+            onCacheableSuccess?()
+        }
         return returned
     }
 
@@ -533,7 +556,8 @@ public final class PolishCoordinator {
     /// runs are identified by `mode == .auto` in the debug export.
     private func polishAutoDetected(_ request: Request,
                                     writingStyle: WritingStyle,
-                                    onEngineWillRun: (() -> Void)?) async -> String {
+                                    onEngineWillRun: (() -> Void)?,
+                                    onCacheableSuccess: (() -> Void)? = nil) async -> String {
         let raw = request.raw
         let languagePolicy = request.languagePolicy
         let methodStart = request.methodStart
@@ -612,6 +636,9 @@ public final class PolishCoordinator {
             failureReason: bundle.failureReason
         )
         await emit(m, raw: raw, polished: bundle.engineOutput)
+        if bundle.outcome == .success {
+            onCacheableSuccess?()
+        }
         return returned
     }
 
@@ -625,7 +652,8 @@ public final class PolishCoordinator {
                                          recordingDuration: TimeInterval,
                                          regions: [SpeechRegionTranscript],
                                          writingStyle: WritingStyle,
-                                         onEngineWillRun: (() -> Void)?) async -> String {
+                                         onEngineWillRun: (() -> Void)?,
+                                         onCacheableSuccess: (() -> Void)? = nil) async -> String {
         let methodStart = Date()
         let skipEngine = recordingDuration < Self.engineMinDuration
         let currentEngine = activeEngine
@@ -686,6 +714,9 @@ public final class PolishCoordinator {
             failureReason: bundle.failureReason
         )
         await emit(m, raw: raw, polished: bundle.text)
+        if bundle.outcome == .success {
+            onCacheableSuccess?()
+        }
         return bundle.text
     }
 

@@ -146,12 +146,12 @@ class DictationCoordinator: ObservableObject {
 
     /// Which dictation the app is currently in. Moves when one starts and when one
     /// is abandoned -- see `DictationSessionGeneration` for why both matter.
-    private var sessionGeneration = DictationSessionGeneration()
+    private let sessions = DictationSessionController()
 
     /// The generation delayed UI closures capture (issue #60). RecordingView's
     /// dismiss and onboarding auto-advance bail out when it has moved on, so a
     /// stale reset can never tear down a fresh recording.
-    var dictationGeneration: Int { sessionGeneration.current }
+    var dictationGeneration: Int { sessions.current }
 
     /// Set when cold start dictation is deferred because the app is .inactive.
     ///
@@ -352,8 +352,7 @@ class DictationCoordinator: ObservableObject {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                let enabled = self.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
-                    || self.defaults.bool(forKey: SharedKeys.serviceEnabled)
+                let enabled = KeyboardDictationService.isEnabled(in: self.defaults)
                 if enabled {
                     self.enableKeyboardSession()
                 } else {
@@ -557,7 +556,7 @@ class DictationCoordinator: ObservableObject {
 
         // New session supersedes any pending delayed reset (issue #60) and any
         // outstanding work from the previous one (#267).
-        sessionGeneration.beginSession()
+        sessions.beginSession()
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
             cancelPendingTranslation()
@@ -619,7 +618,7 @@ class DictationCoordinator: ObservableObject {
         // The session these start paths belong to. `ensureMicrophonePermission` is
         // an await even when permission is already granted, so a cancel queued on
         // the main actor can land between here and the first write below (#267).
-        let session = sessionGeneration.current
+        let session = sessions.current
 
         if audioEngine.isEngineRunning {
             // WARM START: engine already running → purge + record (instant)
@@ -743,7 +742,7 @@ class DictationCoordinator: ObservableObject {
             && defaults.string(forKey: SharedKeys.dictationStatus) == DictationStatus.requested.rawValue
         let request = isKeyboardRequest ? loaded : loaded.unbound().bound(
             sessionID: UUID().uuidString,
-            generation: sessionGeneration.current,
+            generation: sessions.current,
             clientIdentifier: "app-\(UUID().uuidString)"
         )
         currentLanguageRequest = request.withResolvedSourceLanguage(capability.sourceLanguage)
@@ -826,14 +825,14 @@ class DictationCoordinator: ObservableObject {
 
         // The session this run belongs to. Every write it makes below is gated on
         // still being that session (#267) -- see `mayReport`.
-        let session = sessionGeneration.current
+        let session = sessions.current
         let capturedLanguageRequest = currentLanguageRequest
 
         dictationTask = Task {
             defer {
                 // A cancelled task can finish after its successor has started.
                 // It must not release that successor's lock or background time.
-                if self.sessionGeneration.mayReport(from: session) {
+                if self.sessions.mayReport(from: session) {
                     self.isTranscribingInFlight = false
                     self.endTranscriptionAssertion(reason: "task-exit")
                 }
@@ -906,7 +905,7 @@ class DictationCoordinator: ObservableObject {
                 // label and a new animation for a single frame. `onEngineWillRun`
                 // fires only once an engine worth waiting for is about to run.
                 let polishStarted = Date()
-                let cleaned = await PolishCoordinator.shared.polish(
+                let cleaned = await CleanupPipeline.clean(
                     raw: translatedRawText,
                     languagePolicy: languagePolicy,
                     recordingDuration: audioDuration,
@@ -931,28 +930,16 @@ class DictationCoordinator: ObservableObject {
                 // event labels, and is the text the keyboard later offers
                 // next-word predictions from. Multilingual output skips
                 // per-language filler/punctuation rules so mixed speech stays intact.
-                let text = PolishPostpass.grammarFloor(
-                    cleaned,
-                    language: languagePolicy.grammarFloorLanguage(
+                let assembled = TranscriptionPipeline.assemble(
+                    cleaned: cleaned,
+                    grammarLanguage: languagePolicy.grammarFloorLanguage(
                         translationTarget: capturedLanguageRequest.translationTarget
-                    )
+                    ),
+                    insertAsIs: languagePolicy.insertsTranscriptionAsIs
+                        && capturedLanguageRequest.translationTarget == nil
                 )
-
-                // Append trailing separator so chained dictations don't stick together.
-                // Whisper Auto-detect mode (#226) inserts the transcription as-is: the
-                // output language is unknown, and coercing Western punctuation/spacing
-                // onto e.g. Chinese ("你好。" + ". ") would corrupt the text. Follow and
-                // explicit modes — and Parakeet in every mode — keep the historical
-                // separator behavior unchanged.
-                let formattedText: String
-                if languagePolicy.insertsTranscriptionAsIs,
-                   capturedLanguageRequest.translationTarget == nil {
-                    formattedText = text
-                } else if let last = text.last, ".!?…".contains(last) {
-                    formattedText = text + " "
-                } else {
-                    formattedText = text + ". "
-                }
+                let text = assembled.body
+                let formattedText = assembled.formatted
 
                 let decision = DictationFinalizationDecision.make(
                     transcript: text,
@@ -975,20 +962,20 @@ class DictationCoordinator: ObservableObject {
                 // Write result to App Group
                 lastResult = finalText
                 status = .ready
-                defaults.set(finalText, forKey: SharedKeys.lastTranscription)
-                defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.lastTranscriptionTimestamp)
-                RecentDictations.append(finalText, in: defaults)
-                DictationDelivery.publish(finalText, for: capturedLanguageRequest, to: defaults)
-                defaults.set(DictationStatus.ready.rawValue, forKey: SharedKeys.dictationStatus)
-                defaults.synchronize()
+                DictationDeliveryStore.publishReady(
+                    text: finalText,
+                    request: capturedLanguageRequest,
+                    to: defaults
+                )
 
                 DarwinNotificationCenter.post(DarwinNotificationName.statusChanged)
                 DarwinNotificationCenter.post(DarwinNotificationName.transcriptionReady)
                 LiveActivityManager.shared.endWithResult(preview: finalText)
+                let keepTranscript = defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true
                 persistLastDictationIssue(
                     stage: DictationStatus.ready.rawValue,
-                    rawText: translatedRawText,
-                    cleanedText: finalText
+                    rawText: keepTranscript ? translatedRawText : nil,
+                    cleanedText: keepTranscript ? finalText : nil
                 )
 
                 if #available(iOS 14.0, *) {
@@ -1020,8 +1007,8 @@ class DictationCoordinator: ObservableObject {
         generation: Int? = nil
     ) async -> String {
         guard let target = request.translationTarget, !transcript.isEmpty else { return transcript }
-        guard sessionGeneration.mayReport(
-            from: generation ?? sessionGeneration.current,
+        guard sessions.mayReport(
+            from: generation ?? sessions.current,
             request: request, currentRequest: currentLanguageRequest
         ) else {
             return transcript
@@ -1034,8 +1021,8 @@ class DictationCoordinator: ObservableObject {
                 translatedRegions.reserveCapacity(regions.count)
                 for region in regions {
                     guard !Task.isCancelled,
-                          sessionGeneration.mayReport(
-                              from: generation ?? sessionGeneration.current,
+                          sessions.mayReport(
+                              from: generation ?? sessions.current,
                               request: request,
                               currentRequest: currentLanguageRequest
                           ) else {
@@ -1048,7 +1035,7 @@ class DictationCoordinator: ObservableObject {
                         target: target,
                         sourceHint: region.validatedLanguage ?? region.detectedLanguage,
                         request: request,
-                        generation: generation ?? sessionGeneration.current
+                        generation: generation ?? sessions.current
                     )
                     translatedRegions.append(outcome.resolvedText)
                 }
@@ -1061,7 +1048,7 @@ class DictationCoordinator: ObservableObject {
                 target: target,
                 sourceHint: regions.first?.validatedLanguage ?? regions.first?.detectedLanguage,
                 request: request,
-                generation: generation ?? sessionGeneration.current
+                generation: generation ?? sessions.current
             )
             return outcome.resolvedText
         }
@@ -1135,7 +1122,7 @@ class DictationCoordinator: ObservableObject {
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
-        guard sessionGeneration.mayReport(
+        guard sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
@@ -1166,7 +1153,7 @@ class DictationCoordinator: ObservableObject {
             return .fallback(transcript, reason: .unavailable)
         }
 
-        guard sessionGeneration.mayReport(
+        guard sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
@@ -1256,7 +1243,7 @@ class DictationCoordinator: ObservableObject {
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
-        guard sessionGeneration.mayReport(
+        guard sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
@@ -1333,7 +1320,7 @@ class DictationCoordinator: ObservableObject {
         let id = pending.id
         activeTranslationSession = session
 
-        guard pending.generation == sessionGeneration.current else {
+        guard pending.generation == sessions.current else {
             finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
             return
         }
@@ -1357,7 +1344,7 @@ class DictationCoordinator: ObservableObject {
                 return
             }
             guard pendingTranslation?.id == id,
-                  pending.generation == sessionGeneration.current,
+                  pending.generation == sessions.current,
                   currentLanguageRequest.matches(
                       sessionID: pending.sessionID,
                       generation: pending.requestGeneration,
@@ -1373,7 +1360,7 @@ class DictationCoordinator: ObservableObject {
                       generation: pending.requestGeneration,
                       clientIdentifier: pending.clientIdentifier
                   ),
-                  pending.generation == sessionGeneration.current else {
+                  pending.generation == sessions.current else {
                 finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
                 return
             }
@@ -1389,7 +1376,7 @@ class DictationCoordinator: ObservableObject {
                       generation: pending.requestGeneration,
                       clientIdentifier: pending.clientIdentifier
                   ),
-                  pending.generation == sessionGeneration.current else {
+                  pending.generation == sessions.current else {
                 finishTranslation(id: id, outcome: .fallback(pending.originalText, reason: .cancelled))
                 return
             }
@@ -1444,7 +1431,7 @@ class DictationCoordinator: ObservableObject {
         // `Task.cancel()` below is only a request -- neither WhisperKit nor Apple FM
         // promises to return promptly -- so the task can still finish seconds from
         // now, and this is what makes its outcome land nowhere.
-        sessionGeneration.abandonSession()
+        sessions.abandonSession()
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
             cancelPendingTranslation()
@@ -1566,7 +1553,7 @@ class DictationCoordinator: ObservableObject {
         // Same reasoning as `cancelDictation`: this teardown ends the session, so
         // the task must not report into it afterwards (#267). The `.failed` written
         // below is this handler speaking, not the task, and is not gated.
-        sessionGeneration.abandonSession()
+        sessions.abandonSession()
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
             cancelPendingTranslation()
@@ -1790,19 +1777,13 @@ class DictationCoordinator: ObservableObject {
     ///   App Group still reads `.requested`; a cancel writes `.idle` first, so the
     ///   deferred start does not resurrect.
     private func mayReport(_ session: Int, _ what: String) -> Bool {
-        guard sessionGeneration.mayReport(from: session) else {
-            PersistentLog.log(.dictationDeferred(
-                reason: "abandoned session dropped \(what) (gen \(session) != \(sessionGeneration.current))"
-            ))
-            return false
-        }
-        if currentLanguageRequest.clientIdentifier?.hasPrefix("app-") != true {
-            guard !defaults.bool(forKey: SharedKeys.cancelRequested),
-                  currentLanguageRequest.hasSameIdentity(as: DictationLanguageRequest.load(from: defaults)) else {
-                return false
-            }
-        }
-        return true
+        sessions.mayReportOutcome(
+            session: session,
+            what: what,
+            cancelRequested: defaults.bool(forKey: SharedKeys.cancelRequested),
+            currentRequest: currentLanguageRequest,
+            persistedRequest: DictationLanguageRequest.load(from: defaults)
+        )
     }
 
     // MARK: - Stage Watchdog
@@ -1951,11 +1932,12 @@ class DictationCoordinator: ObservableObject {
             audioEngine.deactivateIfIdle()
         }
         DictationErrorChannel.record(message, disposition: disposition)
+        let keepTranscript = defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true
         persistLastDictationIssue(
             stage: status.rawValue,
             failureStage: status.rawValue,
             errorSummary: message,
-            rawText: issueRawText
+            rawText: keepTranscript ? issueRawText : nil
         )
         defaults.set(false, forKey: SharedKeys.coldStartActive)
         defaults.removeObject(forKey: SharedKeys.sourceAppScheme)

@@ -141,34 +141,6 @@ public enum VoiceOnlyKeyboardPolicy {
             return upperFrames + lastFrames
         }
 
-        /// Expands each key frame by half the neighboring gap so hit targets
-        /// tile continuously. Visual plates stay drawn from the original frames
-        /// (same centers); only the interactive/layout rect grows into gaps.
-        public static func expandFramesAbsorbingGaps(
-            _ frames: [[CGRect]],
-            horizontalSpacing: CGFloat,
-            verticalSpacing: CGFloat
-        ) -> [[CGRect]] {
-            guard !frames.isEmpty else { return frames }
-            let halfH = max(0, horizontalSpacing) / 2
-            let halfV = max(0, verticalSpacing) / 2
-            return frames.enumerated().map { rowIndex, row in
-                guard !row.isEmpty else { return row }
-                return row.enumerated().map { columnIndex, frame in
-                    let left = columnIndex == 0 ? 0 : halfH
-                    let right = columnIndex == row.count - 1 ? 0 : halfH
-                    let top = rowIndex == 0 ? 0 : halfV
-                    let bottom = rowIndex == frames.count - 1 ? 0 : halfV
-                    return CGRect(
-                        x: frame.minX - left,
-                        y: frame.minY - top,
-                        width: frame.width + left + right,
-                        height: frame.height + top + bottom
-                    )
-                }
-            }
-        }
-
         /// Builds a symbol row whose first and last commands keep a native-sized
         /// hit target while the punctuation keys share the remaining width.
         ///
@@ -555,6 +527,11 @@ public enum VoiceOnlyKeyboardPolicy {
             let width = max(0, surfaceFrame.width - visibleControlGap * 2)
             let bottomY = spaceLaneMinY - floatingEmojiCategoryBarGap
             guard width > 0, height > 0, bottomY - height >= surfaceFrame.minY else { return .zero }
+            // Symmetric inset only. An earlier version shortened the bar on the
+            // right so it would stop before delete, which silently moved the
+            // selected-category marker off the horizontal centre. The delete
+            // corner is resolved by hit-test order instead, which costs nothing
+            // visually.
             let frame = CGRect(
                 x: surfaceFrame.minX + visibleControlGap,
                 y: bottomY - height,
@@ -853,10 +830,16 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         /// Top-left of the dictation board, clear of the microphone capsule.
+        ///
+        /// The toggle is a bare `UISwitch`, so its frame *is* its visual. Every
+        /// other board control keeps a hit frame at `visibleControlGap` and puts
+        /// its glass face a further `commandVisualInset` inside that. Matching
+        /// only the hit inset left the switch sitting visibly closer to the edge
+        /// than its neighbours, so both insets are applied here.
         public var dictationServiceToggleFrame: CGRect {
             let frame = CGRect(
-                x: surfaceFrame.minX + visibleControlGap,
-                y: surfaceFrame.minY + 4,
+                x: surfaceFrame.minX + visibleControlGap + commandVisualInset,
+                y: surfaceFrame.minY + visibleControlGap + commandVisualInset,
                 width: VoiceOnlyKeyboardPolicy.dictationToggleWidth,
                 height: VoiceOnlyKeyboardPolicy.dictationToggleHeight
             )

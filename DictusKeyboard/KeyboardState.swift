@@ -359,27 +359,38 @@ class KeyboardState: ObservableObject {
     @Published private(set) var emojiCategoryBarExpanded = false
 
     func selectEmojiCategory(at index: Int) {
-        emojiCategorySelectionIndex = max(0, index)
+        var surface = currentSurface
+        surface.select(at: index)
+        emojiCategorySelectionIndex = surface.selectionIndex
         emojiCategoryJumpIndex = index
         emojiCategoryJumpToken = UUID()
         onSelectEmojiCategory?(index)
     }
 
     func setEmojiCategorySelectionIndex(_ index: Int) {
-        let normalized = max(0, index)
-        guard emojiCategorySelectionIndex != normalized else { return }
-        emojiCategorySelectionIndex = normalized
+        var surface = currentSurface
+        guard surface.setSelectionIndex(index) else { return }
+        emojiCategorySelectionIndex = surface.selectionIndex
     }
 
     func setEmojiCategoryBarExpanded(_ expanded: Bool) {
-        guard emojiCategoryBarExpanded != expanded else { return }
-        emojiCategoryBarExpanded = expanded
+        var surface = currentSurface
+        guard surface.setExpanded(expanded) else { return }
+        emojiCategoryBarExpanded = surface.expanded
     }
 
     func setEmojiCategoryBarOffset(_ offset: CGFloat) {
-        let normalized = max(0, offset)
-        guard abs(emojiCategoryBarOffset - normalized) > 0.5 else { return }
-        emojiCategoryBarOffset = normalized
+        var surface = currentSurface
+        guard surface.setOffset(offset) else { return }
+        emojiCategoryBarOffset = surface.offset
+    }
+
+    private var currentSurface: KeyboardSurfaceState {
+        KeyboardSurfaceState(
+            offset: emojiCategoryBarOffset,
+            selectionIndex: emojiCategorySelectionIndex,
+            expanded: emojiCategoryBarExpanded
+        )
     }
 
     /// The active model's actual input-language detection capability.
@@ -605,13 +616,22 @@ class KeyboardState: ObservableObject {
 
     /// Open the app without creating another recording request.
     func openDictusForRecovery() {
-        guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 0.75 else {
-            HapticFeedback.actionRefused()
-            return
+        // One press can deliver touch-down twice while the handoff is running.
+        // A missing URL callback must not leave the button dead.
+        if isOpeningForDictation,
+           Date().timeIntervalSince(lastModelPreparationOpenDate) > 1.2 {
+            isOpeningForDictation = false
         }
+        guard !isOpeningForDictation else { return }
         lastModelPreparationOpenDate = Date()
-        guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else {
+        guard let url = KeyboardDictationBridge.recoveryURL() else {
+            lastModelPreparationOpenDate = .distantPast
             HapticFeedback.actionRefused()
+            presentStatusMessage(
+                "Unable to open sAiity. Try again.",
+                reason: "recoveryURLFailed",
+                timeoutReason: "recoveryURLFailed-timeout"
+            )
             return
         }
         isOpeningForDictation = true
@@ -622,12 +642,9 @@ class KeyboardState: ObservableObject {
             timeoutReason: "recovery-opening-timeout"
         )
         logProbe("openDictusForRecovery", details: "url=\(url.absoluteString)")
-        // Launching from touch-down can be ignored while the keyboard host still
-        // owns the active touch. Keep the immediate acknowledgement, then hand
-        // off on the next main-run-loop turn.
-        DispatchQueue.main.async { [weak self] in
-            self?.openDictusURL(url)
-        }
+        // extensionContext.open is ignored unless it runs inside the touch.
+        // A later turn is not a user gesture, so the tap looked dead.
+        openDictusURL(url)
     }
 
     /// Same preference as Home's "Keyboard dictation" toggle. The app applies
@@ -1984,7 +2001,7 @@ class KeyboardState: ObservableObject {
         // single tap opens one app handoff.
         guard Date().timeIntervalSince(lastModelPreparationOpenDate) >= 1 else { return }
         lastModelPreparationOpenDate = Date()
-        guard let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") else {
+        guard let url = KeyboardDictationBridge.recoveryURL() else {
             return
         }
         openDictusURL(url)
@@ -2007,9 +2024,28 @@ class KeyboardState: ObservableObject {
         )
     }
 
-    var dictationActionLabel: String {
-        appNeedsAppAction ? "Open sAiity to prepare dictation" : "Hold to dictate"
+    /// Single source of truth for "the board offers to open sAiity" instead of
+    /// the dictate control.
+    ///
+    /// Two gates used to disagree. The label consulted only `appNeedsAppAction`
+    /// while the UIKit action also honoured `failedRequiresApp`, so a failed
+    /// session that needed the app rendered "Hold to dictate" and then opened
+    /// the app on press — the control advertised one verb and performed
+    /// another. Label and action now read this one flag, so they cannot drift.
+    ///
+    /// A live session always wins: `ownsKeyboardArea` is true while requested or
+    /// recording, and the recovery control must never displace cancel.
+    var showsRecoveryAction: Bool {
+        guard !dictationStatus.ownsKeyboardArea else { return false }
+        return appNeedsAppAction || failedRequiresApp
     }
+
+    /// Label for whichever control currently occupies the board's primary slot.
+    var primaryBoardActionLabel: String {
+        showsRecoveryAction ? "Open sAiity to prepare dictation" : "Hold to dictate"
+    }
+
+    var dictationActionLabel: String { primaryBoardActionLabel }
 
     /// Defer recording without leaving a requested state behind in the keyboard.
     private func deferRecordingForModelPreparation(reason: String = "keyboard opened sAiity for model preparation") {
@@ -2032,8 +2068,20 @@ class KeyboardState: ObservableObject {
         }
         openURLFromExtension(url) { [weak self] succeeded in
             DispatchQueue.main.async {
+                #if DEBUG
+                // The handoff result is the difference between "the tap never
+                // arrived" and "the tap arrived and iOS refused the open". Those
+                // need completely different fixes, so record the outcome.
+                PersistentLog.log(.diagnosticProbe(
+                    component: "TouchPath",
+                    instanceID: self?.instanceID ?? "nil",
+                    action: "openURL",
+                    details: "succeeded=\(succeeded) url=\(url.absoluteString) hasContext=\(self?.controller?.extensionContext != nil)"
+                ))
+                #endif
                 guard let self, !succeeded else { return }
                 self.isOpeningForDictation = false
+                self.lastModelPreparationOpenDate = .distantPast
                 self.presentStatusMessage("iOS could not open sAiity. Open it from the Home Screen to start dictation.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
                 PersistentLog.log(.diagnosticProbe(
                     component: "KeyboardState", instanceID: self.instanceID,
@@ -2110,22 +2158,16 @@ private extension KeyboardState {
     /// is to audit what was *written* -- a keyboard rebuilt after the app died has no
     /// in-memory status of its own yet.
     func dictationLiveness() -> DictationLivenessReading {
-        let status = defaults.string(forKey: SharedKeys.dictationStatus)
-            .flatMap(DictationStatus.init(rawValue:))
         let raw = defaults.double(forKey: SharedKeys.recordingHeartbeat)
-        let heartbeat: TimeInterval? = raw > 0 ? raw : nil
-        let now = Date().timeIntervalSince1970
+        let reading = KeyboardLifecycleMonitor.reading(
+            statusRaw: defaults.string(forKey: SharedKeys.dictationStatus),
+            heartbeat: raw > 0 ? raw : nil,
+            localSessionStartedAt: sessionStartedAt?.timeIntervalSince1970
+        )
         return DictationLivenessReading(
-            verdict: DictationSessionLivenessPolicy.evaluate(
-                status: status,
-                heartbeat: heartbeat,
-                // The in-process fact that keeps a corpse heartbeat from being read
-                // against a session this keyboard started after it (#261).
-                localSessionStartedAt: sessionStartedAt?.timeIntervalSince1970,
-                now: now
-            ),
-            status: status,
-            heartbeatAgeMs: heartbeat.map { Int((now - $0) * 1000) } ?? -1
+            verdict: reading.verdict,
+            status: reading.status,
+            heartbeatAgeMs: reading.heartbeatAgeMs
         )
     }
 

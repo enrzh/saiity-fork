@@ -310,14 +310,18 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         )
 
         XCTAssertFalse(controller.contains("setAuxiliaryUtilityVisuals"))
-        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = true"))
+        // Gated on the surfaces UIKit actually owns. An unconditional enable left
+        // transparent chrome buttons hit-testing the letter grid, where they ate
+        // taps meant for keys.
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = overlayVisible"))
         XCTAssertFalse(rootView.contains("alternateAccessoryRow"))
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad"))
         XCTAssertTrue(rootView.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
         XCTAssertTrue(rootView.contains(".frame(width: surfaceFrame.width, height: surfaceFrame.height)"))
         XCTAssertFalse(rootView.contains("availableHeight: contentFrame.height"))
         XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .letters || mode == .numberPad)"))
-        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = true"))
+        XCTAssertTrue(controller.contains("controls.isUserInteractionEnabled = overlayVisible"),
+                      "the overlay must stay non-interactive on SwiftUI-owned surfaces")
         XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
     }
 
@@ -809,8 +813,28 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             XCTAssertFalse(layout.dictationServiceToggleFrame.intersects(layout.dictateFrame), "width=\(width)")
             XCTAssertEqual(
                 layout.dictationServiceToggleFrame.minX,
-                layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+                layout.surfaceFrame.minX
+                    + VoiceOnlyKeyboardPolicy.visibleControlGap
+                    + VoiceOnlyKeyboardPolicy.commandVisualInset,
                 "width=\(width)"
+            )
+            // The toggle is a bare UISwitch, so its frame is its visual. Other
+            // board controls sit their glass face a further commandVisualInset
+            // inside the hit inset; the switch must land on the same visual edge
+            // or it reads as too close to the corner.
+            XCTAssertEqual(
+                layout.dictationServiceToggleFrame.minX,
+                layout.surfaceFrame.minX
+                    + VoiceOnlyKeyboardPolicy.visibleControlGap
+                    + VoiceOnlyKeyboardPolicy.commandVisualInset,
+                "the dictation toggle must align with the other board visuals, width=\(width)"
+            )
+            XCTAssertEqual(
+                layout.dictationServiceToggleFrame.minY,
+                layout.surfaceFrame.minY
+                    + VoiceOnlyKeyboardPolicy.visibleControlGap
+                    + VoiceOnlyKeyboardPolicy.commandVisualInset,
+                "the dictation toggle must align with the other board visuals, width=\(width)"
             )
             XCTAssertEqual(layout.languageFrame.minY, VoiceOnlyKeyboardPolicy.verticalPadding + VoiceOnlyKeyboardPolicy.topInset, "width=\(width)")
             XCTAssertEqual(layout.leftUtilityFrames.at, left.at, "width=\(width)")
