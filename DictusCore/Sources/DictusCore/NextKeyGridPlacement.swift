@@ -66,14 +66,17 @@ public enum KeyGridPlacement {
         // letter rows into 1pt each. The visible symptom would have been a keyboard
         // that drew three hairlines and ignored 87% of every tap.
         let rowCount = CGFloat(page.rows.count)
+        let rowSpacing = page.rowSpacing ?? KeyGridPlacement.rowSpacing
         let gaps = rowSpacing * (rowCount - 1)
-        // The bar is not one of the rows: it lives in its own lane below the grid,
-        // so the grid is solved into what is left above it.
         let gridHeight = max(1, size.height)
-        let rowHeight = max(
-            1,
-            min((gridHeight - gaps) / rowCount, maximumRowHeight)
-        )
+        // A page may ask for its own row height. The number pad does, because its
+        // keys are taller than the letter grid's — it trades the bottom bar for the
+        // room, and without asking it was being handed the letter grid's cap and
+        // coming out a third short.
+        let rowHeight = max(1, min(
+            (gridHeight - gaps) / rowCount,
+            page.rowHeight ?? maximumRowHeight
+        ))
         let blockHeight = rowHeight * rowCount + gaps
         // Bottom-aligned inside the grid area, so any slack sits above the first row
         // exactly as it did in the legacy layout.

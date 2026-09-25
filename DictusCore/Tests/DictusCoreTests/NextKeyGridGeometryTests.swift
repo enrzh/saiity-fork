@@ -352,6 +352,57 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(402 - delete.plate.maxX, 7, accuracy: 0.5)
     }
 
+    /// The 3×4 pad matches the system pad.
+    ///
+    /// Measured: three columns of ~126.5pt with 6pt gaps, keys 48pt tall on a 54pt
+    /// pitch, and a last row that is a centred `0` with a delete in the right column.
+    /// The pad's keys are *taller* than the letter grid's 43pt, which only works
+    /// because the pad has no bottom bar — so it takes the whole surface.
+    func testNumberPadMatchesTheMeasuredSystemPad() {
+        func key(_ id: String, _ label: String) -> KeyGridKey {
+            KeyGridKey(id: id, action: .insert(label), label: label)
+        }
+        let rows: [[KeyGridKey]] = [
+            [key("1", "1"), key("2", "2"), key("3", "3")],
+            [key("4", "4"), key("5", "5"), key("6", "6")],
+            [key("7", "7"), key("8", "8"), key("9", "9")],
+            [
+                KeyGridKey(id: "spacer", action: .none),
+                key("0", "0"),
+                KeyGridKey(id: "del", action: .delete, isCommand: true)
+            ]
+        ]
+        let page = KeyGridPage(id: "pad", rows: rows, rowHeight: 48, rowSpacing: 6)
+        let layout = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 224))
+
+        // Three columns, standard width, 6pt apart, 7pt margins.
+        let first = layout.rows[0]
+        guard first.count == 3 else {
+            XCTFail("expected three columns")
+            return
+        }
+        let a = first[0]
+        let b = first[1]
+        XCTAssertEqual(a.plate.minX, 7, accuracy: 0.5)
+        XCTAssertEqual(a.plate.width, 125.3, accuracy: 1.0)
+        XCTAssertEqual(b.plate.minX - a.plate.maxX, 6, accuracy: 0.5)
+
+        // Keys are 48pt on a 54pt pitch — taller than the letter grid's 43.
+        XCTAssertEqual(a.plate.height, 48, accuracy: 0.5)
+        let rowTops = layout.rows.map { $0.first?.plate.minY ?? .nan }
+        XCTAssertEqual(rowTops[1] - rowTops[0], 54, accuracy: 0.5)
+        XCTAssertEqual(rowTops[3] - rowTops[2], 54, accuracy: 0.5)
+
+        // The `0` lands in the middle column, as it does on the system pad.
+        let lastRow = layout.rows[3]
+        guard lastRow.count == 3 else {
+            XCTFail("expected a three-cell last row")
+            return
+        }
+        XCTAssertEqual(lastRow[1].plate.minX, b.plate.minX, accuracy: 0.5,
+                       "0 must sit in the middle column")
+    }
+
     // MARK: - The bottom bar is not ours
 
     /// The grid fills the rect it is handed, and nothing more.

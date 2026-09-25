@@ -133,11 +133,32 @@ public struct KeyGridPage: Equatable {
     /// pinned: its space key is wide and sits between 123 and return, so it is
     /// distributed by weight like any other row.
     public var pinnedLastRow: Bool
+    /// The row height this page wants, when it is not the letter grid's.
+    ///
+    /// The 3×4 number pad is the case that needs it. Measured on the system
+    /// keyboard, its keys are 48pt tall against the letter grid's 43pt, because it
+    /// has four rows and no bottom bar to make room for. Left on the default the
+    /// pad's rows came out 34pt — visibly squashed next to every other page.
+    public var rowHeight: CGFloat?
+    /// Vertical gap between rows, when this page wants a different one.
+    ///
+    /// The number pad again: measured on the system pad its rows sit 54pt apart with
+    /// 48pt keys, so the gap is 6pt — the same as the horizontal gap — where the
+    /// letter and symbol pages use 11pt.
+    public var rowSpacing: CGFloat?
 
-    public init(id: String, rows: [[KeyGridKey]], pinnedLastRow: Bool = false) {
+    public init(
+        id: String,
+        rows: [[KeyGridKey]],
+        pinnedLastRow: Bool = false,
+        rowHeight: CGFloat? = nil,
+        rowSpacing: CGFloat? = nil
+    ) {
         self.id = id
         self.rows = rows
         self.pinnedLastRow = pinnedLastRow
+        self.rowHeight = rowHeight
+        self.rowSpacing = rowSpacing
     }
 
     public var isEmpty: Bool { rows.allSatisfy(\.isEmpty) }

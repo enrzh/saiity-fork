@@ -284,6 +284,15 @@ struct KeyboardRootView: View {
             + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
         let barHeight = CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
         let isLetterPage = state.areaMode == .letters
+        // The number pad has no bar. The system pad is 1-9 then a centred 0 and a
+        // delete, and it runs the full height; mounting a bar under it would both
+        // differ from that and take 54pt the pad's keys need.
+        let isPad = state.areaMode == .numberPad
+        if isPad {
+            Color.clear
+                .frame(width: surfaceFrame.width, height: surfaceFrame.height)
+                .allowsHitTesting(false)
+        } else {
         VStack(spacing: 0) {
             // The grid's share. Transparent and untouchable: it only reserves the
             // space so the bar lands in the lane the host left for it.
@@ -325,6 +334,7 @@ struct KeyboardRootView: View {
                 .allowsHitTesting(false)
         }
         .frame(width: surfaceFrame.width, height: surfaceFrame.height, alignment: .topLeading)
+        }
     }
 
     @ViewBuilder

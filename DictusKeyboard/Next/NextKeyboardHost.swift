@@ -216,6 +216,13 @@ final class NextKeyboardHost: NSObject {
         page: Page
     ) -> CGRect {
         let surface = layout.surfaceFrame
+        // The number pad takes the whole surface. It has no bottom bar — the system
+        // pad does not have one either, it runs 1-9 and then a centred 0 with a
+        // delete — so reserving the bar lane stole 54pt from four rows and left
+        // every key 14pt short of the platform's.
+        if case .numberPad = page {
+            return surface
+        }
         let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
             + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
             + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)

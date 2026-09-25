@@ -181,33 +181,41 @@ enum KeyGridPageFactory {
     /// the behaviour the system keyboard offers, so a numeric field does not trap
     /// the user.
     static func numberPad(style: HostFieldPolicy.NumberPadStyle) -> KeyGridPage {
-        let keys: [[(String, CGFloat, Bool)]] = [
+        let digits: [[(String, CGFloat, Bool)]] = [
             [("1", 1, false), ("2", 1, false), ("3", 1, false)],
             [("4", 1, false), ("5", 1, false), ("6", 1, false)],
-            [("7", 1, false), ("8", 1, false), ("9", 1, false)],
-            [("ABC", 1.4, true), ("0", 1, false), (decimalLabel(for: style), 1, false)]
+            [("7", 1, false), ("8", 1, false), ("9", 1, false)]
         ]
-        let rows = keys.enumerated().map { rowIndex, row in
+        var rows = digits.enumerated().map { rowIndex, row in
             row.enumerated().map { column, entry in
-                let (label, weight, isCommand) = entry
-                if isCommand {
-                    return KeyGridKey(
-                        id: "pad-letters-\(rowIndex)-\(column)",
-                        action: .letters,
-                        weight: weight,
-                        label: label,
-                        isCommand: true
-                    )
-                }
-                return KeyGridKey(
-                    id: "pad-\(rowIndex)-\(column)",
-                    action: .character(base: label, variants: []),
-                    weight: weight,
-                    label: label
-                )
+                digitKey(label: entry.0, row: rowIndex, column: column)
             }
         }
-        return KeyGridPage(id: "numberPad", rows: rows)
+        // The last row is a centred `0` and a delete on the right, exactly as the
+        // system pad draws it — measured there, `0` occupies the middle column at
+        // x=137..263 and the delete sits in the right one. The leading cell carries
+        // the width and draws nothing, which is what puts `0` in the middle column
+        // rather than off to the left.
+        rows.append([
+            KeyGridKey(id: "pad-spacer", action: .none, glyphSize: 17,
+                       glyphWeight: .regular),
+            digitKey(label: "0", row: 3, column: 1),
+            KeyGridKey(id: "pad-delete", action: .delete, isCommand: true,
+                       glyphSize: 18, glyphWeight: .regular)
+        ])
+        // Taller keys than the letter grid, because the pad has four rows and spends
+        // none of its height on a bottom bar. Measured: 48pt against the letters' 43.
+        return KeyGridPage(id: "numberPad", rows: rows, rowHeight: 48, rowSpacing: 6)
+    }
+
+    private static func digitKey(label: String, row: Int, column: Int) -> KeyGridKey {
+        KeyGridKey(
+            id: "pad-\(row)-\(column)",
+            action: .character(base: label, variants: []),
+            label: label,
+            glyphSize: 22,
+            glyphWeight: .light
+        )
     }
 
     private static func decimalLabel(for style: HostFieldPolicy.NumberPadStyle) -> String {
