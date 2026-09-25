@@ -1989,7 +1989,8 @@ class KeyboardViewController: UIInputViewController,
             for: layout,
             surfaceHeight: layout.surfaceFrame.height,
             // The new grid draws its own bottom bar, so it takes the whole surface.
-            bottomBarHeight: 0
+            bottomBarHeight: 0,
+            page: mode
         )
         host.mount(in: inputView, frame: frame, page: mode)
     }

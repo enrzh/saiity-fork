@@ -126,6 +126,7 @@ final class KeyGridView: UIView {
         guard bounds.size != solvedSize, let page else { return }
         solvedSize = bounds.size
         layout = KeyGridPlacement.solve(page, in: bounds.size)
+        onGlassLayoutChanged?(glassSpecs)
         setNeedsDisplay()
     }
 
@@ -169,32 +170,88 @@ final class KeyGridView: UIView {
         Set(presses.values.map { PlacedPosition(row: $0.row, column: $0.column) })
     }
 
-    private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
-        // A key with no action is a spacer: it carries width so the row indents and
-        // draws nothing at all. Legacy spacers were invisible, and the way to get
-        // that right is to draw nothing rather than to draw an empty plate.
-        if case .none = item.key.action { return }
+    /// A plate that should be backed by real material.
+    struct GlassSpec: Equatable {
+        let rect: CGRect
+        let radius: CGFloat
+    }
+
+    /// Told every time the set of glass plates changes, so the host can realise the
+    /// material in a sibling layer. The grid cannot host it itself: a
+    /// `UIVisualEffectView` is a subview, and subviews draw *above* the receiver's
+    /// own `draw(_:)`, so the glyphs would be covered.
+    ///
+    /// The host puts that layer below the grid. That also keeps the material out of
+    /// the touch path — on iOS 26 a glass layer can win the hit test on its own,
+    /// which is how Liquid Glass keys became untappable before.
+    var onGlassLayoutChanged: (([GlassSpec]) -> Void)?
+
+    /// The plates that get a visible face, in draw order.
+    ///
+    /// One rule, shared with `drawPlate`, so the material and the fallback fill can
+    /// never disagree about which keys have a container.
+    private var glassSpecs: [GlassSpec] {
+        var specs: [GlassSpec] = []
+        for row in layout.rows {
+            for item in row {
+                guard showsPlate(for: item.key) else { continue }
+                specs.append(GlassSpec(rect: item.plate,
+                                       radius: cornerRadius(for: item.key, in: item.plate)))
+            }
+        }
+        return specs
+    }
+
+    /// A key with no action is a spacer: it carries width so the row indents and
+    /// draws nothing at all. Legacy spacers were invisible, and the way to get that
+    /// right is to draw nothing rather than to draw an empty plate.
+    private func showsPlate(for key: KeyGridKey) -> Bool {
+        if case .none = key.action { return false }
         // Letter plates have no container in the legacy design — the
         // `keyContainersEnabled` preference defaulted to off, so only the glyph
         // showed. Drawing a filled plate behind every letter is the single most
         // visible difference from that look, so the preference is honoured here
         // rather than assumed.
-        let showPlate = !item.key.isInvisiblePlate
-            || KeyboardInteractionPreferences.keyContainersEnabled
-        if showPlate {
-            let radius = item.key.isPill
-                ? min(item.plate.height / 2, KeyGridPlacement.commandCornerRadius)
-                : (item.key.isCommand
-                    ? KeyGridPlacement.commandCornerRadius
-                    : KeyGridPlacement.keyCornerRadius)
-            let path = UIBezierPath(roundedRect: item.plate, cornerRadius: radius)
-            context.saveGState()
-            context.setFillColor(
-                plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor
-            )
-            context.addPath(path.cgPath)
-            context.fillPath()
-            context.restoreGState()
+        return !key.isInvisiblePlate || KeyboardInteractionPreferences.keyContainersEnabled
+    }
+
+    private func cornerRadius(for key: KeyGridKey, in plate: CGRect) -> CGFloat {
+        if key.isPill {
+            return min(plate.height / 2, KeyGridPlacement.commandCornerRadius)
+        }
+        return key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyGridPlacement.keyCornerRadius
+    }
+
+    private var usesLiveMaterial: Bool {
+        KeyboardInteractionPreferences.liquidGlassEnabled
+            && !UIAccessibility.isReduceTransparencyEnabled
+    }
+
+    private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
+        if case .none = item.key.action { return }
+        if showsPlate(for: item.key) {
+            // With live material the sibling glass layer already carries the face.
+            // Filling here as well would paint a solid slab over it.
+            if !usesLiveMaterial {
+                let path = UIBezierPath(roundedRect: item.plate,
+                                        cornerRadius: cornerRadius(for: item.key, in: item.plate))
+                context.saveGState()
+                context.setFillColor(
+                    plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor
+                )
+                context.addPath(path.cgPath)
+                context.fillPath()
+                context.restoreGState()
+            } else if pressed {
+                // A press still needs to read on glass, which has no fill of its own.
+                let path = UIBezierPath(roundedRect: item.plate,
+                                        cornerRadius: cornerRadius(for: item.key, in: item.plate))
+                context.saveGState()
+                context.setFillColor(UIColor.label.withAlphaComponent(0.18).cgColor)
+                context.addPath(path.cgPath)
+                context.fillPath()
+                context.restoreGState()
+            }
         }
         drawLabel(for: item.key, in: item.plate, pressed: pressed)
     }

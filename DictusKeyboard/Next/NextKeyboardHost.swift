@@ -34,6 +34,11 @@ final class NextKeyboardHost: NSObject {
 
     let gridView: KeyGridView
 
+    /// Sits directly below the grid and carries the real key material.
+    private let glassLayer: UIView
+    /// One effect view per glass plate, reconciled against the grid's layout.
+    private var glassViews: [UIVisualEffectView] = []
+
     /// Which symbol page is showing. The bar's toggle flips this.
     private var symbolPage: KeyGridPageFactory.Page = .symbolsNumbers
 
@@ -50,12 +55,26 @@ final class NextKeyboardHost: NSObject {
 
     override init() {
         gridView = KeyGridView(frame: .zero)
+        glassLayer = UIView(frame: .zero)
         super.init()
         gridView.delegate = self
         // Translucent, and never opaque: the grid is a layer over the keyboard's
         // own background, not a replacement for it.
         gridView.backgroundColor = .clear
         gridView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        // The material lives in its own layer rather than inside the grid, for two
+        // reasons. A `UIVisualEffectView` is a subview, and subviews draw above the
+        // grid's own `draw(_:)`, so glyphs drawn there would be covered. And on
+        // iOS 26 a glass layer can win the hit test by itself, which is how Liquid
+        // Glass keys went untappable before. Below the grid and non-interactive,
+        // neither can happen.
+        glassLayer.backgroundColor = .clear
+        glassLayer.isUserInteractionEnabled = false
+        glassLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        gridView.onGlassLayoutChanged = { [weak self] specs in
+            self?.applyGlass(specs)
+        }
     }
 
     deinit {
@@ -70,13 +89,69 @@ final class NextKeyboardHost: NSObject {
     /// geometry and the touch targets the same rectangles: the grid resolves a
     /// point in its own space and the plates were drawn in that same space.
     func mount(in container: UIView, frame: CGRect, page: Page) {
+        if glassLayer.superview !== container {
+            glassLayer.removeFromSuperview()
+            container.addSubview(glassLayer)
+        }
         if gridView.superview !== container {
             gridView.removeFromSuperview()
             container.addSubview(gridView)
         }
+        glassLayer.frame = frame
+        gridLayerPosition()
         gridView.frame = frame
         show(page)
         gridView.setNeedsLayout()
+    }
+
+    /// Keeps the grid above the material without letting either claim touches.
+    private func gridLayerPosition() {
+        // The controller raises the grid to 500 to sit above the SwiftUI host and
+        // the voice overlay. The material follows just below it, and no higher: if
+        // it rose above the SwiftUI chrome it would be visible over the accessory
+        // lane, which has no plates of its own.
+        glassLayer.layer.zPosition = gridView.layer.zPosition - 1
+    }
+
+    /// Reconciles the effect views against the grid's current plates.
+    ///
+    /// Reuses views by index so a re-solve does not churn the material, which is
+    /// what makes the blur expensive.
+    private func applyGlass(_ specs: [KeyGridView.GlassSpec]) {
+        let wanted = KeyboardInteractionPreferences.liquidGlassEnabled
+            && !UIAccessibility.isReduceTransparencyEnabled
+        guard wanted, !specs.isEmpty else {
+            glassViews.forEach { $0.removeFromSuperview() }
+            glassViews.removeAll()
+            return
+        }
+        while glassViews.count < specs.count {
+            let view = UIVisualEffectView(effect: Self.keyMaterial())
+            view.isUserInteractionEnabled = false
+            view.layer.cornerCurve = .continuous
+            view.clipsToBounds = true
+            glassLayer.addSubview(view)
+            glassViews.append(view)
+        }
+        while glassViews.count > specs.count {
+            glassViews.removeLast().removeFromSuperview()
+        }
+        for (view, spec) in zip(glassViews, specs) {
+            // No animation: a plate that slides or fades reads as a transition on
+            // every re-solve, including the ones caused by an orientation change.
+            UIView.performWithoutAnimation {
+                view.frame = spec.rect
+                view.layer.cornerRadius = spec.radius
+            }
+        }
+    }
+
+    /// The material the legacy `glassEffect(.regular)` resolves to.
+    private static func keyMaterial() -> UIVisualEffect {
+        if #available(iOS 26, *) {
+            return UIGlassEffect()
+        }
+        return UIBlurEffect(style: .systemChromeMaterial)
     }
 
     func unmount() {
@@ -86,6 +161,9 @@ final class NextKeyboardHost: NSObject {
         gridView.isHidden = true
         gridView.isUserInteractionEnabled = false
         gridView.removeFromSuperview()
+        glassViews.forEach { $0.removeFromSuperview() }
+        glassViews.removeAll()
+        glassLayer.removeFromSuperview()
         stopDeleteRepeat()
     }
 
@@ -117,11 +195,24 @@ final class NextKeyboardHost: NSObject {
     /// Derived from the shared page layout rather than hard-coded, so the new
     /// keyboard sits in the same place as the voice board's chrome and leaves the
     /// same space at the bottom.
+    ///
+    /// The letter page is inset from the top of the surface by
+    /// `letterKeyboardHeaderHeight`. That band is not decoration: it is what keeps
+    /// the rows at their 45pt height instead of letting them stretch to fill the
+    /// surface, and its absence is most of why the rebuilt page read as too airy
+    /// next to the legacy one. `letterKeyboardFrame` already carries the inset, so
+    /// the grid reuses the policy's own frame rather than re-deriving it.
+    ///
+    /// The symbol and number pages take the whole surface, as they did before.
     static func gridFrame(
         for layout: VoiceOnlyKeyboardPolicy.Layout,
         surfaceHeight: CGFloat,
-        bottomBarHeight: CGFloat
+        bottomBarHeight: CGFloat,
+        page: Page
     ) -> CGRect {
+        if page == .letters {
+            return layout.letterKeyboardFrame
+        }
         let surface = layout.surfaceFrame
         let height = max(0, surface.height - bottomBarHeight)
         return CGRect(x: surface.minX, y: surface.minY, width: surface.width, height: height)
