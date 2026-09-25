@@ -321,7 +321,13 @@ struct KeyboardRootView: View {
                 onSpaceCursorMoved: routeCursorMovement,
                 onSpaceCursorEnded: routeCursorEnded,
                 onReturn: { routeProxyCommand(.returnKey) },
-                showsNumbersControl: true,
+                // Flag for flag as `LetterKeyboardSurface` and
+                // `SymbolKeyboardSurface` pass them. The letter page shows 123 and
+                // hides ABC because it *is* ABC; the symbol pages show ABC and hide
+                // 123, because their layer toggle lives in the grid's own last row.
+                // Setting both true renders two layer controls, which is how the
+                // symbol pages came to show 123 where they should show ABC.
+                showsNumbersControl: isLetterPage,
                 showsLettersControl: !isLetterPage,
                 showsEmojiControl: true,
                 showsPeriodKey: isLetterPage,

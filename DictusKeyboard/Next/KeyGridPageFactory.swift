@@ -128,7 +128,16 @@ enum KeyGridPageFactory {
         guard !rows.isEmpty else {
             return KeyGridPage(id: "symbols", rows: [])
         }
-        if rows.count > 1 { rows.removeLast() }
+        // Nothing is dropped here. `KeyboardSymbolsLayout` is three rows of real
+        // content — the last one is the page toggle, the punctuation keys and
+        // delete — and the shared `AuxiliaryBottomBar` now owns the rail that used
+        // to live in a fourth row.
+        //
+        // This used to remove the last row unconditionally, on the assumption that
+        // every symbols page ended in a space/return rail. That is true of
+        // `KeyboardLayout.numbersRows` and false of the layout actually in use, so
+        // it was deleting a row of punctuation and leaving the page two rows deep
+        // with the remaining rows stretched to fill.
 
         let id = page == .symbolsNumbers ? "symbols1" : "symbols2"
         // Symbols are drawn smaller and heavier than letters: at 22pt light a "€"
