@@ -32,6 +32,13 @@ public enum KeyGridPlacement {
     /// Height of a letter plate. Rows are allowed to be shorter when the container
     /// is cramped; this is the height they get when there is room.
     public static let preferredRowHeight: CGFloat = 45
+    /// Rows grow past `preferredRowHeight` to fill the surface, up to this.
+    ///
+    /// A hard cap at 45pt left most of a three-row page empty above the first row,
+    /// which read as a broken layout rather than as breathing room. The cap only
+    /// exists to stop a very tall container producing absurd keys; at 66pt a
+    /// three-row page fills a 216pt keyboard exactly.
+    public static let maximumRowHeight: CGFloat = 66
     public static let keyCornerRadius: CGFloat = 8
     public static let commandCornerRadius: CGFloat = 18
 
@@ -53,9 +60,17 @@ public enum KeyGridPlacement {
         // that drew three hairlines and ignored 87% of every tap.
         let rowCount = CGFloat(page.rows.count)
         let gaps = rowSpacing * (rowCount - 1)
-        let rowHeight = max(1, min((size.height - gaps) / rowCount, preferredRowHeight))
+        let rowHeight = max(
+            1,
+            min((size.height - gaps) / rowCount, maximumRowHeight)
+        )
         let blockHeight = rowHeight * rowCount + gaps
         let originY = max(0, size.height - blockHeight)
+        // Short rows are centred and keep the width of a standard key rather than
+        // stretching to fill. A nine-key row made of nine full-width keys looks
+        // wrong next to a ten-key row; this is how a native keyboard draws them.
+        let widestRow = page.rows.reduce(0) { max($0, $1.count) }
+        let standardWidth = standardKeyWidth(for: widestRow, in: size.width)
 
         var placed: [PlacedKey] = []
         for (rowIndex, row) in page.rows.enumerated() {
@@ -63,7 +78,13 @@ public enum KeyGridPlacement {
             let rowTop = originY + CGFloat(rowIndex) * (rowHeight + rowSpacing)
             let plates = (rowIndex == page.rows.count - 1 && page.pinnedLastRow)
                 ? edgePinnedPlates(for: row, width: size.width, top: rowTop, height: rowHeight)
-                : weightedPlates(for: row, width: size.width, top: rowTop, height: rowHeight)
+                : weightedPlates(
+                    for: row,
+                    width: size.width,
+                    top: rowTop,
+                    height: rowHeight,
+                    standardWidth: standardWidth
+                )
             for (column, plate) in plates.enumerated() {
                 placed.append(
                     PlacedKey(key: row[column], row: rowIndex, column: column,
@@ -98,18 +119,38 @@ public enum KeyGridPlacement {
         return size.width > neededWidth && size.height >= neededHeight
     }
 
+    /// Width of one standard key in the widest row, which every other row is
+    /// measured against.
+    private static func standardKeyWidth(for count: Int, in width: CGFloat) -> CGFloat {
+        guard count > 0 else { return 0 }
+        let gaps = keySpacing * CGFloat(count - 1)
+        return max(1, (width - edgeInset * 2 - gaps) / CGFloat(count))
+    }
+
     /// Distributes a row across the width in proportion to each key's weight.
+    ///
+    /// A row with fewer keys than the widest is centred and keeps the standard key
+    /// width, so the plates in a nine-key row line up optically with the ten-key
+    /// row above it. It only stretches when there is genuinely spare width.
     private static func weightedPlates(
         for row: [KeyGridKey],
         width: CGFloat,
         top: CGFloat,
-        height: CGFloat
+        height: CGFloat,
+        standardWidth: CGFloat
     ) -> [CGRect] {
+        let count = CGFloat(row.count)
         let totalWeight = row.reduce(CGFloat(0)) { $0 + max(0.01, $1.weight) }
-        let available = max(0, width - edgeInset * 2 - keySpacing * CGFloat(row.count - 1))
-        var x = edgeInset
+        let unit = max(1, width - edgeInset * 2 - keySpacing * (count - 1))
+        // Weight one standard key, so weights mean the same thing in every row.
+        let perWeight = standardWidth > 0 ? standardWidth : unit / totalWeight
+        var natural = row.reduce(CGFloat(0)) { $0 + max(0.01, $1.weight) * perWeight }
+        natural += keySpacing * (count - 1)
+        // Only stretch when the row is genuinely narrower than the space available.
+        let rowWidth = min(unit + keySpacing * (count - 1), max(natural, 0))
+        var x = edgeInset + max(0, (width - edgeInset * 2 - rowWidth) / 2)
         return row.map { key in
-            let plateWidth = available * max(0.01, key.weight) / totalWeight
+            let plateWidth = max(1, max(0.01, key.weight) * perWeight)
             defer { x += plateWidth + keySpacing }
             return CGRect(x: x, y: top, width: plateWidth, height: height)
         }
@@ -177,18 +218,30 @@ public enum KeyGridPlacement {
     /// Vertically each row extends halfway into the gap above and below, and the
     /// first and last rows reach the grid's own top and bottom.
     private static func withTargets(_ placed: [PlacedKey], in bounds: CGRect) -> [PlacedKey] {
-        let rowIndices = Set(placed.map(\.row)).sorted()
+        // Plate extents per row, taken from the plates and not from the targets.
+        // Deriving a row's top from the previous row's *target* bottom adds the gap
+        // twice and leaves a dead band between every pair of rows.
+        var plateTop: [Int: CGFloat] = [:]
+        var plateBottom: [Int: CGFloat] = [:]
+        for item in placed {
+            plateTop[item.row] = min(plateTop[item.row] ?? item.plate.minY, item.plate.minY)
+            plateBottom[item.row] = max(plateBottom[item.row] ?? item.plate.maxY, item.plate.maxY)
+        }
+        let rowIndices = plateTop.keys.sorted()
+
         var rowSpans: [Int: (CGFloat, CGFloat)] = [:]
         for (position, rowIndex) in rowIndices.enumerated() {
-            let plates = placed.filter { $0.row == rowIndex }
-            guard let first = plates.first, let last = plates.last else { continue }
-            let top = position > 0
-                ? (rowSpans[rowIndices[position - 1]]?.1 ?? first.plate.minY) + rowSpacing / 2
+            guard let top = plateTop[rowIndex], let bottom = plateBottom[rowIndex] else { continue }
+            // The seam between two rows is the midpoint of the gap between their
+            // plates. The outermost boundaries are the grid's own edges, so the
+            // first and last row reach the ends of the keyboard.
+            let upper = position > 0
+                ? ((plateBottom[rowIndices[position - 1]] ?? top) + top) / 2
                 : bounds.minY
-            let bottom = position + 1 < rowIndices.count
-                ? last.plate.maxY + rowSpacing / 2
+            let lower = position + 1 < rowIndices.count
+                ? (bottom + (plateTop[rowIndices[position + 1]] ?? bottom)) / 2
                 : bounds.maxY
-            rowSpans[rowIndex] = (min(top, bottom), max(top, bottom))
+            rowSpans[rowIndex] = (min(upper, lower), max(upper, lower))
         }
 
         var result: [PlacedKey] = []

@@ -170,9 +170,14 @@ final class KeyGridView: UIView {
     }
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
-        let radius = item.key.isCommand
-            ? KeyGridPlacement.commandCornerRadius
-            : KeyGridPlacement.keyCornerRadius
+        // Space, return, emoji and the layer switches are pills; letters and
+        // shift/delete are rounded rectangles. Drawing both with one radius is
+        // immediately readable as "not the keyboard it replaced".
+        let radius = item.key.isPill
+            ? item.plate.height / 2
+            : (item.key.isCommand
+                ? KeyGridPlacement.commandCornerRadius
+                : KeyGridPlacement.keyCornerRadius)
         let path = UIBezierPath(roundedRect: item.plate, cornerRadius: radius)
         context.saveGState()
         context.setFillColor(plateColor(pressed: pressed).cgColor)
@@ -194,12 +199,8 @@ final class KeyGridView: UIView {
     private func drawLabel(for key: KeyGridKey, in plate: CGRect, pressed: Bool) {
         let text = displayText(for: key)
         guard !text.isEmpty else { return }
-        let isCommand = key.isCommand
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(
-                ofSize: isCommand ? 15 : 22,
-                weight: isCommand ? .regular : .light
-            ),
+            .font: UIFont.systemFont(ofSize: key.glyphSize, weight: fontWeight(key.glyphWeight)),
             .foregroundColor: UIColor.label.withAlphaComponent(pressed ? 0.55 : 1),
             .paragraphStyle: centeredParagraph()
         ]
@@ -207,6 +208,15 @@ final class KeyGridView: UIView {
         let measured = string.size()
         string.draw(at: CGPoint(x: plate.midX - measured.width / 2,
                                 y: plate.midY - measured.height / 2))
+    }
+
+    private func fontWeight(_ weight: KeyGlyphWeight) -> UIFont.Weight {
+        switch weight {
+        case .light: return .light
+        case .regular: return .regular
+        case .medium: return .medium
+        case .semibold: return .semibold
+        }
     }
 
     private func centeredParagraph() -> NSParagraphStyle {

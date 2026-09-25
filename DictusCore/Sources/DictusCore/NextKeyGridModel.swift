@@ -38,6 +38,19 @@ public enum KeyAction: Equatable {
     case none
 }
 
+/// Weight of a key's glyph.
+///
+/// Set per key rather than per page because a keyboard mixes them: letters are
+/// light and large, symbols are regular and smaller, and command labels are
+/// medium and smallest. Drawing them all at one size is what makes a rebuilt
+/// keyboard look unlike the one it replaced.
+public enum KeyGlyphWeight: String, Sendable {
+    case light
+    case regular
+    case medium
+    case semibold
+}
+
 /// One key, as data.
 public struct KeyGridKey: Equatable {
     public var id: String
@@ -50,6 +63,14 @@ public struct KeyGridKey: Equatable {
     public var systemImage: String?
     /// Command-sized plates get the wider corner radius and the heavier weight.
     public var isCommand: Bool
+    /// Drawn as a full pill rather than a rounded rectangle.
+    ///
+    /// Space, return, emoji and the layer switches are pills on every system
+    /// keyboard; shift and delete are rounded rectangles. Using one shape for both
+    /// is immediately visible as "not the real keyboard".
+    public var isPill: Bool
+    public var glyphSize: CGFloat
+    public var glyphWeight: KeyGlyphWeight
 
     public init(
         id: String,
@@ -57,7 +78,10 @@ public struct KeyGridKey: Equatable {
         weight: CGFloat = 1,
         label: String? = nil,
         systemImage: String? = nil,
-        isCommand: Bool = false
+        isCommand: Bool = false,
+        isPill: Bool = false,
+        glyphSize: CGFloat = 22,
+        glyphWeight: KeyGlyphWeight = .light
     ) {
         self.id = id
         self.action = action
@@ -65,6 +89,9 @@ public struct KeyGridKey: Equatable {
         self.label = label
         self.systemImage = systemImage
         self.isCommand = isCommand
+        self.isPill = isPill
+        self.glyphSize = glyphSize
+        self.glyphWeight = glyphWeight
     }
 
     /// The glyph to draw, resolved once so the draw path does no work.
@@ -76,7 +103,10 @@ public struct KeyGridKey: Equatable {
         case .delete, .deleteRepeating: return "⌫"
         case .space: return "space"
         case .newline: return "return"
-        case .symbols, .letters: return "123"
+        // ABC, not 123: this key returns to the letters, and labelling it 123 on a
+        // symbol page produced two identical keys side by side.
+        case .symbols: return "123"
+        case .letters: return "ABC"
         case .emoji: return "☺"
         case .dismiss: return "⌄"
         case .page(let title): return title

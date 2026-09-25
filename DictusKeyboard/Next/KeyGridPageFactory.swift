@@ -44,11 +44,15 @@ enum KeyGridPageFactory {
         }
         if rows.count > 1 { rows.removeLast() }
 
-        var built: [[KeyGridKey]] = rows.enumerated().map { rowIndex, row in
-            row.enumerated().map { column, key in
-                makeKey(key, row: rowIndex, column: column)
-            }
-        }
+        var built: [[KeyGridKey]] = translate(
+            rows,
+            // The layout's own command keys are dropped: this page supplies its
+            // own shift, delete and bottom bar, and keeping the originals produced
+            // two shift keys and two delete keys side by side.
+            dropping: suppliedByTheBar,
+            glyphSize: 22,
+            glyphWeight: .light
+        )
 
         // Shift and delete go on the lowest letter row, pinned to its edges.
         if built.count >= 2 {
@@ -58,13 +62,15 @@ enum KeyGridPageFactory {
                 return KeyGridPage(id: "letters", rows: built, pinnedLastRow: false)
             }
             lowest.insert(
-                KeyGridKey(id: "shift", action: .shift, weight: 1.4,
-                           label: "⇧", isCommand: true),
+                KeyGridKey(id: "shift", action: .shift, weight: 1.5,
+                           label: "⇧", isCommand: true,
+                           glyphSize: 17, glyphWeight: .semibold),
                 at: 0
             )
             lowest.append(
-                KeyGridKey(id: "delete", action: .deleteRepeating, weight: 1.4,
-                           label: "⌫", isCommand: true)
+                KeyGridKey(id: "delete", action: .deleteRepeating, weight: 1.5,
+                           label: "⌫", isCommand: true,
+                           glyphSize: 18, glyphWeight: .regular)
             )
             built[built.count - 1] = lowest
         }
@@ -78,18 +84,50 @@ enum KeyGridPageFactory {
 
     /// 123, space, emoji, return — the same four controls every system keyboard
     /// puts there, so the page reads the way a person expects.
-    private static func bottomBar(leading: KeyGridKey? = nil) -> [KeyGridKey] {
+    /// The page's rows, translated, with the layout's own command keys removed.
+    ///
+    /// Spacers are dropped rather than rendered: the layout data pads short rows
+    /// with them, and drawing them produced sliver keys at both ends of the home row.
+    /// The solver centres short rows on its own, so the padding is not needed.
+    private static func translate(
+        _ rows: [[KeyDefinition]],
+        dropping: Set<String>,
+        glyphSize: CGFloat,
+        glyphWeight: KeyGlyphWeight
+    ) -> [[KeyGridKey]] {
+        rows.map { row in
+            row.enumerated().compactMap { column, key in
+                guard !dropping.contains(key.type.identity) else { return nil }
+                return makeKey(
+                    key,
+                    row: 0,
+                    column: column,
+                    glyphSize: glyphSize,
+                    glyphWeight: glyphWeight
+                )
+            }
+        }
+    }
+
+    private static func bottomBar(
+        leading: KeyGridKey? = nil,
+        layerLabel: String = "123"
+    ) -> [KeyGridKey] {
         var keys: [KeyGridKey] = []
         if let leading { keys.append(leading) }
         keys.append(contentsOf: [
-            KeyGridKey(id: "bar-symbols", action: .symbols, weight: 1.2,
-                       label: "123", isCommand: true),
+            KeyGridKey(id: "bar-layer", action: .symbols, weight: 1.2,
+                       label: layerLabel, isCommand: true, isPill: true,
+                       glyphSize: 15, glyphWeight: .medium),
             KeyGridKey(id: "bar-space", action: .space, weight: 5,
-                       label: spaceLabel, isCommand: true),
+                       label: spaceLabel, isCommand: true, isPill: true,
+                       glyphSize: 15, glyphWeight: .regular),
             KeyGridKey(id: "bar-emoji", action: .emoji, weight: 1.2,
-                       label: "☺", isCommand: true),
+                       label: "☺", isCommand: true, isPill: true,
+                       glyphSize: 22, glyphWeight: .regular),
             KeyGridKey(id: "bar-return", action: .newline, weight: 2.2,
-                       label: returnLabel, isCommand: true)
+                       label: returnLabel, isCommand: true, isPill: true,
+                       glyphSize: 15, glyphWeight: .regular)
         ])
         return keys
     }
@@ -120,32 +158,40 @@ enum KeyGridPageFactory {
         if rows.count > 1 { rows.removeLast() }
 
         let id = page == .symbolsNumbers ? "symbols1" : "symbols2"
-        var built: [[KeyGridKey]] = []
-        for (rowIndex, row) in rows.enumerated() {
-            built.append(row.enumerated().map { column, key in
-                makeKey(key, row: rowIndex, column: column)
-            })
-        }
+        // Symbols are drawn smaller and heavier than letters: at 22pt light a "€"
+        // or "@" fills its plate and the page stops reading as a keyboard.
+        var built = translate(
+            rows,
+            dropping: suppliedByTheBar,
+            glyphSize: 17,
+            glyphWeight: .regular
+        )
         if var last = built.last, !last.isEmpty {
             last[last.count - 1] = KeyGridKey(
                 id: "delete",
                 action: .deleteRepeating,
-                weight: 1.4,
+                weight: 1.5,
                 label: "⌫",
-                isCommand: true
+                isCommand: true,
+                glyphSize: 18,
+                glyphWeight: .regular
             )
             built[built.count - 1] = last
         }
         // The page toggle lives on the bottom bar rather than stealing a grid row,
-        // so the symbol keys keep the same places on both pages.
+        // so the symbol keys keep the same places on both pages. The bar's layer key
+        // reads ABC here, which is what distinguishes the two pages at a glance.
         let toggle = KeyGridKey(
             id: "symbolPageToggle",
             action: .page(page == .symbolsNumbers ? "#+=" : "123"),
             weight: 1.2,
             label: page == .symbolsNumbers ? "#+=" : "123",
-            isCommand: true
+            isCommand: true,
+            isPill: true,
+            glyphSize: 15,
+            glyphWeight: .medium
         )
-        built.append(bottomBar(leading: toggle))
+        built.append(bottomBar(leading: toggle, layerLabel: "ABC"))
         return KeyGridPage(id: id, rows: built, pinnedLastRow: false)
     }
 
@@ -193,13 +239,30 @@ enum KeyGridPageFactory {
         }
     }
 
+    /// Key kinds the page supplies itself.
+    ///
+    /// The shipped layouts already contain a shift, a delete, a layer switch and a
+    /// space/return row, and they pad short rows with spacers. Translating those
+    /// alongside the page's own controls produced two shift keys, two delete keys,
+    /// two "123" keys and sliver keys at the ends of the home row.
+    private static let suppliedByTheBar: Set<String> = [
+        "shift", "backspace", "symbols", "shiftSymbols",
+        "spacebar", "returnkey", "spacer"
+    ]
+
     // MARK: - Translation
 
     /// One legacy key definition into one new key.
     ///
     /// Accent variants are attached here rather than looked up on press, so the
     /// touch handler does no work beyond reading a value it already has.
-    private static func makeKey(_ key: KeyDefinition, row: Int, column: Int) -> KeyGridKey {
+    private static func makeKey(
+        _ key: KeyDefinition,
+        row: Int,
+        column: Int,
+        glyphSize: CGFloat,
+        glyphWeight: KeyGlyphWeight
+    ) -> KeyGridKey {
         let id = "k-\(row)-\(column)"
         switch key.type {
         case .input(let value, _):
@@ -208,44 +271,36 @@ enum KeyGridPageFactory {
                 return KeyGridKey(
                     id: id,
                     action: .character(base: value, variants: [value] + variants),
-                    label: value
+                    label: value,
+                    glyphSize: glyphSize,
+                    glyphWeight: glyphWeight
                 )
             }
-            return KeyGridKey(id: id, action: .insert(value), label: value)
-
-        case .shift:
-            return KeyGridKey(id: id, action: .shift, weight: 1.4, label: "⇧", isCommand: true)
-        case .backspace:
-            return KeyGridKey(id: id, action: .deleteRepeating, weight: 1.4,
-                              label: "⌫", isCommand: true)
-        case .symbols, .shiftSymbols:
-            return KeyGridKey(id: id, action: .symbols, weight: 1.4,
-                              label: "123", isCommand: true)
-        case .returnkey:
-            return KeyGridKey(id: id, action: .newline, weight: 2.2,
-                              label: "return", isCommand: true)
-        case .spacebar:
-            return KeyGridKey(id: id, action: .space, weight: 4, isCommand: true)
-        case .spacer:
-            return KeyGridKey(id: id, action: .none, weight: 0.4)
+            return KeyGridKey(id: id, action: .insert(value), label: value,
+                              glyphSize: glyphSize, glyphWeight: glyphWeight)
         default:
-            return KeyGridKey(id: id, action: .none, label: key.type.resolvedLabel)
+            // Everything the page supplies itself is dropped before reaching here,
+            // so anything left that is not an input key is a spacer.
+            return KeyGridKey(id: id, action: .none, label: nil,
+                              glyphSize: glyphSize, glyphWeight: glyphWeight)
         }
     }
 }
 
 private extension KeyType {
-    /// A readable stand-in for a key type the grid does not model.
-    var resolvedLabel: String {
+    /// A stable name for the key's kind, used to filter the layout's own command
+    /// keys out of a page that supplies its own.
+    var identity: String {
         switch self {
-        case .input(let value, _): return value
-        case .shift: return "⇧"
-        case .backspace: return "⌫"
-        case .symbols, .shiftSymbols: return "123"
-        case .returnkey: return "return"
-        case .spacebar: return "space"
-        case .spacer: return ""
-        default: return ""
+        case .input: return "input"
+        case .shift: return "shift"
+        case .backspace: return "backspace"
+        case .spacebar: return "spacebar"
+        case .returnkey: return "returnkey"
+        case .symbols: return "symbols"
+        case .shiftSymbols: return "shiftSymbols"
+        case .spacer: return "spacer"
+        default: return "other"
         }
     }
 }

@@ -150,6 +150,67 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(right?.column, (layout.rows.first?.count ?? 1) - 1)
     }
 
+    // MARK: - Filling the surface
+
+    /// The rows must fill the keyboard, not sit in the bottom two-thirds of it.
+    ///
+    /// A hard cap of 45pt left a large empty band above the first row on the
+    /// three-row pages, which read as a broken layout rather than as breathing room.
+    func testRowsFillTheSurface() {
+        // The pages that exist: three letter rows plus a bar, or two symbol rows
+        // plus a bar. A hypothetical two-row page is bottom-aligned by design and
+        // is not held to the fill rule.
+        for rowCount in [3, 4, 5] {
+            var rows: [[KeyGridKey]] = []
+            for row in 0..<rowCount {
+                rows.append((0..<10).map {
+                    KeyGridKey(id: "k\($0)-\(row)", action: .insert("a"))
+                })
+            }
+            let layout = KeyGridPlacement.solve(KeyGridPage(id: "fill", rows: rows), in: size)
+            guard let top = layout.placed.map(\.plate.minY).min(),
+                  let bottom = layout.placed.map(\.plate.maxY).max() else {
+                XCTFail("no keys placed for \(rowCount) rows")
+                continue
+            }
+            // Either the block reaches the top, or what is left above it is less
+            // than a single row gap — anything more reads as dead space.
+            let leftover = top
+            XCTAssertLessThanOrEqual(
+                leftover, KeyGridPlacement.rowSpacing + 0.5,
+                "\(rowCount) rows left \(leftover)pt empty above the first key"
+            )
+            XCTAssertEqual(bottom, size.height, accuracy: 0.5,
+                           "the block must sit against the bottom of the grid")
+        }
+    }
+
+    /// A short row is centred and keeps the standard key width, so the home row
+    /// lines up optically with the row above it instead of stretching to the edges.
+    func testShortRowsAreCentredAndKeepTheStandardKeyWidth() {
+        let page = KeyGridPage(
+            id: "centred",
+            rows: [
+                (0..<10).map { KeyGridKey(id: "a\($0)", action: .insert("a")) },
+                (0..<7).map { KeyGridKey(id: "b\($0)", action: .insert("b")) }
+            ]
+        )
+        let layout = KeyGridPlacement.solve(page, in: size)
+        let top = layout.rows[0]
+        let short = layout.rows[1]
+        XCTAssertEqual(short.count, 7)
+        XCTAssertEqual(short.first?.plate.width ?? 0, top.first?.plate.width ?? -1,
+                       accuracy: 0.5, "a short row must keep the standard key width")
+        let topInset = top.first?.plate.minX ?? 0
+        let shortInset = short.first?.plate.minX ?? 0
+        let topRightGap = size.width - (top.last?.plate.maxX ?? 0)
+        let shortRightGap = size.width - (short.last?.plate.maxX ?? 0)
+        XCTAssertGreaterThan(shortInset, topInset, "a short row must be indented")
+        XCTAssertEqual(shortInset, shortRightGap, accuracy: 0.5,
+                       "a short row must be centred, not left-aligned")
+        XCTAssertGreaterThan(topRightGap, 0)
+    }
+
     // MARK: - Robustness
 
     func testDegenerateSizesDoNotCrashAndProduceNothing() {
