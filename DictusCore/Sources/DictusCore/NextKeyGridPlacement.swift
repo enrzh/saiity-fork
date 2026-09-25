@@ -202,44 +202,40 @@ public enum KeyGridPlacement {
                               width: commandWidth, height: height)
 
         if !middle.isEmpty {
-            // The middle keys keep the standard key width, so z x c v b n m sit on
-            // exactly the same pitch as q w e r t y u i o p above them.
+            // The outer gap is the platform's, and the middle keys then fill what is
+            // left between them.
             //
-            // Dividing the leftover space instead — which is what this did — made
-            // every middle key a different width from the row above, and then capped
-            // shift and delete at that same even share, leaving them 8pt narrower
-            // than the system keyboard's. The system keyboard widens only the two
-            // edge keys and spends what is left on the outer gaps, and that is what
-            // this reproduces.
-            let middleStart = frames[0].maxX + keySpacing
-            let middleEnd = frames[last].minX - keySpacing
+            // This is one rule for every page, and it is the rule the system keyboard
+            // uses. Holding the middles at the standard key width instead only looked
+            // right on the letter page, where seven standard keys happen to fill the
+            // space exactly: on the symbol pages there are five, and they are 49pt
+            // wide there, not 33.5. Deriving the middle width from the key count is
+            // what makes both pages land where the platform's do.
+            let middleStart = frames[0].maxX + edgeGap
+            let middleEnd = frames[last].minX - edgeGap
             let available = max(
                 0,
                 middleEnd - middleStart - keySpacing * CGFloat(middle.count - 1)
             )
-            let standard = standardKeyWidth
             let totalWeight = middle.reduce(CGFloat(0)) { $0 + max(0.01, $1.weight) }
-            // Standard width when the row has room for it; weighted shares only when
-            // it genuinely does not, so a cramped keyboard still fits.
-            let useStandard = standard * CGFloat(middle.count) <= available
-            // Whatever the standard widths do not use is split evenly into the two
-            // outer gaps rather than all dumped at the right. The system keyboard's
-            // bottom row has ~14pt beside shift and ~13.5pt before delete, against
-            // 6pt between the letters; centring is what reproduces that.
-            let slack = useStandard
-                ? max(0, available - standard * CGFloat(middle.count)) / 2
-                : 0
-            var x = middleStart + slack
+            var x = middleStart
             for (offset, key) in middle.enumerated() {
-                let plateWidth = useStandard
-                    ? standard
-                    : available * max(0.01, key.weight) / totalWeight
+                let plateWidth = available * max(0.01, key.weight) / totalWeight
                 frames[offset + 1] = CGRect(x: x, y: top, width: plateWidth, height: height)
                 x += plateWidth + keySpacing
             }
         }
         return frames
     }
+
+    /// Gap between a pinned edge key and the first key beside it.
+    ///
+    /// Measured, not chosen: on the system keyboard this is ~14pt on every page
+    /// that has a pinned row — the letter page, and both symbol pages — against 6pt
+    /// between the keys in the middle. It is the one place the platform spends more
+    /// than the standard gap, and reproducing it is what makes the bottom row sit
+    /// where the platform's does.
+    public static let edgeGap: CGFloat = 14
 
     /// Width of a pinned command plate.
     ///

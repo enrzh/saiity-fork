@@ -299,6 +299,59 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(del.plate.width / 33.5, 1.36, accuracy: 0.05)
     }
 
+    /// The symbol pages share the letter page's rule, and it has to be derived from
+    /// the key count rather than assumed.
+    ///
+    /// Measured on the system keyboard: both symbol pages are 10 / 10 / 7 with the
+    /// bottom row pinned, and on that row the two edge keys are ~45pt, the outer
+    /// gaps ~14pt, and the five middle keys come out ~49pt — not the 33.5pt a letter
+    /// key is. Holding the middles at the standard width matched the letter page by
+    /// coincidence and was 15pt out on both symbol pages.
+    func testSymbolPagesMatchTheMeasuredSystemKeyboard() {
+        func keys(_ count: Int, _ prefix: String) -> [KeyGridKey] {
+            (0..<count).map { KeyGridKey(id: "\(prefix)\($0)", action: .insert("1")) }
+        }
+        var bottom: [KeyGridKey] = [KeyGridKey(id: "toggle", action: .page("123"), isCommand: true)]
+        bottom += keys(5, "sym")
+        bottom.append(KeyGridKey(id: "delete", action: .delete, isCommand: true))
+
+        let rows: [[KeyGridKey]] = [keys(10, "a"), keys(10, "b"), bottom]
+        let layout = KeyGridPlacement.solve(
+            KeyGridPage(id: "symbols", rows: rows, pinnedLastRow: true),
+            in: CGSize(width: 402, height: 170)
+        )
+
+        // Rows one and two are the same as the letter page's.
+        for index in 0...1 {
+            let row = layout.rows[index]
+            guard let first = row.first, let second = row.count > 1 ? row[1] : nil else {
+                XCTFail("row \(index) has no keys")
+                continue
+            }
+            XCTAssertEqual(first.plate.minX, 7, accuracy: 0.5)
+            XCTAssertEqual(first.plate.width, 33.5, accuracy: 1.0)
+            XCTAssertEqual(second.plate.minX - first.plate.maxX, 6, accuracy: 0.5)
+        }
+
+        let lastRow = layout.rows[2]
+        guard let toggle = lastRow.first,
+              let firstMiddle = lastRow.count > 1 ? lastRow[1] : nil,
+              let delete = lastRow.last else {
+            XCTFail("no bottom row keys")
+            return
+        }
+        // Edges at the platform's size, outer gap at the platform's size.
+        XCTAssertEqual(toggle.plate.width, 45.5, accuracy: 1.5)
+        XCTAssertEqual(delete.plate.width, 45.5, accuracy: 1.5)
+        XCTAssertEqual(firstMiddle.plate.minX - toggle.plate.maxX, 14, accuracy: 1.5)
+        // And the five middles widen to fill: 49pt, not a letter's 33.5.
+        XCTAssertEqual(firstMiddle.plate.width, 49, accuracy: 1.5)
+        for (a, b) in zip(lastRow, lastRow.dropFirst()) {
+            XCTAssertGreaterThan(b.plate.minX, a.plate.maxX, "keys must not overlap")
+        }
+        XCTAssertEqual(402 - delete.plate.maxX, 7, accuracy: 0.5)
+    }
+
     // MARK: - The bottom bar is not ours
 
     /// The grid fills the rect it is handed, and nothing more.
