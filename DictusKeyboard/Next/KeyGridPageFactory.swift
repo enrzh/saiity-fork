@@ -62,7 +62,8 @@ enum KeyGridPageFactory {
             }
             lowest.insert(
                 KeyGridKey(id: "shift", action: .shift, weight: 1.5,
-                           label: "⇧", isCommand: true,
+                           label: "⇧", systemImage: "shift.fill",
+                           isCommand: true,
                            glyphSize: 17, glyphWeight: .semibold),
                 at: 0
             )
@@ -290,6 +291,17 @@ enum KeyGridPageFactory {
             // Carries width so the row indents, and draws nothing.
             return KeyGridKey(id: id, action: .none, weight: 0.5,
                               glyphSize: glyphSize, glyphWeight: glyphWeight)
+        case .fullStop:
+            // The period key gets comma and other punctuation variants on hold.
+            let variants = [",", ";", ":", "..."]
+            return KeyGridKey(
+                id: id,
+                action: .character(base: ".", variants: ["."] + variants),
+                label: ".",
+                glyphSize: glyphSize,
+                glyphWeight: glyphWeight,
+                isInvisiblePlate: true
+            )
         default:
             return KeyGridKey(id: id, action: .none, label: nil,
                               glyphSize: glyphSize, glyphWeight: glyphWeight)

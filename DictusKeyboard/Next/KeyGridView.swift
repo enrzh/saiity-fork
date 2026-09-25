@@ -317,6 +317,11 @@ final class KeyGridView: UIView {
             drawPeriodKey(in: plate, color: color)
             return
         }
+        // Shift key shows different icon when caps lock is active.
+        if key.id == "shift", isCapsLocked {
+            drawSymbol("capslock.fill", in: plate, size: key.glyphSize, color: color)
+            return
+        }
         if let systemImage = key.systemImage {
             drawSymbol(systemImage, in: plate, size: key.glyphSize, color: color)
             return
