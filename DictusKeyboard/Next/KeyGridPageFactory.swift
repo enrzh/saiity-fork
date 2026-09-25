@@ -58,8 +58,10 @@ enum KeyGridPageFactory {
         if built.count >= 2 {
             var lowest = built[built.count - 1]
             guard !lowest.isEmpty else {
-                built.append(bottomBar())
-                return KeyGridPage(id: "letters", rows: built, pinnedLastRow: false)
+                return KeyGridPage(
+                    id: "letters", rows: built, pinnedLastRow: true,
+                    bottomBar: bottomBar()
+                )
             }
             lowest.insert(
                 KeyGridKey(id: "shift", action: .shift, weight: 1.5,
@@ -75,11 +77,12 @@ enum KeyGridPageFactory {
             built[built.count - 1] = lowest
         }
 
-        built.append(bottomBar())
-        // The last row is the weighted bottom bar, so nothing is pinned there; the
-        // pinned treatment belongs to the shift/delete row above it. The solver
-        // pins by row index, so the flag is carried on a second page below.
-        return KeyGridPage(id: "letters", rows: built, pinnedLastRow: false)
+        return KeyGridPage(
+            id: "letters",
+            rows: built,
+            pinnedLastRow: true,
+            bottomBar: bottomBar()
+        )
     }
 
     /// 123, space, emoji, return — the same four controls every system keyboard
@@ -109,25 +112,59 @@ enum KeyGridPageFactory {
         }
     }
 
+    /// The bottom bar, in the legacy order: 123, emoji, space, period, return.
+    ///
+    /// Five controls, not four. The period key sits between space and return and
+    /// carries a comma hint beneath its dot, which is how the legacy design offered
+    /// punctuation without a second key. Its action is the period, matching the
+    /// control it replaces.
     private static func bottomBar(
-        leading: KeyGridKey? = nil,
-        layerLabel: String = "123"
+        layerLabel: String = "123",
+        pageToggle: KeyGridKey? = nil
     ) -> [KeyGridKey] {
         var keys: [KeyGridKey] = []
-        if let leading { keys.append(leading) }
+        if let pageToggle { keys.append(pageToggle) }
         keys.append(contentsOf: [
-            KeyGridKey(id: "bar-layer", action: .symbols, weight: 1.2,
-                       label: layerLabel, isCommand: true, isPill: true,
-                       glyphSize: 15, glyphWeight: .medium),
-            KeyGridKey(id: "bar-space", action: .space, weight: 5,
-                       label: spaceLabel, isCommand: true, isPill: true,
-                       glyphSize: 15, glyphWeight: .regular),
-            KeyGridKey(id: "bar-emoji", action: .emoji, weight: 1.2,
-                       label: "☺", isCommand: true, isPill: true,
-                       glyphSize: 22, glyphWeight: .regular),
-            KeyGridKey(id: "bar-return", action: .newline, weight: 2.2,
-                       label: returnLabel, isCommand: true, isPill: true,
-                       glyphSize: 15, glyphWeight: .regular)
+            KeyGridKey(
+                id: "bar-layer", action: .symbols,
+                label: layerLabel, systemImage: nil,
+                isCommand: true, isPill: true,
+                faceInset: CGSize(width: 8, height: 8),
+                glyphSize: 14, glyphWeight: .semibold,
+                barWidth: .compact
+            ),
+            KeyGridKey(
+                id: "bar-emoji", action: .emoji,
+                label: nil, systemImage: "face.smiling",
+                isCommand: true, isPill: true,
+                faceInset: CGSize(width: 8, height: 8),
+                glyphSize: 16, glyphWeight: .semibold,
+                barWidth: .compact
+            ),
+            KeyGridKey(
+                id: "bar-space", action: .space,
+                label: spaceLabel,
+                isCommand: true, isPill: true,
+                faceInset: CGSize(width: 0, height: 4),
+                glyphSize: 14, glyphWeight: .semibold,
+                barWidth: .flex
+            ),
+            KeyGridKey(
+                id: "bar-period", action: .insert("."),
+                label: ".",
+                isCommand: false, isPill: false,
+                faceInset: CGSize(width: 10, height: 8),
+                glyphSize: 19, glyphWeight: .light,
+                barWidth: .compact
+            ),
+            KeyGridKey(
+                id: "bar-return", action: .newline,
+                label: nil, systemImage: "return",
+                isCommand: true, isPill: true,
+                faceInset: CGSize(width: 8, height: 8),
+                glyphSize: 16, glyphWeight: .semibold,
+                barWidth: .wide
+            )
         ])
         return keys
     }
@@ -191,8 +228,12 @@ enum KeyGridPageFactory {
             glyphSize: 15,
             glyphWeight: .medium
         )
-        built.append(bottomBar(leading: toggle, layerLabel: "ABC"))
-        return KeyGridPage(id: id, rows: built, pinnedLastRow: false)
+        return KeyGridPage(
+            id: id,
+            rows: built,
+            pinnedLastRow: true,
+            bottomBar: bottomBar(layerLabel: "ABC", pageToggle: toggle)
+        )
     }
 
     // MARK: - Number pad
@@ -242,12 +283,16 @@ enum KeyGridPageFactory {
     /// Key kinds the page supplies itself.
     ///
     /// The shipped layouts already contain a shift, a delete, a layer switch and a
-    /// space/return row, and they pad short rows with spacers. Translating those
-    /// alongside the page's own controls produced two shift keys, two delete keys,
-    /// two "123" keys and sliver keys at the ends of the home row.
+    /// space/return row, and the page supplies its own. Translating both produced two
+    /// shift keys, two delete keys and two "123" keys side by side.
+    ///
+    /// Spacers are deliberately **kept**: they are 0.5-weight keys that indent the
+    /// home row, which is why that row is narrower than the row above it. They are
+    /// invisible because letter plates have no container, not because they are
+    /// absent.
     private static let suppliedByTheBar: Set<String> = [
         "shift", "backspace", "symbols", "shiftSymbols",
-        "spacebar", "returnkey", "spacer"
+        "spacebar", "returnkey"
     ]
 
     // MARK: - Translation
@@ -273,14 +318,18 @@ enum KeyGridPageFactory {
                     action: .character(base: value, variants: [value] + variants),
                     label: value,
                     glyphSize: glyphSize,
-                    glyphWeight: glyphWeight
+                    glyphWeight: glyphWeight,
+                    isInvisiblePlate: true
                 )
             }
             return KeyGridKey(id: id, action: .insert(value), label: value,
+                              glyphSize: glyphSize, glyphWeight: glyphWeight,
+                              isInvisiblePlate: true)
+        case .spacer:
+            // Carries width so the row indents, and draws nothing.
+            return KeyGridKey(id: id, action: .none, weight: 0.5,
                               glyphSize: glyphSize, glyphWeight: glyphWeight)
         default:
-            // Everything the page supplies itself is dropped before reaching here,
-            // so anything left that is not an input key is a spacer.
             return KeyGridKey(id: id, action: .none, label: nil,
                               glyphSize: glyphSize, glyphWeight: glyphWeight)
         }

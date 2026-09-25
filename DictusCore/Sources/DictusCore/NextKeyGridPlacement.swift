@@ -41,6 +41,11 @@ public enum KeyGridPlacement {
     public static let maximumRowHeight: CGFloat = 66
     public static let keyCornerRadius: CGFloat = 8
     public static let commandCornerRadius: CGFloat = 18
+    /// Bottom-bar lane metrics, matching the legacy bar exactly.
+    public static let barEdgeInset: CGFloat = 8
+    public static let barGap: CGFloat = 4
+    public static let compactBarWidth: CGFloat = 44
+    public static let wideBarWidth: CGFloat = 88
 
     /// Solves `page` for a container of `size`.
     ///
@@ -60,12 +65,17 @@ public enum KeyGridPlacement {
         // that drew three hairlines and ignored 87% of every tap.
         let rowCount = CGFloat(page.rows.count)
         let gaps = rowSpacing * (rowCount - 1)
+        // The bar is not one of the rows: it lives in its own lane below the grid,
+        // so the grid is solved into what is left above it.
+        let gridHeight = max(1, size.height - (page.bottomBar.isEmpty ? 0 : reservedBarHeight))
         let rowHeight = max(
             1,
-            min((size.height - gaps) / rowCount, maximumRowHeight)
+            min((gridHeight - gaps) / rowCount, maximumRowHeight)
         )
         let blockHeight = rowHeight * rowCount + gaps
-        let originY = max(0, size.height - blockHeight)
+        // Bottom-aligned inside the grid area, so any slack sits above the first row
+        // exactly as it did in the legacy layout.
+        let originY = max(0, gridHeight - blockHeight)
         // Short rows are centred and keep the width of a standard key rather than
         // stretching to fill. A nine-key row made of nine full-width keys looks
         // wrong next to a ten-key row; this is how a native keyboard draws them.
@@ -93,11 +103,32 @@ public enum KeyGridPlacement {
             }
         }
 
+        // The bar is placed as its own row so the same draw and hit-test path
+        // handles it. Its lanes are the targets; the drawn faces are inset inside
+        // them.
+        let barRow = page.rows.count
+        if !page.bottomBar.isEmpty {
+            for (column, lane) in barPlates(for: page.bottomBar, in: size).enumerated() {
+                let key = page.bottomBar[column]
+                placed.append(
+                    PlacedKey(
+                        key: key, row: barRow, column: column,
+                        plate: face(for: key, in: lane), target: lane
+                    )
+                )
+            }
+        }
+
         // Targets are assigned after every plate is known, because a seam between
-        // two keys depends on both of them.
-        layout.placed = withTargets(placed, in: CGRect(origin: .zero, size: size))
-        layout.rows = Array(repeating: [], count: page.rows.count)
-        for item in layout.placed where item.row < page.rows.count {
+        // two keys depends on both of them. The bar is excluded: its lane is already
+        // its hit area, and widening it would let the space key steal presses from
+        // the controls beside it.
+        layout.placed = placed.map { item in
+            guard item.row != barRow else { return item }
+            return widened(item, in: CGRect(origin: .zero, size: size), rows: placed)
+        }
+        layout.rows = Array(repeating: [], count: page.rows.count + (page.bottomBar.isEmpty ? 0 : 1))
+        for item in layout.placed where item.row < layout.rows.count {
             layout.rows[item.row].append(item)
         }
         layout.bounds = CGRect(origin: .zero, size: size)
@@ -115,8 +146,62 @@ public enum KeyGridPlacement {
         let widestRow = page.rows.reduce(0) { max($0, $1.count) }
         guard widestRow > 0, size.height >= 1 else { return false }
         let neededWidth = edgeInset * 2 + keySpacing * CGFloat(max(0, widestRow - 1))
-        let neededHeight = rowSpacing * CGFloat(max(0, page.rows.count - 1)) + 1
+        let barHeight = page.bottomBar.isEmpty ? 0 : reservedBarHeight
+        let neededHeight = rowSpacing * CGFloat(max(0, page.rows.count - 1))
+            + 1 + barHeight
         return size.width > neededWidth && size.height >= neededHeight
+    }
+
+    /// Vertical space the bottom bar occupies, including the gap above it and the
+    /// inset below it. The legacy layout reserved exactly this much.
+    public static let commandRowGap: CGFloat = 4
+    public static let bottomBarHeight: CGFloat = 44
+    public static let bottomInset: CGFloat = 6
+    private static var reservedBarHeight: CGFloat {
+        commandRowGap + bottomBarHeight + bottomInset
+    }
+
+    /// Lays the bottom bar out as fixed lanes.
+    ///
+    /// Each control keeps its own width and only the space key flexes, so a longer
+    /// return label or a different language never shifts its neighbours. The drawn
+    /// face is inset inside the lane, matching the legacy bar where the glass did
+    /// not run edge to edge.
+    private static func barPlates(
+        for bar: [KeyGridKey],
+        in size: CGSize
+    ) -> [CGRect] {
+        guard !bar.isEmpty else { return [] }
+        let y = size.height - bottomInset - bottomBarHeight
+        let gaps = barGap * CGFloat(max(0, bar.count - 1))
+        let fixedTotal = bar.reduce(CGFloat(0)) { total, key in
+            switch key.barWidth {
+            case .compact: return total + compactBarWidth
+            case .wide: return total + wideBarWidth
+            case .flex: return total
+            }
+        }
+        let usable = max(0, size.width - barEdgeInset * 2 - gaps - fixedTotal)
+        let flexCount = CGFloat(bar.filter { $0.barWidth == .flex }.count)
+        let flexWidth = flexCount > 0 ? max(0, usable / flexCount) : 0
+
+        var x = barEdgeInset
+        return bar.map { key in
+            let width: CGFloat
+            switch key.barWidth {
+            case .compact: width = compactBarWidth
+            case .wide: width = wideBarWidth
+            case .flex: width = flexWidth
+            }
+            defer { x += width + barGap }
+            return CGRect(x: x, y: y, width: width, height: bottomBarHeight)
+        }
+    }
+
+    /// The face actually drawn for a bar key: its lane inset on every side.
+    private static func face(for key: KeyGridKey, in lane: CGRect) -> CGRect {
+        let inset = key.faceInset
+        return lane.insetBy(dx: inset.width / 2, dy: inset.height / 2)
     }
 
     /// Width of one standard key in the widest row, which every other row is
@@ -208,64 +293,59 @@ public enum KeyGridPlacement {
         return min(max(0, width * 0.22), evenShare)
     }
 
-    /// Widens every plate into a target that tiles the grid.
+    /// One key's target: its plate widened to the contiguous tile that owns it.
     ///
-    /// Horizontally the first target starts at the grid's left edge and the last
-    /// ends at its right edge, so the margin beside the outermost keys is live. The
-    /// seams between keys sit in the gaps, so a target can grow into a gap but
-    /// never into a neighbour's plate.
+    /// Horizontally the first target starts at the grid's left edge and the last ends
+    /// at its right edge, so the margin beside the outermost keys is live. Seams sit
+    /// in the gaps, so a target grows into a gap and never into a neighbour's plate.
     ///
-    /// Vertically each row extends halfway into the gap above and below, and the
-    /// first and last rows reach the grid's own top and bottom.
-    private static func withTargets(_ placed: [PlacedKey], in bounds: CGRect) -> [PlacedKey] {
-        // Plate extents per row, taken from the plates and not from the targets.
-        // Deriving a row's top from the previous row's *target* bottom adds the gap
-        // twice and leaves a dead band between every pair of rows.
+    /// Vertically the span is bounded by the midpoints of the gaps above and below,
+    /// with the grid's own edges outermost. Those midpoints come from **plate** edges:
+    /// deriving a row's top from the previous row's target bottom adds the row gap
+    /// twice and leaves a dead band between every pair of rows.
+    private static func widened(
+        _ item: PlacedKey,
+        in bounds: CGRect,
+        rows placed: [PlacedKey]
+    ) -> PlacedKey {
+        let rowPlates = placed
+            .filter { $0.row == item.row }
+            .sorted { $0.column < $1.column }
+        guard !rowPlates.isEmpty else { return item }
+
+        // Plate extents per row, for the vertical spans.
         var plateTop: [Int: CGFloat] = [:]
         var plateBottom: [Int: CGFloat] = [:]
-        for item in placed {
-            plateTop[item.row] = min(plateTop[item.row] ?? item.plate.minY, item.plate.minY)
-            plateBottom[item.row] = max(plateBottom[item.row] ?? item.plate.maxY, item.plate.maxY)
+        for candidate in placed {
+            plateTop[candidate.row] = min(
+                plateTop[candidate.row] ?? candidate.plate.minY, candidate.plate.minY
+            )
+            plateBottom[candidate.row] = max(
+                plateBottom[candidate.row] ?? candidate.plate.maxY, candidate.plate.maxY
+            )
         }
         let rowIndices = plateTop.keys.sorted()
-
-        var rowSpans: [Int: (CGFloat, CGFloat)] = [:]
-        for (position, rowIndex) in rowIndices.enumerated() {
-            guard let top = plateTop[rowIndex], let bottom = plateBottom[rowIndex] else { continue }
-            // The seam between two rows is the midpoint of the gap between their
-            // plates. The outermost boundaries are the grid's own edges, so the
-            // first and last row reach the ends of the keyboard.
-            let upper = position > 0
-                ? ((plateBottom[rowIndices[position - 1]] ?? top) + top) / 2
-                : bounds.minY
-            let lower = position + 1 < rowIndices.count
-                ? (bottom + (plateTop[rowIndices[position + 1]] ?? bottom)) / 2
-                : bounds.maxY
-            rowSpans[rowIndex] = (min(upper, lower), max(upper, lower))
+        guard let position = rowIndices.firstIndex(of: item.row),
+              let top = plateTop[item.row], let bottom = plateBottom[item.row] else {
+            return item
         }
+        let upper = position > 0
+            ? ((plateBottom[rowIndices[position - 1]] ?? top) + top) / 2
+            : bounds.minY
+        let lower = position + 1 < rowIndices.count
+            ? (bottom + (plateTop[rowIndices[position + 1]] ?? bottom)) / 2
+            : bounds.maxY
 
-        var result: [PlacedKey] = []
-        result.reserveCapacity(placed.count)
-        for item in placed {
-            let rowPlates = placed.filter { $0.row == item.row }.sorted { $0.column < $1.column }
-            guard let span = rowSpans[item.row] else {
-                result.append(item)
-                continue
-            }
-            let leftSeam = seam(before: item, in: rowPlates, bounds: bounds)
-            let rightSeam = seam(after: item, in: rowPlates, bounds: bounds)
-            let target = CGRect(
-                x: leftSeam,
-                y: span.0,
-                width: max(0, rightSeam - leftSeam),
-                height: max(0, span.1 - span.0)
-            )
-            result.append(
-                PlacedKey(key: item.key, row: item.row, column: item.column,
-                          plate: item.plate, target: target)
-            )
-        }
-        return result
+        let leftSeam = seam(before: item, in: rowPlates, bounds: bounds)
+        let rightSeam = seam(after: item, in: rowPlates, bounds: bounds)
+        let target = CGRect(
+            x: leftSeam,
+            y: min(upper, lower),
+            width: max(0, rightSeam - leftSeam),
+            height: max(0, abs(lower - upper))
+        )
+        return PlacedKey(key: item.key, row: item.row, column: item.column,
+                         plate: item.plate, target: target)
     }
 
     private static func seam(

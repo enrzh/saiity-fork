@@ -170,44 +170,108 @@ final class KeyGridView: UIView {
     }
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
-        // Space, return, emoji and the layer switches are pills; letters and
-        // shift/delete are rounded rectangles. Drawing both with one radius is
-        // immediately readable as "not the keyboard it replaced".
-        let radius = item.key.isPill
-            ? item.plate.height / 2
-            : (item.key.isCommand
-                ? KeyGridPlacement.commandCornerRadius
-                : KeyGridPlacement.keyCornerRadius)
-        let path = UIBezierPath(roundedRect: item.plate, cornerRadius: radius)
-        context.saveGState()
-        context.setFillColor(plateColor(pressed: pressed).cgColor)
-        context.addPath(path.cgPath)
-        context.fillPath()
-        context.restoreGState()
+        // Spacers and any key with nothing to draw are skipped entirely.
+        guard case .none = item.key.action else {
+            drawLabel(for: item.key, in: item.plate, pressed: pressed)
+            return
+        }
+        // Letter plates have no container in the legacy design — the
+        // `keyContainersEnabled` preference defaulted to off, so only the glyph
+        // showed. Drawing a filled plate behind every letter is the single most
+        // visible difference from that look, so the preference is honoured here
+        // rather than assumed.
+        let showPlate = !item.key.isInvisiblePlate
+            || KeyboardInteractionPreferences.keyContainersEnabled
+        if showPlate {
+            let radius = item.key.isPill
+                ? item.plate.height / 2
+                : (item.key.isCommand
+                    ? KeyGridPlacement.commandCornerRadius
+                    : KeyGridPlacement.keyCornerRadius)
+            let path = UIBezierPath(roundedRect: item.plate, cornerRadius: radius)
+            context.saveGState()
+            context.setFillColor(plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate).cgColor)
+            context.addPath(path.cgPath)
+            context.fillPath()
+            context.restoreGState()
+        }
         drawLabel(for: item.key, in: item.plate, pressed: pressed)
     }
 
     /// Plate fill. The material preference is visual only and is resolved here, so
     /// it can never influence which key is pressed.
-    private func plateColor(pressed: Bool) -> UIColor {
+    ///
+    /// Command faces use the system fill the legacy glass resolved to when the
+    /// material preference is off, which is the closest a plain `UIView` drawing
+    /// can get to the real material.
+    private func plateColor(pressed: Bool, isLetter: Bool = false) -> UIColor {
         if pressed {
-            return UIColor.label.withAlphaComponent(0.13)
+            return isLetter
+                ? UIColor.label.withAlphaComponent(0.10)
+                : UIColor.label.withAlphaComponent(0.13)
         }
-        return UIColor.secondarySystemFill.withAlphaComponent(0.5)
+        if KeyboardInteractionPreferences.liquidGlassEnabled {
+            return UIColor.secondarySystemFill.withAlphaComponent(0.5)
+        }
+        return UIColor.tertiarySystemFill
     }
 
     private func drawLabel(for key: KeyGridKey, in plate: CGRect, pressed: Bool) {
+        let color = UIColor.label.withAlphaComponent(pressed ? 0.55 : 1)
+        // The period key carries a comma hint beneath its dot, as the legacy
+        // control did, so punctuation was reachable without a second key.
+        if key.id == "bar-period" {
+            drawPeriodKey(in: plate, color: color)
+            return
+        }
+        if let systemImage = key.systemImage {
+            drawSymbol(systemImage, in: plate, size: key.glyphSize, color: color)
+            return
+        }
         let text = displayText(for: key)
         guard !text.isEmpty else { return }
-        let attributes: [NSAttributedString.Key: Any] = [
+        let string = NSAttributedString(string: text, attributes: [
             .font: UIFont.systemFont(ofSize: key.glyphSize, weight: fontWeight(key.glyphWeight)),
-            .foregroundColor: UIColor.label.withAlphaComponent(pressed ? 0.55 : 1),
+            .foregroundColor: color,
             .paragraphStyle: centeredParagraph()
-        ]
-        let string = NSAttributedString(string: text, attributes: attributes)
+        ])
         let measured = string.size()
         string.draw(at: CGPoint(x: plate.midX - measured.width / 2,
                                 y: plate.midY - measured.height / 2))
+    }
+
+    private func drawSymbol(_ name: String, in plate: CGRect, size: CGFloat, color: UIColor) {
+        guard let image = UIImage(systemName: name)?
+            .withConfiguration(UIImage.SymbolConfiguration(pointSize: size, weight: .semibold))
+            .withTintColor(color, renderingMode: .alwaysOriginal) else { return }
+        let fitted = image.size
+        image.draw(in: CGRect(
+            x: plate.midX - fitted.width / 2,
+            y: plate.midY - fitted.height / 2,
+            width: fitted.width,
+            height: fitted.height
+        ))
+    }
+
+    /// A large period with a small comma beneath it.
+    private func drawPeriodKey(in plate: CGRect, color: UIColor) {
+        let dot = NSAttributedString(string: ".", attributes: [
+            .font: UIFont.systemFont(ofSize: 19, weight: .light),
+            .foregroundColor: color,
+            .paragraphStyle: centeredParagraph()
+        ])
+        let comma = NSAttributedString(string: ",", attributes: [
+            .font: UIFont.systemFont(ofSize: 9, weight: .medium),
+            .foregroundColor: UIColor.secondaryLabel,
+            .paragraphStyle: centeredParagraph()
+        ])
+        let dotSize = dot.size()
+        let commaSize = comma.size()
+        let totalHeight = dotSize.height + commaSize.height
+        var y = plate.midY - totalHeight / 2
+        dot.draw(at: CGPoint(x: plate.midX - dotSize.width / 2, y: y))
+        y += dotSize.height
+        comma.draw(at: CGPoint(x: plate.midX - commaSize.width / 2, y: y))
     }
 
     private func fontWeight(_ weight: KeyGlyphWeight) -> UIFont.Weight {

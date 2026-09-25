@@ -211,6 +211,86 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertGreaterThan(topRightGap, 0)
     }
 
+    // MARK: - The bottom bar
+
+    /// The bar is fixed lanes, not a weighted row.
+    ///
+    /// The legacy design gave each control its own 44pt lane with the space key
+    /// absorbing the remainder, so a longer return label or a different language
+    /// never shifted its neighbours. Treating the bar as another weighted row is
+    /// what made the rebuilt bar look crowded.
+    func testBottomBarUsesFixedLanesAndOnlySpaceFlexes() {
+        let page = KeyGridPage(
+            id: "bar",
+            rows: [(0..<10).map { KeyGridKey(id: "k\($0)", action: .insert("a")) }],
+            bottomBar: [
+                KeyGridKey(id: "layer", action: .symbols, barWidth: .compact),
+                KeyGridKey(id: "space", action: .space, barWidth: .flex),
+                KeyGridKey(id: "return", action: .newline, barWidth: .wide)
+            ]
+        )
+        let layout = KeyGridPlacement.solve(page, in: size)
+        let bar = layout.rows[page.rows.count]
+        XCTAssertEqual(bar.count, 3)
+        XCTAssertEqual(bar[0].target.width, KeyGridPlacement.compactBarWidth, accuracy: 0.5)
+        XCTAssertEqual(bar[2].target.width, KeyGridPlacement.wideBarWidth, accuracy: 0.5)
+        XCTAssertGreaterThan(bar[1].target.width, KeyGridPlacement.wideBarWidth,
+                             "space must absorb the remaining width")
+        // Every lane is the same height, sitting one inset above the bottom.
+        for item in bar {
+            XCTAssertEqual(item.target.height, KeyGridPlacement.bottomBarHeight, accuracy: 0.5)
+            XCTAssertEqual(item.target.maxY, size.height - KeyGridPlacement.bottomInset,
+                           accuracy: 0.5)
+        }
+        // Lanes are separated by the rail gap, not touching.
+        XCTAssertEqual(bar[1].target.minX - bar[0].target.maxX,
+                       KeyGridPlacement.barGap, accuracy: 0.5)
+        XCTAssertEqual(bar[0].target.minX, KeyGridPlacement.barEdgeInset, accuracy: 0.5)
+    }
+
+    /// A bar key's drawn face is inset inside its hit lane.
+    ///
+    /// The legacy bar drew glass that did not run edge to edge, which is why the
+    /// rebuilt bar looked crowded at full lane size.
+    func testBarFacesAreInsetInsideTheirLanes() {
+        let page = KeyGridPage(
+            id: "inset",
+            rows: [[KeyGridKey(id: "k", action: .insert("a"))]],
+            bottomBar: [
+                KeyGridKey(id: "layer", action: .symbols,
+                           faceInset: CGSize(width: 8, height: 8),
+                           barWidth: .compact)
+            ]
+        )
+        let layout = KeyGridPlacement.solve(page, in: size)
+        let bar = layout.rows[page.rows.count]
+        let key = bar.first
+        XCTAssertNotNil(key)
+        guard let placed = key else { return }
+        XCTAssertEqual(placed.plate.width, placed.target.width - 8, accuracy: 0.5)
+        XCTAssertEqual(placed.plate.height, placed.target.height - 8, accuracy: 0.5)
+        // The face is drawn inside the lane, never outside it.
+        XCTAssertTrue(placed.target.contains(placed.plate))
+    }
+
+    /// The bar's lane is its hit area. Widening it the way grid rows are widened
+    /// would let the space key steal presses from its neighbours.
+    func testBarLanesAreNotWidenedIntoNeighbours() {
+        let page = KeyGridPage(
+            id: "narrow",
+            rows: [[KeyGridKey(id: "k", action: .insert("a"))]],
+            bottomBar: [
+                KeyGridKey(id: "space", action: .space, barWidth: .flex),
+                KeyGridKey(id: "return", action: .newline, barWidth: .wide)
+            ]
+        )
+        let layout = KeyGridPlacement.solve(page, in: size)
+        for item in layout.rows[page.rows.count] {
+            XCTAssertEqual(item.plate, item.target,
+                           "a bar lane is its own hit area and must not be widened")
+        }
+    }
+
     // MARK: - Robustness
 
     func testDegenerateSizesDoNotCrashAndProduceNothing() {
