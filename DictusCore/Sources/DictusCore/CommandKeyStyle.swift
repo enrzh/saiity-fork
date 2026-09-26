@@ -26,23 +26,26 @@ public enum CommandKeyStyle {
 
     /// Corner radius of a command key's glass plate.
     ///
-    /// Measured off the rendered system keyboard, and it is not what this used to be.
-    /// Cropping the platform's own shift key next to ours showed the difference
-    /// plainly: the platform's command keys — letter-row shift and delete, and the
-    /// 123/#+= row's two controls — are **rounded squares** at roughly 11pt on a
-    /// 45×43pt plate. Ours were pills, because the radius was 18 and the plate is
-    /// 43pt tall, which is 21.5 for a pill: 18 looked generous in isolation and read
-    /// as a completely different shape next to the real thing.
+    /// 18, which on a 43pt plate is a generously rounded shape — close to a pill
+    /// without being one. This is the product's radius, and it is what the whole
+    /// family shares: the letter row's shift and delete, the 123/#+= row's two
+    /// controls, the number pad's delete, the bottom bar, and the emoji page's
+    /// delete.
     ///
-    /// This is the number that makes "a command button" one button. It is also why
-    /// the space bar asks for `pillRadius` explicitly instead of using this: the
-    /// platform's space bar genuinely is a pill, and it is not a command button.
-    public static let cornerRadius: CGFloat = 11
+    /// It was briefly 11, on the reading that the platform draws these as rounded
+    /// squares. That reading came from a 56×50pt crop and does not survive checking:
+    /// calibrating the measurement against known radii shows that 11, 15, 18 and
+    /// 21.5 all predict corner insets within about a point of each other at this
+    /// scale, which is well inside the noise. So the platform's exact radius is not
+    /// something that crop can establish, and changing the product's look on a
+    /// measurement that cannot tell 11 from 18 was wrong. It is 18 because that is
+    /// the shape this keyboard is meant to have.
+    public static let cornerRadius: CGFloat = 18
 
     /// The radius that makes a plate a full pill: half its height.
     ///
-    /// For the wide bar keys, where that is what the platform draws. Not a command
-    /// key, so it is not the default.
+    /// For the space bar, which is the one key that is a pill rather than a rounded
+    /// command shape — it is wide, so a full pill costs it nothing visually.
     public static func pillRadius(forHeight height: CGFloat) -> CGFloat {
         max(0, height / 2)
     }

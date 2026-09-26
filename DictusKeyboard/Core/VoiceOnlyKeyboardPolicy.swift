@@ -39,10 +39,10 @@ public enum VoiceOnlyKeyboardPolicy {
     ///
     /// Points at `CommandKeyStyle` rather than carrying its own number. This constant
     /// is read in ten places across the keyboard — the emoji page's delete, the
-    /// shared `commandKeyPlate`, the legacy letter grid, the chrome — and it was 18
-    /// while the platform draws these as rounded squares at ~11pt. Ten call sites is
-    /// ten chances to update one and miss the other nine, so there is one number and
-    /// it lives with the rest of the command key's appearance.
+    /// shared `commandKeyPlate`, the legacy letter grid, the chrome — so ten call
+    /// sites would otherwise be ten chances to update the shape once and miss the
+    /// other nine. One number, and it lives with the rest of the command key's
+    /// appearance.
     public static let commandKeyCornerRadius: CGFloat = CommandKeyStyle.cornerRadius
     /// Maximum number of key rows on the letter page (including optional digit row).
     public static let maxKeyRows: Int = 5
