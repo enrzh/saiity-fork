@@ -231,13 +231,45 @@ final class LetterKeyGridView: UIView {
         setNeedsDisplay()
     }
 
-    /// Advances the shift page, returning the new one.
+    /// Two taps closer together than this mean caps lock, as on the system keyboard.
+    private static let capsLockWindow: TimeInterval = 0.35
+
+    /// Whether the next character will be capitalised, either by a one-shot shift or
+    /// by caps lock. This is what the shift key's icon is drawn from.
+    private var shiftActive: Bool { page == .shifted || page == .capslock }
+
+    /// Decide what a shift tap meant.
     ///
-    /// A single shift applies to exactly one character and then falls back, which is
-    /// what every other keyboard does and what stops a forgotten shift turning a
-    /// whole word uppercase.
+    /// One tap arms the next character. A second tap inside the window locks caps.
+    /// A tap while locked switches straight back off.
+    ///
+    /// This used to be `page = page == .normal ? .shifted : .normal`, which had two
+    /// faults. Shift was sticky: nothing reset `.shifted` after a character, so one
+    /// tap capitalised the rest of the word. And `lastShiftTap` was declared and
+    /// never read, so the double tap that was meant to produce caps lock had no
+    /// timing to compare against and the state never existed. Both are the faults
+    /// "toggle Caps is bugged" is describing.
     private func advanceShift() {
-        page = page == .normal ? .shifted : .normal
+        let now = ProcessInfo.processInfo.systemUptime
+        if page == .capslock {
+            // Out of caps lock, and the next character is lower case. The tap that
+            // cancels caps does not also arm a shift, which is what the platform does.
+            page = .normal
+        } else if now - lastShiftTap < Self.capsLockWindow {
+            page = .capslock
+        } else {
+            page = .shifted
+        }
+        lastShiftTap = now
+        setNeedsDisplay()
+    }
+
+    /// Spends a one-shot shift.
+    ///
+    /// Without this the page stays `.shifted` forever and every letter after the first
+    /// is capitalised — a forgotten shift turning a whole word uppercase.
+    private func consumeOneShotShift() {
+        if page == .shifted { page = .normal }
         setNeedsDisplay()
     }
 
@@ -298,8 +330,12 @@ final class LetterKeyGridView: UIView {
     ) {
         let radius: CGFloat
         switch key.type {
-        case .shift, .backspace, .symbols, .returnkey, .spacebar:
+        case .shift, .backspace, .symbols, .returnkey:
             radius = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius
+        case .spacebar:
+            // The space bar is the one key that is a pill, and it is wide enough to
+            // afford one.
+            radius = CommandKeyStyle.pillRadius(forHeight: plate.height)
         default:
             radius = VoiceOnlyKeyboardPolicy.keyCornerRadius
         }
@@ -308,7 +344,7 @@ final class LetterKeyGridView: UIView {
         // The plate is a visual. Whether it is Liquid Glass or a solid fill is the
         // design's business and never affects input, so it is resolved here from the
         // same preference the SwiftUI chrome uses.
-        context.setFillColor(plateColor(isPressed: isPressed).cgColor)
+        context.setFillColor(plateColor(for: key, isPressed: isPressed).cgColor)
         context.addPath(path.cgPath)
         context.fillPath()
         context.restoreGState()
@@ -316,60 +352,96 @@ final class LetterKeyGridView: UIView {
         drawGlyph(for: key, in: plate, isPressed: isPressed)
     }
 
-    private func plateColor(isPressed: Bool) -> UIColor {
-        if isPressed { return UIColor.label.withAlphaComponent(0.14) }
+    /// Plate fill. The material preference is visual only and is resolved here, so it
+    /// can never influence which key is pressed.
+    private func plateColor(for key: KeyDefinition, isPressed: Bool) -> UIColor {
+        // A command key that is engaged is lit, and that outranks the material fill: an
+        // active shift has to read as active whether or not the glass preference is on.
+        if key.type == .shift && shiftActive {
+            return UIColor.label.withAlphaComponent(CommandKeyStyle.litWashAlpha)
+        }
+        if isPressed {
+            return key.type.isInputKey
+                ? UIColor.label.withAlphaComponent(0.10)
+                : UIColor.label.withAlphaComponent(0.13)
+        }
         if KeyboardInteractionPreferences.liquidGlassEnabled {
-            return UIColor.secondarySystemFill.withAlphaComponent(0.55)
+            return UIColor.secondarySystemFill.withAlphaComponent(0.5)
         }
         return UIColor.tertiarySystemFill
     }
 
+    /// The glyph on a key, drawn the way the rebuilt grid draws it.
+    ///
+    /// Two things moved here with the rest of the styling. Shift is an SF Symbol
+    /// chosen from the state the keyboard is actually in — `shift` at rest and
+    /// `shift.fill` when the next character will be capitalised — instead of a text
+    /// arrow that was identical in both states. And the press dim follows the shared
+    /// treatment rather than one flat value for every key, so a command key dims with
+    /// its plate and a letter key keeps its own lighter dim because it has no plate.
     private func drawGlyph(for key: KeyDefinition, in plate: CGRect, isPressed: Bool) {
-        let text: String
-        let size: CGFloat
-        let weight: UIFont.Weight
+        let isCommand = !key.type.isInputKey
+        let color = UIColor.label.withAlphaComponent(isPressed
+            ? (isCommand ? CommandKeyStyle.pressOpacity : 0.55)
+            : 1)
+
         switch key.type {
-        case .input(let value, _):
-            text = displayed(value)
-            size = 22
-            weight = .light
         case .shift:
-            text = page == .capslock ? "⇪" : (page == .shifted ? "⇧" : "⇧")
-            size = 17
-            weight = .semibold
-        case .backspace:
-            text = "⌫"
-            size = 19
-            weight = .regular
-        case .symbols, .shiftSymbols:
-            text = "123"
-            size = 15
-            weight = .medium
-        case .returnkey:
-            text = "return"
-            size = 15
-            weight = .regular
-        case .spacebar:
-            text = "space"
-            size = 15
-            weight = .regular
+            drawSymbol(shiftActive ? "shift.fill" : "shift",
+                       in: plate, size: CommandKeyStyle.glyphSize, color: color)
+            return
+        case .backspace, .symbols, .shiftSymbols, .returnkey, .spacebar:
+            drawSymbol(systemSymbol(for: key),
+                       in: plate, size: isCommand ? CommandKeyStyle.glyphSize : 15,
+                       color: color)
+            return
+        case .input(let value, _):
+            let string = NSAttributedString(string: displayed(value), attributes: [
+                .font: UIFont.systemFont(ofSize: 22, weight: .light),
+                .foregroundColor: color,
+                .paragraphStyle: centeredParagraph()
+            ])
+            let measured = string.size()
+            string.draw(at: CGPoint(x: plate.midX - measured.width / 2,
+                                    y: plate.midY - measured.height / 2))
         default:
             return
         }
+    }
+
+    /// The system symbol for a command key.
+    ///
+    /// The platform's keyboard draws its bar from SF Symbols, which is why the letter
+    /// grid's text "⌫", "⇧" and "123" read as a different keyboard from the one above
+    /// it. Both grids now use the same symbols.
+    private func systemSymbol(for key: KeyDefinition) -> String {
+        switch key.type {
+        case .backspace: return "delete.backward"
+        case .symbols, .shiftSymbols: return "textformat.123"
+        case .returnkey: return "return"
+        case .spacebar: return "space"
+        default: return ""
+        }
+    }
+
+    private func drawSymbol(_ name: String, in plate: CGRect, size: CGFloat, color: UIColor) {
+        guard let image = UIImage(systemName: name)?
+            .withConfiguration(UIImage.SymbolConfiguration(pointSize: size, weight: .semibold))
+            .withTintColor(color, renderingMode: .alwaysOriginal) else { return }
+        let fitted = image.size
+        image.draw(in: CGRect(
+            x: plate.midX - fitted.width / 2,
+            y: plate.midY - fitted.height / 2,
+            width: fitted.width,
+            height: fitted.height
+        ))
+    }
+
+    private func centeredParagraph() -> NSParagraphStyle {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: size, weight: weight),
-            .foregroundColor: UIColor.label.withAlphaComponent(isPressed ? 0.6 : 1),
-            .paragraphStyle: paragraph
-        ]
-        let string = NSAttributedString(string: text, attributes: attributes)
-        let measured = string.size()
-        let origin = CGPoint(
-            x: plate.midX - measured.width / 2,
-            y: plate.midY - measured.height / 2
-        )
-        string.draw(at: origin)
+        paragraph.lineBreakMode = .byClipping
+        return paragraph
     }
 
     private func displayed(_ value: String) -> String {
@@ -506,6 +578,7 @@ final class LetterKeyGridView: UIView {
                         popupShown: false, selectedOption: 0
                     )
                     delegate?.letterGrid(self, didInsert: displayed(value))
+                    consumeOneShotShift()
                 }
                 setNeedsDisplay()
             default:
