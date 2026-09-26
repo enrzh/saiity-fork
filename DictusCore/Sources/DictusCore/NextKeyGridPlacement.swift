@@ -80,9 +80,24 @@ public enum KeyGridPlacement {
             page.rowHeight ?? maximumRowHeight
         ))
         let blockHeight = rowHeight * rowCount + gaps
-        // Bottom-aligned inside the grid area, so any slack sits above the first row
-        // exactly as it did in the legacy layout.
-        let originY = max(0, gridHeight - blockHeight)
+        // Anchored a fixed distance below the top of the grid area, not to its
+        // bottom.
+        //
+        // Bottom-anchoring looks right on exactly one keyboard and wrong on every
+        // other one. The grid area's height is whatever the host surface leaves once
+        // the accessory lane and the bottom bar have taken their share, so on a
+        // taller device the area grows, and a bottom-anchored block slides down by
+        // the whole difference — the letters end up sitting low against the bar
+        // while the platform's sit directly under the accessory lane. The extra
+        // height is not ours to spend: the platform spends it above the lane, where
+        // it reads as more of the page.
+        //
+        // Measured on an 18 Pro: surface top 547, first letter row top 598. The grid
+        // area begins below the lane, so the block starts 19pt into it.
+        let originY = min(
+            max(0, page.topInset),
+            max(0, gridHeight - blockHeight)
+        )
         // Short rows are centred and keep the width of a standard key rather than
         // stretching to fill. A nine-key row made of nine full-width keys looks
         // wrong next to a ten-key row; this is how a native keyboard draws them.

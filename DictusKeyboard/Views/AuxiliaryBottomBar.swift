@@ -186,6 +186,9 @@ struct AuxiliaryBottomBar: View {
     }
 
     private func periodBegan(at _: CGPoint, source: CGRect, bounds: CGSize, topOverflow: CGFloat) {
+        PersistentLog.log(.keyboardPeriodKeyProbe(details:
+            "began frame=\(Int(source.minX)),\(Int(source.minY)),"
+            + "\(Int(source.width))x\(Int(source.height))"))
         HapticFeedback.playInputClick()
         periodPreviewSession = KeyPreviewSession(
             text: ".",
@@ -241,6 +244,9 @@ struct AuxiliaryBottomBar: View {
         let session = periodVariantSession
         periodVariantSession = nil
         periodPreviewSession = nil
+        PersistentLog.log(.keyboardPeriodKeyProbe(details:
+            "ended cancelled=\(cancelled) options=\(session?.options.count ?? 0)"
+            + " selected=\(session?.selectedIndex ?? -1)"))
         guard !cancelled else { return }
         if let session, session.options.indices.contains(session.selectedIndex) {
             onPeriod(session.options[session.selectedIndex])

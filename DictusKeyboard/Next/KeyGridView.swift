@@ -75,14 +75,24 @@ final class KeyGridView: UIView {
 
     /// Decide what a shift tap meant, once it is released.
     ///
-    /// One tap arms the next character. Two taps inside the window lock caps, and a
-    /// third tap inside it unlocks — the same three-state cycle the system keyboard
-    /// uses, and the reason the old release handler (which could only ever unlatch)
-    /// never once produced a locked state.
+    /// One tap arms the next character. A second tap inside the window locks caps.
+    /// A tap while locked switches straight back off.
+    ///
+    /// That last case is the one that was wrong. The cycle used to run
+    /// off → one-shot → locked → off through `isCapsLocked.toggle()` on every tap
+    /// inside the window, so leaving caps lock took *three* rapid taps: one to be
+    /// counted as the second tap of a pair, one to toggle off, and the state only
+    /// settled if a third landed inside 350ms. The platform leaves caps lock in one
+    /// tap from the locked state, and so does this.
     private func resolveShiftTap() {
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastShiftRelease < Self.capsLockWindow {
-            isCapsLocked.toggle()
+        if isCapsLocked {
+            // Out of caps lock. The next character is lower case, which is what the
+            // platform does: the tap that cancels caps does not also arm a shift.
+            isCapsLocked = false
+            shiftLatched = false
+        } else if now - lastShiftRelease < Self.capsLockWindow {
+            isCapsLocked = true
             shiftLatched = false
         } else {
             isCapsLocked = false
@@ -312,13 +322,23 @@ final class KeyGridView: UIView {
             // The wash is drawn only while held. Painting it unconditionally would
             // put an 18% white film over every command key at rest.
             let plate = CommandKeyStyle.pressedPlate(item.plate, pressed: pressed)
+            // Shift carries a third state on top of pressed and resting: lit, because
+            // it will change the next character. The platform lights this key for
+            // both one-shot and caps lock, and an unlit key with a solid arrow is
+            // how you end up not knowing whether caps is on.
+            let lit = item.key.id == "shift" && shiftActive
             if !usesLiveMaterial {
                 fill(plate, radius: radius,
-                     color: plateColor(pressed: pressed,
+                     color: plateColor(pressed: pressed, isLit: lit,
                                        isLetter: item.key.isInvisiblePlate), in: context)
-            } else if pressed {
+            } else if pressed || lit {
+                // A wash, not a fill: the sibling glass layer is the face, and this
+                // only has to change how it reads. Held it is the press wash; lit it
+                // is lighter, because it is a state rather than a touch.
                 fill(plate, radius: radius,
-                     color: UIColor.label.withAlphaComponent(CommandKeyStyle.pressWashAlpha),
+                     color: UIColor.label.withAlphaComponent(
+                        pressed ? CommandKeyStyle.pressWashAlpha
+                                : CommandKeyStyle.litWashAlpha),
                      in: context)
             }
         } else if !usesLiveMaterial {
@@ -345,11 +365,20 @@ final class KeyGridView: UIView {
     /// Command faces use the system fill the legacy glass resolved to when the
     /// material preference is off, which is the closest a plain `UIView` drawing
     /// can get to the real material.
-    private func plateColor(pressed: Bool, isLetter: Bool = false) -> UIColor {
+    private func plateColor(
+        pressed: Bool,
+        isLit: Bool = false,
+        isLetter: Bool = false
+    ) -> UIColor {
         if pressed {
             return isLetter
                 ? UIColor.label.withAlphaComponent(0.10)
                 : UIColor.label.withAlphaComponent(0.13)
+        }
+        // Lit outranks the material fill: an engaged shift has to read as engaged
+        // whether or not the glass preference is on.
+        if isLit {
+            return UIColor.label.withAlphaComponent(CommandKeyStyle.litWashAlpha)
         }
         if KeyboardInteractionPreferences.liquidGlassEnabled {
             return UIColor.secondarySystemFill.withAlphaComponent(0.5)
@@ -371,9 +400,21 @@ final class KeyGridView: UIView {
             drawPeriodKey(in: plate, color: color)
             return
         }
-        // Shift key shows different icon when caps lock is active.
-        if key.id == "shift", isCapsLocked {
-            drawSymbol("capslock.fill", in: plate, size: key.glyphSize, color: color)
+        // Shift is drawn from the state it is actually in, not from a static glyph.
+        //
+        // It used to always draw `shift.fill` and switch to a `capslock.fill` padlock
+        // when locked. Both halves of that were wrong. A filled arrow at rest means
+        // the resting state and the armed state look identical, so there is nothing
+        // to see change when a tap lands — which is the whole feedback the key
+        // exists to give. And the padlock is not the platform's caps indicator: the
+        // system keyboard keeps the *same* solid arrow for one-shot and for caps
+        // lock, and tells them apart by whether it stays lit after you type.
+        //
+        // So: hollow arrow at rest, solid arrow whenever the next character will be
+        // capitalised. `shift` is the hollow variant of the same symbol.
+        if key.id == "shift" {
+            drawSymbol(shiftActive ? "shift.fill" : "shift",
+                       in: plate, size: key.glyphSize, color: color)
             return
         }
         if let systemImage = key.systemImage {

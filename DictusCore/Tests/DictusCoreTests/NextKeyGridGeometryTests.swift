@@ -167,7 +167,12 @@ final class NextKeyGridGeometryTests: XCTestCase {
                     KeyGridKey(id: "k\($0)-\(row)", action: .insert("a"))
                 })
             }
-            let layout = KeyGridPlacement.solve(KeyGridPage(id: "fill", rows: rows), in: size)
+            // No top inset, so the block still has to fit inside a container that
+            // is exactly its own height. This is the invariant that keeps rows from
+            // spilling out of the grid, which is separate from where the block is
+            // hung inside a container that has room to spare.
+            let page = KeyGridPage(id: "fill", rows: rows)
+            let layout = KeyGridPlacement.solve(page, in: size)
             guard let top = layout.placed.map(\.plate.minY).min(),
                   let bottom = layout.placed.map(\.plate.maxY).max() else {
                 XCTFail("no keys placed for \(rowCount) rows")
@@ -185,15 +190,21 @@ final class NextKeyGridGeometryTests: XCTestCase {
                     )
                 }
             }
-            XCTAssertEqual(bottom, size.height, accuracy: 0.5,
-                           "the block must sit against the bottom of the grid")
-            // The slack above the first plate is still owned by a target. Leaving it
-            // unowned would reintroduce the dead band that took four builds to find,
-            // so the rule is about targets tiling the grid, not about plates filling
-            // it.
-            let owner = layout.placed.first { $0.target.contains(CGPoint(x: size.width / 2, y: top / 2)) }
-            XCTAssertNotNil(owner,
-                            "\(rowCount) rows left \(top)pt that no target owns")
+            // The block has to fit. It is not required to fill: with no top inset it
+            // now starts at the top of the grid, and a container taller than the
+            // block simply has room left over at the bottom. Filling was the old
+            // rule, and it is the one that put the keys low.
+            XCTAssertLessThanOrEqual(bottom, size.height + 0.5,
+                                     "\(rowCount) rows overflow a \(size.height)pt grid")
+            // Whatever room is left has to belong to a key. Leaving it unowned would
+            // reintroduce the dead band that took four builds to find, so the rule is
+            // about targets tiling the grid, not about plates filling it.
+            for step in stride(from: 1.0, to: size.height, by: 1.0) {
+                let owner = layout.placed.first {
+                    $0.target.contains(CGPoint(x: size.width / 2, y: step))
+                }
+                XCTAssertNotNil(owner, "\(rowCount) rows left \(step)pt that no target owns")
+            }
         }
     }
 
@@ -552,6 +563,71 @@ final class NextKeyGridGeometryTests: XCTestCase {
         let firstLetter = home[1]
         let secondLetter = home[2]
         XCTAssertEqual(secondLetter.plate.minX - firstLetter.plate.maxX, 6, accuracy: 0.5)
+    }
+
+    /// A taller container must not push the keys down.
+    ///
+    /// This is the "the letters sit low" bug. The grid area's height is whatever the
+    /// host surface leaves after the accessory lane and the bottom bar, so it is
+    /// larger on a larger screen — 208pt on an iPhone Air against 170pt on an 18 Pro.
+    /// The block used to rest on the bottom of that area, so the extra 38pt went
+    /// entirely into moving the keys down, away from the accessory lane and towards
+    /// the bar, which is not where the platform puts them.
+    ///
+    /// The block hangs from a fixed inset instead, so only the gap below it changes.
+    func testTallerContainerDoesNotMoveTheKeysDown() {
+        let page = KeyGridPage(
+            id: "anchored",
+            rows: [
+                (0..<10).map { KeyGridKey(id: "t\($0)", action: .insert("a")) },
+                (0..<9).map { KeyGridKey(id: "h\($0)", action: .insert("a")) },
+                [KeyGridKey(id: "shift", action: .shift, isCommand: true)]
+                    + (0..<7).map { KeyGridKey(id: "b\($0)", action: .insert("a")) }
+                    + [KeyGridKey(id: "delete", action: .delete, isCommand: true)]
+            ],
+            pinnedLastRow: true,
+            topInset: 19
+        )
+        let short = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 170))
+        let tall = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 208))
+
+        // Same first row, same last row: the block is in the same place, and the
+        // extra height is left below it rather than spent on moving the keys.
+        XCTAssertEqual(short.rows[0].first?.plate.minY ?? .nan, 19, accuracy: 0.5)
+        XCTAssertEqual(tall.rows[0].first?.plate.minY ?? .nan, 19, accuracy: 0.5)
+        XCTAssertEqual(short.rows[2].last?.plate.maxY ?? .nan,
+                       tall.rows[2].last?.plate.maxY ?? .nan, accuracy: 0.5)
+        // The block occupies the same band in both; the taller container simply has
+        // more room below it. A bottom-anchored block would instead have ended at
+        // 208 in the tall case and 170 in the short one.
+        let shortBottom = short.placed.map(\.plate.maxY).max() ?? .nan
+        let tallBottom = tall.placed.map(\.plate.maxY).max() ?? .nan
+        XCTAssertEqual(shortBottom, tallBottom, accuracy: 0.5)
+        XCTAssertEqual(tallBottom, 19 + 151, accuracy: 0.5)
+    }
+
+    /// The block still fits when the container is exactly its height, or shorter.
+    ///
+    /// A fixed top inset must never win over "does the block fit". A keyboard that
+    /// is mid-animation, or on a short screen, would otherwise push its last row off
+    /// the bottom — which is how a key ends up drawn where nothing can press it.
+    func testTopInsetNeverPushesTheBlockOutOfTheContainer() {
+        let rows: [[KeyGridKey]] = (0..<3).map { row in
+            (0..<10).map { column in
+                KeyGridKey(id: "r\(row)k\(column)", action: .insert("a"))
+            }
+        }
+        // 3 rows at 43 + 2 gaps of 11 = 151 is the block. Anything under 151 + inset
+        // has to give the inset up.
+        for height in [151.0, 140.0, 120.0] {
+            let page = KeyGridPage(id: "tight", rows: rows, topInset: 19)
+            let layout = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: height))
+            let bottom = layout.placed.map(\.plate.maxY).max() ?? .nan
+            let top = layout.placed.map(\.plate.minY).min() ?? .nan
+            XCTAssertGreaterThanOrEqual(top, -0.5, "block starts above the grid at \(height)pt")
+            XCTAssertLessThanOrEqual(bottom, height + 0.5,
+                                     "block runs past the bottom at \(height)pt")
+        }
     }
 
     /// Adding a half-weight entry must not move the row above it.

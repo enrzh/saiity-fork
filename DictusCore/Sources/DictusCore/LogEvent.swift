@@ -104,6 +104,14 @@ public enum LogEvent: Sendable {
     case keyboardDidDisappear
     case keyboardMicTapped
     case keyboardTextInserted  // No content parameter -- privacy by design
+    /// The period key's resolved frame and whether its touch arrived and ended.
+    ///
+    /// This key has a live bug that static reading has not located: its geometry
+    /// checks out, its press handler and its variant popup are all wired, and on a
+    /// device it inserts nothing. Guessing at a SwiftUI hit-test path produced
+    /// several wrong theories in a row, so the two facts that settle it — the frame
+    /// it resolved to, and whether `began`/`ended` actually fire — are recorded.
+    case keyboardPeriodKeyProbe(details: String)
     /// The plates the key grid solved for a page, as geometry. One line per solve.
     ///
     /// Recorded because a render and the arithmetic that produced it can disagree
@@ -288,7 +296,7 @@ public enum LogEvent: Sendable {
              .modelDownloadProgress, .modelDownloadStalled:
             return .model
         case .keyboardDidAppear, .keyboardDidDisappear, .keyboardMicTapped, .keyboardTextInserted,
-             .keyboardGridGeometryProbe,
+             .keyboardGridGeometryProbe, .keyboardPeriodKeyProbe,
              .overlayShown, .overlayHidden, .rapidTapRejected,
              .dictationMessageSet, .dictationMessageDisplayed, .dictationMessageCleared,
              .waveformAppeared, .waveformDisappeared, .waveformHeartbeat, .waveformStall,
@@ -367,6 +375,7 @@ public enum LogEvent: Sendable {
              .modelDeleted, .modelPrewarmStarted, .modelCleanupPerformed,
              .modelPrewarmPeakMemory, .modelLoadStateChanged, .transcriptionPerformance,
              .keyboardDidAppear, .keyboardMicTapped, .keyboardGridGeometryProbe,
+             .keyboardPeriodKeyProbe,
              .dictationMessageSet, .dictationMessageDisplayed,
              .appLaunched, .appWhisperKitLoaded, .logExportCompleted,
              .deviceCapabilitySnapshot,
@@ -448,6 +457,7 @@ public enum LogEvent: Sendable {
         case .modelPrewarmStarted: return "modelPrewarmStarted"
         case .modelCleanupPerformed: return "modelCleanupPerformed"
         case .keyboardGridGeometryProbe: return "keyboardGridGeometryProbe"
+        case .keyboardPeriodKeyProbe: return "keyboardPeriodKeyProbe"
         case .keyboardDidAppear: return "keyboardDidAppear"
         case .keyboardDidDisappear: return "keyboardDidDisappear"
         case .keyboardMicTapped: return "keyboardMicTapped"
@@ -605,7 +615,7 @@ public enum LogEvent: Sendable {
         case .keyboardDidAppear, .keyboardDidDisappear,
              .keyboardMicTapped, .keyboardTextInserted:
             return ""
-        case .keyboardGridGeometryProbe(let details):
+        case .keyboardGridGeometryProbe(let details), .keyboardPeriodKeyProbe(let details):
             return details
 
         // Engine Diagnostics

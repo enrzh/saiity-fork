@@ -146,19 +146,32 @@ public struct KeyGridPage: Equatable {
     /// 48pt keys, so the gap is 6pt — the same as the horizontal gap — where the
     /// letter and symbol pages use 11pt.
     public var rowSpacing: CGFloat?
+    /// Distance from the top of the grid area to the top of the first row.
+    ///
+    /// The block is hung from here rather than pushed down from the bottom, so that
+    /// a taller surface moves the accessory lane instead of the keys. On the system
+    /// keyboard the first letter row is a fixed 51pt below the top of the panel on
+    /// every device; anchoring to the bottom instead put the letters low on any
+    /// screen taller than the one the constants were measured on.
+    ///
+    /// Clamped to whatever room is left, so a short container still gets a block that
+    /// fits rather than one that runs off the bottom.
+    public var topInset: CGFloat
 
     public init(
         id: String,
         rows: [[KeyGridKey]],
         pinnedLastRow: Bool = false,
         rowHeight: CGFloat? = nil,
-        rowSpacing: CGFloat? = nil
+        rowSpacing: CGFloat? = nil,
+        topInset: CGFloat = 0
     ) {
         self.id = id
         self.rows = rows
         self.pinnedLastRow = pinnedLastRow
         self.rowHeight = rowHeight
         self.rowSpacing = rowSpacing
+        self.topInset = topInset
     }
 
     public var isEmpty: Bool { rows.allSatisfy(\.isEmpty) }

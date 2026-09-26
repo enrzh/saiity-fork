@@ -51,6 +51,14 @@ public enum CommandKeyStyle {
     /// Press-in and press-out durations.
     public static let pressDurationIn: TimeInterval = 0.08
     public static let pressDurationOut: TimeInterval = 0.16
+    /// How much a plate is washed with the label colour when it is *lit* — engaged
+    /// rather than held.
+    ///
+    /// Shift is the only key with this third state, and it needs one: a solid arrow
+    /// on an unlit plate is what the resting key already looked like, so without a
+    /// change to the plate there is nothing to see. Lighter than a press, because a
+    /// press is a touch that is happening and this is a state that persists.
+    public static let litWashAlpha: CGFloat = 0.28
     /// How much a held plate is washed with the label colour.
     ///
     /// The Core Graphics stand-in for `pressOpacity`. A renderer that owns the whole

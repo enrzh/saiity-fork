@@ -26,6 +26,18 @@ enum KeyGridPageFactory {
 
     // MARK: - Letters
 
+    /// Distance from the top of the grid area to the top of the first key row.
+    ///
+    /// Measured, not chosen: on the system keyboard the panel's top edge is at 547pt
+    /// and the first letter row's top at 598pt, and the grid area starts below the
+    /// accessory lane — so 19pt into the area.
+    ///
+    /// This is the number that keeps the keys off the bottom of the bar on a screen
+    /// taller than the one it was measured on. The block hangs from here rather than
+    /// resting on the bottom of whatever height it is handed, so a taller surface
+    /// grows the gap above the lane instead of pushing the letters down.
+    static let letterGridTopInset: CGFloat = 19
+
     /// The letter page: the layout's letter rows, shift and delete on the lowest of
     /// them, and a bottom bar carrying 123, space, emoji and return.
     ///
@@ -77,7 +89,8 @@ enum KeyGridPageFactory {
             built[built.count - 1] = lowest
         }
 
-        return KeyGridPage(id: "letters", rows: built, pinnedLastRow: true)
+        return KeyGridPage(id: "letters", rows: built, pinnedLastRow: true,
+                          topInset: KeyGridPageFactory.letterGridTopInset)
     }
 
     /// 123, space, emoji, return — the same four controls every system keyboard
@@ -198,7 +211,8 @@ enum KeyGridPageFactory {
             )
             built[built.count - 1] = last
         }
-        return KeyGridPage(id: id, rows: built, pinnedLastRow: true)
+        return KeyGridPage(id: id, rows: built, pinnedLastRow: true,
+                        topInset: KeyGridPageFactory.letterGridTopInset)
     }
 
     // MARK: - Number pad
@@ -234,7 +248,8 @@ enum KeyGridPageFactory {
         ])
         // Taller keys than the letter grid, because the pad has four rows and spends
         // none of its height on a bottom bar. Measured: 48pt against the letters' 43.
-        return KeyGridPage(id: "numberPad", rows: rows, rowHeight: 48, rowSpacing: 6)
+        return KeyGridPage(id: "numberPad", rows: rows, rowHeight: 48, rowSpacing: 6,
+                        topInset: KeyGridPageFactory.letterGridTopInset)
     }
 
     private static func digitKey(label: String, row: Int, column: Int) -> KeyGridKey {
