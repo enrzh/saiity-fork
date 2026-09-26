@@ -104,7 +104,20 @@ struct AuxiliaryBottomBar: View {
             } else if showsPeriodKey && !periodFrame.isEmpty {
                 periodKey(source: periodSourceFrame, bounds: barBounds, topOverflow: popupTopOverflow)
                     .frame(width: periodSourceFrame.width, height: periodSourceFrame.height)
-                    .offset(x: periodSourceFrame.minX, y: periodSourceFrame.minY)
+                    // Positioned like every other control in this bar, by `.position`
+                    // rather than `.offset`.
+                    //
+                    // It was the one control positioned with `.offset(x:y:)` after a
+                    // fixed frame, inside a `ZStack(alignment: .topLeading)`. That is
+                    // a layout offset applied after the fact, and the UIKit touch
+                    // control inside it is hit-tested against its *layout* frame, so
+                    // the control answered for the top-leading corner of the bar rather
+                    // than for the period key's own rectangle. Every touch on the "."
+                    // therefore arrived at whatever control owns the top-left of the bar,
+                    // which is why the key looked alive and did nothing. `.position`
+                    // centres the view on the frame's midpoint, which is what the rest of
+                    // the bar does and what puts the control over the key it draws.
+                    .position(x: periodSourceFrame.midX, y: periodSourceFrame.midY)
             }
 
             // The return's target is bounded by its neighbours, not by a constant.

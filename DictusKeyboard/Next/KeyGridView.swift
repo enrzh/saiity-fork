@@ -323,11 +323,15 @@ final class KeyGridView: UIView {
             // The wash is drawn only while held. Painting it unconditionally would
             // put an 18% white film over every command key at rest.
             let plate = CommandKeyStyle.pressedPlate(item.plate, pressed: pressed)
-            // Shift carries a third state on top of pressed and resting: lit, because
-            // it will change the next character. The platform lights this key for
-            // both one-shot and caps lock, and an unlit key with a solid arrow is
-            // how you end up not knowing whether caps is on.
-            let lit = item.key.id == "shift" && shiftActive
+            // A shift that is changing the next character is *not* lit on the plate.
+            //
+            // It was, and the plate went white, which is the single most obvious thing on
+            // the keyboard and not what the platform does. The system keyboard keeps
+            // this plate exactly as it was and changes only the arrow: hollow at rest,
+            // solid while shift is engaged. The state is carried by the icon, because
+            // that is the part the platform varies, and a white plate reads as a
+            // different key rather than a different state of this one.
+            let lit = false
             if !usesLiveMaterial {
                 fill(plate, radius: radius,
                      color: plateColor(pressed: pressed, isLit: lit,

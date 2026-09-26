@@ -16,8 +16,64 @@
 // registry outlived the controller that filled it and any controller could revoke
 // another's live input.
 
+import SwiftUI
 import UIKit
 import DictusCore
+
+/// One key's plate of Liquid Glass, drawn by SwiftUI.
+///
+/// `UIGlassEffect` in a bare `UIVisualEffectView` renders flat — measured about 20
+/// luma lighter than the SwiftUI bar and uniform across the plate, with none of the
+/// variation that reads as glass. So the plate is hosted from SwiftUI and drawn with
+/// `glassEffect`, the same call the emoji page's delete and the bottom bar make.
+///
+/// Hosting rather than calling `UIGlassEffect` directly is the whole point: the two
+/// renderers do not produce the same material, and the difference is visible.
+private final class GlassPlateView: UIView {
+    let host = UIHostingController(rootView: GlassPlate(radius: 0))
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(host.view)
+        host.view.frame = bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // The glass is the only thing this view draws, and it must not take touches:
+        // the grid below owns those.
+        host.view.isUserInteractionEnabled = false
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not implemented") }
+
+    /// Sets the corner radius and repaints the glass.
+    func setRadius(_ radius: CGFloat) {
+        host.rootView.radius = radius
+        // The hosting view's layer rounds the glass to the plate's shape.
+        layer.cornerCurve = .continuous
+        layer.cornerRadius = radius
+        clipsToBounds = true
+    }
+}
+
+/// The SwiftUI side of a glass plate: a clear fill with the material over it.
+private struct GlassPlate: View {
+    var radius: CGFloat
+
+    var body: some View {
+        // `glassEffect` is iOS 26 and later. Below that there is no material to host,
+        // and a clear fill is the honest fallback: the plate simply has no glass.
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+                )
+                .allowsHitTesting(false)
+        } else {
+            Color.clear
+        }
+    }
+}
 
 protocol NextKeyboardHostDelegate: AnyObject {
     func nextKeyboardHost(_ host: NextKeyboardHost, perform command: KeyboardCommand)
@@ -36,8 +92,8 @@ final class NextKeyboardHost: NSObject {
 
     /// Sits directly below the grid and carries the real key material.
     private let glassLayer: UIView
-    /// One effect view per glass plate, reconciled against the grid's layout.
-    private var glassViews: [UIVisualEffectView] = []
+    /// One glass plate view per spec, reconciled against the grid's layout.
+    private var glassViews: [GlassPlateView] = []
 
     /// Which symbol page is showing. The bar's toggle flips this.
     private var symbolPage: KeyGridPageFactory.Page = .symbolsNumbers
@@ -93,11 +149,19 @@ final class NextKeyboardHost: NSObject {
             glassLayer.removeFromSuperview()
             container.addSubview(glassLayer)
         }
+        if backdropView.superview !== container {
+            backdropView.removeFromSuperview()
+            // Below the glass, so the glass has something to refract. Inserted at
+            // index 0 so it cannot cover the SwiftUI content above it.
+            container.insertSubview(backdropView, at: 0)
+        }
         if gridView.superview !== container {
             gridView.removeFromSuperview()
             container.addSubview(gridView)
         }
         glassLayer.frame = frame
+        backdropView.frame = frame
+        paintBackdrop()
         gridLayerPosition()
         gridView.frame = frame
         show(page)
@@ -113,6 +177,45 @@ final class NextKeyboardHost: NSObject {
         glassLayer.layer.zPosition = gridView.layer.zPosition - 1
     }
 
+    /// The surface the glass sits on, and the material that renders it.
+    ///
+    /// `UIGlassEffect` in a bare `UIVisualEffectView` does not render as the platform's
+    /// glass. Measured against the SwiftUI bar, which renders the same material through
+    /// `glassEffect`: the bar's keys read about 76 luma and the grid's read about 99 —
+    /// flatter and lighter, the same grey at every point, with none of the variation
+    /// that reads as glass rather than as a painted pill. A backdrop gradient behind
+    /// the plates did not close that gap, so the difference is the renderer, not what
+    /// is behind it.
+    ///
+    /// So the plates are hosted from SwiftUI and drawn with `glassEffect`, which is
+    /// what the emoji page's delete and the bottom bar already use. Same renderer, same
+    /// material, same result — which is the whole of "1:1 with the emoji delete".
+    private let backdropView: UIView = {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        return view
+    }()
+
+    /// Paints the backdrop gradient into `backdropView`.
+    ///
+    /// Two stops, darker at the edges and lighter in the middle, which is the shape
+    /// the keyboard surface has. It is deliberately subtle: the point is to give the
+    /// glass something to refract, not to be visible in its own right.
+    private func paintBackdrop() {
+        let layer = CAGradientLayer()
+        layer.colors = [
+            UIColor(white: 0.20, alpha: 1).cgColor,
+            UIColor(white: 0.30, alpha: 1).cgColor,
+            UIColor(white: 0.20, alpha: 1).cgColor
+        ]
+        layer.startPoint = CGPoint(x: 0.5, y: 0)
+        layer.endPoint = CGPoint(x: 0.5, y: 1)
+        layer.locations = [0, 0.5, 1]
+        backdropView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        backdropView.layer.insertSublayer(layer, at: 0)
+        layer.frame = backdropView.bounds
+    }
+
     /// Reconciles the effect views against the grid's current plates.
     ///
     /// Reuses views by index so a re-solve does not churn the material, which is
@@ -126,15 +229,8 @@ final class NextKeyboardHost: NSObject {
             return
         }
         while glassViews.count < specs.count {
-            let view = UIVisualEffectView(effect: Self.keyMaterial())
-            view.isUserInteractionEnabled = false
-            view.layer.cornerCurve = .continuous
-            // The clip stays. `UIGlassEffect` in a bare `UIVisualEffectView` composes
-            // unbounded without it: turning it off rendered the plate as an opaque
-            // white fill that covered its own key's glyph. So the corners come from
-            // the clip, and the light ring along the edge comes from the effect's own
-            // border rather than from a second one stacked on top.
-            view.clipsToBounds = true
+            let view = GlassPlateView()
+            view.host.view.backgroundColor = .clear
             glassLayer.addSubview(view)
             glassViews.append(view)
         }
@@ -146,17 +242,9 @@ final class NextKeyboardHost: NSObject {
             // every re-solve, including the ones caused by an orientation change.
             UIView.performWithoutAnimation {
                 view.frame = spec.rect
-                view.layer.cornerRadius = spec.radius
+                view.setRadius(spec.radius)
             }
         }
-    }
-
-    /// The material the legacy `glassEffect(.regular)` resolves to.
-    private static func keyMaterial() -> UIVisualEffect {
-        if #available(iOS 26, *) {
-            return UIGlassEffect()
-        }
-        return UIBlurEffect(style: .systemChromeMaterial)
     }
 
     func unmount() {
@@ -169,6 +257,7 @@ final class NextKeyboardHost: NSObject {
         glassViews.forEach { $0.removeFromSuperview() }
         glassViews.removeAll()
         glassLayer.removeFromSuperview()
+        backdropView.removeFromSuperview()
         stopDeleteRepeat()
     }
 

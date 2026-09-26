@@ -355,11 +355,9 @@ final class LetterKeyGridView: UIView {
     /// Plate fill. The material preference is visual only and is resolved here, so it
     /// can never influence which key is pressed.
     private func plateColor(for key: KeyDefinition, isPressed: Bool) -> UIColor {
-        // A command key that is engaged is lit, and that outranks the material fill: an
-        // active shift has to read as active whether or not the glass preference is on.
-        if key.type == .shift && shiftActive {
-            return UIColor.label.withAlphaComponent(CommandKeyStyle.litWashAlpha)
-        }
+        // An engaged shift is not lit on the plate. The plate going white was the most
+        // obvious thing on the keyboard and not what the platform does: it keeps the
+        // plate as it was and changes only the arrow. The state belongs to the icon.
         if isPressed {
             return key.type.isInputKey
                 ? UIColor.label.withAlphaComponent(0.10)
