@@ -129,6 +129,11 @@ final class NextKeyboardHost: NSObject {
             let view = UIVisualEffectView(effect: Self.keyMaterial())
             view.isUserInteractionEnabled = false
             view.layer.cornerCurve = .continuous
+            // The clip stays. `UIGlassEffect` in a bare `UIVisualEffectView` composes
+            // unbounded without it: turning it off rendered the plate as an opaque
+            // white fill that covered its own key's glyph. So the corners come from
+            // the clip, and the light ring along the edge comes from the effect's own
+            // border rather than from a second one stacked on top.
             view.clipsToBounds = true
             glassLayer.addSubview(view)
             glassViews.append(view)
