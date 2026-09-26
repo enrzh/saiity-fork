@@ -80,3 +80,6 @@ Dictus.xcodeproj/xcuserdata/
 # Tool output, not source
 graphify-out/
 .superpowers/
+
+# Reference logs: machine-generated, large, and not source.
+assets/reference/logs/
