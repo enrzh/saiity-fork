@@ -343,17 +343,21 @@ class KeyboardViewController: UIInputViewController,
         // touches against geometry SwiftUI published through a process-wide bus,
         // which meant the keys that were drawn and the keys that could be pressed
         // were described by two different systems. Here a single view does both.
-        if let inputView {
-            let grid = LetterKeyGridView(frame: inputView.bounds)
-            grid.autoresizingMask = []
-            grid.layer.zPosition = 200
-            inputView.addSubview(grid)
-            letterGridView = grid
-        }
-
+        //
+        // That view is `NextKeyboardHost`'s, mounted later at zPosition 500. The
+        // legacy `LetterKeyGridView` used to be created here at zPosition 200 and
+        // handed to the SwiftUI surface, which drew the same keys a second time
+        // underneath it. Two grids describing one keyboard was the doubling: the
+        // lower one was drawn over on every key, so it cost a fill and a hit-test
+        // layer per key and bought nothing, and any disagreement between them showed
+        // up as a key that looked right and did not answer.
+        //
+        // It is not created any more. The SwiftUI surface keeps the bottom bar, the
+        // suggestion lane and the glass rim — the things that are not keys — and the
+        // grid draws and hit-tests the keys, so there is one of each.
         let rootView = KeyboardRootView(
             controllerID: controllerID,
-            letterGridView: letterGridView,
+            letterGridView: nil,
             routeText: { [weak self] text in self?.routeProxyText(text) },
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
             routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
