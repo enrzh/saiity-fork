@@ -52,19 +52,34 @@ final class CommandKeyStyleTests: XCTestCase {
         }
     }
 
-    /// The corner radius makes a command key read as a control, not a letter key.
+    /// The corner radius makes a command key read as a control, not a letter key —
+    /// and, more to the point, as the *same* control as every other command key.
     ///
-    /// It is not a full pill on every plate and should not be: 18 is a pill on the
-    /// emoji page's 36pt delete and a rounded rect on the grid's 43pt shift. What has
-    /// to hold is that it is much rounder than the letter radius of 8, and that it
-    /// never exceeds half the tallest plate — past that the corners clip and the
-    /// shape stops being the one that was measured.
-    func testCornerRadiusIsRounderThanALetterAndDoesNotClip() {
+    /// It is measured, not chosen: cropping the platform's own shift key beside ours
+    /// showed the platform's command keys are rounded squares at ~11pt on a 45×43
+    /// plate, where this was a pill. What has to hold is that it is clearly rounder
+    /// than a letter key, clearly not a pill, and that it never exceeds half the
+    /// tallest plate — past that the corners clip.
+    func testCornerRadiusIsRoundedSquareNotAPill() {
         let tallestPlate = KeyGridPlacement.maximumRowHeight
         XCTAssertGreaterThan(CommandKeyStyle.cornerRadius, KeyGridPlacement.keyCornerRadius)
-        XCTAssertLessThanOrEqual(CommandKeyStyle.cornerRadius, tallestPlate / 2)
-        // A full pill on the shorter bar plates, which is where it was measured.
-        XCTAssertEqual(CommandKeyStyle.cornerRadius, 36 / 2, accuracy: 0.01)
+        // Rounded square: roomier than a letter key, nowhere near a full pill.
+        XCTAssertGreaterThan(CommandKeyStyle.cornerRadius, 9)
+        XCTAssertLessThan(CommandKeyStyle.cornerRadius, tallestPlate / 2)
+    }
+
+    /// The wide bar keys are pills, and they ask for that radius explicitly.
+    ///
+    /// The space bar is not a command button, so it must not silently take the
+    /// command radius — that is what turned a pill into a rounded square once.
+    func testPillRadiusIsHalfTheHeight() {
+        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: 40), 20, accuracy: 0.01)
+        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: 43), 21.5, accuracy: 0.01)
+        XCTAssertGreaterThan(
+            CommandKeyStyle.pillRadius(forHeight: 40),
+            CommandKeyStyle.cornerRadius
+        )
+        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: -5), 0, accuracy: 0.01)
     }
 
     /// The grid's copy of the radius is the same number, not a second literal.

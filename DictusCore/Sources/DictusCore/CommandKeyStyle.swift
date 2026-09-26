@@ -26,10 +26,26 @@ public enum CommandKeyStyle {
 
     /// Corner radius of a command key's glass plate.
     ///
-    /// A command key is roughly twice a letter key's height, so the letter grid's 8pt
-    /// reads as a rectangle on it. 18 is the system keyboard's own radius and makes
-    /// the plate a full pill.
-    public static let cornerRadius: CGFloat = 18
+    /// Measured off the rendered system keyboard, and it is not what this used to be.
+    /// Cropping the platform's own shift key next to ours showed the difference
+    /// plainly: the platform's command keys — letter-row shift and delete, and the
+    /// 123/#+= row's two controls — are **rounded squares** at roughly 11pt on a
+    /// 45×43pt plate. Ours were pills, because the radius was 18 and the plate is
+    /// 43pt tall, which is 21.5 for a pill: 18 looked generous in isolation and read
+    /// as a completely different shape next to the real thing.
+    ///
+    /// This is the number that makes "a command button" one button. It is also why
+    /// the space bar asks for `pillRadius` explicitly instead of using this: the
+    /// platform's space bar genuinely is a pill, and it is not a command button.
+    public static let cornerRadius: CGFloat = 11
+
+    /// The radius that makes a plate a full pill: half its height.
+    ///
+    /// For the wide bar keys, where that is what the platform draws. Not a command
+    /// key, so it is not the default.
+    public static func pillRadius(forHeight height: CGFloat) -> CGFloat {
+        max(0, height / 2)
+    }
 
     // MARK: - Glyph
 

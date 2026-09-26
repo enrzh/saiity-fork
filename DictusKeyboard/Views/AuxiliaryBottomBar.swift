@@ -107,8 +107,19 @@ struct AuxiliaryBottomBar: View {
                     .offset(x: periodSourceFrame.minX, y: periodSourceFrame.minY)
             }
 
+            // The return's target is bounded by its neighbours, not by a constant.
+            //
+            // `actionHitSize` is 88pt wide, which is more than twice the 40pt plate it
+            // gets centred on. Centred, it grew in both directions at once: 12pt of it
+            // landed past the right edge of the keyboard, where nothing can press it,
+            // and 20pt of it landed on the period key to the left. The return is added
+            // to this stack after the period, so it sat above it and won the hit test
+            // there — which is why the period "did nothing". It was not inert, it was
+            // inserting a newline over the right half of its own plate.
+            let returnHit = returnHitRect(previous: periodFrame, surface: surface)
             if fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle {
-                wideControl(systemName: "return", label: "Return", action: onReturn)
+                wideControl(systemName: "return", label: "Return", action: onReturn,
+                            hitWidth: returnHit.width, hitHeight: returnHit.height)
                     .position(x: localX(returnFrame), y: localY(returnFrame))
             } else {
                 wideControl(
@@ -138,6 +149,33 @@ struct AuxiliaryBottomBar: View {
         }
         .frame(width: surfaceWidth, height: rowHeight, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .center)
+    }
+
+    /// The return key's press target: the platform's generous width where it fits,
+    /// and no more.
+    ///
+    /// A key's target may be larger than its plate — that is the point of a target —
+    /// but only into space that is on the keyboard and belongs to nobody else. The
+    /// return sits in the rightmost slot, so growing it symmetrically spends half the
+    /// extra width off the edge of the screen and the other half on the period key.
+    /// Both are waste; the second is worse than waste, because it is a working key
+    /// silently overwritten by its neighbour.
+    ///
+    /// So the growth is one-sided and bounded: into the gap on the left, stopping at
+    /// the previous key's edge. With the period key present that leaves the return its
+    /// own 40pt, which is what the layout can actually give it. Widening the return's
+    /// plate to the platform's ~93pt is a proportion question and a separate change;
+    /// this only stops one key from eating another.
+    private func returnHitRect(previous: CGRect, surface: CGRect) -> CGRect {
+        let plate = layout.chromeReturnFrame
+        let leftLimit = previous.isEmpty
+            ? surface.minX
+            : previous.maxX + VoiceOnlyKeyboardPolicy.railSpacing
+        let room = max(0, plate.maxX - leftLimit)
+        let width = min(VoiceOnlyKeyboardPolicy.actionHitSize.width,
+                        max(plate.width, room))
+        return CGRect(x: plate.maxX - width, y: plate.minY,
+                      width: width, height: plate.height)
     }
 
     private func periodKey(source: CGRect, bounds: CGSize, topOverflow: CGFloat) -> some View {
@@ -346,6 +384,12 @@ struct SpaceBarControl: View {
             CommandKeyFace(
                 text: "space",
                 plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                // The space bar is one of the two wide keys, and the platform draws
+                // those as full pills. It is not a command button, so it does not
+                // take the command radius.
+                cornerRadius: CommandKeyStyle.pillRadius(
+                    forHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+                ),
                 isPressed: drag.isTracking
             )
             // The label hands over to a steering arrow, the way the platform's does,
@@ -814,8 +858,14 @@ private extension AuxiliaryBottomBar {
             .accessibilityAddTraits(.isButton)
     }
 
-    private func wideControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        let hit = VoiceOnlyKeyboardPolicy.actionHitSize
+    private func wideControl(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void,
+        hitWidth: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.width,
+        hitHeight: CGFloat = VoiceOnlyKeyboardPolicy.actionHitSize.height
+    ) -> some View {
+        let hit = CGSize(width: hitWidth, height: hitHeight)
         let plate = widePlateSize(hitWidth: hit.width, hitHeight: hit.height)
         return chromeControl(label: label, action: action, hit: hit, highlightSize: hit) { pressed in
             CommandKeyFace(

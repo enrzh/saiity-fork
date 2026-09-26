@@ -203,6 +203,7 @@ final class KeyGridView: UIView {
                 + " w=\(String(format: "%.1f", first?.width ?? 0))"
                 + " h=\(String(format: "%.1f", first?.height ?? 0))"
                 + " y=\(String(format: "%.1f", first?.minY ?? 0))"
+                + " r=\(String(format: "%.1f", row.first.map { cornerRadius(for: $0.key) } ?? 0))"
                 + (glyph.map { " glyphCx=\(String(format: "%.1f", $0.midX))" } ?? ""))
         }
         PersistentLog.log(.keyboardGridGeometryProbe(details: parts.joined(separator: " | ")))
