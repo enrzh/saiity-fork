@@ -92,11 +92,15 @@ final class KeyGridView: UIView {
             isCapsLocked = false
             shiftLatched = false
         } else if now - lastShiftRelease < Self.capsLockWindow {
+            // Two taps inside the window lock caps. Checked before the toggle, or a
+            // double tap reads as toggle-on then toggle-off and caps is unreachable.
             isCapsLocked = true
             shiftLatched = false
         } else {
+            // A tap outside the window toggles the one-shot shift: off if it was on.
+            // Re-arming an already-armed shift is what made a second tap look inert.
+            shiftLatched.toggle()
             isCapsLocked = false
-            shiftLatched = true
         }
         lastShiftRelease = now
     }
@@ -274,11 +278,27 @@ final class KeyGridView: UIView {
         for row in layout.rows {
             for item in row {
                 guard showsPlate(for: item.key) else { continue }
-                specs.append(GlassSpec(rect: item.plate,
+                // A command key's material is drawn at the shared command size, centred
+                // on its hit area, so it is the same plate the emoji delete draws.
+                let rect = item.key.isCommand
+                    ? CommandKeyStyle.visualPlate(for: item.plate)
+                    : item.plate
+                specs.append(GlassSpec(rect: rect,
                                        radius: cornerRadius(for: item.key)))
             }
         }
         return specs
+    }
+
+    /// The plate a key draws at: the shared command size for a command key, otherwise
+    /// its hit plate.
+    ///
+    /// One rule, used by both the material and the fallback fill, so they cannot
+    /// disagree about how big a key looks.
+    private func visualPlate(for item: PlacedKey) -> CGRect {
+        item.key.isCommand
+            ? CommandKeyStyle.visualPlate(for: item.plate)
+            : item.plate
     }
 
     /// A key with no action is a spacer: it carries width so the row indents and
@@ -315,14 +335,19 @@ final class KeyGridView: UIView {
             // the bottom bar or the emoji page are the same button.
             //
             // `CommandKeyFace` expresses it in SwiftUI as a 0.94 scale and a 0.72
-            // opacity. Core Graphics cannot dim a sibling `UIGlassEffect` — it belongs
+            // opacity. Core Graphics cannot dim a sibling material view — it belongs
             // to another view — so the same numbers are spent here as a scaled plate
             // and a lightening wash inside it. Fading a dark glass plate over a dark
             // keyboard reads as a lightening, which is what the wash does.
             //
             // The wash is drawn only while held. Painting it unconditionally would
             // put an 18% white film over every command key at rest.
-            let plate = CommandKeyStyle.pressedPlate(item.plate, pressed: pressed)
+            //
+            // The plate is drawn at the shared command size, centred on the hit area, so
+            // it is the same rectangle the emoji delete draws. The hit area is untouched.
+            let plate = CommandKeyStyle.pressedPlate(
+                visualPlate(for: item), pressed: pressed
+            )
             // A shift that is changing the next character is *not* lit on the plate.
             //
             // It was, and the plate went white, which is the single most obvious thing on

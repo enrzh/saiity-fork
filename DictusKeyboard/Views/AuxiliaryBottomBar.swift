@@ -405,14 +405,9 @@ struct SpaceBarControl: View {
                 ),
                 isPressed: drag.isTracking
             )
-            // The label hands over to a steering arrow, the way the platform's does,
-            // and the arrow leans with the finger.
-            Image(systemName: "arrow.left.and.right")
-                .font(.system(size: CommandKeyStyle.glyphSize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .offset(x: drag.offset)
-                .opacity(drag.isTracking ? CommandKeyStyle.pressOpacity : 0)
-                .allowsHitTesting(false)
+            // No steering arrow. The caret moving is the feedback, and an arrow that
+            // leans with the finger reads as a control the user is meant to operate
+            // rather than a cursor they are already steering.
             SpaceTrackingButton(
                 drag: drag,
                 onTap: onTap,

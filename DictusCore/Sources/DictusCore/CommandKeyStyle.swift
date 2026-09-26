@@ -50,6 +50,26 @@ public enum CommandKeyStyle {
         max(0, height / 2)
     }
 
+    /// The size a command key's visible plate is drawn at.
+    ///
+    /// The emoji page's delete draws at 40x40, and every command key in the bottom bar
+    /// draws at that size. The grid's command keys were drawing at their full hit size
+    /// — 45x43 on the letter row, 48x43 on the symbol rows — which is close enough to
+    /// look alike at a glance and different enough that the family never read as one.
+    /// This is the one number, and it is what "the same styling as the emoji delete"
+    /// means for the grid.
+    public static let visualSize: CGFloat = 40
+
+    /// The visible plate for a command key, centred on its hit area.
+    ///
+    /// The hit area stays at its resolved size so nothing changes about what can be
+    /// pressed; only the plate the user sees is standardised.
+    public static func visualPlate(for hit: CGRect) -> CGRect {
+        let size = visualSize
+        return CGRect(x: hit.midX - size / 2, y: hit.midY - size / 2,
+                      width: size, height: size)
+    }
+
     // MARK: - Glyph
 
     /// Point size and weight of a command key's system glyph.

@@ -52,22 +52,20 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
         // hit-tests them from the same rectangles, with no SwiftUI key faces at all.
         // Drawing and hit testing in two systems is what let a visible key have no
         // target, and a target have no visible key.
-        let letterGrid = try source("DictusKeyboard/LetterKeyGridView.swift")
-        XCTAssertTrue(letterGrid.contains("final class LetterKeyGridView: UIView"))
-        XCTAssertTrue(letterGrid.contains("override func touchesBegan("),
-                      "the letter grid must own its own touches")
-        XCTAssertTrue(letterGrid.contains("KeyboardKeyHitGeometry.contiguousTiles("),
-                      "hit targets must be contiguous tiles over the whole grid")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        XCTAssertTrue(grid.contains("final class KeyGridView: UIView"))
+        XCTAssertTrue(grid.contains("override func touchesBegan("),
+                      "the key grid must own its own touches")
+        XCTAssertTrue(grid.contains("KeyGridPlacement.solve("),
+                      "hit targets must come from the shared geometry, which tiles the grid contiguously")
         XCTAssertFalse(letter.contains(".keyGridInput("),
                        "the letter surface must not publish a separate hit geometry")
         XCTAssertFalse(letter.contains("ForEach(frames)"),
                        "the letter surface must not draw key faces; the UIKit grid does")
-        XCTAssertTrue(controller.contains("LetterKeyGridView(frame: inputView.bounds)"),
-                      "the controller must mount the letter grid on the input view")
-        XCTAssertTrue(letter.contains("gridView.setDefinitions("),
-                      "the surface must hand its rows to the grid")
-        XCTAssertTrue(controller.contains("letterGridView?.isHidden = mode != .letters"),
-                      "the grid must be live only on the letter page")
+        XCTAssertTrue(controller.contains("NextKeyboardHost()"),
+                      "the controller must host the key grid on the input view")
+        XCTAssertFalse(controller.contains("LetterKeyGridView(frame:"),
+                      "there must be exactly one key grid, not a legacy one beneath it")
         XCTAssertFalse(number.contains("NumberInteractionOverlay"))
         XCTAssertFalse(symbol.contains("SymbolInteractionOverlay"))
         XCTAssertFalse(root.contains("GiellaKeyboardView("))

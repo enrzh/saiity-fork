@@ -256,9 +256,15 @@ final class LetterKeyGridView: UIView {
             // cancels caps does not also arm a shift, which is what the platform does.
             page = .normal
         } else if now - lastShiftTap < Self.capsLockWindow {
+            // Two taps inside the window lock caps. This has to be checked before the
+            // plain toggle, or a double tap would read as toggle-on then toggle-off
+            // and caps lock would be unreachable.
             page = .capslock
         } else {
-            page = .shifted
+            // A tap outside the window toggles the one-shot shift: off if it was on.
+            // Re-arming an already-armed shift is what made a second tap look like it
+            // did nothing.
+            page = (page == .shifted) ? .normal : .shifted
         }
         lastShiftTap = now
         setNeedsDisplay()
