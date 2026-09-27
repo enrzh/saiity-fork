@@ -106,7 +106,7 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertTrue(KeyboardInteractionPreferences.liquidGlassEnabled)
     }
 
-    func testKeyContainersDefaultToDisabled() {
+    func testKeyContainersDefaultToEnabled() {
         let defaults = AppGroup.defaults
         let storedValue = defaults.object(forKey: SharedKeys.keyContainersEnabled)
         defer {
@@ -118,7 +118,10 @@ final class SharedKeysExtensionTests: XCTestCase {
         }
 
         defaults.removeObject(forKey: SharedKeys.keyContainersEnabled)
-        XCTAssertFalse(KeyboardInteractionPreferences.keyContainersEnabled)
+        // On by default: the platform draws a plate on every key, and a keyboard
+        // of bare glyphs floating on the panel is the most obvious way this one
+        // stops looking like the system keyboard.
+        XCTAssertTrue(KeyboardInteractionPreferences.keyContainersEnabled)
     }
 
     func testMissingTranscriptionLanguageDefaultsToAutomaticDetection() {

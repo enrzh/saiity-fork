@@ -271,19 +271,22 @@ final class KeyGridView: UIView {
 
     /// The plates that get a visible face, in draw order.
     ///
-    /// One rule, shared with `drawPlate`, so the material and the fallback fill can
-    /// never disagree about which keys have a container.
+    /// The command keys that get their material from the sibling glass layer.
+    ///
+    /// Letter plates are drawn by the grid itself, not by the glass layer. The glass
+    /// layer is a sibling *below* the grid, and on a fast page switch it can fail to
+    /// reconcile in time — which is the "the letter keys lose their containers"
+    /// report. A plate the grid draws itself cannot disappear.
+    ///
+    /// So the two paths no longer share one predicate: this one takes commands only,
+    /// and `drawPlate` fills every other plate. Each covers what the other does not,
+    /// so a key is never left without a face and never painted twice.
     private var glassSpecs: [GlassSpec] {
         var specs: [GlassSpec] = []
         for row in layout.rows {
             for item in row {
-                guard showsPlate(for: item.key) else { continue }
-                // A command key's material is drawn at the shared command size, centred
-                // on its hit area, so it is the same plate the emoji delete draws.
-                let rect = item.key.isCommand
-                    ? CommandKeyStyle.visualPlate(for: item.plate)
-                    : item.plate
-                specs.append(GlassSpec(rect: rect,
+                guard item.key.isCommand, showsPlate(for: item.key) else { continue }
+                specs.append(GlassSpec(rect: CommandKeyStyle.visualPlate(for: item.plate),
                                        radius: cornerRadius(for: item.key)))
             }
         }
@@ -379,9 +382,15 @@ final class KeyGridView: UIView {
                                 : CommandKeyStyle.litWashAlpha),
                      in: context)
             }
-        } else if !usesLiveMaterial {
-            // With live material the sibling glass layer already carries the face.
-            // Filling here as well would paint a solid slab over it.
+        } else {
+            // Letter and number plates are always drawn by the grid itself.
+            //
+            // They used to be left to the sibling glass layer, which made them
+            // intermittent: on a fast page switch the grid could draw before the
+            // glass views had been reconciled, and the letters came out with no
+            // container at all. Drawing the plate here means the face and the
+            // target are produced by the same view in the same pass, so they
+            // cannot disagree.
             fill(item.plate, radius: radius,
                  color: plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate),
                  in: context)
