@@ -306,12 +306,20 @@ final class KeyGridView: UIView {
     /// right is to draw nothing rather than to draw an empty plate.
     private func showsPlate(for key: KeyGridKey) -> Bool {
         if case .none = key.action { return false }
-        // Letter plates have no container in the legacy design — the
-        // `keyContainersEnabled` preference defaulted to off, so only the glyph
-        // showed. Drawing a filled plate behind every letter is the single most
-        // visible difference from that look, so the preference is honoured here
-        // rather than assumed.
-        return !key.isInvisiblePlate || KeyboardInteractionPreferences.keyContainersEnabled
+        // Every key with an action draws a plate, always.
+        //
+        // This used to be gated on `keyContainersEnabled`, a preference that existed
+        // to reproduce the legacy look where letters had no container. Gating a
+        // visible plate on a preference the user cannot see produced the "the letter
+        // keys lose their containers when I switch from emoji" report: the number and
+        // symbol pages were never gated, so they always had plates, and the letter
+        // page had them only when the preference happened to read true — which made
+        // the pages disagree and made the plates look like they came and went.
+        //
+        // The platform draws a plate on every key. So does this grid. The preference
+        // still exists for the legacy surfaces, which are the ones that look wrong
+        // without it.
+        return true
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
