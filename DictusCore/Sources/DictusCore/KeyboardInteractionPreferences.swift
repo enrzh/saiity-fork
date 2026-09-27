@@ -22,8 +22,21 @@ public enum KeyboardInteractionPreferences {
     }
 
     /// Per-key plates are off unless the user turns them on. Popout still uses its own overlay.
+    /// Whether letter keys draw a visible container behind the glyph.
+    ///
+    /// Defaults to **on**, because that is what the platform draws and what the
+    /// rebuilt keyboard is meant to match: every letter key on the system keyboard has
+    /// a plate, and a grid of bare glyphs floating on the panel is the single most
+    /// obvious way this keyboard stops looking like the one it replaced.
+    ///
+    /// It defaulted to off, which reproduced the legacy look where letters had no
+    /// container. That produced a keyboard whose letter page and number page disagreed
+    /// with each other — the number keys always had plates, so the two pages read as
+    /// different products — and it made the letter plates appear and vanish with a
+    /// preference that nothing on screen indicated, which is the "the containers
+    /// sometimes disappear" report.
     public static var keyContainersEnabled: Bool {
-        AppGroup.defaults.object(forKey: SharedKeys.keyContainersEnabled) as? Bool ?? false
+        AppGroup.defaults.object(forKey: SharedKeys.keyContainersEnabled) as? Bool ?? true
     }
 
     /// Adaptive hit-target prediction nudges the seam between adjacent keys

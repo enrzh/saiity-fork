@@ -149,19 +149,11 @@ final class NextKeyboardHost: NSObject {
             glassLayer.removeFromSuperview()
             container.addSubview(glassLayer)
         }
-        if backdropView.superview !== container {
-            backdropView.removeFromSuperview()
-            // Below the glass, so the glass has something to refract. Inserted at
-            // index 0 so it cannot cover the SwiftUI content above it.
-            container.insertSubview(backdropView, at: 0)
-        }
         if gridView.superview !== container {
             gridView.removeFromSuperview()
             container.addSubview(gridView)
         }
         glassLayer.frame = frame
-        backdropView.frame = frame
-        paintBackdrop()
         gridLayerPosition()
         gridView.frame = frame
         show(page)
@@ -175,45 +167,6 @@ final class NextKeyboardHost: NSObject {
         // it rose above the SwiftUI chrome it would be visible over the accessory
         // lane, which has no plates of its own.
         glassLayer.layer.zPosition = gridView.layer.zPosition - 1
-    }
-
-    /// The surface the glass sits on, and the material that renders it.
-    ///
-    /// `UIGlassEffect` in a bare `UIVisualEffectView` does not render as the platform's
-    /// glass. Measured against the SwiftUI bar, which renders the same material through
-    /// `glassEffect`: the bar's keys read about 76 luma and the grid's read about 99 —
-    /// flatter and lighter, the same grey at every point, with none of the variation
-    /// that reads as glass rather than as a painted pill. A backdrop gradient behind
-    /// the plates did not close that gap, so the difference is the renderer, not what
-    /// is behind it.
-    ///
-    /// So the plates are hosted from SwiftUI and drawn with `glassEffect`, which is
-    /// what the emoji page's delete and the bottom bar already use. Same renderer, same
-    /// material, same result — which is the whole of "1:1 with the emoji delete".
-    private let backdropView: UIView = {
-        let view = UIView()
-        view.isUserInteractionEnabled = false
-        return view
-    }()
-
-    /// Paints the backdrop gradient into `backdropView`.
-    ///
-    /// Two stops, darker at the edges and lighter in the middle, which is the shape
-    /// the keyboard surface has. It is deliberately subtle: the point is to give the
-    /// glass something to refract, not to be visible in its own right.
-    private func paintBackdrop() {
-        let layer = CAGradientLayer()
-        layer.colors = [
-            UIColor(white: 0.20, alpha: 1).cgColor,
-            UIColor(white: 0.30, alpha: 1).cgColor,
-            UIColor(white: 0.20, alpha: 1).cgColor
-        ]
-        layer.startPoint = CGPoint(x: 0.5, y: 0)
-        layer.endPoint = CGPoint(x: 0.5, y: 1)
-        layer.locations = [0, 0.5, 1]
-        backdropView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        backdropView.layer.insertSublayer(layer, at: 0)
-        layer.frame = backdropView.bounds
     }
 
     /// Reconciles the effect views against the grid's current plates.
@@ -257,7 +210,6 @@ final class NextKeyboardHost: NSObject {
         glassViews.forEach { $0.removeFromSuperview() }
         glassViews.removeAll()
         glassLayer.removeFromSuperview()
-        backdropView.removeFromSuperview()
         stopDeleteRepeat()
     }
 
