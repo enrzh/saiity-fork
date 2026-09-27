@@ -12,10 +12,16 @@
 //
 // One set of numbers, read by both renderers, is what makes them the same button.
 //
-// It lives here rather than on `VoiceOnlyKeyboardPolicy` because the keyboard target
-// declares its own copy of that type, which shadows the framework's. Two types with
-// one name is a trap, and a press treatment that silently resolves to the wrong one
-// is worse than no shared treatment at all.
+// It lives here rather than on `VoiceOnlyKeyboardPolicy` because `VoiceOnlyKeyboardPolicy`
+// is the keyboard's layout authority, and a layout type is the worst place to hang a
+// press treatment that three renderers have to agree on.
+//
+// It used to say that instead: that the keyboard target declared its own copy of
+// `VoiceOnlyKeyboardPolicy`, which shadowed this framework's. That copy was real, and
+// it was a live trap — it was never in the Xcode target, so it never compiled, but a
+// single "Add Files" in Xcode would have made it win over the framework's and broken
+// the build in six independent ways. The duplicate directory is deleted, and that
+// shadow is no longer possible. The separation is worth keeping anyway.
 
 import CoreGraphics
 import Foundation
