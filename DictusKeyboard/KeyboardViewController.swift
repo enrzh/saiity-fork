@@ -82,7 +82,8 @@ class KeyboardViewController: UIInputViewController,
     /// letter page and would take the owner down with it.
     /// Touch owner for the symbol and number pages.
     ///
-    /// Letters no longer use this: they are drawn and owned by `letterGridView`.
+    /// Letters do not use this either: they are drawn and owned by the new
+    /// `KeyGridView`, which the controller mounts directly.
     /// The symbol and number surfaces still publish their geometry through
     /// `KeyGridTouchBus`, and that path is left alone here rather than being
     /// rewritten in the same change as the letter grid.
@@ -94,7 +95,6 @@ class KeyboardViewController: UIInputViewController,
     /// the only thing that owns letter touches while the letter page is showing.
     /// There is no global registry and no shared bus: the controller owns this
     /// instance, so a stale controller can only ever revoke its own.
-    private var letterGridView: LetterKeyGridView?
     private var keyboardModeButton: UIButton?
     private var emojiButton: UIButton?
     private var numberButton: UIButton?
@@ -344,20 +344,19 @@ class KeyboardViewController: UIInputViewController,
         // which meant the keys that were drawn and the keys that could be pressed
         // were described by two different systems. Here a single view does both.
         //
-        // That view is `NextKeyboardHost`'s, mounted later at zPosition 500. The
-        // legacy `LetterKeyGridView` used to be created here at zPosition 200 and
-        // handed to the SwiftUI surface, which drew the same keys a second time
-        // underneath it. Two grids describing one keyboard was the doubling: the
-        // lower one was drawn over on every key, so it cost a fill and a hit-test
-        // layer per key and bought nothing, and any disagreement between them showed
-        // up as a key that looked right and did not answer.
+        // That view is `NextKeyboardHost`'s, mounted later at zPosition 500. A
+        // legacy letter grid used to be created here at zPosition 200 and handed to
+        // the SwiftUI surface, which drew the same keys a second time underneath it.
+        // Two grids describing one keyboard was the doubling: the lower one was drawn
+        // over on every key, so it cost a fill and a hit-test layer per key and bought
+        // nothing, and any disagreement between them showed up as a key that looked
+        // right and did not answer.
         //
-        // It is not created any more. The SwiftUI surface keeps the bottom bar, the
-        // suggestion lane and the glass rim — the things that are not keys — and the
-        // grid draws and hit-tests the keys, so there is one of each.
+        // Both that grid and this hand-off are gone. The SwiftUI surface keeps the
+        // bottom bar, the suggestion lane and the glass rim — the things that are not
+        // keys — and the grid draws and hit-tests the keys, so there is one of each.
         let rootView = KeyboardRootView(
             controllerID: controllerID,
-            letterGridView: nil,
             routeText: { [weak self] text in self?.routeProxyText(text) },
             routeCommand: { [weak self] command in self?.routeProxyCommand(command) },
             routeWordDeletion: { [weak self] in self?.deletePreviousWord() },
@@ -1677,12 +1676,6 @@ class KeyboardViewController: UIInputViewController,
         let overlayVisible = uikitOwnsVoiceChrome || mode == .emoji
         controls.isHidden = !overlayVisible
         controls.isUserInteractionEnabled = overlayVisible
-        // The letter grid draws and owns letter touches itself, so it is shown only
-        // on the letter page. Everywhere else it is removed from hit testing
-        // entirely, which is the failure mode the old shared owner had: a grid that
-        // stayed live over a page it no longer described.
-        letterGridView?.isHidden = mode != .letters
-        letterGridView?.isUserInteractionEnabled = mode == .letters
         // The old shared owner is the reverse case, and it is the one that actually
         // broke the letter page: it is mounted at the same layer as the new grid and
         // was added later, so it sat *above* it while still holding the last symbol
@@ -2001,20 +1994,6 @@ class KeyboardViewController: UIInputViewController,
 
     private func unmountNextKeyboard() {
         nextKeyboardHost?.unmount()
-    }
-
-    // MARK: - Letter grid
-
-    func letterGrid(_ view: LetterKeyGridView, didInsert text: String) {
-        routeProxyText(text)
-    }
-
-    func letterGridDidTapDelete(_ view: LetterKeyGridView) {
-        routeProxyCommand(.delete)
-    }
-
-    func letterGridDidTapSymbols(_ view: LetterKeyGridView) {
-        presentNumbersArea()
     }
 
     // MARK: - New keyboard host

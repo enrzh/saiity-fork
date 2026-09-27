@@ -25,7 +25,6 @@
 		RR000027 /* EmojiCategoryControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100027 /* EmojiCategoryControl.swift */; };
 		RR000029 /* KeyboardKeyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100029 /* KeyboardKeyInput.swift */; };
 		RR000099 /* KeyGridTouchOwner.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100099 /* KeyGridTouchOwner.swift */; };
-		RR000100 /* LetterKeyGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100100 /* LetterKeyGridView.swift */; };
 		RR000103 /* KeyGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100103 /* KeyGridView.swift */; };
 		RR000104 /* KeyGridPageFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100104 /* KeyGridPageFactory.swift */; };
 		RR000105 /* NextKeyboardHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100105 /* NextKeyboardHost.swift */; };
@@ -203,7 +202,6 @@
 		RR100027 /* EmojiCategoryControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiCategoryControl.swift; sourceTree = "<group>"; };
 		RR100029 /* KeyboardKeyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardKeyInput.swift; sourceTree = "<group>"; };
 		RR100099 /* KeyGridTouchOwner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyGridTouchOwner.swift; sourceTree = "<group>"; };
-		RR100100 /* LetterKeyGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LetterKeyGridView.swift; sourceTree = "<group>"; };
 		RR100103 /* KeyGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridView.swift; sourceTree = "<group>"; };
 		RR100104 /* KeyGridPageFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridPageFactory.swift; sourceTree = "<group>"; };
 		RR100105 /* NextKeyboardHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/NextKeyboardHost.swift; sourceTree = "<group>"; };
@@ -424,7 +422,6 @@
 				RR100025 /* VoiceBoardSurface.swift */,
 				RR100029 /* KeyboardKeyInput.swift */,
 				RR100099 /* KeyGridTouchOwner.swift */,
-				RR100100 /* LetterKeyGridView.swift */,
 				RR100103 /* KeyGridView.swift */,
 				RR100104 /* KeyGridPageFactory.swift */,
 				RR100105 /* NextKeyboardHost.swift */,
@@ -1052,7 +1049,6 @@
 				RR000025 /* VoiceBoardSurface.swift in Sources */,
 				RR000029 /* KeyboardKeyInput.swift in Sources */,
 				RR000099 /* KeyGridTouchOwner.swift in Sources */,
-				RR000100 /* LetterKeyGridView.swift in Sources */,
 				RR000103 /* KeyGridView.swift in Sources */,
 				RR000104 /* KeyGridPageFactory.swift in Sources */,
 				RR000105 /* NextKeyboardHost.swift in Sources */,

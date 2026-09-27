@@ -7,10 +7,6 @@ import DictusCore
 /// Root SwiftUI view for the voice-only keyboard surface.
 struct KeyboardRootView: View {
     let controllerID: String
-    /// The UIKit letter grid. It is mounted on the input view by the controller and
-    /// is handed down rather than created here, so there is exactly one instance
-    /// and no process-wide registry for it to be registered in.
-    let letterGridView: LetterKeyGridView?
     let routeText: (String) -> Void
     let routeCommand: (KeyboardCommand) -> Void
     let routeWordDeletion: () -> Void
@@ -356,7 +352,6 @@ struct KeyboardRootView: View {
                 surfaceLayout: layout,
                 availableWidth: surfaceFrame.width,
                 availableHeight: surfaceFrame.height,
-                gridView: letterGridView,
                 onInsert: routeProxyText,
                 onDelete: { routeProxyCommand(.delete) },
                 onDeleteWord: routeWordDeletion,

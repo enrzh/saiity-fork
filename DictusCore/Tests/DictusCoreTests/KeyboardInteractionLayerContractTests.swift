@@ -64,8 +64,8 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
                        "the letter surface must not draw key faces; the UIKit grid does")
         XCTAssertTrue(controller.contains("NextKeyboardHost()"),
                       "the controller must host the key grid on the input view")
-        XCTAssertFalse(controller.contains("LetterKeyGridView(frame:"),
-                      "there must be exactly one key grid, not a legacy one beneath it")
+        XCTAssertFalse(controller.contains("LetterKeyGridView"),
+                       "the legacy letter grid is deleted; the controller must not name it at all")
         XCTAssertFalse(number.contains("NumberInteractionOverlay"))
         XCTAssertFalse(symbol.contains("SymbolInteractionOverlay"))
         XCTAssertFalse(root.contains("GiellaKeyboardView("))

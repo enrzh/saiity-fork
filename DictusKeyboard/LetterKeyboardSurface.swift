@@ -7,8 +7,6 @@ struct LetterKeyboardSurface: View {
     let surfaceLayout: VoiceOnlyKeyboardPolicy.Layout
     let availableWidth: CGFloat
     let availableHeight: CGFloat
-    /// The UIKit grid that draws and owns the letter keys. `nil` only in previews.
-    let gridView: LetterKeyGridView?
     let onInsert: (String) -> Void
     let onDelete: () -> Void
     let onDeleteWord: () -> Void
@@ -84,11 +82,6 @@ struct LetterKeyboardSurface: View {
     var body: some View {
         let _ = (onBackToVoice, showsSymbolsControl)
         let gridSize = gridSize
-        // Placed here rather than in `.onAppear`, which is not a dependable place to
-        // hand a UIKit view its content: if it does not fire, the view is mounted
-        // with no rows and silently draws nothing. This runs on every evaluation,
-        // is idempotent, and mutates no SwiftUI state, so it cannot loop.
-        let _ = syncGridView(size: gridSize)
         VStack(spacing: 0) {
             // The keys themselves are drawn and hit-tested by one UIKit view, mounted
             // on the input view by the controller. SwiftUI contributes nothing but
@@ -161,22 +154,11 @@ struct LetterKeyboardSurface: View {
         nonPopupVariantTouchIDs.removeAll()
     }
 
-    /// Points the UIKit grid at this surface's letter rows and places it.
-    ///
-    /// The frame is in input-view coordinates, which is where the grid is mounted.
-    /// `surfaceLayout.surfaceFrame.origin` is the same offset the old shared owner
-    /// used, so the placement is identical to what the letters looked like before.
-    private func syncGridView(size: CGSize) {
-        guard let gridView else { return }
-        gridView.frame = CGRect(origin: surfaceLayout.surfaceFrame.origin, size: size)
-        // The grid owns its shift page: it draws the glyphs, so keeping a second
-        // copy of the page here would be a second source of truth that can disagree
-        // with what is on screen.
-        gridView.setDefinitions(
-            rows,
-            commandWidth: surfaceLayout.commandKeyVisualSize.width
-        )
-    }
+    /// The keys themselves live in `KeyGridView`, which the controller mounts on the
+    /// input view and owns end to end. This surface contributes only the space they
+    /// occupy plus the bar and suggestion lane, so there is nothing left to sync
+    /// here — and a second copy of the row definitions would be a second source of
+    /// truth that could disagree with what is on screen.
 
     private var rows: [[KeyDefinition]] {
         let _ = languageCode

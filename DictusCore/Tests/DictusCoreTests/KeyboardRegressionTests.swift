@@ -38,7 +38,7 @@ final class KeyboardRegressionTests: XCTestCase {
 
     func testLetterPageDoesNotCommitSwipeTyping() throws {
         let root = try source("DictusKeyboard/LetterKeyboardSurface.swift")
-        let grid = try source("DictusKeyboard/LetterKeyGridView.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         XCTAssertFalse(root.contains("swipeWord"))
         XCTAssertFalse(root.contains("SwipeTypingDecoder"))
         XCTAssertFalse(grid.contains("swipeWord"))
@@ -46,8 +46,12 @@ final class KeyboardRegressionTests: XCTestCase {
         // gesture now lives in the UIKit grid, so that is where the assertion belongs.
         XCTAssertTrue(grid.contains("override func touchesMoved("),
                       "hold-for-accents stays on the letter page; swipe is not wired there")
-        XCTAssertTrue(grid.contains("KeyVariantPopup.selectedIndex("),
+        // The popup follows the finger: `touchesMoved` re-resolves which option is
+        // under the touch and stores it, and the redraw is driven from there.
+        XCTAssertTrue(grid.contains("press.selectedVariant = index"),
                       "the accent popup must follow the finger on the letter page")
+        XCTAssertTrue(grid.contains("variantIndex("),
+                      "the accent popup must resolve the option under the touch")
         let engine = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
         XCTAssertTrue(engine.contains("func swipeWord(from path: String)"))
         let settings = try source("DictusApp/Views/SettingsView.swift")
@@ -758,7 +762,6 @@ final class KeyboardRegressionTests: XCTestCase {
     /// not make it impossible, because the lifecycle was still per key.
     func testLetterSurfaceHasExactlyOneTouchOwnerAndNoPerKeyControls() throws {
         let surface = try source("DictusKeyboard/LetterKeyboardSurface.swift")
-        let grid = try source("DictusKeyboard/LetterKeyGridView.swift")
 
         // One owner for the whole grid, and it is the thing that draws the keys.
         // The surface no longer draws key faces at all, so there is no second
@@ -770,21 +773,23 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(surface.contains(".allowsHitTesting(false)"),
                       "the space the grid occupies must not compete for touches")
 
-        // No per-key control survives anywhere in the new layer, and nothing in it
-        // is a UIKit control that SwiftUI could destroy mid-gesture.
+        // The per-touch bookkeeping this used to assert about the letter grid is now
+        // `KeyGridTouchOwner`'s, and is covered by
+        // `testCaptureViewTracksEachTouchSeparately` below.
+        //
+        // What remains is the no-per-key-control rule, and it belongs on the view
+        // that draws the keys. Note it is deliberately *not* asserted on the surface:
+        // `ImmediateKeyButton` is live there, wrapping the shift key so it can
+        // dispatch on touch-down. That is a control for one command key, not the
+        // per-key control layer the rule is about.
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         XCTAssertFalse(grid.contains("UIButton("))
         XCTAssertFalse(grid.contains("ImmediateKeyButton("))
         XCTAssertFalse(grid.contains("ImmediateVariantKey("))
-        XCTAssertTrue(grid.contains("private var activeTouches: [ObjectIdentifier: ActiveTouch]"),
-                      "touches must be tracked by touch identity, not by key")
         XCTAssertTrue(grid.contains("isMultipleTouchEnabled = true"),
                       "two fingers on two keys must both be live")
         XCTAssertFalse(grid.contains("isExclusiveTouch = true"),
                        "one finger per key is the point, so the view must not be exclusive")
-
-        // The shared geometry and the resolver are still the single source of truth.
-        XCTAssertTrue(grid.contains("KeyboardKeyHitResolver.keyIndex(at: point, rows: tiles)"))
-        XCTAssertTrue(grid.contains("private var plates: [[CGRect]] = []"))
     }
 
     /// The owner must attribute each release to the key its own press began on.
