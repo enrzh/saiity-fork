@@ -22,8 +22,8 @@ struct GlobeKeyTutorialPage: View {
     @State private var awaitingInsertion = false
     @State private var dictationBaselineText = ""
     @State private var accessibilityAnnouncement = ""
-    @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
-    @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
+    @ObservedObject private var setup = KeyboardSetupModel.shared
+    private var fullAccessVerified: Bool { setup.fullAccessVerified }
     @State private var dictationFailed = false
     @State private var fullAccessRequired = false
 
@@ -73,7 +73,6 @@ struct GlobeKeyTutorialPage: View {
         .onDisappear {
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
-            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
         }
         .onChange(of: textFieldContent) { _, newValue in
             guard awaitingInsertion,
@@ -85,6 +84,15 @@ struct GlobeKeyTutorialPage: View {
             accessibilityAnnouncement = "First dictation inserted. Setup is complete."
             UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
             PersistentLog.log(.onboardingGlobeTutorialTextDetected)
+        }
+        .onChange(of: setup.fullAccessVerified) { _, verified in
+            guard dictusKeyboardActive else { return }
+            fullAccessRequired = !verified
+            if verified {
+                dictationFailed = false
+                accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
+                UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+            }
         }
     }
 
@@ -106,17 +114,6 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func observeTranscriptionReady() {
-        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
-            DispatchQueue.main.async {
-                refreshFullAccess()
-                guard dictusKeyboardActive else { return }
-                guard fullAccessVerified else { return }
-                fullAccessRequired = false
-                dictationFailed = false
-                accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
-                UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
-            }
-        }
         DarwinNotificationCenter.addObserver(for: DarwinNotificationName.transcriptionReady) {
             DispatchQueue.main.async {
                 guard dictusKeyboardActive else { return }
@@ -143,14 +140,7 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func refreshFullAccess() {
-        AppGroup.defaults.synchronize()
-        let storedVerified = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
-        let handshake = KeyboardSetupStatus.isCurrentFullAccessHandshake(
-            verified: storedVerified,
-            probe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessProbe),
-            acknowledgedProbe: AppGroup.defaults.string(forKey: SharedKeys.onboardingFullAccessAcknowledgedProbe)
-        )
-        fullAccessVerified = handshake
+        setup.requestProbe()
     }
 
     private func openSettings() {

@@ -122,6 +122,8 @@ final class SharedKeysExtensionTests: XCTestCase {
         // of bare glyphs floating on the panel is the most obvious way this one
         // stops looking like the system keyboard.
         XCTAssertTrue(KeyboardInteractionPreferences.keyContainersEnabled)
+        defaults.set(false, forKey: SharedKeys.keyContainersEnabled)
+        XCTAssertFalse(KeyboardInteractionPreferences.keyContainersEnabled)
     }
 
     func testMissingTranscriptionLanguageDefaultsToAutomaticDetection() {

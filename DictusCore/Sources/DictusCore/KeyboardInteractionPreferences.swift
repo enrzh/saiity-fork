@@ -21,7 +21,10 @@ public enum KeyboardInteractionPreferences {
         AppGroup.defaults.object(forKey: SharedKeys.liquidGlassEnabled) as? Bool ?? true
     }
 
-    /// Per-key plates are off unless the user turns them on. Popout still uses its own overlay.
+    public static var keyboardInsetEnabled: Bool {
+        AppGroup.defaults.object(forKey: SharedKeys.keyboardInsetEnabled) as? Bool ?? true
+    }
+
     /// Whether letter keys draw a visible container behind the glyph.
     ///
     /// Defaults to **on**, because that is what the platform draws and what the
@@ -49,5 +52,9 @@ public enum KeyboardInteractionPreferences {
     /// Tell the keyboard extension to reload App Group interaction preferences.
     public static func notifyChanged() {
         DarwinNotificationCenter.post(DarwinNotificationName.keyboardPreferencesChanged)
+    }
+
+    public static func notifyVocabularyChanged() {
+        DarwinNotificationCenter.post(DarwinNotificationName.keyboardVocabularyChanged)
     }
 }

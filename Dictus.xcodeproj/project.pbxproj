@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        RR000201 /* EmojiData.swift in App Sources */ = {isa = PBXBuildFile; fileRef = AA1000B0 /* EmojiData.swift */; };
+        RR000202 /* LocalPolishEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100202 /* LocalPolishEngine.swift */; };
+        RR000203 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = RR900201 /* MLXLLM */; };
+        RR000204 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = RR900202 /* MLXLMCommon */; };
+        RR000205 /* Saiity.icon in Resources */ = {isa = PBXBuildFile; fileRef = RR100205 /* Saiity.icon */; };
+        RR000206 /* KeyboardSetupGuide.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = RR100206 /* KeyboardSetupGuide.mp4 */; };
+        RR000207 /* OpenSourceNotices.json in Resources */ = {isa = PBXBuildFile; fileRef = RR100207 /* OpenSourceNotices.json */; };
+        RR000208 /* DeviceKit in App Frameworks */ = {isa = PBXBuildFile; productRef = CC900001 /* DeviceKit */; };
 		4647AD302F76AAA5003C3546 /* RecordingView.swift in Frameworks */ = {isa = PBXBuildFile; fileRef = AA100043 /* RecordingView.swift */; };
 		4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = AA900030 /* FluidAudio */; };
 		AA000001 /* DictusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* DictusApp.swift */; };
@@ -28,6 +36,7 @@
 		RR000103 /* KeyGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100103 /* KeyGridView.swift */; };
 		RR000104 /* KeyGridPageFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100104 /* KeyGridPageFactory.swift */; };
 		RR000105 /* NextKeyboardHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100105 /* NextKeyboardHost.swift */; };
+		RR000106 /* KeyboardSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100106 /* KeyboardSurfaceView.swift */; };
 		RR000030 /* KeyboardKeyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100030 /* KeyboardKeyStyle.swift */; };
 		AA000006 /* DictationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000A /* DictationView.swift */; };
 		AA000007 /* KeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000B /* KeyboardState.swift */; };
@@ -182,6 +191,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        RR100202 /* LocalPolishEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPolishEngine.swift; sourceTree = "<group>"; };
+        RR100205 /* Saiity.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = DictusApp/Saiity.icon; sourceTree = SOURCE_ROOT; };
+        RR100206 /* KeyboardSetupGuide.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = DictusApp/Resources/KeyboardSetupGuide.mp4; sourceTree = SOURCE_ROOT; };
+        RR100207 /* OpenSourceNotices.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = DictusApp/Resources/OpenSourceNotices.json; sourceTree = SOURCE_ROOT; };
 		AA100001 /* DictusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictusApp.swift; sourceTree = "<group>"; };
 		AA100002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA100003 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
@@ -205,6 +218,7 @@
 		RR100103 /* KeyGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridView.swift; sourceTree = "<group>"; };
 		RR100104 /* KeyGridPageFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyGridPageFactory.swift; sourceTree = "<group>"; };
 		RR100105 /* NextKeyboardHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/NextKeyboardHost.swift; sourceTree = "<group>"; };
+		RR100106 /* KeyboardSurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Next/KeyboardSurfaceView.swift; sourceTree = "<group>"; };
 		RR100030 /* KeyboardKeyStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardKeyStyle.swift; sourceTree = "<group>"; };
 		AA10000A /* DictationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationView.swift; sourceTree = "<group>"; };
 		AA10000B /* KeyboardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardState.swift; sourceTree = "<group>"; };
@@ -341,6 +355,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                RR000203 /* MLXLLM in Frameworks */,
+                RR000204 /* MLXLMCommon in Frameworks */,
+                RR000208 /* DeviceKit in App Frameworks */,
 				4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */,
 				AA000010 /* DictusCore in Frameworks */,
 				AA000042 /* WhisperKit in Frameworks */,
@@ -425,6 +442,7 @@
 				RR100103 /* KeyGridView.swift */,
 				RR100104 /* KeyGridPageFactory.swift */,
 				RR100105 /* NextKeyboardHost.swift */,
+				RR100106 /* KeyboardSurfaceView.swift */,
 				RR100030 /* KeyboardKeyStyle.swift */,
 				AA10000B /* KeyboardState.swift */,
 				AA1000F6 /* KeyboardLifecycleProbe.swift */,
@@ -631,6 +649,7 @@
 		AA40P200 /* Polish */ = {
 			isa = PBXGroup;
 			children = (
+                RR100202 /* LocalPolishEngine.swift */,
 				AA10P201 /* PolishAvailability.swift */,
 				AA10P203 /* PolishCoordinator.swift */,
 				AA10P204 /* PolishMetricsRing.swift */,
@@ -771,6 +790,9 @@
 			);
 			name = DictusApp;
 			packageProductDependencies = (
+                RR900201 /* MLXLLM */,
+                RR900202 /* MLXLMCommon */,
+                CC900001 /* DeviceKit */,
 				AA900010 /* DictusCore */,
 				AA900020 /* WhisperKit */,
 				AA900030 /* FluidAudio */,
@@ -853,6 +875,7 @@
 			);
 			mainGroup = AA400000;
 			packageReferences = (
+                RR800201 /* mlx-swift-lm */,
 				AA800001 /* XCLocalSwiftPackageReference "DictusCore" */,
 				AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
@@ -874,6 +897,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                RR000205 /* Saiity.icon in Resources */,
+                RR000206 /* KeyboardSetupGuide.mp4 in Resources */,
+                RR000207 /* OpenSourceNotices.json in Resources */,
 				AA0000C0 /* Assets.xcassets in Resources */,
 				AA0000F4 /* Sounds in Resources */,
 				AA000P10 /* PrivacyInfo.xcprivacy in Resources */,
@@ -988,6 +1014,8 @@
 				AA0000F5 /* LiveActivityManager.swift in Sources */,
 				AA00P201 /* PolishAvailability.swift in Sources */,
 				AA00P203 /* PolishCoordinator.swift in Sources */,
+                RR000201 /* EmojiData.swift in App Sources */,
+                RR000202 /* LocalPolishEngine.swift in Sources */,
 				AA00P204 /* PolishMetricsRing.swift in Sources */,
 				AA00P205 /* PolishDebugView.swift in Sources */,
 				AA00P207 /* PolishDebugExporter.swift in Sources */,
@@ -1052,6 +1080,7 @@
 				RR000103 /* KeyGridView.swift in Sources */,
 				RR000104 /* KeyGridPageFactory.swift in Sources */,
 				RR000105 /* NextKeyboardHost.swift in Sources */,
+				RR000106 /* KeyboardSurfaceView.swift in Sources */,
 				RR000030 /* KeyboardKeyStyle.swift in Sources */,
 				RR000026 /* EmojiGestureCoordinator.swift in Sources */,
 				RR000027 /* EmojiCategoryControl.swift in Sources */,
@@ -1239,11 +1268,11 @@
 		AA720001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Saiity;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1262,11 +1291,11 @@
 		AA720002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Saiity;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DictusApp/DictusApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusApp/Info.plist;
@@ -1288,7 +1317,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1316,7 +1345,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusKeyboard/DictusKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1344,7 +1373,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
@@ -1366,7 +1395,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = DictusWidgets/DictusWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 220;
+				CURRENT_PROJECT_VERSION = 223;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DictusWidgets/Info.plist;
@@ -1431,6 +1460,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+        RR800201 /* mlx-swift-lm */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+            requirement = { kind = exactVersion; version = 2.30.6; };
+        };
 		AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -1458,6 +1492,8 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+        RR900201 /* MLXLLM */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLLM; };
+        RR900202 /* MLXLMCommon */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLMCommon; };
 		AA900010 /* DictusCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA800001 /* XCLocalSwiftPackageReference "DictusCore" */;

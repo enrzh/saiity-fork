@@ -9,6 +9,7 @@ struct KeyVariantPopup: View {
     let isEmoji: Bool
     var cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.keyCornerRadius
     var onSelect: ((Int) -> Void)?
+    var liquidGlassEnabled = KeyboardInteractionPreferences.liquidGlassEnabled
 
     var body: some View {
         HStack(spacing: 0) {
@@ -45,6 +46,8 @@ struct KeyVariantPopup: View {
             transaction.animation = nil
         }
         .accessibilityElement(children: .contain)
+        .environment(\.keyboardLiquidGlassEnabled, liquidGlassEnabled)
+        .ignoresSafeArea()
     }
 
     static func cellWidth(isEmoji: Bool) -> CGFloat { isEmoji ? 44 : 36 }
@@ -106,7 +109,7 @@ struct KeyPreviewPopup: View {
     var body: some View {
         Text(text)
             .font(.system(size: 28, weight: .light))
-            .frame(width: Self.width, height: Self.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .keyboardGlass(
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
                 interactive: false
@@ -121,7 +124,8 @@ struct KeyPreviewPopup: View {
     static let height: CGFloat = 56
 
     static func frame(for source: CGRect, in bounds: CGSize, topOverflow: CGFloat = 0) -> CGRect {
-        let size = CGSize(width: max(width, source.width + 6), height: height)
+        let size = CGSize(width: min(max(width, source.width + 6), max(1, bounds.width - 8)),
+                          height: min(height, max(32, source.height * 1.3), max(1, bounds.height - 8)))
         var x = source.midX - size.width / 2
         x = min(max(4, x), max(4, bounds.width - size.width - 4))
         let topBoundary = -max(0, topOverflow)
@@ -145,16 +149,24 @@ struct KeyPreviewSession {
 /// Hosts either the balloon popup or the zoom-out popout for a pressed key.
 struct KeyPressPreviewHost: View {
     @Binding var session: KeyPreviewSession?
+    var identity: UUID?
+    var liquidGlassEnabled = KeyboardInteractionPreferences.liquidGlassEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if let preview = session {
-            previewView(preview)
-                .frame(width: preview.popupFrame.width, height: preview.popupFrame.height)
-                .position(x: preview.popupFrame.midX, y: preview.popupFrame.midY)
-                .allowsHitTesting(false)
-                .zIndex(20)
+        ZStack(alignment: .topLeading) {
+            if let preview = session {
+                previewView(preview)
+                    .id(identity)
+                    .frame(width: preview.popupFrame.width, height: preview.popupFrame.height)
+                    .position(x: preview.popupFrame.midX, y: preview.popupFrame.midY)
+                    .allowsHitTesting(false)
+                    .environment(\.keyboardLiquidGlassEnabled, liquidGlassEnabled)
+                    .zIndex(20)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea()
     }
 
     @ViewBuilder
@@ -168,7 +180,11 @@ struct KeyPressPreviewHost: View {
             KeyPopoutPreview(
                 text: preview.text,
                 cornerRadius: preview.cornerRadius,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                sourceScale: CGSize(width: preview.sourceFrame.width / max(1, preview.popupFrame.width),
+                                    height: preview.sourceFrame.height / max(1, preview.popupFrame.height)),
+                anchor: UnitPoint(x: (preview.sourceFrame.midX - preview.popupFrame.minX) / max(1, preview.popupFrame.width),
+                                  y: (preview.sourceFrame.midY - preview.popupFrame.minY) / max(1, preview.popupFrame.height))
             )
         }
     }
@@ -190,6 +206,8 @@ struct KeyPopoutPreview: View {
     let text: String
     var cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.keyCornerRadius
     var reduceMotion: Bool = false
+    var sourceScale = CGSize(width: 1 / expansionScale, height: 1 / expansionScale)
+    var anchor = UnitPoint.center
     @State private var expanded = false
 
     static let expansionScale: CGFloat = 1.55
@@ -205,10 +223,10 @@ struct KeyPopoutPreview: View {
             // The host reserves the expanded bounds. Start at the pressed-key
             // size inside that frame, then grow to the frame itself so the
             // transform cannot escape and be clipped by the keyboard canvas.
-            .scaleEffect(expanded && !reduceMotion ? 1 : 1 / Self.expansionScale)
+            .scaleEffect(expanded || reduceMotion ? CGSize(width: 1, height: 1) : sourceScale, anchor: anchor)
             .opacity(1)
             .onAppear {
-                withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.32)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
                     expanded = true
                 }
             }

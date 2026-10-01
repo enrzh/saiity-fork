@@ -68,6 +68,9 @@ struct DictusApp: App {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PersistentLog.log(.appLaunched(version: version))
         PerformanceMetricsSubscriber.shared.start()
+        #if DEBUG
+        CleanupModelProbe.startIfRequested()
+        #endif
 
         // Clean up any Live Activities left over from a previous app session.
         // WHY in init: If the app crashed or was force-quit, the Dynamic Island
@@ -151,6 +154,23 @@ struct DictusApp: App {
                     }
                 }
                 .task {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--live-activity-preview") {
+                        coordinator.resetStatus()
+                        LiveActivityManager.shared.startStandbyActivity()
+                        return
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--model-download-probe") {
+                        do { try ModelRepoDownloader.checkDownloadReceipt() }
+                        catch { print("MODEL_DOWNLOAD_PROBE failed: \(error.localizedDescription)") }
+                        return
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--cleanup-model-probe") { return }
+                    if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe") {
+                        coordinator.resetStatus()
+                        return
+                    }
+                    #endif
                     // The preference is enabled by default. Re-arm the warm
                     // microphone session when the app process starts so the first
                     // keyboard hold does not become a needless recovery handoff.

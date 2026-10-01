@@ -19,6 +19,16 @@ struct ModelManagerView: View {
 
     private let deviceCapabilities = DeviceCapabilities.current()
 
+    private var catalogModels: [ModelInfo] {
+        var models = ModelInfo.available(on: deviceCapabilities)
+        let preferred = modelManager.selectionProfile.preferredIdentifier(for: deviceCapabilities)
+        if !models.contains(where: { $0.identifier == preferred }),
+           let model = ModelInfo.forIdentifier(preferred), model.isSupported(on: deviceCapabilities) {
+            models.append(model)
+        }
+        return models
+    }
+
     private var installedModels: [ModelInfo] {
         ModelInfo.installedRows(from: ModelInfo.allIncludingDeprecated)
             .filter(isInstalled).filter(matchesFilter)
@@ -31,7 +41,7 @@ struct ModelManagerView: View {
     }
 
     private var availableModels: [ModelInfo] {
-        return ModelInfo.available(on: deviceCapabilities)
+        return catalogModels
             .filter { !isInstalled($0) }.filter(matchesFilter)
             .sorted { lhs, rhs in
                 let leftRecommended = modelManager.isRecommended(lhs.identifier)
@@ -43,7 +53,7 @@ struct ModelManagerView: View {
     }
 
     private var recommendedModels: [ModelInfo] {
-        ModelInfo.available(on: deviceCapabilities)
+        catalogModels
             .filter { modelManager.isRecommended($0.identifier) }
             .filter(matchesFilter)
             .sorted { lhs, rhs in
@@ -140,6 +150,7 @@ struct ModelManagerView: View {
     private var modelList: some View {
         List {
             Section {
+                ModelSelectionProfilePicker(modelManager: modelManager)
                 ModelSelectionModePicker(modelManager: modelManager)
             } header: {
                 Text("Selection")
@@ -246,14 +257,18 @@ struct ModelManagerView: View {
     private var dictationCleanupSection: some View {
         let cleanupModels = modelManager.customModels.filter { $0.role == .cleanup }
         Section {
+            CleanupModelPicker(manager: modelManager)
             appleIntelligenceCleanupRow
+            ForEach(LocalCleanupModel.allCases, id: \.self) { model in
+                CleanupModelCardView(model: model, manager: modelManager)
+            }
             ForEach(cleanupModels) { model in
                 customCleanupRow(model)
             }
         } header: {
             modelSectionHeader("Dictation cleanup", systemImage: "sparkles")
         } footer: {
-            Text("Apple Intelligence uses the on-device Foundation Models in iOS. Select an Ollama cleanup model only after you have registered one.")
+            Text("Speech recognition and text processing use separate models. Apple supports background processing; downloaded local processing models require sAiity to stay open.")
                 .font(.caption)
         }
         .listSectionSeparator(.hidden)

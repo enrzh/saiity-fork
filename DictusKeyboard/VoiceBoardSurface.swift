@@ -10,18 +10,20 @@ extension KeyboardRootView {
             let dictateFrame = layout.dictateFrame
             let errorFrame = layout.dictationErrorFrame
             ZStack(alignment: .topLeading) {
-                primaryBoardControl(frame: dictateFrame)
-                    .frame(width: dictateFrame.width, height: dictateFrame.height)
-                    .position(x: dictateButtonLocalX(for: dictateFrame, in: layout),
-                              y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
-                    .allowsHitTesting(!voiceBoardUsesUIKitHits)
-                    .accessibilityHidden(voiceBoardUsesUIKitHits)
-                if !layout.spaceFrame.isEmpty {
-                    spaceBar(frame: layout.spaceFrame)
-                        .position(
-                            x: CGFloat(layout.spaceFrame.midX - layout.surfaceFrame.minX),
-                            y: CGFloat(layout.spaceFrame.midY - layout.surfaceFrame.minY)
-                        )
+                if !voiceBoardUsesUIKitHits {
+                    primaryBoardControl(frame: dictateFrame)
+                        .frame(width: dictateFrame.width, height: dictateFrame.height)
+                        .position(x: dictateButtonLocalX(for: dictateFrame, in: layout),
+                                  y: CGFloat(dictateFrame.midY - layout.surfaceFrame.minY))
+                        .allowsHitTesting(!voiceBoardUsesUIKitHits)
+                        .accessibilityHidden(voiceBoardUsesUIKitHits)
+                    if !layout.spaceFrame.isEmpty {
+                        spaceBar(frame: layout.spaceFrame)
+                            .position(
+                                x: CGFloat(layout.spaceFrame.midX - layout.surfaceFrame.minX),
+                                y: CGFloat(layout.spaceFrame.midY - layout.surfaceFrame.minY)
+                            )
+                    }
                 }
                 if !dictationErrorMessage.isEmpty && !errorFrame.isEmpty {
                     Text(dictationErrorMessage)
@@ -206,9 +208,7 @@ extension KeyboardRootView {
     /// The handoff acknowledges the press immediately, before iOS finishes
     /// switching away, so the control never looks inert while it works.
     private var recoveryTitle: String {
-        if state.isOpeningForDictation { return "Opening sAiity…" }
-        if state.dictationStatus == .failed, state.statusMessage != nil { return "Try again" }
-        return "Open sAiity"
+        state.recoveryBoardTitle
     }
 
     private func spaceBar(frame: CGRect) -> some View {
@@ -217,7 +217,7 @@ extension KeyboardRootView {
                 Text("space")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .frame(width: frame.width, height: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)),
+                    .frame(width: frame.width, height: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)),
                 in: Capsule()
             )
             if !voiceBoardUsesUIKitHits {
@@ -237,23 +237,11 @@ extension KeyboardRootView {
     /// Dictation's own copy. The app-handoff wording moved to the recovery
     /// control, so nothing here can promise one action and perform another.
     private var dictationTitle: String {
-        switch state.dictationStatus {
-        case .idle, .ready: return "Hold to dictate"
-        case .requested: return "Getting ready..."
-        case .recording: return state.isFinishingRecording ? "Finishing..." : "Listening..."
-        case .transcribing: return "Cancel transcription"
-        case .processing: return "Cancel cleanup"
-        case .failed: return "Hold to dictate"
-        }
+        state.dictationBoardTitle
     }
 
     private var dictationSymbol: String {
-        switch state.dictationStatus {
-        case .recording: return state.isFinishingRecording ? "ellipsis" : "waveform"
-        case .requested: return "ellipsis"
-        case .transcribing, .processing: return "xmark"
-        case .failed, .idle, .ready: return "mic.fill"
-        }
+        state.dictationBoardSymbol
     }
 
     /// The blocked-link guidance belongs to the recovery control now, so it only

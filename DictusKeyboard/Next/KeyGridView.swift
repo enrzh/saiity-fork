@@ -28,6 +28,7 @@
 // to commit the chosen variant, so those decide on touch-up.
 
 import UIKit
+import SwiftUI
 import DictusCore
 
 protocol KeyGridViewDelegate: AnyObject {
@@ -45,6 +46,8 @@ final class KeyGridView: UIView {
 
     private(set) var page: KeyGridPage?
     private(set) var layout = KeyGridLayout()
+    private var neutralLayout = KeyGridLayout()
+    private var hitPrediction: NextCharacterProbabilities?
     private var fingerprint: String = ""
     private var solvedSize: CGSize = .zero
 
@@ -111,12 +114,13 @@ final class KeyGridView: UIView {
         let key: KeyGridKey
         let row: Int
         let column: Int
+        let previewText: String?
         /// Accent keys decide on release; everything else has already committed.
-        let waitsForRelease: Bool
+        var waitsForRelease: Bool
         var variants: [String]
         var popupVisible: Bool
         var selectedVariant: Int
-        var popupWork: DispatchWorkItem?
+        var popupWork: KeyboardHoldSession?
     }
 
     /// Keyed by touch identity, never by key: two fingers on two keys are two
@@ -125,6 +129,12 @@ final class KeyGridView: UIView {
     /// At most one accent popup at a time. A second finger on another accent key
     /// must still be able to type, so it types its base character and shows none.
     private var popupOwner: ObjectIdentifier?
+    private var previewOwner: ObjectIdentifier?
+    private var variantPopupHost: UIHostingController<KeyVariantPopup>?
+    private var previewPopupHost: UIHostingController<KeyPressPreviewHost>?
+    private var previewPopupIdentity: ObjectIdentifier?
+    private var previewPopupMode: KeyPopupMode?
+    private var publishedCommandSpecs: [CommandSpec] = []
 
     /// Delete repeat, driven by the delegate so the timing lives in one place.
     private var repeatingKey: KeyGridKey?
@@ -159,13 +169,20 @@ final class KeyGridView: UIView {
     /// plate has actually changed.
     func setPage(_ page: KeyGridPage, force: Bool = false) {
         let next = page.fingerprint
-        guard force || next != fingerprint || page.id != self.page?.id else {
+        guard force || next != fingerprint || page.id != self.page?.id
+                || page.topInset != self.page?.topInset else {
             self.page = page
             return
+        }
+        if self.page != nil {
+            if self.page?.id == page.id { cancelActivePresses() }
+            else { reset() }
         }
         fingerprint = next
         self.page = page
         solvedSize = .zero
+        neutralLayout = KeyGridLayout()
+        layout = KeyGridLayout()
         setNeedsLayout()
         setNeedsDisplay()
     }
@@ -176,8 +193,16 @@ final class KeyGridView: UIView {
         // Re-solving on a size change only. Solving is arithmetic over the page,
         // and doing it per keystroke is the cost that used to make typing lag.
         guard bounds.size != solvedSize, let page else { return }
+        // Rotation invalidates finger coordinates and the popup's source frame.
+        // Cancel only the fingers; keep Shift/Caps state across the resize.
+        if solvedSize != .zero { cancelActivePresses() }
         solvedSize = bounds.size
-        layout = KeyGridPlacement.solve(page, in: bounds.size)
+        neutralLayout = KeyGridPlacement.solve(page, in: bounds.size)
+        layout = page.id == "letters" && hitPrediction != nil
+            ? KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)
+            : neutralLayout
+        updateVariantPopup()
+        updatePressPreview()
         logSolvedGeometry()
         onGlassLayoutChanged?(glassSpecs)
         setNeedsDisplay()
@@ -219,18 +244,56 @@ final class KeyGridView: UIView {
     /// tracked when the page changes is the shape of bug where a character is
     /// committed to a field the user has already left.
     func reset() {
-        for press in presses.values {
-            press.popupWork?.cancel()
-        }
-        presses.removeAll()
-        popupOwner = nil
-        repeatingKey = nil
+        cancelActivePresses()
         shiftLatched = false
         isCapsLocked = false
         setNeedsDisplay()
     }
 
+    private func cancelActivePresses() {
+        for press in presses.values {
+            press.popupWork?.cancel()
+        }
+        presses.removeAll()
+        popupOwner = nil
+        previewOwner = nil
+        updatePressPreview()
+        updateVariantPopup()
+        if repeatingKey != nil { delegate?.keyGridDidEndRepeat(self) }
+        repeatingKey = nil
+        setNeedsDisplay()
+    }
+
+    /// Appearance preferences never require a new page or a geometry solve.
+    func refreshAppearance() {
+        onGlassLayoutChanged?(glassSpecs)
+        onCommandFacesChanged?(commandSpecs)
+        updateVariantPopup()
+        updatePressPreview(force: true)
+        setNeedsDisplay()
+    }
+
+    /// A new prior only changes the target map; active fingers retain their
+    /// press identity and the visible plates are never re-solved or redrawn.
+    func updateHitPrediction(_ prediction: NextCharacterProbabilities?, enabled: Bool) {
+        let next = enabled && page?.id == "letters" ? prediction : nil
+        guard next != hitPrediction else { return }
+        hitPrediction = next
+        guard solvedSize == bounds.size, !neutralLayout.placed.isEmpty else { return }
+        layout = next == nil ? neutralLayout
+            : KeyGridPlacement.retarget(neutralLayout, probabilities: next)
+    }
+
     // MARK: - Drawing
+
+    override func setNeedsDisplay() {
+        super.setNeedsDisplay()
+        updatePressPreview()
+        let specs = commandSpecs
+        guard specs != publishedCommandSpecs else { return }
+        publishedCommandSpecs = specs
+        onCommandFacesChanged?(specs)
+    }
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
@@ -241,7 +304,6 @@ final class KeyGridView: UIView {
                 drawPlate(item, pressed: isPressed, context: context)
             }
         }
-        drawVariantPopupIfNeeded()
     }
 
     private struct PlacedPosition: Hashable {
@@ -259,6 +321,13 @@ final class KeyGridView: UIView {
         let radius: CGFloat
     }
 
+    struct CommandSpec: Equatable {
+        let rect: CGRect
+        let systemName: String?
+        let text: String?
+        let pressed: Bool
+    }
+
     /// Told every time the set of glass plates changes, so the host can realise the
     /// material in a sibling layer. The grid cannot host it itself: a
     /// `UIVisualEffectView` is a subview, and subviews draw *above* the receiver's
@@ -268,25 +337,36 @@ final class KeyGridView: UIView {
     /// the touch path — on iOS 26 a glass layer can win the hit test on its own,
     /// which is how Liquid Glass keys became untappable before.
     var onGlassLayoutChanged: (([GlassSpec]) -> Void)?
+    var onCommandFacesChanged: (([CommandSpec]) -> Void)?
 
-    /// The plates that get a visible face, in draw order.
-    ///
-    /// The command keys that get their material from the sibling glass layer.
-    ///
-    /// Letter plates are drawn by the grid itself, not by the glass layer. The glass
-    /// layer is a sibling *below* the grid, and on a fast page switch it can fail to
-    /// reconcile in time — which is the "the letter keys lose their containers"
-    /// report. A plate the grid draws itself cannot disappear.
-    ///
-    /// So the two paths no longer share one predicate: this one takes commands only,
-    /// and `drawPlate` fills every other plate. Each covers what the other does not,
-    /// so a key is never left without a face and never painted twice.
+    private var commandSpecs: [CommandSpec] {
+        let held = heldPositions()
+        return layout.rows.flatMap { row in
+            row.compactMap { item in
+                guard item.key.isCommand else { return nil }
+                if case .none = item.key.action { return nil }
+                let systemName = item.key.id == "shift"
+                    ? (shiftActive ? "shift.fill" : "shift")
+                    : item.key.systemImage
+                return CommandSpec(
+                    rect: visualPlate(for: item),
+                    systemName: systemName,
+                    text: systemName == nil ? displayText(for: item.key) : nil,
+                    pressed: held.contains(PlacedPosition(row: item.row, column: item.column))
+                        || (item.key.id == "shift" && shiftTouch != nil)
+                )
+            }
+        }
+    }
+
+    /// Every visible plate has a fallback below the sibling glass material.
     private var glassSpecs: [GlassSpec] {
         var specs: [GlassSpec] = []
         for row in layout.rows {
             for item in row {
-                guard item.key.isCommand, showsPlate(for: item.key) else { continue }
-                specs.append(GlassSpec(rect: CommandKeyStyle.visualPlate(for: item.plate),
+                guard showsPlate(for: item.key),
+                      !(item.key.isCommand && onCommandFacesChanged != nil) else { continue }
+                specs.append(GlassSpec(rect: visualPlate(for: item),
                                        radius: cornerRadius(for: item.key)))
             }
         }
@@ -300,29 +380,20 @@ final class KeyGridView: UIView {
     /// disagree about how big a key looks.
     private func visualPlate(for item: PlacedKey) -> CGRect {
         item.key.isCommand
-            ? CommandKeyStyle.visualPlate(for: item.plate)
+            ? CommandKeyStyle.visualPlate(for: item.plate, surfaceWidth: bounds.width)
             : item.plate
     }
 
-    /// A key with no action is a spacer: it carries width so the row indents and
-    /// draws nothing at all. Legacy spacers were invisible, and the way to get that
-    /// right is to draw nothing rather than to draw an empty plate.
+    /// Spacers have no face; the preference affects typing keys, not commands or the pad.
     private func showsPlate(for key: KeyGridKey) -> Bool {
         if case .none = key.action { return false }
-        // Every key with an action draws a plate, always.
-        //
-        // This used to be gated on `keyContainersEnabled`, a preference that existed
-        // to reproduce the legacy look where letters had no container. Gating a
-        // visible plate on a preference the user cannot see produced the "the letter
-        // keys lose their containers when I switch from emoji" report: the number and
-        // symbol pages were never gated, so they always had plates, and the letter
-        // page had them only when the preference happened to read true — which made
-        // the pages disagree and made the plates look like they came and went.
-        //
-        // The platform draws a plate on every key. So does this grid. The preference
-        // still exists for the legacy surfaces, which are the ones that look wrong
-        // without it.
-        return true
+        if key.isCommand { return true }
+        switch page?.id {
+        case "letters", "symbols1", "symbols2":
+            return KeyboardInteractionPreferences.keyContainersEnabled
+        default:
+            return true
+        }
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
@@ -330,12 +401,16 @@ final class KeyGridView: UIView {
     }
 
     private var usesLiveMaterial: Bool {
-        KeyboardInteractionPreferences.liquidGlassEnabled
-            && !UIAccessibility.isReduceTransparencyEnabled
+        if #available(iOS 26.0, *) {
+            return KeyboardInteractionPreferences.liquidGlassEnabled
+                && !UIAccessibility.isReduceTransparencyEnabled
+        }
+        return false
     }
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
         if case .none = item.key.action { return }
+        if item.key.isCommand, onCommandFacesChanged != nil { return }
         guard showsPlate(for: item.key) else {
             drawLabel(for: item.key, in: item.plate, pressed: pressed)
             return
@@ -382,20 +457,18 @@ final class KeyGridView: UIView {
                                 : CommandKeyStyle.litWashAlpha),
                      in: context)
             }
-        } else {
-            // Letter and number plates are always drawn by the grid itself.
-            //
-            // They used to be left to the sibling glass layer, which made them
-            // intermittent: on a fast page switch the grid could draw before the
-            // glass views had been reconciled, and the letters came out with no
-            // container at all. Drawing the plate here means the face and the
-            // target are produced by the same view in the same pass, so they
-            // cannot disagree.
+        } else if !usesLiveMaterial {
             fill(item.plate, radius: radius,
                  color: plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate),
                  in: context)
+        } else if pressed {
+            fill(item.plate, radius: radius,
+                 color: UIColor.label.withAlphaComponent(0.10), in: context)
         }
-        drawLabel(for: item.key, in: item.plate, pressed: pressed)
+        let labelPlate = item.key.isCommand
+            ? CommandKeyStyle.pressedPlate(visualPlate(for: item), pressed: pressed)
+            : item.plate
+        drawLabel(for: item.key, in: labelPlate, pressed: pressed)
     }
 
     private func fill(_ rect: CGRect, radius: CGFloat, color: UIColor, in context: CGContext) {
@@ -427,7 +500,7 @@ final class KeyGridView: UIView {
         if isLit {
             return UIColor.label.withAlphaComponent(CommandKeyStyle.litWashAlpha)
         }
-        if KeyboardInteractionPreferences.liquidGlassEnabled {
+        if usesLiveMaterial {
             return UIColor.secondarySystemFill.withAlphaComponent(0.5)
         }
         return UIColor.tertiarySystemFill
@@ -552,59 +625,83 @@ final class KeyGridView: UIView {
         }
     }
 
-    private func drawVariantPopupIfNeeded() {
+    private func updatePressPreview(force: Bool = false) {
+        guard let previewOwner, let press = presses[previewOwner],
+              !press.popupVisible, let text = press.previewText,
+              let item = itemAt(row: press.row, column: press.column),
+              KeyboardInteractionPreferences.keyPopupMode != .off else {
+            previewPopupHost?.view.isHidden = true
+            previewPopupIdentity = nil
+            previewPopupMode = nil
+            return
+        }
+        let mode = KeyboardInteractionPreferences.keyPopupMode
+        guard force || previewPopupIdentity != previewOwner || previewPopupMode != mode else { return }
+        let session = KeyPreviewSession(
+            text: text, sourceFrame: item.plate,
+            popupFrame: KeyPressPreviewHost.frame(for: item.plate, in: bounds.size)
+        )
+        let content = KeyPressPreviewHost(session: .constant(session), identity: UUID())
+        // Retain one host across key presses. Reset the popout's local animation
+        // with identity, without allocating another hosting controller per key.
+        if let previewPopupHost {
+            previewPopupHost.rootView = content
+            previewPopupHost.view.frame = bounds
+            previewPopupHost.view.isHidden = false
+            bringSubviewToFront(previewPopupHost.view)
+        } else {
+            let host = UIHostingController(rootView: content)
+            host.view.backgroundColor = .clear
+            host.view.isOpaque = false
+            host.view.isUserInteractionEnabled = false
+            host.view.frame = bounds
+            host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            attachKeyboardVisualController(host, from: self)
+            previewPopupHost = host
+        }
+        previewPopupIdentity = previewOwner
+        previewPopupMode = mode
+    }
+
+    private func updateVariantPopup() {
         guard let owner = popupOwner,
               let press = presses[owner],
               press.popupVisible,
               press.variants.count > 1,
-              let item = itemAt(row: press.row, column: press.column) else { return }
-        let cellWidth: CGFloat = 44
-        let cellHeight: CGFloat = 54
-        let width = cellWidth * CGFloat(press.variants.count)
-        let frame = popupFrame(above: item.plate, width: width, height: cellHeight)
-        UIColor.secondarySystemBackground.setFill()
-        UIBezierPath(roundedRect: frame, cornerRadius: 12).fill()
-        UIColor.separator.setStroke()
-        let outline = UIBezierPath(roundedRect: frame, cornerRadius: 12)
-        outline.lineWidth = 1
-        outline.stroke()
-
-        for (index, option) in press.variants.enumerated() {
-            let cell = CGRect(x: frame.minX + cellWidth * CGFloat(index),
-                              y: frame.minY, width: cellWidth, height: cellHeight)
-            if index == press.selectedVariant {
-                UIColor.label.withAlphaComponent(0.12).setFill()
-                UIBezierPath(roundedRect: cell.insetBy(dx: 2, dy: 2),
-                             cornerRadius: 9).fill()
-            }
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 22, weight: .regular),
-                .foregroundColor: UIColor.label,
-                .paragraphStyle: centeredParagraph()
-            ]
-            let string = NSAttributedString(string: option, attributes: attributes)
-            let measured = string.size()
-            string.draw(at: CGPoint(x: cell.midX - measured.width / 2,
-                                    y: cell.midY - measured.height / 2))
+              let item = itemAt(row: press.row, column: press.column) else {
+            detachKeyboardVisualController(variantPopupHost)
+            variantPopupHost = nil
+            return
         }
-    }
-
-    private func popupFrame(above plate: CGRect, width: CGFloat, height: CGFloat) -> CGRect {
-        CGRect(
-            x: min(max(0, plate.midX - width / 2), max(0, bounds.width - width)),
-            y: max(0, plate.minY - height - 4),
-            width: width,
-            height: height
+        let frame = KeyVariantPopup.frame(
+            for: item.plate, optionCount: press.variants.count,
+            isEmoji: false, in: bounds.size
         )
+        let popup = KeyVariantPopup(
+            options: press.variants, selectedIndex: press.selectedVariant, isEmoji: false
+        )
+        if let variantPopupHost {
+            variantPopupHost.rootView = popup
+            variantPopupHost.view.frame = frame
+        } else {
+            let host = UIHostingController(rootView: popup)
+            host.view.backgroundColor = .clear
+            host.view.isUserInteractionEnabled = false
+            host.view.frame = frame
+            host.view.accessibilityIdentifier = "key-variant-selector"
+            attachKeyboardVisualController(host, from: self)
+            variantPopupHost = host
+        }
     }
 
     // MARK: - Touches
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for touch in touches {
+        for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
             let point = touch.location(in: self)
             guard let item = layout.key(at: point) else { continue }
             let identity = ObjectIdentifier(touch)
+            commitPendingCharacter()
             let action = item.key.action
 
             switch action {
@@ -623,6 +720,7 @@ final class KeyGridView: UIView {
                 repeatingKey = item.key
                 presses[identity] = Press(
                     key: item.key, row: item.row, column: item.column,
+                    previewText: nil,
                     waitsForRelease: false, variants: [],
                     popupVisible: false, selectedVariant: 0, popupWork: nil
                 )
@@ -633,13 +731,16 @@ final class KeyGridView: UIView {
                 // `.character` action for letters that have accents, so without
                 // handling shift here most keys typed lower case while caps was on.
                 HapticFeedback.playInputClick()
-                delegate?.keyGrid(self, perform: .insert(shiftedText(text)), key: item.key)
-                consumeOneShotShift()
+                let inserted = shiftedText(text)
                 presses[identity] = Press(
                     key: item.key, row: item.row, column: item.column,
+                    previewText: text.count == 1 && !item.key.isCommand ? inserted : nil,
                     waitsForRelease: false, variants: [],
                     popupVisible: false, selectedVariant: 0, popupWork: nil
                 )
+                if text.count == 1 && !item.key.isCommand { previewOwner = identity }
+                delegate?.keyGrid(self, perform: .insert(inserted), key: item.key)
+                consumeOneShotShift()
 
             case .character(let base, let variants):
                 HapticFeedback.playInputClick()
@@ -648,33 +749,35 @@ final class KeyGridView: UIView {
                     if ownsPopup { popupOwner = identity }
                     var press = Press(
                         key: item.key, row: item.row, column: item.column,
-                        waitsForRelease: true, variants: variants,
+                        previewText: shiftedText(base),
+                        waitsForRelease: true, variants: variants.map(shiftedText),
                         popupVisible: false, selectedVariant: 0, popupWork: nil
                     )
                     if ownsPopup {
-                        let work = DispatchWorkItem { [weak self] in
+                        let work = KeyboardHoldSession()
+                        work.begin(after: KeyboardDeletion.holdRecognitionDuration) { [weak self] in
                             self?.revealPopup(for: identity)
                         }
                         press.popupWork = work
-                        DispatchQueue.main.asyncAfter(
-                            deadline: .now() + KeyboardDeletion.holdRecognitionDuration,
-                            execute: work
-                        )
                     }
                     presses[identity] = press
+                    previewOwner = identity
                 } else {
                     presses[identity] = Press(
                         key: item.key, row: item.row, column: item.column,
+                        previewText: shiftedText(base),
                         waitsForRelease: false, variants: [],
                         popupVisible: false, selectedVariant: 0, popupWork: nil
                     )
-                    commit(base)
+                    previewOwner = identity
+                    commit(shiftedText(base))
                 }
 
             default:
                 HapticFeedback.playInputClick()
                 presses[identity] = Press(
                     key: item.key, row: item.row, column: item.column,
+                    previewText: nil,
                     waitsForRelease: false, variants: [],
                     popupVisible: false, selectedVariant: 0, popupWork: nil
                 )
@@ -691,20 +794,19 @@ final class KeyGridView: UIView {
                   popupOwner == identity,
                   press.popupVisible,
                   let item = itemAt(row: press.row, column: press.column) else { continue }
-            let cellWidth: CGFloat = 44
-            let cellHeight: CGFloat = 54
-            let frame = popupFrame(
-                above: item.plate,
-                width: cellWidth * CGFloat(press.variants.count),
-                height: cellHeight
+            let frame = KeyVariantPopup.frame(
+                for: item.plate, optionCount: press.variants.count,
+                isEmoji: false, in: bounds.size
             )
-            let index = variantIndex(
-                at: touch.location(in: self), frame: frame, count: press.variants.count
+            let index = KeyVariantPopup.selectedIndex(
+                at: touch.location(in: self), popupFrame: frame,
+                optionCount: press.variants.count
             )
             guard index != press.selectedVariant else { continue }
             press.selectedVariant = index
             presses[identity] = press
             HapticFeedback.variantHighlightChanged()
+            updateVariantPopup()
             setNeedsDisplay()
         }
     }
@@ -731,8 +833,12 @@ final class KeyGridView: UIView {
                 continue
             }
             guard let press = presses.removeValue(forKey: identity) else { continue }
+            if previewOwner == identity { previewOwner = nil }
             press.popupWork?.cancel()
-            if popupOwner == identity { popupOwner = nil }
+            if popupOwner == identity {
+                popupOwner = nil
+                updateVariantPopup()
+            }
             if repeatingKey?.id == press.key.id {
                 repeatingKey = nil
                 delegate?.keyGridDidEndRepeat(self)
@@ -740,12 +846,11 @@ final class KeyGridView: UIView {
             if cancelled { continue }
             switch press.key.action {
             case .character(let base, _):
+                guard press.waitsForRelease else { continue }
                 if press.popupVisible, press.variants.indices.contains(press.selectedVariant) {
                     commit(press.variants[press.selectedVariant])
-                } else if !press.waitsForRelease {
-                    // Already committed on press.
                 } else {
-                    commit(shiftedText(base))
+                    commit(press.previewText ?? shiftedText(base))
                 }
             default:
                 break
@@ -759,27 +864,36 @@ final class KeyGridView: UIView {
         return layout.rows[row].first { $0.column == column }
     }
 
-    private func variantIndex(at point: CGPoint, frame: CGRect, count: Int) -> Int {
-        guard count > 0 else { return 0 }
-        let cellWidth = frame.width / CGFloat(count)
-        guard cellWidth > 0 else { return 0 }
-        let index = Int((point.x - frame.minX) / cellWidth)
-        return min(max(0, index), count - 1)
-    }
-
     private func revealPopup(for identity: ObjectIdentifier) {
-        guard popupOwner == identity, var press = presses[identity] else { return }
+        guard popupOwner == identity, var press = presses[identity], press.waitsForRelease else { return }
         press.popupVisible = true
         press.popupWork = nil
         presses[identity] = press
         HapticFeedback.variantPopupPresented()
+        updateVariantPopup()
         setNeedsDisplay()
     }
 
-    /// Sends a character through the same path whether it was typed, held or
-    /// tapped, so casing is applied in exactly one place.
-    private func commit(_ character: String) {
-        let text = shiftedText(character)
+    /// Settle an earlier accent key before the next key or bottom-bar action.
+    /// Otherwise overlapping A-down, S-down, A-up inserts "sa". Mark it committed
+    /// before calling the delegate, whose proxy route also calls this method.
+    func commitPendingCharacter() {
+        for (identity, var press) in presses where press.waitsForRelease {
+            let text = press.popupVisible && press.variants.indices.contains(press.selectedVariant)
+                ? press.variants[press.selectedVariant] : press.previewText
+            press.waitsForRelease = false
+            press.popupWork?.cancel()
+            press.popupWork = nil
+            press.popupVisible = false
+            presses[identity] = press
+            if popupOwner == identity { popupOwner = nil }
+            if let text { commit(text) }
+        }
+        updateVariantPopup()
+    }
+
+    /// Character casing was captured when its finger pressed the key.
+    private func commit(_ text: String) {
         delegate?.keyGrid(self, perform: .insert(text), key: KeyGridKey(id: "", action: .none))
         // Shift applies to one character. Leaving it latched is how a forgotten
         // shift turns a whole word uppercase. Caps lock is not consumed.

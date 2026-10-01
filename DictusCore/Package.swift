@@ -9,7 +9,7 @@ let package = Package(
         .executable(name: "polish-harness", targets: ["polish-harness"])
     ],
     targets: [
-        .target(name: "DictusCore", path: "Sources/DictusCore"),
+        .target(name: "DictusCore", path: "Sources/DictusCore", resources: [.process("Resources")]),
         // Off-device polish eval harness (macOS only — needs Apple Intelligence).
         // Runs the REAL pipeline (PolishPipeline + AppleFoundationModelsPolishEngine)
         // on text fixtures, sharing one source of truth with the app. Not built by

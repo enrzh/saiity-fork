@@ -117,6 +117,8 @@ class DictationCoordinator: ObservableObject {
     /// A pending/recording session must survive a scene transition so a cold start
     /// can finish or an existing background recording can continue.
     func deactivateAudioIfIdle() {
+        // The setup guide owns playback while its PiP video accompanies Settings.
+        guard AVAudioSession.sharedInstance().category != .playback else { return }
         guard !DictationSessionLivenessPolicy.isActive(status) else { return }
         guard !keyboardSessionEnabled else { return }
         audioEngine.deactivateIfIdle()

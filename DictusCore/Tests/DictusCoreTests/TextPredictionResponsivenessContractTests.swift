@@ -71,7 +71,8 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
         let state = try source("DictusKeyboard/TextPrediction/SuggestionState.swift")
         XCTAssertFalse(state.contains("touchRecallTokens"),
                        "touch routing must not depend on dictionary/name recall")
-        XCTAssertTrue(state.contains("TypingCommit.accepts(typed: word, correction: prepared.correction)"))
+        XCTAssertTrue(state.contains("prepared.correction.flatMap"))
+        XCTAssertTrue(state.contains("let correction: String?"), "completed negative checks must also be cached")
         XCTAssertTrue(state.contains("adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight"))
         XCTAssertTrue(state.contains("UserDictionary.shared.reload()"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.spellCheck(word) }"))
@@ -113,5 +114,20 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
                       "protected fields must drop a stale touch prior")
         XCTAssertTrue(body.contains("self.engine.shouldAbstainFromPrediction(for: inputContext)"),
                       "code-like or uncertain context should not bias a key")
+    }
+
+    func testVisualPreferencesDoNotReloadVocabulary() throws {
+        let state = try source("DictusKeyboard/TextPrediction/SuggestionState.swift")
+        let preferenceStart = try XCTUnwrap(state.range(of: "func refreshPreferences()"))
+        let vocabularyStart = try XCTUnwrap(state.range(of: "func refreshVocabulary()", range: preferenceStart.upperBound..<state.endIndex))
+        let preferenceBody = String(state[preferenceStart.lowerBound..<vocabularyStart.lowerBound])
+        let vocabularyBody = String(state[vocabularyStart.lowerBound...])
+
+        XCTAssertFalse(preferenceBody.contains("UserDictionary.shared.reload()"))
+        XCTAssertTrue(preferenceBody.contains("enabled != lastAutocorrectEnabled"))
+        XCTAssertTrue(vocabularyBody.contains("UserDictionary.shared.reload()"))
+
+        let settings = try source("DictusApp/Views/SettingsView.swift")
+        XCTAssertEqual(settings.components(separatedBy: "KeyboardInteractionPreferences.notifyVocabularyChanged()").count - 1, 3)
     }
 }

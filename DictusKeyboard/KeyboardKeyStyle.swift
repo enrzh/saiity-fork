@@ -8,21 +8,36 @@ enum KeyboardChromeRole {
     case board
 }
 
+private struct KeyboardLiquidGlassKey: EnvironmentKey {
+    static var defaultValue: Bool { KeyboardInteractionPreferences.liquidGlassEnabled }
+}
+
+extension EnvironmentValues {
+    var keyboardLiquidGlassEnabled: Bool {
+        get { self[KeyboardLiquidGlassKey.self] }
+        set { self[KeyboardLiquidGlassKey.self] = newValue }
+    }
+}
+
 /// A visual-only material component. Input belongs to `KeyboardKeyTouchControl`.
 struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     let shape: S
     var interactive: Bool = true
     var role: KeyboardChromeRole = .control
+    @Environment(\.keyboardLiquidGlassEnabled) private var liquidGlassEnabled
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
     func body(content: Content) -> some View {
-        plate(content).allowsHitTesting(false)
+        // Material is a background, never an input policy for its content.
+        content.background {
+            plate(Color.clear).allowsHitTesting(false)
+        }
     }
 
     @ViewBuilder
-    private func plate(_ content: Content) -> some View {
-        if !KeyboardInteractionPreferences.liquidGlassEnabled {
+    private func plate<Plate: View>(_ content: Plate) -> some View {
+        if !liquidGlassEnabled {
             if role == .board {
                 content.allowsHitTesting(false)
             } else {
@@ -115,7 +130,7 @@ struct CommandKeyFace: View {
         text = nil
         textWeight = .semibold
         self.symbolPointSize = symbolPointSize
-        textPointSize = 14
+        textPointSize = CommandKeyStyle.textSize
         self.plateWidth = plateWidth
         self.plateHeight = plateHeight
         self.cornerRadius = cornerRadius
@@ -127,7 +142,7 @@ struct CommandKeyFace: View {
         plateWidth: CGFloat? = nil,
         plateHeight: CGFloat,
         cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
-        textPointSize: CGFloat = 14,
+        textPointSize: CGFloat = CommandKeyStyle.textSize,
         textWeight: Font.Weight = .semibold,
         isPressed: Bool = false
     ) {

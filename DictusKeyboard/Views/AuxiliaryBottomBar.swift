@@ -1,5 +1,6 @@
 // DictusKeyboard/Views/AuxiliaryBottomBar.swift
 import SwiftUI
+import UIKit
 import DictusCore
 
 enum KeyHitTarget {
@@ -24,6 +25,7 @@ struct AuxiliaryBottomBar: View {
     let returnFrame: CGRect
     var periodFrame: CGRect = .zero
     var onPeriod: (String) -> Void = { _ in }
+    var onDelete: () -> Void = {}
     let onSpace: () -> Void
     let onSpaceCursorBegan: () -> Void
     let onSpaceCursorMoved: (KeyboardCursorStep) -> Void
@@ -39,6 +41,7 @@ struct AuxiliaryBottomBar: View {
     @State private var periodVariantSession: KeyVariantSession?
     @State private var periodPreviewSession: KeyPreviewSession?
     @State private var periodHoldToken: UUID?
+    @State private var periodInserted = false
 
     var body: some View {
         let surface = layout.surfaceFrame
@@ -104,20 +107,10 @@ struct AuxiliaryBottomBar: View {
             } else if showsPeriodKey && !periodFrame.isEmpty {
                 periodKey(source: periodSourceFrame, bounds: barBounds, topOverflow: popupTopOverflow)
                     .frame(width: periodSourceFrame.width, height: periodSourceFrame.height)
-                    // Positioned like every other control in this bar, by `.position`
-                    // rather than `.offset`.
-                    //
-                    // It was the one control positioned with `.offset(x:y:)` after a
-                    // fixed frame, inside a `ZStack(alignment: .topLeading)`. That is
-                    // a layout offset applied after the fact, and the UIKit touch
-                    // control inside it is hit-tested against its *layout* frame, so
-                    // the control answered for the top-leading corner of the bar rather
-                    // than for the period key's own rectangle. Every touch on the "."
-                    // therefore arrived at whatever control owns the top-left of the bar,
-                    // which is why the key looked alive and did nothing. `.position`
-                    // centres the view on the frame's midpoint, which is what the rest of
-                    // the bar does and what puts the control over the key it draws.
+                    // The native mounting bridge converts this exact placement,
+                    // so the visible face and its target cannot drift apart.
                     .position(x: periodSourceFrame.midX, y: periodSourceFrame.midY)
+                    .zIndex(10)
             }
 
             // The return's target is bounded by its neighbours, not by a constant.
@@ -133,16 +126,16 @@ struct AuxiliaryBottomBar: View {
             if fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle {
                 wideControl(systemName: "return", label: "Return", action: onReturn,
                             hitWidth: returnHit.width, hitHeight: returnHit.height)
-                    .position(x: localX(returnFrame), y: localY(returnFrame))
+                    .position(x: localX(returnHit), y: localY(returnHit))
             } else {
                 wideControl(
                     text: fieldKeys.returnTitle,
                     label: fieldKeys.returnTitle,
                     action: onReturn,
-                    hitWidth: returnFrame.width,
-                    hitHeight: returnFrame.height
+                    hitWidth: returnHit.width,
+                    hitHeight: returnHit.height
                 )
-                .position(x: localX(returnFrame), y: localY(returnFrame))
+                .position(x: localX(returnHit), y: localY(returnHit))
             }
 
             if let session = periodVariantSession {
@@ -157,11 +150,20 @@ struct AuxiliaryBottomBar: View {
                 .zIndex(20)
             } else if periodPreviewSession != nil {
                 KeyPressPreviewHost(session: $periodPreviewSession)
+                    .allowsHitTesting(false)
                     .zIndex(20)
             }
         }
         .frame(width: surfaceWidth, height: rowHeight, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .center)
+        .onChange(of: showsPeriodKey) { _, visible in
+            if !visible {
+                periodHoldToken = nil
+                periodInserted = false
+                periodVariantSession = nil
+                periodPreviewSession = nil
+            }
+        }
     }
 
     /// The return key's press target: the platform's generous width where it fits,
@@ -180,15 +182,7 @@ struct AuxiliaryBottomBar: View {
     /// plate to the platform's ~93pt is a proportion question and a separate change;
     /// this only stops one key from eating another.
     private func returnHitRect(previous: CGRect, surface: CGRect) -> CGRect {
-        let plate = layout.chromeReturnFrame
-        let leftLimit = previous.isEmpty
-            ? surface.minX
-            : previous.maxX + VoiceOnlyKeyboardPolicy.railSpacing
-        let room = max(0, plate.maxX - leftLimit)
-        let width = min(VoiceOnlyKeyboardPolicy.actionHitSize.width,
-                        max(plate.width, room))
-        return CGRect(x: plate.maxX - width, y: plate.minY,
-                      width: width, height: plate.height)
+        KeyboardBottomBarView.returnHitRect(layout: layout, previous: previous)
     }
 
     private func periodKey(source: CGRect, bounds: CGSize, topOverflow: CGFloat) -> some View {
@@ -212,7 +206,7 @@ struct AuxiliaryBottomBar: View {
             }
             .fixedSize(horizontal: true, vertical: true)
             .frame(width: plateWidth, height: visual.height)
-            .letterKeyPlate()
+            .commandKeyPlate(cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
             ImmediateVariantKey(
@@ -224,7 +218,9 @@ struct AuxiliaryBottomBar: View {
                 },
                 onEnded: { cancelled in
                     periodEnded(cancelled: cancelled)
-                }
+                },
+                nativeMode: .letters,
+                highlightSize: CGSize(width: plateWidth, height: visual.height)
             )
             .frame(width: source.width, height: source.height)
         }
@@ -237,10 +233,13 @@ struct AuxiliaryBottomBar: View {
     }
 
     private func periodBegan(at _: CGPoint, source: CGRect, bounds: CGSize, topOverflow: CGFloat) {
+        guard !periodInserted else { return }
         PersistentLog.log(.keyboardPeriodKeyProbe(details:
             "began frame=\(Int(source.minX)),\(Int(source.minY)),"
             + "\(Int(source.width))x\(Int(source.height))"))
         HapticFeedback.playInputClick()
+        periodInserted = true
+        onPeriod(".")
         periodPreviewSession = KeyPreviewSession(
             text: ".",
             sourceFrame: source,
@@ -292,21 +291,163 @@ struct AuxiliaryBottomBar: View {
 
     private func periodEnded(cancelled: Bool) {
         periodHoldToken = nil
+        let inserted = periodInserted
+        periodInserted = false
         let session = periodVariantSession
         periodVariantSession = nil
         periodPreviewSession = nil
         PersistentLog.log(.keyboardPeriodKeyProbe(details:
             "ended cancelled=\(cancelled) options=\(session?.options.count ?? 0)"
             + " selected=\(session?.selectedIndex ?? -1)"))
-        guard !cancelled else { return }
-        if let session, session.options.indices.contains(session.selectedIndex) {
-            onPeriod(session.options[session.selectedIndex])
-        } else {
-            onPeriod(".")
-        }
+        guard !cancelled, inserted,
+              let session, session.options.indices.contains(session.selectedIndex) else { return }
+        let variant = session.options[session.selectedIndex]
+        guard variant != "." else { return }
+        onDelete()
+        onPeriod(variant)
     }
 
 }
+
+/// Live bottom bar. Its touch owners survive material/preview updates and the
+/// period belongs to this row, not to an independent input-view overlay.
+final class KeyboardBottomBarView: UIView {
+    let period = KeyboardPeriodKeyView()
+    let firstControl = KeyboardKeyTouchControl()
+    let secondControl = KeyboardKeyTouchControl()
+    let fieldControl = KeyboardKeyTouchControl()
+    let returnControl = KeyboardKeyTouchControl()
+    let spaceControl = SpaceTrackingButton.TrackingControl()
+    var onNumbers: (() -> Void)?
+    var onLetters: (() -> Void)?
+    var onEmoji: (() -> Void)?
+    var onInsert: ((String) -> Void)?
+    var onReturn: (() -> Void)?
+    private let spaceDrag = SpaceDragState()
+    private var mode: KeyboardAreaMode = .letters
+    private var fieldKeys = HostFieldPolicy.LetterFieldKeys.standard
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isHidden = true
+        for control in [firstControl, secondControl, fieldControl, returnControl] {
+            control.isAccessibilityElement = true
+            control.accessibilityTraits = .button
+            addSubview(control)
+        }
+        spaceControl.drag = spaceDrag
+        spaceControl.isAccessibilityElement = true
+        spaceControl.accessibilityLabel = "Space"
+        firstControl.accessibilityIdentifier = "bottom-layer-switch"
+        secondControl.accessibilityIdentifier = "bottom-secondary-switch"
+        returnControl.accessibilityIdentifier = "bottom-return"
+        fieldControl.accessibilityIdentifier = "bottom-field-insert"
+        spaceControl.accessibilityIdentifier = "bottom-space"
+        spaceControl.accessibilityTraits = .button
+        addSubview(spaceControl)
+        addSubview(period)
+        firstControl.onBegan = { [weak self] _ in
+            guard let self else { return }
+            HapticFeedback.playInputClick()
+            if self.mode == .panel { self.onLetters?() } else { self.onNumbers?() }
+        }
+        secondControl.onBegan = { [weak self] _ in
+            guard let self else { return }
+            HapticFeedback.playInputClick()
+            if let text = self.fieldKeys.leftInsert { self.onInsert?(text) }
+            else if self.mode == .emoji { self.onLetters?() }
+            else { self.onEmoji?() }
+        }
+        fieldControl.onBegan = { [weak self] _ in
+            guard let self, let text = self.fieldKeys.rightInsert else { return }
+            HapticFeedback.playInputClick()
+            self.onInsert?(text)
+        }
+        returnControl.onBegan = { [weak self] _ in
+            HapticFeedback.playInputClick()
+            self?.onReturn?()
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func show(_ mode: KeyboardAreaMode, layout: VoiceOnlyKeyboardPolicy.Layout,
+              inputHeight: CGFloat, fieldKeys: HostFieldPolicy.LetterFieldKeys) {
+        if self.mode != mode { cancelInteractions() }
+        self.mode = mode
+        self.fieldKeys = mode == .letters ? fieldKeys : .standard
+        isHidden = mode != .letters && mode != .panel && mode != .emoji
+        if isHidden { cancelInteractions(); return }
+        let bar = CGRect(x: layout.surfaceFrame.minX, y: layout.chromeBottomBarOriginY,
+                         width: layout.surfaceFrame.width, height: VoiceOnlyKeyboardPolicy.spacebarHeight)
+        frame = layout.inputFrame(bar, inputViewHeight: inputHeight)
+        func local(_ rect: CGRect) -> CGRect { rect.offsetBy(dx: -bar.minX, dy: -bar.minY) }
+        firstControl.frame = local(layout.chromeNumbersFrame)
+        secondControl.frame = local(layout.chromeLettersFrame)
+        spaceControl.frame = local(mode == .letters ? layout.letterSpaceFrame : layout.chromeWideSpaceFrame)
+        let previous = mode == .letters ? layout.letterPeriodFrame : .zero
+        period.frame = local(previous)
+        period.isHidden = mode != .letters || self.fieldKeys.rightInsert != nil
+        if period.isHidden { period.cancelInteraction() }
+        fieldControl.frame = local(previous)
+        fieldControl.isHidden = mode != .letters || self.fieldKeys.rightInsert == nil
+        returnControl.frame = local(Self.returnHitRect(layout: layout, previous: previous))
+        firstControl.accessibilityLabel = mode == .panel ? "Open letter keyboard" : "Open symbols keyboard"
+        secondControl.accessibilityLabel = self.fieldKeys.leftInsert ?? (mode == .emoji ? "Open letter keyboard" : "Emoji")
+        fieldControl.accessibilityLabel = self.fieldKeys.rightInsert
+        returnControl.accessibilityLabel = self.fieldKeys.returnTitle
+        updateChrome()
+        period.refreshAppearance()
+    }
+
+    static func returnHitRect(layout: VoiceOnlyKeyboardPolicy.Layout, previous: CGRect) -> CGRect {
+        let plate = layout.chromeReturnFrame
+        let leftLimit = previous.isEmpty ? layout.surfaceFrame.minX
+            : previous.maxX + VoiceOnlyKeyboardPolicy.railSpacing
+        let room = max(0, plate.maxX - leftLimit)
+        let width = min(VoiceOnlyKeyboardPolicy.actionHitSize.width, max(plate.width, room))
+        return CGRect(x: plate.maxX - width, y: plate.minY, width: width, height: plate.height)
+    }
+
+    private func updateChrome() {
+        firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123")
+        let second = fieldKeys.leftInsert ?? (mode == .emoji ? "ABC" : nil)
+        secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil)
+        fieldControl.keyboardFace.configure(text: fieldKeys.rightInsert,
+            textPointSize: (fieldKeys.rightInsert?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
+        let title = fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle
+            ? nil : fieldKeys.returnTitle
+        returnControl.keyboardFace.configure(text: title, symbol: title == nil ? "return" : nil,
+            textPointSize: (title?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
+        spaceControl.keyboardFace.configure(text: "space",
+            visualSize: CGSize(width: spaceControl.bounds.width, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
+            radius: CommandKeyStyle.pillRadius(forHeight: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight))
+    }
+
+    func refreshAppearance() {
+        period.refreshAppearance()
+        if !isHidden { updateChrome() }
+    }
+
+    func cancelInteractions() {
+        [firstControl, secondControl, fieldControl, returnControl].forEach { $0.cancelInteraction() }
+        spaceControl.cancelInteraction()
+        period.cancelInteraction()
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, isUserInteractionEnabled, alpha > 0.01,
+              bounds.contains(point) else { return nil }
+        for owner in [period, fieldControl, returnControl, spaceControl,
+                      secondControl, firstControl] as [UIView] {
+            guard !owner.isHidden, owner.isUserInteractionEnabled, owner.alpha > 0.01 else { continue }
+            if let hit = owner.hitTest(owner.convert(point, from: self), with: event) { return hit }
+        }
+        return nil
+    }
+}
+
 
 /// Circular accessory-lane control with even inset from the suggestion bar edge.
 struct SuggestionBarIconButton: View {
@@ -396,12 +537,12 @@ struct SpaceBarControl: View {
         ZStack {
             CommandKeyFace(
                 text: "space",
-                plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize),
+                plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
                 // The space bar is one of the two wide keys, and the platform draws
                 // those as full pills. It is not a command button, so it does not
                 // take the command radius.
                 cornerRadius: CommandKeyStyle.pillRadius(
-                    forHeight: CGFloat(VoiceOnlyKeyboardPolicy.utilityVisualSize)
+                    forHeight: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
                 ),
                 isPressed: drag.isTracking
             )
@@ -426,7 +567,7 @@ struct SpaceBarControl: View {
 /// UIKit tracks one finger independently from every other key control. Movement
 /// deltas move the caret immediately, including after the finger leaves the
 /// visible capsule; a stationary finger is inert.
-private struct SpaceTrackingButton: UIViewRepresentable {
+struct SpaceTrackingButton: UIViewRepresentable {
     let drag: SpaceDragState
     let onTap: () -> Void
     let onCursorBegan: () -> Void
@@ -452,6 +593,9 @@ private struct SpaceTrackingButton: UIViewRepresentable {
     }
 
     final class TrackingControl: UIControl {
+        override var isHighlighted: Bool {
+            didSet { existingKeyboardFace?.setPressed(isHighlighted) }
+        }
         /// The drag state the SwiftUI face renders. The view owns it; this only writes.
         var drag: SpaceDragState?
         var onTap: (() -> Void)?
@@ -466,6 +610,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
         private var latestTouchPoint: CGPoint?
         private var isCursorTracking = false
         private var cursorTimer: Timer?
+        private let cursorHold = KeyboardHoldSession()
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -474,7 +619,6 @@ private struct SpaceTrackingButton: UIViewRepresentable {
         }
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-            if startedAt != nil { return true }
             return bounds.insetBy(dx: -2, dy: -2).contains(point)
         }
 
@@ -513,6 +657,8 @@ private struct SpaceTrackingButton: UIViewRepresentable {
         }
 
         override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+            isHighlighted = true
+            HapticFeedback.playInputClick()
             startedAt = Date()
             trackingCoordinateView = window ?? superview ?? self
             let point = trackingPoint(for: touch)
@@ -521,14 +667,9 @@ private struct SpaceTrackingButton: UIViewRepresentable {
             latestTouchPoint = point
             isCursorTracking = false
             stopJoystickClock()
-            let holdTimer = Timer(
-                timeInterval: KeyboardDeletion.cursorHoldDuration,
-                repeats: false
-            ) { [weak self] _ in
+            cursorHold.begin(after: KeyboardDeletion.cursorHoldDuration) { [weak self] in
                 self?.activateCursorTracking()
             }
-            RunLoop.main.add(holdTimer, forMode: .common)
-            cursorTimer = holdTimer
             return true
         }
 
@@ -593,6 +734,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
 
         private func finish(wasCancelled: Bool) {
             guard startedAt != nil else { return }
+            isHighlighted = false
             stopJoystickClock()
             defer {
                 startedAt = nil
@@ -606,9 +748,24 @@ private struct SpaceTrackingButton: UIViewRepresentable {
             if isCursorTracking {
                 onCursorEnded?()
             } else if !wasCancelled {
-                HapticFeedback.playInputClick()
                 onTap?()
             }
+        }
+
+        func cancelInteraction() {
+            finish(wasCancelled: true)
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { cancelInteraction() }
+        }
+
+        override func accessibilityActivate() -> Bool {
+            guard !isHidden, isEnabled, isUserInteractionEnabled else { return false }
+            HapticFeedback.playInputClick()
+            onTap?()
+            return true
         }
 
         private func activateCursorTracking() {
@@ -624,6 +781,7 @@ private struct SpaceTrackingButton: UIViewRepresentable {
         }
 
         private func stopJoystickClock() {
+            cursorHold.cancel()
             cursorTimer?.invalidate()
             cursorTimer = nil
         }
@@ -684,7 +842,7 @@ struct KeyboardDeleteButton: View {
     var body: some View {
         ZStack {
             CommandKeyFace(
-                systemName: "delete.backward",
+                systemName: CommandKeyStyle.deleteSymbolName,
                 plateWidth: visualWidth,
                 plateHeight: visualHeight,
                 cornerRadius: visualCornerRadius,
@@ -737,8 +895,7 @@ final class KeyboardDeleteRepeatControl: UIControl {
     var pressState: KeyboardPressState?
 
     private var isDeleting = false
-    private var startedAt = Date.distantPast
-    private var repeatTimer: Timer?
+    private let deleteRepeat = KeyboardDeleteRepeatSession()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -758,7 +915,10 @@ final class KeyboardDeleteRepeatControl: UIControl {
     }
 
     override var isHighlighted: Bool {
-        didSet { pressState?.isPressed = isHighlighted }
+        didSet {
+            pressState?.isPressed = isHighlighted
+            existingKeyboardFace?.setPressed(isHighlighted)
+        }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -768,17 +928,17 @@ final class KeyboardDeleteRepeatControl: UIControl {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard !isDeleting else { return }
         isDeleting = true
-        startedAt = Date()
         isHighlighted = true
         HapticFeedback.keyTapped()
         onDelete?()
 
-        let timer = Timer(timeInterval: KeyboardDeletion.repeatInterval, repeats: true) { [weak self] _ in
-            self?.repeatDelete()
+        deleteRepeat.begin { [weak self] action in
+            guard let self, self.isDeleting else { return }
+            switch action {
+            case .word: self.onDeleteWord?()
+            case .character: self.onDelete?()
+            }
         }
-        timer.fireDate = Date().addingTimeInterval(KeyboardDeletion.repeatDelay)
-        repeatTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -789,34 +949,34 @@ final class KeyboardDeleteRepeatControl: UIControl {
         finish()
     }
 
-    private func repeatDelete() {
-        guard isDeleting else { return }
+    func cancelInteraction() {
+        finish()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { finish() }
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard !isHidden, isEnabled, isUserInteractionEnabled, alpha > 0.01 else { return false }
         HapticFeedback.keyTapped()
-        switch KeyboardDeletion.repeatAction(after: Date().timeIntervalSince(startedAt)) {
-        case .word:
-            onDeleteWord?()
-        case .character:
-            onDelete?()
-        }
+        onDelete?()
+        return true
     }
 
     private func finish() {
         guard isDeleting else { return }
-        repeatTimer?.invalidate()
-        repeatTimer = nil
+        deleteRepeat.cancel()
         isDeleting = false
-        startedAt = .distantPast
         isHighlighted = false
     }
 
-    deinit {
-        repeatTimer?.invalidate()
-    }
 }
 
 private extension AuxiliaryBottomBar {
     private var commandHitSize: CGSize {
-        CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight)
+        CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.spacebarHeight)
     }
 
     private var commandVisual: CGSize {
@@ -837,7 +997,7 @@ private extension AuxiliaryBottomBar {
     private func roundControl(
         text: String,
         label: String,
-        textPointSize: CGFloat = 14,
+        textPointSize: CGFloat = CommandKeyStyle.textSize,
         action: @escaping () -> Void
     ) -> some View {
         chromeControl(label: label, action: action, hit: commandHitSize, highlightSize: commandVisual) { pressed in

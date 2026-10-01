@@ -6,6 +6,18 @@ import XCTest
 @testable import DictusCore
 
 final class HostFieldPolicyTests: XCTestCase {
+    func testNamesAddressesAndIdentifierContentStayLiteralEvenWithDefaultKeyboardTraits() {
+        for content in [HostFieldPolicy.ContentKind.name, .address, .postalCode, .creditCard, .telephone] {
+            let policy = HostFieldPolicy.evaluate(keyboard: .standard, content: content,
+                autocorrectionDisabled: false, spellCheckingDisabled: false, isSecureEntry: false)
+            XCTAssertFalse(policy.autocorrectAllowed)
+            XCTAssertFalse(policy.suggestionsAllowed)
+        }
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .standard, content: .creditCard), .digits)
+        XCTAssertEqual(HostFieldPolicy.numberPadStyle(keyboard: .standard, content: .telephone), .phone)
+        XCTAssertNil(HostFieldPolicy.numberPadStyle(keyboard: .standard, content: .postalCode),
+                     "postal codes can contain letters")
+    }
 
     /// Shorthand: evaluate with permissive defaults, overriding one axis at a time.
     private func evaluate(

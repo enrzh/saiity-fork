@@ -14,6 +14,7 @@ struct KeyboardRootView: View {
     let routeCursorEnded: () -> Void
     let routePaste: () -> Void
     let routeDismiss: () -> Void
+    let installOpenURL: (@escaping (URL, @escaping (Bool) -> Void) -> Void) -> Void
     @ObservedObject var state = KeyboardState.shared
     @Environment(\.openURL) private var openURL
     @State private var symbolPage: KeyboardPage = .symbols1
@@ -46,7 +47,7 @@ struct KeyboardRootView: View {
                     // is visible without changing the controls' hit targets.
                     .zIndex(3)
 
-                if state.areaMode == .keys || state.areaMode == .recording {
+                if !voiceBoardUsesUIKitHits && (state.areaMode == .keys || state.areaMode == .recording) {
                     if layout.leftRailWidth > 0 {
                         voiceBoardChrome(text: "123", label: "Open symbols keyboard") {
                             state.presentNumbersArea()
@@ -109,45 +110,8 @@ struct KeyboardRootView: View {
                     }
                 }
 
-                if state.areaMode == .emoji {
-                    EmojiCategoryBar(
-                        sections: CategoryInfo.emojiBarSections,
-                        selectedCategoryID: emojiSelectedCategoryID,
-                        isExpanded: state.emojiCategoryBarExpanded,
-                        contentOffset: Binding(
-                            get: { state.emojiCategoryBarOffset },
-                            set: { state.setEmojiCategoryBarOffset($0) }
-                        )
-                    )
-                    .frame(
-                        width: CGFloat(layout.floatingEmojiCategoryFrame.width),
-                        height: CGFloat(layout.floatingEmojiCategoryFrame.height)
-                    )
-                    .position(
-                        x: CGFloat(layout.floatingEmojiCategoryFrame.midX),
-                        y: CGFloat(layout.floatingEmojiCategoryFrame.midY)
-                    )
-                    .allowsHitTesting(false)
-                    .zIndex(4)
-
-                    KeyboardDeleteButton(
-                        onDelete: { routeProxyCommand(.delete) },
-                        onDeleteWord: routeWordDeletion,
-                        visualWidth: layout.commandKeyVisualSize.width,
-                        visualHeight: layout.commandKeyVisualSize.height,
-                        hitWidth: layout.boardDeleteFrame.width,
-                        hitHeight: layout.boardDeleteFrame.height
-                    )
-                    .position(
-                        x: CGFloat(layout.boardDeleteFrame.midX),
-                        y: CGFloat(layout.boardDeleteFrame.midY)
-                    )
-                    .zIndex(4)
-                }
-
-                accessoryBar(width: proxy.size.width, layout: layout)
-                    .position(x: proxy.size.width / 2, y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2)
-                    .zIndex(2)
+                // Accessory faces are children of their native controls.
+                // The retained SwiftUI accessory renderer is not live here.
             }
             .frame(
                 maxWidth: .infinity,
@@ -165,10 +129,12 @@ struct KeyboardRootView: View {
                 }
             }
         }
+        .environment(\.keyboardLiquidGlassEnabled, KeyboardInteractionPreferences.liquidGlassEnabled)
+        .allowsHitTesting(false)
         .onAppear {
             // Keep the SwiftUI URL action available as the fallback when the
             // extension context declines a recovery handoff.
-            state.openContainingApp = { url, completion in
+            installOpenURL { url, completion in
                 openURL(url, completion: completion)
             }
             HapticFeedback.refreshEnabledState()
@@ -215,7 +181,9 @@ struct KeyboardRootView: View {
                     y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
                 )
             HStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
-                pasteButton
+                if categoryFrame.width >= VoiceOnlyKeyboardPolicy.accessoryControlSize {
+                    pasteButton
+                }
                 Spacer(minLength: 0)
             }
             .frame(width: max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width), height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
@@ -257,19 +225,18 @@ struct KeyboardRootView: View {
         // nothing overlaps, which is what let the SwiftUI layer stay non-interactive
         // over the rows. That matters: leaving SwiftUI hit-testable on top of the
         // grid is what swallowed every touch in the first place.
-        if KeyboardViewController.nextKeyboardModes.contains(state.areaMode) {
-            sharedBottomBar(layout: layout, surfaceFrame: surfaceFrame)
+        if KeyboardViewController.nextKeyboardModes.contains(state.areaMode) || state.areaMode == .emoji {
+            // KeyboardBottomBarView is mounted directly by the controller.
+            Color.clear
+                .frame(width: surfaceFrame.width, height: surfaceFrame.height)
+                .allowsHitTesting(false)
         } else {
             surfaceContent(layout: layout, surfaceFrame: surfaceFrame)
         }
     }
 
-    /// The one bottom bar, mounted in the lane the grid leaves free.
-    ///
-    /// Deliberately the same component the emoji picker, symbol surface and legacy
-    /// letter surface use, so a bar change lands on every page at once. The grid
-    /// pages used to carry their own, which is how the same keyboard ended up with
-    /// two different bars depending on which page you were on.
+    /// Retained legacy SwiftUI renderer until native on-device parity is signed
+    /// off. Live pages use KeyboardBottomBarView, never this second touch path.
     @ViewBuilder
     private func sharedBottomBar(
         layout: VoiceOnlyKeyboardPolicy.Layout,
@@ -280,6 +247,7 @@ struct KeyboardRootView: View {
             + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
         let barHeight = CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
         let isLetterPage = state.areaMode == .letters
+        let isEmojiPage = state.areaMode == .emoji
         // The number pad has no bar. The system pad is 1-9 then a centred 0 and a
         // delete, and it runs the full height; mounting a bar under it would both
         // differ from that and take 54pt the pad's keys need.
@@ -312,6 +280,7 @@ struct KeyboardRootView: View {
                 returnFrame: layout.chromeReturnFrame,
                 periodFrame: isLetterPage ? layout.letterPeriodFrame : .zero,
                 onPeriod: { routeText($0) },
+                onDelete: { routeProxyCommand(.delete) },
                 onSpace: { routeProxyCommand(.space) },
                 onSpaceCursorBegan: {},
                 onSpaceCursorMoved: routeCursorMovement,
@@ -323,11 +292,11 @@ struct KeyboardRootView: View {
                 // 123, because their layer toggle lives in the grid's own last row.
                 // Setting both true renders two layer controls, which is how the
                 // symbol pages came to show 123 where they should show ABC.
-                showsNumbersControl: isLetterPage,
+                showsNumbersControl: isLetterPage || isEmojiPage,
                 showsLettersControl: !isLetterPage,
-                showsEmojiControl: true,
-                showsPeriodKey: isLetterPage,
-                fieldKeys: state.hostLetterFieldKeys,
+                showsEmojiControl: !isEmojiPage,
+                showsPeriodKey: false,
+                fieldKeys: isLetterPage ? state.hostLetterFieldKeys : .standard,
                 onSymbolInsert: { routeText($0) }
             )
             .frame(width: surfaceFrame.width, height: barHeight)
@@ -505,7 +474,7 @@ struct KeyboardRootView: View {
 
     private var dictationBoardButton: some View {
         SuggestionBarIconButton(
-            systemName: "text.bubble",
+            systemName: "mic.fill",
             label: "Return to dictation board",
             laneSize: accessoryHitSize,
             action: { state.closeArea() }

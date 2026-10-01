@@ -58,25 +58,8 @@ struct ModelCardView: View {
 
     private var modelSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(model.displayName)
-                    .font(.headline)
-                    .lineLimit(2)
-
-                if isActive {
-                    Text("Active")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.green)
-                } else if modelManager.isRecommended(model.identifier) {
-                    Text("Recommended")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tint)
-                }
-                Spacer(minLength: 0)
-                Text(model.sizeLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            ModelCardHeading(name: model.displayName, size: model.sizeLabel,
+                             active: isActive, recommended: modelManager.isRecommended(model.identifier))
 
             Text(model.localizedDescription)
                 .font(.subheadline)
@@ -274,6 +257,100 @@ struct ModelCardView: View {
         modelManager.startCatalogDownload(model.identifier, onError: onDownloadError)
     }
 
+}
+
+struct ModelCardHeading: View {
+    let name: String
+    let size: String
+    var active = false
+    var recommended = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(name).font(.headline).lineLimit(2)
+            if active { Text("Active").font(.caption2.weight(.semibold)).foregroundStyle(.green) }
+            else if recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(.tint) }
+            Spacer(minLength: 0)
+            Text(size).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct CleanupModelCardView: View {
+    let model: LocalCleanupModel
+    @ObservedObject var manager: ModelManager
+    @ObservedObject private var cleanup = CleanupModelManager.shared
+    @State private var showInfo = false
+    @State private var confirmDelete = false
+    @State private var deleteError: String?
+    private var active: Bool { manager.cleanupBackend == .local(model) }
+    private var downloading: Bool { cleanup.preparing == model }
+    private var size: String {
+        cleanup.installedBytes[model].map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "4-bit"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ModelCardHeading(name: model.displayName, size: size, active: active)
+            Text(model.explanation).font(.subheadline).foregroundStyle(.secondary)
+            Label(downloading ? "Preparing" : cleanup.installedBytes[model] != nil ? "Downloaded" : "Not installed",
+                  systemImage: downloading ? "arrow.down.circle" : "sparkles")
+                .font(.caption).foregroundStyle(.secondary)
+            if downloading { ProgressView(value: cleanup.progress) }
+            if let error = cleanup.error, cleanup.failedModel == model { Text(error).font(.caption).foregroundStyle(.red) }
+            HStack {
+                if downloading {
+                    Button("Cancel", systemImage: "xmark.circle") { cleanup.cancel() }.buttonStyle(.bordered)
+                } else if !active {
+                    Button(cleanup.installedBytes[model] != nil ? "Select" : "Download", systemImage: "arrow.down.circle") {
+                        cleanup.select(model, manager: manager)
+                    }.buttonStyle(.borderedProminent).disabled(cleanup.preparing != nil)
+                }
+                Spacer(minLength: 0)
+                Button("Info", systemImage: "info.circle") { showInfo = true }.buttonStyle(.bordered)
+                if cleanup.installedBytes[model] != nil && !active {
+                    Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+                        .accessibilityLabel("Delete \(model.displayName)").disabled(cleanup.preparing != nil)
+                }
+            }.controlSize(.small)
+        }
+        .padding(.vertical, 6)
+        .onAppear { cleanup.refreshArtifacts() }
+        .sheet(isPresented: $showInfo) {
+            NavigationStack {
+                List {
+                    Section("Processing model") {
+                        LabeledContent("Model", value: model.displayName)
+                        LabeledContent("Engine", value: "MLX · on device")
+                        LabeledContent("Parameters", value: model.parameterCount)
+                        LabeledContent("Quantization", value: "4-bit")
+                        LabeledContent("Storage", value: cleanup.installedBytes[model].map {
+                            ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
+                        } ?? "Not downloaded")
+                    }
+                    Section("Use") {
+                        Text("Punctuation, cleanup and grammar run in one pass. Keep sAiity open while processing; Apple Foundation Models remains the background option.")
+                        Text("Speed depends on text length and your iPhone. Mixed-language rewrites are checked and fall back to conservative cleanup when meaning changes.")
+                        Text(model.explanation)
+                    }
+                    if let source = URL(string: "https://huggingface.co/" + model.repository) {
+                        Section { Link("Model card, languages and license", destination: source) }
+                    }
+                }
+                .navigationTitle(model.displayName)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showInfo = false } } }
+            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
+        .alert("Delete processing model?", isPresented: $confirmDelete) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                do { try cleanup.delete(model, manager: manager) } catch { deleteError = error.localizedDescription }
+            }
+        } message: { Text("Delete the downloaded files for \(model.displayName)?") }
+        .alert("Could not delete model", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK") { deleteError = nil }
+        } message: { Text(deleteError ?? "") }
+    }
 }
 
 #Preview {

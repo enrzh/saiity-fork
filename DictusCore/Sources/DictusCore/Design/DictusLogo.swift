@@ -1,51 +1,46 @@
 #if os(iOS)
-// DictusCore/Sources/DictusCore/Design/DictusLogo.swift
-// Shared sAiity logo expression.
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
-/// Uses the real legacy sAiity app icon asset when hosted by the app bundle.
-///
-/// This preserves the existing type and initializer while keeping branding in one asset.
+/// The same Icon Composer artwork in the app, keyboard and Live Activity.
 public struct DictusLogo: View {
-    /// Overall height of the tallest bar (center).
-    public var height: CGFloat = 80
-
-    public init(height: CGFloat = 80) {
+    public var height: CGFloat
+    public var foregroundOnly: Bool
+    public init(height: CGFloat = 80, foregroundOnly: Bool = false) {
         self.height = height
+        self.foregroundOnly = foregroundOnly
     }
-
     public var body: some View {
         Group {
-            #if canImport(UIKit)
-            if let appIcon = UIImage(named: "AppIcon-1024", in: .main, compatibleWith: nil) {
-                Image(uiImage: appIcon)
-                    .resizable()
-                    .scaledToFit()
+            if foregroundOnly {
+                VoiceRibbons().fill(Color.blue.gradient)
             } else {
-                nativeMark
+                Image("SaiityBrand", bundle: .module).resizable().scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: height * 0.22))
             }
-            #else
-            nativeMark
-            #endif
         }
-        .frame(width: height, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: height * 0.22))
-        .accessibilityLabel("sAiity")
+            .frame(width: height, height: height)
+            .accessibilityLabel("sAiity")
     }
+}
 
-    /// Resource-free mark for package and extension bundles without the app icon asset.
-    private var nativeMark: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: height * 0.22)
-                .fill(Color.dictusAccent)
-            Text(verbatim: "sAi")
-                .font(.system(size: height * 0.52, weight: .bold, design: .rounded))
-                .tracking(-height * 0.035)
-                .foregroundStyle(.white)
-        }
+/// The same three vector layers as the Icon Composer document, without its
+/// app-icon background. WidgetKit can render this even when raster assets fail.
+private struct VoiceRibbons: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: CGRect(x: 232, y: 394, width: 128, height: 300), cornerSize: CGSize(width: 64, height: 64))
+        path.addRoundedRect(in: CGRect(x: 448, y: 214, width: 128, height: 540), cornerSize: CGSize(width: 64, height: 64))
+        path.move(to: CGPoint(x: 728, y: 318))
+        path.addCurve(to: CGPoint(x: 792, y: 382), control1: CGPoint(x: 763.35, y: 318), control2: CGPoint(x: 792, y: 346.65))
+        path.addLine(to: CGPoint(x: 792, y: 658))
+        path.addCurve(to: CGPoint(x: 728, y: 722), control1: CGPoint(x: 792, y: 693.35), control2: CGPoint(x: 763.35, y: 722))
+        path.addLine(to: CGPoint(x: 724, y: 722))
+        path.addLine(to: CGPoint(x: 664, y: 784))
+        path.addLine(to: CGPoint(x: 664, y: 382))
+        path.addCurve(to: CGPoint(x: 728, y: 318), control1: CGPoint(x: 664, y: 346.65), control2: CGPoint(x: 692.65, y: 318))
+        path.closeSubpath()
+        return path.applying(CGAffineTransform(translationX: -232, y: -214))
+            .applying(CGAffineTransform(scaleX: rect.width / 560, y: rect.height / 570))
     }
 }
 #endif

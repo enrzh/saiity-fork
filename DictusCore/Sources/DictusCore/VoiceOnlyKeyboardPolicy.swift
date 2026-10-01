@@ -262,7 +262,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// The auxiliary page keeps Emoji and microphone in one native-height bottom row.
     /// The page toggle belongs to the first key of the third symbol row, so it does not
     /// consume a second vertical control lane and compress the symbol keys.
-    public static let symbolBottomControlLaneHeight: Double = controlSize
+    public static let symbolBottomControlLaneHeight: Double = spacebarHeight
     public static let symbolBottomControlBottomInset: Double = 4
     public static let symbolBottomControlBudget: Double = symbolBottomControlLaneHeight + symbolBottomControlBottomInset
     public static let actionHitSize = CGSize(width: 88, height: 44)
@@ -307,8 +307,10 @@ public enum VoiceOnlyKeyboardPolicy {
     /// On/off control at the top left of the dictation board.
     public static let dictationToggleWidth: Double = 58
     public static let dictationToggleHeight: Double = 28
-    /// Capsule under the microphone on the voice page.
-    public static let spacebarHeight: Double = 44
+    /// Bottom-row faces match character plates. Keep the shared 4pt inset on
+    /// either side by growing the hit lane, rather than shrinking the glyph rows.
+    public static let bottomBarVisualHeight: Double = Double(letterKeyHeight)
+    public static let spacebarHeight: Double = bottomBarVisualHeight + Double(commandVisualInset)
     public static let railSpacing: Double = 4
     public static let horizontalPadding: Double = 8
     public static let controlEdgeInset: Double = 12
@@ -345,9 +347,9 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let contentSpacing: Double = 6
     public static let topInset: Double = 8
     /// Visual height of the compact suggestion / accessory lane.
-    public static let suggestionLaneHeight: Double = 36
+    public static let suggestionLaneHeight: Double = 32
     /// Hit size of dismiss, paste, and dictation-board controls in that lane.
-    public static let accessoryControlSize: Double = 36
+    public static let accessoryControlSize: Double = 48
     public static let accessoryEdgeInset: Double = 8
     /// Inset for circular suggestion-lane icons inside the 36pt lane.
     public static let suggestionLaneControlInset: CGFloat = 4
@@ -436,6 +438,12 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var surfaceInset: Double { horizontalInset }
 
+        /// UIKit controls are mounted in the input view, while SwiftUI draws in
+        /// a taller, bottom-anchored host. Keep their frames in the same space.
+        public func inputFrame(_ hostedFrame: CGRect, inputViewHeight: CGFloat) -> CGRect {
+            hostedFrame.offsetBy(dx: 0, dy: inputViewHeight - CGFloat(surfaceHeight))
+        }
+
         public var surfaceFrame: CGRect {
             CGRect(x: horizontalInset, y: verticalPadding + topAccessoryHeight,
                    width: max(0, surfaceWidth - horizontalInset * 2),
@@ -443,8 +451,8 @@ public enum VoiceOnlyKeyboardPolicy {
         }
 
         public var bottomAuxiliaryControlFrame: CGRect {
-            CGRect(x: surfaceFrame.minX, y: surfaceFrame.maxY - chromeBottomInset - controlSize,
-                   width: surfaceFrame.width, height: controlSize)
+            CGRect(x: surfaceFrame.minX, y: spaceLaneMinY,
+                   width: surfaceFrame.width, height: spacebarHeight)
         }
 
         public var auxiliaryContentFrame: CGRect {
@@ -524,16 +532,15 @@ public enum VoiceOnlyKeyboardPolicy {
         /// horizontal gesture without moving up into the emoji grid.
         public var floatingEmojiCategoryFrame: CGRect {
             let height = floatingEmojiCategoryBarHeight
-            let width = max(0, surfaceFrame.width - visibleControlGap * 2)
+            let space = chromeWideSpaceFrame
+            let width = max(0, 2 * min(space.midX - surfaceFrame.minX - visibleControlGap,
+                                      boardDeleteFrame.minX - visibleControlGap - space.midX))
             let bottomY = spaceLaneMinY - floatingEmojiCategoryBarGap
             guard width > 0, height > 0, bottomY - height >= surfaceFrame.minY else { return .zero }
-            // Symmetric inset only. An earlier version shortened the bar on the
-            // right so it would stop before delete, which silently moved the
-            // selected-category marker off the horizontal centre. The delete
-            // corner is resolved by hit-test order instead, which costs nothing
-            // visually.
+            // The collapsed marker uses this track's centre, so centre the
+            // track on Space and trim both ends equally to clear Delete.
             let frame = CGRect(
-                x: surfaceFrame.minX + visibleControlGap,
+                x: space.midX - width / 2,
                 y: bottomY - height,
                 width: width,
                 height: height
@@ -590,8 +597,8 @@ public enum VoiceOnlyKeyboardPolicy {
             guard leftRailWidth > 0 else { return LeftUtilityFrames(at: .zero, emoji: .zero, number: .zero) }
             let x = surfaceFrame.minX + visibleControlGap
             let size = CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.controlSize)
-            let emojiFrame = CGRect(x: x, y: surfaceFrame.maxY - chromeBottomInset - size.height, width: size.width, height: size.height)
-            let numberFrame = CGRect(x: x + size.width + railSpacing, y: surfaceFrame.maxY - chromeBottomInset - size.height, width: size.width, height: size.height)
+            let emojiFrame = CGRect(x: x, y: spaceLaneMinY, width: size.width, height: spacebarHeight)
+            let numberFrame = CGRect(x: x + size.width + railSpacing, y: spaceLaneMinY, width: size.width, height: spacebarHeight)
             return LeftUtilityFrames(
                 at: CGRect(x: x, y: emojiFrame.minY - railSpacing - size.height, width: size.width, height: size.height),
                 emoji: controlOrder == .emojiFirst ? emojiFrame : numberFrame,
@@ -612,8 +619,8 @@ public enum VoiceOnlyKeyboardPolicy {
         public var dismissFrame: CGRect {
             guard rightRailWidth > 0 else { return .zero }
             return CGRect(x: surfaceFrame.maxX - visibleControlGap - rightRailWidth,
-                          y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
-                          width: rightRailWidth, height: bottomActionHitHeight)
+                          y: spaceLaneMinY,
+                          width: rightRailWidth, height: spacebarHeight)
         }
 
         /// The letter keyboard keeps the back-to-dictation control immediately
@@ -622,15 +629,15 @@ public enum VoiceOnlyKeyboardPolicy {
             guard rightRailWidth > 0 else { return .zero }
             let returnFrame = CGRect(
                 x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
-                y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
+                y: spaceLaneMinY,
                 width: actionHitSize.width,
-                height: actionHitSize.height
+                height: spacebarHeight
             )
             let frame = CGRect(
                 x: returnFrame.minX - railSpacing - controlSize,
                 y: returnFrame.minY,
                 width: controlSize,
-                height: bottomActionHitHeight
+                height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
         }
@@ -664,9 +671,9 @@ public enum VoiceOnlyKeyboardPolicy {
             guard !letterDismissFrame.isEmpty else { return .zero }
             let frame = CGRect(
                 x: surfaceFrame.maxX - visibleControlGap - actionHitSize.width,
-                y: surfaceFrame.maxY - chromeBottomInset - bottomActionHitHeight,
+                y: spaceLaneMinY,
                 width: actionHitSize.width,
-                height: actionHitSize.height
+                height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
         }
@@ -754,7 +761,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 x: dismissFrame.minX - railSpacing - controlSize,
                 y: dismissFrame.minY,
                 width: controlSize,
-                height: bottomActionHitHeight
+                height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
         }
@@ -838,10 +845,10 @@ public enum VoiceOnlyKeyboardPolicy {
         /// than its neighbours, so both insets are applied here.
         public var dictationServiceToggleFrame: CGRect {
             let frame = CGRect(
-                x: surfaceFrame.minX + visibleControlGap + commandVisualInset,
-                y: surfaceFrame.minY + visibleControlGap + commandVisualInset,
-                width: VoiceOnlyKeyboardPolicy.dictationToggleWidth,
-                height: VoiceOnlyKeyboardPolicy.dictationToggleHeight
+                x: surfaceFrame.minX + visibleControlGap,
+                y: surfaceFrame.minY + visibleControlGap,
+                width: boardDeleteFrame.width,
+                height: bottomActionHitHeight
             )
             guard surfaceFrame.contains(frame), !frame.intersects(dictateFrame) else { return .zero }
             return frame
@@ -914,7 +921,7 @@ public enum VoiceOnlyKeyboardPolicy {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
         let rightWidth = actionHitSize.width
-        let minimumRailHeight = verticalPadding * 2 + visibleControlGap * 2 + rightRailHeight + bottomActionHitHeight
+        let minimumRailHeight = verticalPadding * 2 + visibleControlGap * 2 + rightRailHeight + spacebarHeight
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
             && resolvedSurfaceHeight >= minimumRailHeight
         // Keep the same outer inset on both the visual center region and the UIKit
@@ -938,7 +945,7 @@ public enum VoiceOnlyKeyboardPolicy {
             rightRailHeight: rightRailHeight,
             rightRailTop: verticalPadding + visibleControlGap,
             rightRailBottom: verticalPadding + visibleControlGap + rightRailHeight,
-            dismissTop: resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight,
+            dismissTop: resolvedSurfaceHeight - verticalPadding - chromeBottomInset - spacebarHeight,
             dismissBottom: resolvedSurfaceHeight - verticalPadding - chromeBottomInset,
             contentHeight: resolvedSurfaceHeight,
             surfaceHeight: resolvedSurfaceHeight,
@@ -952,10 +959,10 @@ public enum VoiceOnlyKeyboardPolicy {
                     - visibleControlGap - railWidth / 2
                 : 0,
             leftBottomCenterY: hasRails
-                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight / 2
+                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - spacebarHeight / 2
                 : 0,
             rightBottomCenterY: hasRails
-                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - bottomActionHitHeight / 2
+                ? resolvedSurfaceHeight - verticalPadding - chromeBottomInset - spacebarHeight / 2
                 : 0,
             showsLanguageIndicator: hasRails,
             controlOrder: controlOrder

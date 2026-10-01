@@ -106,6 +106,7 @@ struct LetterKeyboardSurface: View {
                 returnFrame: surfaceLayout.chromeReturnFrame,
                 periodFrame: surfaceLayout.letterPeriodFrame,
                 onPeriod: onInsert,
+                onDelete: onDelete,
                 onSpace: onSpace,
                 onSpaceCursorBegan: onSpaceCursorBegan,
                 onSpaceCursorMoved: onSpaceCursorMoved,

@@ -33,7 +33,7 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
     }
 
     private func resolvedInstructions(mode: PolishMode, language: SupportedLanguage) -> String {
-        instructionsOverride?(mode, language) ?? Self.instructions(for: mode, language: language)
+        instructionsOverride?(mode, language) ?? (DictationCleanupPrompt.instructions() + "\n" + PolishGlossary.promptBlock)
     }
 
     /// Normalize the session-cache language for a mode. `.auto` has a single
@@ -95,7 +95,8 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         // That part is ordering; the identity check above is what closes the
         // window, and neither substitutes for the other.
         do {
-            let response = try await session.respond(to: prompt)
+            let response = try await session.respond(to: prompt,
+                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: min(2048, max(128, raw.count))))
             await cache.dropIfStillCurrent(key, session: session)
             return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {

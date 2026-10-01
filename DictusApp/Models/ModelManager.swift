@@ -54,6 +54,7 @@ class ModelManager: ObservableObject {
 
     /// Whether the active model is chosen by the device-aware resolver or by the user.
     @Published var selectionMode: ModelSelectionMode = .automatic
+    @Published var selectionProfile: ModelSelectionProfile = .balanced
 
     /// Per-model download progress (0.0 to 1.0). Only populated during active downloads.
     @Published var downloadProgress: [String: Float] = [:]
@@ -170,6 +171,7 @@ class ModelManager: ObservableObject {
     /// explicit and avoids type-casting issues. We store a JSON-encoded [String].
     func loadState() {
         selectionMode = ModelSelectionMode.active(from: defaults)
+        selectionProfile = ModelSelectionProfile.active(from: defaults)
         var didMigrateRemovedModels = false
         if let data = defaults.data(forKey: SharedKeys.downloadedModels),
            let models = try? JSONDecoder().decode([String].self, from: data) {
@@ -647,16 +649,23 @@ class ModelManager: ObservableObject {
     /// (ModelInfo), not the state manager. This instance method preserves the
     /// call-site signature so views don't need to change.
     func isRecommended(_ identifier: String) -> Bool {
-        ModelInfo.isRecommended(identifier)
+        identifier == selectionProfile.preferredIdentifier(for: DeviceCapabilities.current())
+    }
+
+    func setSelectionProfile(_ profile: ModelSelectionProfile) {
+        selectionProfile = profile
+        defaults.set(profile.rawValue, forKey: SharedKeys.modelSelectionProfile)
+        setSelectionMode(.automatic)
     }
 
     /// Changes model policy and immediately applies the resulting model.
     func setSelectionMode(_ mode: ModelSelectionMode) {
+        let previousModel = activeModel
         selectionMode = mode
         if mode == .automatic {
             activeModel = automaticActiveModel() ?? activeModel ?? downloadedModels.first
             persistState()
-            if activeModel != nil {
+            if activeModel != nil && (activeModel != previousModel || modelLoadState != .ready && modelLoadState != .loading) {
                 DictationCoordinator.shared.preloadActiveModel()
             }
         } else {
@@ -728,12 +737,11 @@ class ModelManager: ObservableObject {
     private func automaticActiveModel() -> String? {
         guard !downloadedModels.isEmpty else { return nil }
         let osMajor = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
-        let resolution = ModelInfo.automaticRuntimeResolution(
-            installedIdentifiers: Set(downloadedModels),
+        return selectionProfile.resolvedIdentifier(
+            installed: Set(downloadedModels),
             osMajor: osMajor,
             capabilities: DeviceCapabilities.current()
         )
-        return resolution.resolvedIdentifier
     }
 
     /// UserDefaults is only a claim that a model was downloaded. Validate the

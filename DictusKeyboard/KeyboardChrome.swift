@@ -6,8 +6,7 @@ import DictusCore
 extension KeyboardRootView {
     func embeddedSurface<Content: View>(
         _ content: Content,
-        frame: CGRect,
-        withoutGlassRim: Bool = false
+        frame: CGRect
     ) -> some View {
         let surfaceCornerRadius: CGFloat = 24
         let shape = RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous)
@@ -15,14 +14,7 @@ extension KeyboardRootView {
         // the top row. Emoji glyphs are the exception: their rectangular grid
         // must stop at the same rounded edge as the Liquid Glass inset.
         return ZStack(alignment: .topLeading) {
-            appleControlSurface(
-                Color.clear.frame(width: frame.width, height: frame.height),
-                in: shape,
-                usesGlass: !withoutGlassRim,
-                role: .board
-            )
-            .allowsHitTesting(false)
-            .clipShape(shape)
+            // The controller's shared native backdrop owns the inset on all pages.
             if state.areaMode == .emoji {
                 content
                     .frame(width: frame.width, height: frame.height, alignment: .topLeading)
@@ -108,7 +100,7 @@ extension KeyboardRootView {
     ) -> some View {
         let hit = CGSize(
             width: VoiceOnlyKeyboardPolicy.controlSize,
-            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+            height: VoiceOnlyKeyboardPolicy.spacebarHeight
         )
         let plate = VoiceOnlyKeyboardPolicy.commandVisualSize(for: hit)
         commandChromeFace(
@@ -130,7 +122,7 @@ extension KeyboardRootView {
         systemName: String,
         label: String,
         width: Double = VoiceOnlyKeyboardPolicy.controlSize,
-        height: Double = VoiceOnlyKeyboardPolicy.bottomActionHitHeight,
+        height: Double = VoiceOnlyKeyboardPolicy.spacebarHeight,
         visualWidth: Double? = nil,
         visualHeight: Double? = nil,
         visualCornerRadius: Double = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,

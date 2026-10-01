@@ -56,6 +56,11 @@ public struct HostFieldPolicy: Equatable {
         case url
         case email
         case oneTimeCode
+        case name
+        case address
+        case postalCode
+        case creditCard
+        case telephone
         case other
     }
 
@@ -113,7 +118,7 @@ public struct HostFieldPolicy: Equatable {
             )
         }
         switch content {
-        case .username, .password, .url, .email, .oneTimeCode:
+        case .username, .password, .url, .email, .oneTimeCode, .name, .address, .postalCode, .creditCard, .telephone:
             return HostFieldPolicy(
                 autocorrectAllowed: false, suggestionsAllowed: false,
                 reason: "textContentType.\(content.rawValue)"
@@ -153,9 +158,10 @@ public struct HostFieldPolicy: Equatable {
         keyboard: KeyboardKind,
         content: ContentKind
     ) -> NumberPadStyle? {
-        if content == .oneTimeCode {
+        if content == .oneTimeCode || content == .creditCard {
             return .digits
         }
+        if content == .telephone { return .phone }
         switch keyboard {
         case .numeric:
             return .digits

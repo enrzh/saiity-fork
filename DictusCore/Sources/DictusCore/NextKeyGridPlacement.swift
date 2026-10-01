@@ -24,32 +24,45 @@ import Foundation
 public enum KeyGridPlacement {
 
     /// Spacing between plates, and the margin at the left and right edges.
-    public static let keySpacing: CGFloat = 6
+    public static let keySpacing: CGFloat = 5.5
     /// Spacing between rows of plates.
-    public static let rowSpacing: CGFloat = 11
+    public static let rowSpacing: CGFloat = 9
     /// Margin between the grid and the left/right edges of its container.
     ///
-    /// Measured off the system keyboard rather than chosen: a ten-key row on a 402pt
-    /// screen runs x=7..395, so 7pt is what the platform uses. At 6.5 every key was
-    /// half a point narrow and the row did not line up with the one above it.
-    public static let edgeInset: CGFloat = 7
+    /// Slightly expand the previous 7pt-inset plates without changing row pitch.
+    /// These are our tuned visible frames, not the system's accessibility targets.
+    public static let edgeInset: CGFloat = 6.5
     /// Height of a key plate.
     ///
-    /// Also measured: the system keyboard's letter plates are 43pt tall on an 18 Pro,
-    /// with 11pt between rows. Rows are allowed to be shorter when the container is
-    /// cramped, but never taller — a taller key is the single most obvious way a
-    /// rebuilt grid stops lining up with the keyboard it replaced, because every
-    /// row below it drifts.
-    public static let preferredRowHeight: CGFloat = 43
-    /// Rows never grow past the platform's own key height, whatever the container
-    /// offers. Leftover space collects above the block instead of being spent on
-    /// oversized keys.
-    public static let maximumRowHeight: CGFloat = 43
+    /// Use the existing 45pt character metric with a 54pt row pitch. Spend the
+    /// added height on the plate rather than changing the familiar placement.
+    /// Rows shrink in a cramped container rather than exceeding the available area.
+    public static let preferredRowHeight: CGFloat = 45
+    /// Cap visible height at the tuned plate size instead of stretching with the
+    /// container. This keeps a taller host from changing the familiar row pitch.
+    public static let maximumRowHeight: CGFloat = preferredRowHeight
     public static let keyCornerRadius: CGFloat = 8
     /// Command keys take their radius from `CommandKeyStyle`, which owns every other
     /// part of how a command button looks. It used to be a second literal `18` here.
     public static let commandCornerRadius: CGFloat = CommandKeyStyle.cornerRadius
-    /// Bottom-bar lane metrics, matching the legacy bar exactly.
+
+    /// Match the pinned command row to a sibling control without extending the
+    /// grid's touch view into that control's bottom-bar lane.
+    public static func alignLastRow(
+        _ page: KeyGridPage, in size: CGSize, centerY: CGFloat
+    ) -> KeyGridPage {
+        guard let last = solve(page, in: size).rows.last?.last else { return page }
+        var aligned = page
+        aligned.topInset += centerY - last.plate.midY
+        return aligned
+    }
+    /// Taller character plates share the 44pt command row's centre, using half
+    /// their extra height from the gap above the bar rather than moving Delete.
+    public static var bottomBarLaneHeight: CGFloat {
+        CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap + VoiceOnlyKeyboardPolicy.spacebarHeight
+            + VoiceOnlyKeyboardPolicy.chromeBottomInset)
+            - max(0, maximumRowHeight - VoiceOnlyKeyboardPolicy.bottomActionHitHeight) / 2
+    }
 
     /// Solves `page` for a container of `size`.
     ///
@@ -139,6 +152,54 @@ public enum KeyGridPlacement {
         }
         layout.bounds = CGRect(origin: .zero, size: size)
         return layout
+    }
+
+    /// Recalculate only invisible targets; the drawn plates remain exactly where
+    /// the page solver placed them. An empty prior restores the neutral layout.
+    public static func retarget(
+        _ source: KeyGridLayout,
+        probabilities: NextCharacterProbabilities?
+    ) -> KeyGridLayout {
+        guard !source.placed.isEmpty, !source.bounds.isEmpty else { return source }
+        let labels = source.rows.map { row in
+            row.map { item -> String? in
+                guard !item.key.isCommand else { return nil }
+                let value: String
+                switch item.key.action {
+                case .insert(let text): value = text
+                case .character(let base, _): value = base
+                default: return nil
+                }
+                return value.count == 1 ? value : nil
+            }
+        }
+        let biased = probabilities.flatMap { $0.isEmpty ? nil : $0 }.map {
+            KeyboardKeyHitGeometry.contiguousTiles(
+                for: source.rows.map { row in row.map { item in
+                    item.key.isCommand
+                        ? item.plate.union(CommandKeyStyle.visualPlate(
+                            for: item.plate, surfaceWidth: source.bounds.width))
+                        : item.plate
+                } },
+                in: source.bounds,
+                labels: labels,
+                probabilities: $0
+            )
+        }
+        var result = source
+        result.placed = source.placed.map { item in
+            let target = biased.flatMap { rows in
+                rows.indices.contains(item.row) && rows[item.row].indices.contains(item.column)
+                    ? rows[item.row][item.column] : nil
+            } ?? widened(item, in: source.bounds, rows: source.placed).target
+            return PlacedKey(key: item.key, row: item.row, column: item.column,
+                             plate: item.plate, target: target)
+        }
+        result.rows = Array(repeating: [], count: source.rows.count)
+        for item in result.placed where result.rows.indices.contains(item.row) {
+            result.rows[item.row].append(item)
+        }
+        return result
     }
 
     /// Whether a container is large enough to place keys honestly.
@@ -359,8 +420,7 @@ public enum KeyGridPlacement {
     ) -> CGFloat {
         guard item.column > 0, item.column - 1 < row.count else { return bounds.minX }
         let previous = row[item.column - 1]
-        // Midpoint of the gap. Confined to the gap, so neither plate is touched.
-        return (previous.plate.maxX + item.plate.minX) / 2
+        return seam(between: previous, and: item, width: bounds.width)
     }
 
     private static func seam(
@@ -370,6 +430,19 @@ public enum KeyGridPlacement {
     ) -> CGFloat {
         guard item.column + 1 < row.count else { return bounds.maxX }
         let next = row[item.column + 1]
-        return (item.plate.maxX + next.plate.minX) / 2
+        return seam(between: item, and: next, width: bounds.width)
+    }
+
+    private static func seam(between left: PlacedKey, and right: PlacedKey, width: CGFloat) -> CGFloat {
+        let midpoint = (left.plate.maxX + right.plate.minX) / 2
+        if left.key.isCommand {
+            return min(right.plate.minX, max(midpoint,
+                CommandKeyStyle.visualPlate(for: left.plate, surfaceWidth: width).maxX))
+        }
+        if right.key.isCommand {
+            return max(left.plate.maxX, min(midpoint,
+                CommandKeyStyle.visualPlate(for: right.plate, surfaceWidth: width).minX))
+        }
+        return midpoint
     }
 }

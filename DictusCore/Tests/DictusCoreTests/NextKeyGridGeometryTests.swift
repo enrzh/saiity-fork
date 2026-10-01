@@ -23,6 +23,149 @@ final class NextKeyGridGeometryTests: XCTestCase {
 
     private let size = CGSize(width: 390, height: 216)
 
+    func testTallerBottomBarLiftsRowsWithoutChangingCharacterSize() {
+        for width in [320.0, 402, 420] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 269, topAccessoryHeight: 32)
+            XCTAssertEqual(layout.chromeSpaceFrame.height, 53)
+            for hit in [layout.chromeNumbersFrame, layout.chromeLettersFrame,
+                        layout.letterPeriodFrame, layout.chromeReturnFrame] {
+                XCTAssertEqual(hit.height, 53)
+                XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandVisualSize(for: hit.size).height, 45)
+            }
+            let page = lettersPage()
+            let grid = CGSize(width: width, height: layout.surfaceFrame.height - KeyGridPlacement.bottomBarLaneHeight)
+            let centre = layout.boardDeleteFrame.midY - layout.surfaceFrame.minY
+            let current = KeyGridPlacement.solve(KeyGridPlacement.alignLastRow(page, in: grid, centerY: centre), in: grid)
+            let previousSize = CGSize(width: width, height: grid.height + 9)
+            let previous = KeyGridPlacement.solve(KeyGridPlacement.alignLastRow(page, in: previousSize, centerY: centre + 9), in: previousSize)
+            for (old, new) in zip(previous.placed, current.placed) {
+                XCTAssertEqual(new.plate.size, old.plate.size)
+                XCTAssertEqual(new.plate.height, 45)
+                XCTAssertEqual(old.plate.minY - new.plate.minY, 9, accuracy: 0.001)
+            }
+        }
+    }
+
+    func testSlightlyLargerCharacterPlatesPreserveNativeRowPitch() {
+        let layout = KeyGridPlacement.solve(lettersPage(), in: CGSize(width: 402, height: 216))
+        let oldWidth: CGFloat = (402 - 2 * 7 - 9 * 6) / 10
+        XCTAssertGreaterThan(layout.rows[0][0].plate.width, oldWidth)
+        XCTAssertLessThan(layout.rows[0][0].plate.width - oldWidth, 1)
+        XCTAssertEqual(layout.rows[0][0].plate.height, 45, accuracy: 0.001)
+        for row in 1..<layout.rows.count {
+            XCTAssertEqual(layout.rows[row][0].plate.midY - layout.rows[row - 1][0].plate.midY,
+                           54, accuracy: 0.001)
+        }
+        for (index, item) in layout.placed.enumerated() {
+            XCTAssertTrue(item.target.contains(item.plate))
+            for other in layout.placed.dropFirst(index + 1) {
+                let overlap = item.target.intersection(other.target)
+                XCTAssertTrue(overlap.isNull || overlap.width == 0 || overlap.height == 0)
+            }
+        }
+    }
+
+    func testPinnedCommandRowMatchesEmojiDeleteWithoutOverlappingBottomBar() {
+        func row(_ count: Int) -> [KeyGridKey] {
+            (0..<count).map { KeyGridKey(id: "key-\($0)", action: .insert("a")) }
+        }
+        for surfaceHeight in [269.0, 300.0] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(
+                for: 402, surfaceHeight: surfaceHeight,
+                topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+            )
+            let lane = KeyGridPlacement.bottomBarLaneHeight
+            let gridSize = CGSize(width: layout.surfaceFrame.width,
+                                  height: layout.surfaceFrame.height - lane)
+            for middleCount in [5, 7] {
+                let bottom = [KeyGridKey(id: "toggle", action: .shift, isCommand: true)]
+                    + row(middleCount)
+                    + [KeyGridKey(id: "delete", action: .delete, isCommand: true)]
+                let page = KeyGridPage(id: "grid", rows: [row(10), row(10), bottom],
+                                       pinnedLastRow: true, topInset: 19)
+                let target = layout.boardDeleteFrame.midY - layout.surfaceFrame.minY
+                let aligned = KeyGridPlacement.alignLastRow(page, in: gridSize, centerY: target)
+                let solved = KeyGridPlacement.solve(aligned, in: gridSize)
+                XCTAssertEqual(solved.rows.last?.last?.plate.midY ?? .nan, target, accuracy: 0.001)
+                XCTAssertLessThanOrEqual(solved.rows.last?.last?.plate.maxY ?? .infinity,
+                                         gridSize.height)
+                if let first = solved.rows.last?.first, let last = solved.rows.last?.last {
+                    let leading = CommandKeyStyle.visualPlate(for: first.plate, surfaceWidth: gridSize.width)
+                    let trailing = CommandKeyStyle.visualPlate(for: last.plate, surfaceWidth: gridSize.width)
+                    let deleteSize = layout.commandKeyVisualSize
+                    XCTAssertEqual(leading.size, deleteSize)
+                    XCTAssertEqual(trailing.size, deleteSize)
+                    XCTAssertEqual(layout.surfaceFrame.minX + leading.minX,
+                                   layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.horizontalPadding
+                                       + VoiceOnlyKeyboardPolicy.commandVisualInset / 2,
+                                   accuracy: 0.001)
+                    XCTAssertEqual(layout.surfaceFrame.minX + trailing.midX,
+                                   layout.boardDeleteFrame.midX, accuracy: 0.001)
+                }
+            }
+        }
+    }
+
+    func testSharedCommandPlateFitsEveryResolvedHitCell() {
+        let emojiDeleteHit = CGSize(
+            width: (size.width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
+            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+        )
+        let emojiDeleteFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: emojiDeleteHit)
+        for page in [
+            KeyGridPage(id: "letters", rows: [[
+                KeyGridKey(id: "shift", action: .shift, weight: 1.5, isCommand: true),
+                KeyGridKey(id: "delete", action: .delete, weight: 1.5, isCommand: true)
+            ]]),
+            KeyGridPage(id: "symbols1", rows: [[
+                KeyGridKey(id: "toggle", action: .page("#+="), weight: 1.4, isCommand: true),
+                KeyGridKey(id: "delete", action: .delete, weight: 2.25, isCommand: true)
+            ]]),
+            KeyGridPage(id: "numberPad", rows: [[
+                KeyGridKey(id: "spacer", action: .none),
+                KeyGridKey(id: "digit", action: .insert("0")),
+                KeyGridKey(id: "delete", action: .delete, isCommand: true)
+            ]], rowHeight: 48)
+        ] {
+            for item in KeyGridPlacement.solve(page, in: size).placed where item.key.isCommand {
+                let visible = CommandKeyStyle.visualPlate(for: item.plate, surfaceWidth: size.width)
+                XCTAssertEqual(visible.size, emojiDeleteFace, item.key.id)
+                XCTAssertTrue(item.target.contains(visible), item.key.id)
+            }
+        }
+        let compact = CGRect(x: 0, y: 0, width: 30, height: 32)
+        XCTAssertTrue(compact.contains(CommandKeyStyle.visualPlate(for: compact)))
+    }
+
+    func testPinnedCommandFacesMatchEmojiDeleteBorderInset() {
+        let width: CGFloat = 402
+        let letters = (0..<10).map { KeyGridKey(id: "letter-\($0)", action: .insert("a")) }
+        let bottom = [KeyGridKey(id: "shift", action: .shift, isCommand: true)]
+            + (0..<7).map { KeyGridKey(id: "middle-\($0)", action: .insert("a")) }
+            + [KeyGridKey(id: "delete", action: .delete, isCommand: true)]
+        let page = KeyGridPage(id: "letters", rows: [letters, bottom], pinnedLastRow: true)
+        let layout = KeyGridPlacement.solve(page, in: CGSize(width: width, height: 130))
+        let pinned = layout.rows[1]
+        let leading = CommandKeyStyle.visualPlate(for: pinned[0].plate, surfaceWidth: width)
+        let trailing = CommandKeyStyle.visualPlate(for: pinned[8].plate, surfaceWidth: width)
+        let emojiDeleteInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
+            + VoiceOnlyKeyboardPolicy.commandVisualInset / 2
+        XCTAssertEqual(leading.minX, emojiDeleteInset, accuracy: 0.01)
+        XCTAssertEqual(width - trailing.maxX, emojiDeleteInset, accuracy: 0.01)
+        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+            width: (width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
+            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+        ))
+        XCTAssertEqual(leading.size, emojiFace)
+        XCTAssertEqual(trailing.size, emojiFace)
+        XCTAssertTrue(pinned[0].target.contains(leading))
+        XCTAssertTrue(pinned[8].target.contains(trailing))
+        let biased = KeyGridPlacement.retarget(layout,
+            probabilities: NextCharacterProbabilities(["a": 0.9]))
+        XCTAssertTrue(biased.rows[1][0].target.contains(leading))
+        XCTAssertTrue(biased.rows[1][8].target.contains(trailing))
+    }
+
     private func lettersPage(rowCount: Int = 3, keysPerRow: Int = 10) -> KeyGridPage {
         var rows: [[KeyGridKey]] = []
         for row in 0..<rowCount {
@@ -35,6 +178,46 @@ final class NextKeyGridGeometryTests: XCTestCase {
             })
         }
         return KeyGridPage(id: "test", rows: rows)
+    }
+
+    func testContainerPreferenceCannotChangeKeyGeometry() {
+        let page = KeyGridPage(id: "appearance", rows: [[
+            KeyGridKey(id: "letter", action: .insert("a"), isInvisiblePlate: true),
+            KeyGridKey(id: "symbol", action: .insert("1")),
+            KeyGridKey(id: "command", action: .delete, isCommand: true)
+        ]])
+        let layout = KeyGridPlacement.solve(page, in: size)
+        XCTAssertEqual(layout.placed.count, 3)
+        for item in layout.placed {
+            XCTAssertTrue(item.target.contains(item.plate), item.key.id)
+            XCTAssertEqual(layout.key(at: CGPoint(x: item.plate.midX, y: item.plate.midY))?.key.id,
+                           item.key.id)
+        }
+        XCTAssertTrue(layout.placed[0].key.isInvisiblePlate)
+        XCTAssertFalse(layout.placed[1].key.isInvisiblePlate)
+        XCTAssertTrue(layout.placed[2].key.isCommand)
+    }
+
+    func testPredictionChangesOnlyInvisibleTargetsAndCanReturnToNeutral() {
+        let page = KeyGridPage(id: "letters", rows: [[
+            KeyGridKey(id: "r", action: .insert("r"), label: "r"),
+            KeyGridKey(id: "e", action: .insert("e"), label: "e"),
+            KeyGridKey(id: "delete", action: .delete, isCommand: true)
+        ]])
+        let neutral = KeyGridPlacement.solve(page, in: CGSize(width: 180, height: 65))
+        let biased = KeyGridPlacement.retarget(
+            neutral, probabilities: NextCharacterProbabilities(["e": 0.8, "r": 0.01])
+        )
+        XCTAssertEqual(biased.placed.map(\.plate), neutral.placed.map(\.plate))
+        XCTAssertLessThan(biased.rows[0][1].target.minX, neutral.rows[0][1].target.minX)
+        for item in biased.placed {
+            XCTAssertTrue(item.target.contains(item.plate), item.key.id)
+        }
+        for x in stride(from: CGFloat(0), to: CGFloat(180), by: 2) {
+            XCTAssertNotNil(biased.key(at: CGPoint(x: x, y: 32)))
+        }
+        let restored = KeyGridPlacement.retarget(neutral, probabilities: nil)
+        XCTAssertEqual(restored.placed.map(\.target), neutral.placed.map(\.target))
     }
 
     // MARK: - Rule 1: no key is ever reduced
@@ -275,7 +458,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(topFirst.plate.width, 33.5, accuracy: 1.0)
         XCTAssertEqual(topSecond.plate.minX - topFirst.plate.maxX, 6, accuracy: 0.5)
         for row in layout.rows {
-            XCTAssertEqual(row.first?.plate.height ?? .nan, 43, accuracy: 0.5)
+            XCTAssertEqual(row.first?.plate.height ?? .nan, 45, accuracy: 0.5)
         }
 
         // Rows are 11pt apart.
@@ -305,9 +488,18 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(leftGap, rightGap, accuracy: 1.0,
                        "the slack belongs equally beside shift and delete")
 
-        // Shift and delete are about 1.36x a letter, as the system keyboard draws them.
+        // Keep native plate placement; the wider visual face spends empty gap.
         XCTAssertEqual(shift.plate.width / 33.5, 1.36, accuracy: 0.05)
         XCTAssertEqual(del.plate.width / 33.5, 1.36, accuracy: 0.05)
+        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+            width: (screen.width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
+            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+        ))
+        for command in [shift, del] {
+            let face = CommandKeyStyle.visualPlate(for: command.plate, surfaceWidth: screen.width)
+            XCTAssertEqual(face.size, emojiFace)
+            XCTAssertTrue(command.target.contains(face))
+        }
     }
 
     /// The symbol pages share the letter page's rule, and it has to be derived from
@@ -361,6 +553,15 @@ final class NextKeyGridGeometryTests: XCTestCase {
             XCTAssertGreaterThan(b.plate.minX, a.plate.maxX, "keys must not overlap")
         }
         XCTAssertEqual(402 - delete.plate.maxX, 7, accuracy: 0.5)
+        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+            width: (402 - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
+            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+        ))
+        for command in [toggle, delete] {
+            let face = CommandKeyStyle.visualPlate(for: command.plate, surfaceWidth: 402)
+            XCTAssertEqual(face.size, emojiFace)
+            XCTAssertTrue(command.target.contains(face))
+        }
     }
 
     /// The 3×4 pad matches the system pad.
@@ -588,7 +789,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
             pinnedLastRow: true,
             topInset: 19
         )
-        let short = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 170))
+        let short = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 172))
         let tall = KeyGridPlacement.solve(page, in: CGSize(width: 402, height: 208))
 
         // Same first row, same last row: the block is in the same place, and the
@@ -603,7 +804,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
         let shortBottom = short.placed.map(\.plate.maxY).max() ?? .nan
         let tallBottom = tall.placed.map(\.plate.maxY).max() ?? .nan
         XCTAssertEqual(shortBottom, tallBottom, accuracy: 0.5)
-        XCTAssertEqual(tallBottom, 19 + 151, accuracy: 0.5)
+        XCTAssertEqual(tallBottom, 19 + 153, accuracy: 0.5)
     }
 
     /// The block still fits when the container is exactly its height, or shorter.

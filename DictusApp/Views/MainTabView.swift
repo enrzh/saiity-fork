@@ -50,6 +50,11 @@ struct MainTabView: View {
         _preparingModelID = State(
             initialValue: launchIntent == .prepare ? Self.persistedActiveModelIdentifier : nil
         )
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe") {
+            _selectedTab = State(initialValue: 1)
+        }
+        #endif
     }
 
     /// The active model as persisted in the App Group, with the shipped default.

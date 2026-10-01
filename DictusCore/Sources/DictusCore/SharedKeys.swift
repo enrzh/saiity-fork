@@ -113,8 +113,13 @@ public enum SharedKeys {
     public static let translationReadiness = "dictus.translationReadiness"
     /// Whether haptic feedback is enabled, default true
     public static let hapticsEnabled = "dictus.hapticsEnabled"
-    /// Keyboard haptic intensity: off / light / medium / strong.
+    /// Keyboard haptic preset: off / default / snappy. Reads older strength values for migration.
     public static let hapticIntensity = "dictus.hapticIntensity"
+    public static let keyboardHoldSpeed = "dictus.keyboardHoldSpeed"
+    public static let modelSelectionProfile = "dictus.modelSelectionProfile"
+    public static let disabledKeyVariants = "dictus.disabledKeyVariants"
+    public static let defaultEmojiSkinTone = "dictus.defaultEmojiSkinTone"
+    public static let keyboardInsetEnabled = "dictus.keyboardInsetEnabled"
     /// Whether long-press alternate-character popups are enabled, default true
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
     /// Off / popup-above-key / popout-from-key. Migrates from `keyPopupsEnabled`.

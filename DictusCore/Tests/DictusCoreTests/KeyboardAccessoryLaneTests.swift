@@ -2,6 +2,20 @@ import XCTest
 @testable import DictusCore
 
 final class KeyboardAccessoryLaneTests: XCTestCase {
+    func testNativeTargetsFollowBottomAnchoredHostedSurface() {
+        let layout = VoiceOnlyKeyboardPolicy.layout(
+            for: 402, surfaceHeight: 269,
+            topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+        )
+        for frame in [layout.letterPeriodFrame, layout.boardDeleteFrame,
+                      layout.floatingEmojiCategoryFrame, layout.surfaceFrame] {
+            let installed = layout.inputFrame(frame, inputViewHeight: 250)
+            XCTAssertEqual(installed.minY, frame.minY - 19, accuracy: 0.001)
+            XCTAssertEqual(installed.size, frame.size)
+            XCTAssertLessThanOrEqual(installed.maxY, 250)
+        }
+    }
+
     func testEveryLayoutKeepsTheCompactTopLaneOutsideTheSurface() {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(
@@ -10,9 +24,9 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                 topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
             )
 
-            XCTAssertEqual(VoiceOnlyKeyboardPolicy.suggestionLaneHeight, 36)
-            XCTAssertEqual(layout.topAccessoryHeight, 36)
-            XCTAssertEqual(layout.surfaceFrame.minY, 40)
+            XCTAssertEqual(VoiceOnlyKeyboardPolicy.suggestionLaneHeight, 32)
+            XCTAssertEqual(layout.topAccessoryHeight, 32)
+            XCTAssertEqual(layout.surfaceFrame.minY, 36)
             XCTAssertEqual(layout.surfaceFrame.maxY, 276)
             XCTAssertEqual(layout.surfaceFrame.minY - layout.topAccessoryHeight, 4)
             XCTAssertEqual(280 - layout.surfaceFrame.maxY, 4)
@@ -33,14 +47,12 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                 )
                 let bar = layout.floatingEmojiCategoryFrame
                 XCTAssertFalse(bar.isEmpty, "width=\(width) height=\(surfaceHeight)")
-                XCTAssertEqual(bar.midX, layout.surfaceFrame.midX, accuracy: 0.001,
-                               "category bar must be centred, width=\(width) height=\(surfaceHeight)")
-                XCTAssertEqual(bar.minX,
-                               layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+                XCTAssertFalse(bar.intersects(layout.boardDeleteFrame), "Category buttons clear Delete")
+                XCTAssertEqual(bar.midX,
+                               layout.chromeWideSpaceFrame.midX,
                                accuracy: 0.001)
-                XCTAssertEqual(bar.maxX,
-                               layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
-                               accuracy: 0.001)
+                XCTAssertLessThanOrEqual(bar.maxX,
+                               layout.boardDeleteFrame.minX - VoiceOnlyKeyboardPolicy.visibleControlGap)
                 XCTAssertTrue(layout.surfaceFrame.contains(bar))
             }
         }
@@ -49,10 +61,11 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
     func testBoardFramesAre44PointHitTargetsInsideTheSurface() {
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390, surfaceHeight: 280, topAccessoryHeight: 44)
 
-        for frame in [layout.chromeLettersFrame, layout.boardDeleteFrame, layout.chromeReturnFrame] {
-            XCTAssertEqual(frame.size.height, 44)
+        for frame in [layout.chromeLettersFrame, layout.chromeReturnFrame] {
+            XCTAssertEqual(frame.height, VoiceOnlyKeyboardPolicy.spacebarHeight)
             XCTAssertTrue(layout.surfaceFrame.contains(frame), "frame=\(frame)")
         }
+        XCTAssertEqual(layout.boardDeleteFrame.height, 44)
         XCTAssertEqual(layout.boardDeleteFrame.maxY + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.chromeReturnFrame.minY,
                        accuracy: 0.001)
@@ -95,21 +108,20 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                         + VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarGap,
                        layout.chromeSpaceFrame.minY,
                        accuracy: 0.001)
-        XCTAssertEqual(layout.floatingEmojiCategoryFrame.minX,
-                       layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap,
+        XCTAssertEqual(layout.floatingEmojiCategoryFrame.midX,
+                       layout.chromeWideSpaceFrame.midX,
                        accuracy: 0.001)
         // The bar keeps a symmetric inset so the selected marker stays centred;
         // delete keeps the shared corner by winning the hit test, not by the bar
         // being shortened.
-        XCTAssertEqual(layout.floatingEmojiCategoryFrame.maxX,
-                       layout.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
-                       accuracy: 0.001)
+        XCTAssertLessThanOrEqual(layout.floatingEmojiCategoryFrame.maxX,
+                       layout.boardDeleteFrame.minX - VoiceOnlyKeyboardPolicy.visibleControlGap)
         XCTAssertGreaterThan(layout.floatingEmojiCategoryFrame.width,
                              VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarMaxWidth,
-                             "the invisible track must be wider than the moving handle")
+                             "The centred track keeps the expanded category rail readable")
         XCTAssertEqual(layout.accessoryDictationBoardFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.accessoryDismissFrame.minX, accuracy: 0.001)
-        XCTAssertEqual(layout.accessoryDismissFrame.width, 36, accuracy: 0.001)
+        XCTAssertEqual(layout.accessoryDismissFrame.width, 48, accuracy: 0.001)
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.minX,
                        VoiceOnlyKeyboardPolicy.accessoryEdgeInset
                         + VoiceOnlyKeyboardPolicy.languageVisualWidth
@@ -117,9 +129,9 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                        accuracy: 0.001)
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.accessoryDictationBoardFrame.minX, accuracy: 0.001)
-        XCTAssertEqual(layout.accessoryEmojiCategoryFrame.height, 36, accuracy: 0.001)
+        XCTAssertEqual(layout.accessoryEmojiCategoryFrame.height, 32, accuracy: 0.001)
         XCTAssertGreaterThan(layout.accessoryEmojiCategoryFrame.width, 80)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.accessoryControlSize, 36)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.accessoryControlSize, 48)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight, 44)
         XCTAssertGreaterThan(
             VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight,
@@ -166,7 +178,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             )
             let gridHeight = layout.surfaceFrame.height
                 - VoiceOnlyKeyboardPolicy.chromeCommandRowGap
-                - 44
+                - VoiceOnlyKeyboardPolicy.spacebarHeight
                 - VoiceOnlyKeyboardPolicy.chromeBottomInset
             XCTAssertEqual(
                 gridHeight,

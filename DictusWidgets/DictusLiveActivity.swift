@@ -1,340 +1,201 @@
-// DictusWidgets/DictusLiveActivity.swift
-// Live Activity views for Dynamic Island + Lock Screen banner.
 import ActivityKit
 import SwiftUI
 import WidgetKit
 import DictusCore
 
-/// Live Activity configuration for sAiity.
-///
-/// WHY all views in one file:
-/// Widget extensions should minimize file count. The compact/expanded/lock screen
-/// views are tightly coupled — they share the same ContentState and brand assets.
-/// Splitting them would add complexity without benefit.
 struct DictusLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DictusLiveActivityAttributes.self) { context in
-            // Lock Screen / StandBy banner
-            lockScreenView(context: context)
+            DictationActivityCard(state: context.state)
+                .activityBackgroundTint(Color(uiColor: .secondarySystemGroupedBackground))
+                .activitySystemActionForegroundColor(.primary)
+                .widgetURL(URL(string: "saiity://open"))
         } dynamicIsland: { context in
-            DynamicIsland {
-                // Expanded view (long press on Dynamic Island)
+            let status = DictationActivityStatus(state: context.state)
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    expandedLeading(context: context)
+                    HStack(spacing: 8) {
+                        DictusLogo(height: 28, foregroundOnly: true)
+                        Text("sAiity").font(.headline).foregroundStyle(.white)
+                    }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    expandedTrailing(context: context)
+                    ActivityAction(state: context.state, dark: true)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    expandedBottom(context: context)
+                    DictationActivityDetail(state: context.state, dark: true)
+                        .padding(.top, 6)
                 }
             } compactLeading: {
-                compactLeading(context: context)
+                DictusLogo(height: 20, foregroundOnly: true)
+                    .accessibilityLabel("sAiity")
             } compactTrailing: {
-                compactTrailing(context: context)
+                ActivitySignal(state: context.state, compact: true)
             } minimal: {
-                // Minimal view when multiple Live Activities compete for space
-                minimalView(context: context)
+                ActivitySignal(state: context.state, compact: true)
             }
             .widgetURL(URL(string: "saiity://open"))
+            .keylineTint(status.color)
         }
     }
+}
 
-    // MARK: - Compact Views (Dynamic Island pill)
-
-    /// Compact leading carries the compact sAiity mark.
-    @ViewBuilder
-    private func compactLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        SaiityMark(size: 20)
-    }
-
-    /// Compact trailing uses the same status language as the expanded surface.
-    @ViewBuilder
-    private func compactTrailing(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        Image(systemName: statusSymbol(for: context.state.phase))
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(statusColor(for: context.state.phase))
-            .accessibilityLabel(statusLabel(for: context.state.phase))
-    }
-
-    // MARK: - Minimal View
-
-    @ViewBuilder
-    private func minimalView(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        SaiityMark(size: 24)
-    }
-
-    // MARK: - Expanded Views (long press)
-
-    @ViewBuilder
-    private func expandedLeading(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        HStack(spacing: 8) {
-            SaiityMark(size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("sAiity")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                Text(statusLabel(for: context.state.phase))
-                    .font(.system(size: 12))
-                    .foregroundStyle(statusColor(for: context.state.phase))
-            }
-        }
-        .frame(maxHeight: .infinity, alignment: .center)
-    }
-
-    private func statusLabel(for phase: DictusLiveActivityAttributes.Phase) -> String {
-        switch phase {
-        case .standby: return "Ready"
+/// One state vocabulary for the card, expanded Island and compact signal.
+private struct DictationActivityStatus {
+    let state: DictusLiveActivityAttributes.ContentState
+    var paused: Bool { !state.serviceEnabled || state.detectionMuted }
+    var title: String {
+        switch state.phase {
+        case .standby: return paused ? "Dictation paused" : "Ready to dictate"
         case .recording: return "Listening"
         case .transcribing: return "Transcribing"
-        case .processing: return "Polishing"
-        case .ready: return "Ready to use"
-        case .failed: return "Needs attention"
+        case .processing: return "Refining your words"
+        case .ready: return "Your text is ready"
+        case .failed: return "Dictation needs attention"
         }
     }
-
-    private func statusSymbol(for phase: DictusLiveActivityAttributes.Phase) -> String {
-        switch phase {
-        case .standby: return "mic"
+    var detail: String {
+        switch state.phase {
+        case .standby: return paused ? "Open sAiity to resume" : "Hold the microphone on your keyboard"
+        case .recording: return "Release the microphone to finish"
+        case .transcribing: return "Turning speech into text"
+        case .processing: return "Cleaning up punctuation and grammar"
+        case .ready: return "Return to your text field"
+        case .failed: return "Open sAiity to try again"
+        }
+    }
+    var symbol: String {
+        switch state.phase {
+        case .standby: return paused ? "mic.slash.fill" : "mic.fill"
         case .recording: return "waveform"
-        case .transcribing: return "ellipsis"
+        case .transcribing: return "text.bubble.fill"
         case .processing: return "wand.and.stars"
         case .ready: return "checkmark"
-        case .failed: return "exclamationmark.triangle"
+        case .failed: return "exclamationmark.triangle.fill"
         }
     }
-
-    private func statusColor(for phase: DictusLiveActivityAttributes.Phase) -> Color {
-        switch phase {
-        case .standby: return .white.opacity(0.7)
-        case .recording: return .sAiityRecording
-        case .transcribing: return .sAiityAccent
-        case .processing: return .sAiityProcessing
-        case .ready: return .sAiitySuccess
-        case .failed: return .sAiityRecording
+    var color: Color {
+        switch state.phase {
+        case .standby: return paused ? .gray : .cyan
+        case .recording, .failed: return .red
+        case .transcribing: return .blue
+        case .processing: return .purple
+        case .ready: return .green
         }
     }
+}
 
-    @ViewBuilder
-    private func serviceControl(enabled: Bool, size: CGFloat) -> some View {
-        let label = Image(systemName: enabled ? "power" : "power.circle")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.primary)
-            .frame(width: size, height: size)
-            .background(Color.primary.opacity(0.15), in: Circle())
-        if enabled {
-            Button(intent: StopStandbyIntent(toggleDetection: true)) { label }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Disable keyboard dictation")
-        } else if let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") {
-            // Starting a cold microphone requires foreground activation; the
-            // keyboard holds themselves never open the app.
-            Link(destination: url) { label }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Enable keyboard dictation in sAiity")
-        }
-    }
-
-    @ViewBuilder
-    private func expandedTrailing(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0) // Push trailing elements to the right edge
-            switch context.state.phase {
-            case .standby:
-                serviceControl(enabled: context.state.serviceEnabled, size: 44)
-
-            case .recording:
-                // Stop button (left side)
-                if let stopURL = URL(string: "saiity://stop") {
-                    Link(destination: stopURL) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Color.sAiityRecording)
-                            .clipShape(Circle())
-                    }
-                }
-
-                // Timer (right, naturally trailing — aligns with compact trailing)
-                if let startDate = context.state.recordingStartDate {
-                    Text(startDate, style: .timer)
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white)
-                        .monospacedDigit()
-                }
-            case .transcribing:
-                ProgressView()
-                    .tint(.white)
-            case .processing:
-                ProgressView()
-                    .tint(Color(hex: 0x8B5CF6))
-            case .ready, .failed:
-                EmptyView()
+struct DictationActivityCard: View {
+    let state: DictusLiveActivityAttributes.ContentState
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                DictusLogo(height: 24, foregroundOnly: true)
+                Text("sAiity").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                ActivityAction(state: state)
             }
-        }
-        .frame(maxHeight: .infinity, alignment: .center)
-    }
-
-    @ViewBuilder
-    private func expandedBottom(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        switch context.state.phase {
-        case .recording:
-            EmptyView()
-        case .ready:
-            if let preview = context.state.transcriptionPreview {
-                Text(preview)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(2)
-                    .padding(.horizontal, 8)
-            }
-        default:
-            EmptyView()
-        }
-    }
-
-    // MARK: - Lock Screen Banner
-
-    @ViewBuilder
-    private func lockScreenView(context: ActivityViewContext<DictusLiveActivityAttributes>) -> some View {
-        HStack(spacing: 12) {
-            SaiityMark(size: 40)
-
-            VStack(alignment: .leading, spacing: 2) {
-                switch context.state.phase {
-                case .standby:
-                    Text("Ready")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                case .recording:
-                    if let startDate = context.state.recordingStartDate {
-                        HStack(spacing: 4) {
-                            Circle()
-                            .fill(Color.sAiityRecording)
-                                .frame(width: 6, height: 6)
-                            Text(startDate, style: .timer)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
-                case .transcribing:
-                    Text("Transcribing...")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.sAiityAccent)
-                case .processing:
-                    Text("Processing...")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.sAiityProcessing)
-                case .ready:
-                    Text(context.state.transcriptionPreview ?? "Transcription ready")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.sAiitySuccess)
-                        .lineLimit(1)
-                case .failed:
-                    Text("Error")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.sAiityRecording)
-                }
-            }
-
-            Spacer()
-
-            // Action buttons
-            switch context.state.phase {
-            case .standby:
-                serviceControl(enabled: context.state.serviceEnabled, size: 48)
-            case .recording:
-                if let stopURL = URL(string: "saiity://stop") {
-                    Link(destination: stopURL) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .frame(width: 48, height: 48)
-                            .background(Color.sAiityRecording)
-                            .clipShape(Circle())
-                    }
-                }
-            default:
-                EmptyView()
-            }
+            DictationActivityDetail(state: state)
         }
         .padding(16)
-        .background(Color(uiColor: .systemBackground))
     }
-
 }
 
-// MARK: - Waveform Bars (Expanded View)
-
-/// 5-bar waveform for the expanded Dynamic Island view.
-struct WaveformBars: View {
-    let levels: [Float]
-
+private struct DictationActivityDetail: View {
+    let state: DictusLiveActivityAttributes.ContentState
+    var dark = false
+    private var status: DictationActivityStatus { .init(state: state) }
     var body: some View {
-        GeometryReader { geo in
-            let barWidth: CGFloat = 6
-            let spacing: CGFloat = 4  // Fixed tight spacing
-
-            HStack(spacing: spacing) {
-                ForEach(0..<min(levels.count, 5), id: \.self) { index in
-                    let height = max(4, CGFloat(levels[index]) * geo.size.height)
-
-                    RoundedRectangle(cornerRadius: barWidth / 2)
-                        .fill(LinearGradient(
-                            colors: [Color(hex: 0x6BA3FF), Color(hex: 0x3D7EFF)],
-                            startPoint: .top, endPoint: .bottom
-                        ))
-                        .frame(width: barWidth, height: height)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                ActivitySignal(state: state)
+                    .frame(width: 32, height: 32)
+                    .background(status.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(status.title).font(.headline).foregroundStyle(dark ? .white : .primary)
+                    Text(status.detail).font(.caption.weight(.medium))
+                        .foregroundStyle(dark ? .white.opacity(0.7) : .secondary)
+                }
+                Spacer(minLength: 0)
+                if state.phase == .recording, let start = state.recordingStartDate {
+                    Text(start, style: .timer).font(.title3.weight(.semibold)).monospacedDigit()
+                        .foregroundStyle(dark ? .white : .primary)
+                        .multilineTextAlignment(.trailing).frame(maxWidth: 72)
                 }
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-            .animation(.easeInOut(duration: 0.3), value: levels)
+            if state.phase == .transcribing || state.phase == .processing {
+                HStack(spacing: 8) {
+                    Label("Speech", systemImage: "checkmark.circle.fill")
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                    Label("Text", systemImage: state.phase == .processing ? "checkmark.circle.fill" : "text.bubble")
+                    if state.phase == .processing {
+                        Image(systemName: "chevron.right").accessibilityHidden(true)
+                        Label("Refine", systemImage: "wand.and.stars")
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(dark ? .white.opacity(0.5) : .secondary)
+            }
+            if state.phase == .ready, let preview = state.transcriptionPreview, !preview.isEmpty {
+                Text(preview).font(.subheadline.weight(.medium)).lineLimit(2)
+                    .foregroundStyle(dark ? .white.opacity(0.85) : .primary)
+                    .privacySensitive()
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// Compact sAiity mark for WidgetKit surfaces where the app icon asset is not
-/// available to the extension bundle.
-private struct SaiityMark: View {
-    let size: CGFloat
-
+private struct ActivitySignal: View {
+    let state: DictusLiveActivityAttributes.ContentState
+    var compact = false
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.sAiityBrand)
-
-            Text(verbatim: "sAi")
-                .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
-                .tracking(-size * 0.025)
-                .foregroundStyle(.white)
+        let status = DictationActivityStatus(state: state)
+        Group {
+            if state.phase == .recording {
+                HStack(spacing: 2) {
+                    ForEach(0..<5) { index in
+                        let level = state.waveformLevels.indices.contains(index) ? state.waveformLevels[index] : 0
+                        Capsule().frame(width: 3, height: 4 + CGFloat(min(1, max(0, level.isFinite ? level : 0))) * 16)
+                    }
+                }.frame(width: 23, height: 22)
+            } else {
+                Image(systemName: status.symbol).font(.system(size: compact ? 13 : 16, weight: .semibold))
+            }
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .accessibilityLabel("sAiity")
+        .foregroundStyle(status.color)
+        .accessibilityLabel(status.title)
     }
 }
 
-// MARK: - Color Extension (Widget-local)
-
-/// WHY duplicate Color(hex:) here instead of importing from DictusCore:
-/// Widget extensions have a separate compilation context. While DictusCore
-/// is linked, keeping this tiny extension local avoids any import ordering
-/// issues with SwiftUI in widget builds.
-private extension Color {
-    static let sAiityBrand = Color(hex: 0x16A6AA)
-    static let sAiityAccent = Color.accentColor
-    static let sAiityRecording = Color.red
-    static let sAiitySuccess = Color.green
-    static let sAiityProcessing = Color.indigo
-
-    init(hex: UInt, opacity: Double = 1.0) {
-        self.init(
-            red: Double((hex >> 16) & 0xFF) / 255.0,
-            green: Double((hex >> 8) & 0xFF) / 255.0,
-            blue: Double(hex & 0xFF) / 255.0,
-            opacity: opacity
-        )
+/// The same single action in expanded and Lock Screen presentations.
+private struct ActivityAction: View {
+    let state: DictusLiveActivityAttributes.ContentState
+    var dark = false
+    private var status: DictationActivityStatus { .init(state: state) }
+    var body: some View {
+        Group {
+            if state.phase == .standby, !status.paused {
+                Button(intent: StopStandbyIntent(toggleDetection: true)) {
+                    actionLabel("mic.slash", title: "Pause")
+                }.accessibilityLabel("Pause keyboard dictation")
+            } else if state.phase == .recording, let url = URL(string: "saiity://stop") {
+                Link(destination: url) {
+                    actionLabel("stop.fill", title: "Finish")
+                }.accessibilityLabel("Finish dictation")
+            } else if state.phase == .standby || state.phase == .failed,
+                      let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") {
+                Link(destination: url) {
+                    actionLabel("arrow.up.forward", title: state.phase == .failed ? "Open" : "Resume")
+                }.accessibilityLabel("Open sAiity to prepare dictation")
+            }
+        }
+        .buttonStyle(.plain)
+    }
+    private func actionLabel(_ symbol: String, title: String) -> some View {
+        Label(title, systemImage: symbol).font(.caption.weight(.semibold))
+            .foregroundStyle(dark ? .white : .primary)
+            .padding(.horizontal, 12).frame(minHeight: 44)
+            .background(status.color.opacity(dark ? 0.25 : 0.12), in: Capsule())
     }
 }

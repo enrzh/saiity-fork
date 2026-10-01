@@ -190,7 +190,7 @@ public struct KeyGridPage: Equatable {
                 rowPart += key.id
                 rowPart += ":"
                 rowPart += key.resolvedLabel
-                rowPart += key.variants.isEmpty ? "|" : "v|"
+                rowPart += key.variants.isEmpty ? "|" : "v:\(key.variants.joined(separator: ","))|"
             }
             parts.append(rowPart)
         }

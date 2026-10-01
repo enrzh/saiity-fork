@@ -19,6 +19,11 @@ struct HomeView: View {
 
     var body: some View {
         List {
+            Section("Model selection") {
+                ModelSelectionProfilePicker(modelManager: modelManager)
+                Text(modelManager.selectionMode == .manual ? "Using your selected model. Choose a preset for automatic selection." : modelManager.selectionProfile.explanation)
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section {
                 readinessPanel
                 Toggle("Keyboard dictation", isOn: $serviceEnabled)

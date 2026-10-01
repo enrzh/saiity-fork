@@ -61,6 +61,7 @@ public enum KeyboardLayoutPreference {
         if language == .active {
             mirrorToLegacyKey(layout)
         }
+        KeyboardInteractionPreferences.notifyChanged()
     }
 
     /// One layout for every language. Settings and the keyboard menu expose a
@@ -73,6 +74,7 @@ public enum KeyboardLayoutPreference {
         }
         AppGroup.defaults.set(layouts, forKey: SharedKeys.keyboardLayoutsByLanguage)
         mirrorToLegacyKey(layout)
+        KeyboardInteractionPreferences.notifyChanged()
     }
 
     // MARK: - Migration (#272)

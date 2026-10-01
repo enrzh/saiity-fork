@@ -65,13 +65,19 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let categories = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
-        XCTAssertFalse(root.contains("withoutGlassRim: state.areaMode == .emoji"),
-                       "emoji uses the same shared glass inset as the other keyboard pages")
-        XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(categories.contains("contentOffset"))
-        XCTAssertTrue(root.contains("floatingEmojiCategoryFrame"),
-                      "category bookmarks float over the emoji grid")
-        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(try read("DictusKeyboard/KeyboardViewController.swift").contains("surfaceBackdrop.configureInset(layout"))
+        XCTAssertFalse(emoji.contains("view.backgroundView = material"))
+        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertFalse(categories.contains("contentOffset"))
+        let native = try read("DictusKeyboard/Next/KeyboardSurfaceView.swift")
+        XCTAssertFalse(native.contains("emojiInset"), "The inset has one owner for all pages")
+        XCTAssertTrue(emoji.contains("view.decelerationRate = .normal"))
+        XCTAssertTrue(native.contains("floatingEmojiCategoryFrame"),
+                      "category bookmarks float over the native emoji grid")
+        XCTAssertTrue(native.contains("EmojiCategoryBar("))
+        XCTAssertTrue(native.contains("emojiDelete.keyboardFace.configure("))
+        XCTAssertTrue(native.contains("attachKeyboardVisualController(emojiChrome, from: emojiCategory)"))
+        XCTAssertFalse(root.contains("EmojiCategoryBar("))
         XCTAssertTrue(root.contains("KeyboardDeleteButton("))
         XCTAssertTrue(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertTrue(emoji.contains("UICollectionView"),
@@ -139,7 +145,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(control.contains("continueTracking"))
         XCTAssertTrue(control.contains("beginTracking"))
         XCTAssertTrue(control.contains("dragActivationDistance"))
-        XCTAssertTrue(control.contains("onExpansionChanged"))
+        XCTAssertTrue(control.contains("EmojiCategoryBarMetrics.index(atX:"))
         XCTAssertTrue(control.contains("final class EmojiCategoryControl: UIControl"))
         XCTAssertFalse(bar.contains("section.icon.contains"))
         XCTAssertFalse(bar.contains("Text(section.icon)"))
@@ -183,10 +189,11 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testEmojiCategoryLaneHasAnExplicitBottomAlignedContainer() throws {
         let picker = try read("DictusKeyboard/Views/EmojiPickerView.swift")
         let root = try read("DictusKeyboard/KeyboardRootView.swift")
+        let native = try read("DictusKeyboard/Next/KeyboardSurfaceView.swift")
 
         XCTAssertTrue(picker.contains(".frame(width: availableWidth, height: availableHeight)"))
         XCTAssertTrue(root.contains("KeyboardDeleteButton("))
-        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(native.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("let categoryBarHeight: CGFloat = 44"))
         XCTAssertTrue(root.contains("private func accessoryBar("))
@@ -196,7 +203,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let source = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(source.contains("Image(systemName: section.icon)"))
-        XCTAssertTrue(source.contains(".foregroundStyle(.primary)"))
+        XCTAssertTrue(source.contains("Color.primary"))
         XCTAssertFalse(source.contains("symbolRenderingMode"))
         XCTAssertFalse(source.localizedCaseInsensitiveContains("magnifyingglass"))
         XCTAssertFalse(source.contains("representativeEmoji"))
@@ -210,8 +217,11 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         // previously asserted `isUserInteractionEnabled = true` unconditionally,
         // which is the exact opposite of its own name and the cause of letter keys
         // being swallowed by an invisible `return-to-dictation-board`.
-        XCTAssertTrue(source.contains("let overlayVisible = uikitOwnsVoiceChrome || mode == .emoji"),
-                      "overlay interaction must be gated on the modes where UIKit owns the surface")
+        XCTAssertTrue(source.contains("let overlayVisible = true"),
+                      "one native accessory owner stays available in both materials")
+        XCTAssertFalse(source.contains("forwardHitTest"), "the transparent accessory canvas must never forward misses into SwiftUI")
+        XCTAssertTrue(source.contains("inputView.addSubview(surface)"),
+                      "the whole native Emoji board stays outside the voice overlay")
         XCTAssertTrue(source.contains("controls.isUserInteractionEnabled = overlayVisible"),
                       "the overlay must not be interactive while SwiftUI owns the surface")
         XCTAssertFalse(source.contains("controls.isUserInteractionEnabled = true\n"),
@@ -234,11 +244,11 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(source.localizedCaseInsensitiveContains("accessory row"))
     }
 
-    func testUIKitVoiceHitTargetsStayVisuallyTransparentWhenPressed() throws {
+    func testNativeVoiceControlsOwnTheirFacesAndPressFeedback() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("if control.isHighlighted || !control.isEnabled"))
-        XCTAssertTrue(source.contains("control.backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("control.existingKeyboardFace?.setPressed(control.isHighlighted)"))
+        XCTAssertTrue(source.contains("recoveryButton.keyboardFace.configure("))
     }
 
     func testSymbolBottomLaneUsesSharedBottomInsetForItsAnchor() throws {

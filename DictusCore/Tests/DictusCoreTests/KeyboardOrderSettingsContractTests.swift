@@ -28,11 +28,14 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         XCTAssertFalse(keyboardSectionSource.contains("Control order"))
         XCTAssertTrue(keyboardSectionSource.contains("DefaultKeyboardModePicker()"))
         XCTAssertFalse(keyboardSectionSource.contains("ModelManagerView"))
-        XCTAssertTrue(source.contains("Toggle(\"Keyboard haptics\""))
+        XCTAssertTrue(source.contains("Picker(\"Keyboard haptics\", selection: hapticPresetBinding)"))
         XCTAssertTrue(source.contains("Toggle(\"Key containers\""))
         XCTAssertTrue(source.contains("KeyPopupPicker()"))
         XCTAssertTrue(source.contains("KeyboardMaterialPicker()"))
         XCTAssertTrue(source.contains("DictationPresencePicker()"))
+        XCTAssertTrue(source.contains("if polishEnabled && cleanupAvailable {"),
+                      "writing style must not be offered when cleanup cannot run")
+        XCTAssertTrue(source.contains("including Period, always keeps its plates"))
         XCTAssertFalse(source.contains("Toggle(\"Liquid glass\""))
         XCTAssertFalse(source.contains("Toggle(\"Live Activity\""))
         XCTAssertTrue(source.contains("Section(\"Help\")"))
@@ -71,7 +74,8 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
                       "disabled autocorrection must skip space-time replacement")
         XCTAssertTrue(suggestionState.contains("if self.autocorrectEnabled,"),
                       "disabled autocorrection must skip async correction suggestions")
-        XCTAssertTrue(suggestionState.contains("guard !autocorrectEnabled else { return }"),
+        XCTAssertTrue(suggestionState.contains("guard enabled != lastAutocorrectEnabled else { return }"))
+        XCTAssertTrue(suggestionState.contains("guard !enabled else { return }"),
                       "preference refresh must clear stale correction UI when disabled")
     }
 }

@@ -8,8 +8,8 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @AppStorage(SharedKeys.transcriptionOutputMode, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
     @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
-    @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.on.rawValue
-    @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = false
+    @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.default.rawValue
+    @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = true
     @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var autocorrectEnabled = true
     @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var adaptiveHitPredictionEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
@@ -19,7 +19,14 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                if PolishAvailability.isToggleVisible {
+                NavigationLink {
+                    ModelManagerView(modelManager: modelManager)
+                } label: {
+                    Label("Models", systemImage: "square.stack.3d.up")
+                }
+                DictationModelQuickPicker(modelManager: modelManager)
+                CleanupModelPicker(manager: modelManager)
+                if cleanupAvailable {
                     Toggle("Automatic cleanup", isOn: $polishEnabled)
                         .accessibilityHint("Cleans up dictation after speech recognition.")
                 }
@@ -28,9 +35,11 @@ struct SettingsView: View {
                         Text(mode.displayName).tag(mode.storedValue)
                     }
                 }
-                Picker("Writing style", selection: $writingStyleRaw) {
-                    ForEach(WritingStyle.allCases, id: \.rawValue) { style in
-                        Text(style.displayName).tag(style.rawValue)
+                if polishEnabled && cleanupAvailable {
+                    Picker("Writing style", selection: $writingStyleRaw) {
+                        ForEach(WritingStyle.allCases, id: \.rawValue) { style in
+                            Text(style.displayName).tag(style.rawValue)
+                        }
                     }
                 }
                 DictationPresencePicker()
@@ -57,10 +66,15 @@ struct SettingsView: View {
                     .onChange(of: autocorrectEnabled) { _, _ in
                         KeyboardInteractionPreferences.notifyChanged()
                     }
-                Toggle("Keyboard haptics", isOn: hapticsEnabledBinding)
-                    .accessibilityHint("Provides a vibration when keys are pressed.")
+                Picker("Keyboard haptics", selection: hapticPresetBinding) {
+                    ForEach(HapticIntensity.allCases, id: \.self) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .accessibilityIdentifier("keyboard-haptics-setting")
+                .accessibilityHint("Choose Off, the default key vibration, or the stronger Snappy vibration.")
                 Toggle("Key containers", isOn: $keyContainersEnabled)
-                    .accessibilityHint("Draws a plate behind letter and symbol keys. Command keys keep their plates.")
+                    .accessibilityHint("Draws plates behind character rows. The bottom bar, including Period, always keeps its plates.")
                     .onChange(of: keyContainersEnabled) { _, _ in
                         KeyboardInteractionPreferences.notifyChanged()
                     }
@@ -70,11 +84,13 @@ struct SettingsView: View {
                         KeyboardInteractionPreferences.notifyChanged()
                     }
                 KeyPopupPicker()
+                KeyboardHoldSpeedPicker()
+                NavigationLink("Tap and hold options") { KeyboardHoldOptionsView() }
                 KeyboardMaterialPicker()
             } header: {
                 Text("Keyboard")
             } footer: {
-                Text("The keyboard starts in the iPhone language. After a few words, typing follows the language of the sentence until another language takes over.")
+                Text("The keyboard starts in the iPhone language. After a few words, typing follows the language of the sentence until another language takes over. Autocorrection and adaptive touch targets support English, German, French and Spanish. Other scripts, names, codes and web addresses are left unchanged.")
             }
 
             Section("Personalization") {
@@ -91,6 +107,9 @@ struct SettingsView: View {
             }
 
             Section("Help") {
+                NavigationLink("Keyboard setup") {
+                    KeyboardSetupPage(onNext: {})
+                }
                 NavigationLink {
                     DictationHistoryView()
                 } label: {
@@ -154,20 +173,26 @@ struct SettingsView: View {
         }
     }
 
-    private var hapticsEnabledBinding: Binding<Bool> {
+    private var hapticPresetBinding: Binding<HapticIntensity> {
         Binding(
-            get: { HapticIntensity.load(from: UserDefaults(suiteName: AppGroup.identifier)).isEnabled },
-            set: { enabled in
-                let value: HapticIntensity = enabled ? .on : .off
-                hapticIntensityRaw = value.rawValue
-                value.persist()
+            get: { HapticIntensity(rawValue: hapticIntensityRaw) ?? .default },
+            set: { preset in
+                hapticIntensityRaw = preset.rawValue
+                preset.persist()
                 HapticFeedback.refreshEnabledState()
+                HapticFeedback.keyTapped()
+                KeyboardInteractionPreferences.notifyChanged()
             }
         )
     }
 
     private var activeOutputMode: TranscriptionOutputMode {
         TranscriptionOutputMode(storedValue: transcriptionOutputModeRaw)
+    }
+
+    private var cleanupAvailable: Bool {
+        if modelManager.cleanupBackend != .appleIntelligence { return true }
+        return PolishAvailability.isAppleFMAvailable
     }
 
     private var appVersionText: String {
@@ -300,7 +325,7 @@ struct VocabularyView: View {
             Button("Reset", role: .destructive) {
                 UserDictionary.shared.resetAll()
                 reload()
-                KeyboardInteractionPreferences.notifyChanged()
+                KeyboardInteractionPreferences.notifyVocabularyChanged()
             }
         } message: {
             Text("This removes every word sAiity learned from your typing.")
@@ -321,7 +346,7 @@ struct VocabularyView: View {
         _ = UserDictionary.shared.learn(word)
         newWord = ""
         reload()
-        KeyboardInteractionPreferences.notifyChanged()
+        KeyboardInteractionPreferences.notifyVocabularyChanged()
     }
 
     private func deleteWords(at offsets: IndexSet) {
@@ -329,7 +354,7 @@ struct VocabularyView: View {
             UserDictionary.shared.forget(words[index])
         }
         reload()
-        KeyboardInteractionPreferences.notifyChanged()
+        KeyboardInteractionPreferences.notifyVocabularyChanged()
     }
 }
 

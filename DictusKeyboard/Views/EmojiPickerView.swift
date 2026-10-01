@@ -118,26 +118,7 @@ struct EmojiPickerView: View {
     }
 
     private func makePages(for recents: [String]) -> [EmojiPage] {
-        // Recents is always a full viewport page. Empty fillers stay
-        // non-interactive, while the collection view owns blank swipes.
-        EmojiSurfaceModel.pages(
-            recents: recents,
-            categories: categories.map {
-                EmojiSurfaceCategory(id: $0.id, name: $0.name, icon: $0.icon, emojis: $0.emojis)
-            },
-            emojiColumnCount: emojiColumnCount
-        ).map { plan in
-            EmojiPage(
-                id: plan.id,
-                name: plan.name,
-                icon: plan.icon,
-                categoryID: plan.categoryID,
-                columns: plan.columns,
-                items: plan.items.map {
-                    EmojiGridItem(id: $0.id, emoji: $0.emoji, categoryID: $0.categoryID)
-                }
-            )
-        }
+        makeEmojiPages(recents: recents, columns: emojiColumnCount)
     }
 
     private func rebuildPages(for recents: [String]? = nil) {
@@ -165,7 +146,7 @@ struct EmojiPickerView: View {
                 EmojiScrollCanvas(
                     pages: pages,
                     availableWidth: emojiGridWidth,
-                    gridHeight: emojiGridHeight,
+                    gridHeight: emojiGridHeight + commandRowGap,
                     emojiCellWidth: emojiCellWidth,
                     columnCount: emojiColumnCount,
                     rowHeight: rowHeight,
@@ -181,9 +162,9 @@ struct EmojiPickerView: View {
                     onTap: insertEmoji
                 )
                 .id("emoji-scroll-\(Int(emojiGridWidth))-\(Int(emojiGridHeight))")
-                .frame(width: emojiGridWidth, height: emojiGridHeight)
+                .frame(width: emojiGridWidth, height: emojiGridHeight + commandRowGap)
+                .contentShape(Rectangle())
 
-                Color.clear.frame(height: commandRowGap)
                 AuxiliaryBottomBar(
                     layout: surfaceLayout,
                     numbersTitle: "123",
@@ -291,6 +272,141 @@ struct EmojiScrollRequest: Equatable {
     }
 }
 
+/// The controller owns this view directly. No representable or reparented view
+/// participates in its layout, touch delivery, or scroll lifetime.
+final class EmojiPagerView: UIView {
+    var onInsert: ((String) -> Void)?
+    var onCategoryChanged: ((Int) -> Void)?
+    private let collection: EmojiPagerCollectionView
+    private let coordinator = EmojiScrollCanvas.Coordinator()
+    private var pages: [EmojiPage] = []
+    private var columns = 0
+    private var revision = 0
+    private var configuredSize = CGSize.zero
+    private var presented = false
+
+    override init(frame: CGRect) {
+        collection = EmojiPagerCollectionView(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
+        super.init(frame: frame)
+        backgroundColor = .clear
+        addSubview(collection)
+        collection.dataSource = coordinator
+        collection.delegate = coordinator
+        collection.onEmojiInsert = { [weak self] in self?.insert($0) }
+        collection.onInteractionEnded = { [weak self] in
+            guard let self else { return }
+            self.coordinator.reloadWhenIdle(self.collection)
+            self.coordinator.retryPendingScroll(in: self.collection)
+        }
+        collection.onLayoutChanged = { [weak self] in
+            guard let self else { return }
+            self.coordinator.markNeedsReload()
+            self.coordinator.reloadWhenIdle(self.collection)
+        }
+        collection.onLayoutReady = { [weak self] in
+            guard let self else { return }
+            self.coordinator.retryPendingScroll(in: self.collection)
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        collection.frame = bounds
+        if presented { configure(force: false) }
+    }
+
+    func present() {
+        presented = true
+        collection.frame = bounds
+        configure(force: true)
+        let recents = RecentEmojis.load(limit: max(1, columns * 4))
+        let landing = EmojiNavigation.landingCategoryID(recents: recents, firstCategoryID: EmojiStore.categories.first?.id)
+        coordinator.scroll(to: EmojiScrollRequest(id: landing, animated: false), in: collection, animated: false)
+    }
+
+    func dismiss() {
+        presented = false
+        collection.cancelVariantSelection()
+    }
+
+    func refreshPreferences() {
+        collection.cancelVariantSelection()
+        if presented { configure(force: true) }
+    }
+
+    func selectCategory(at index: Int) {
+        let sections = CategoryInfo.emojiBarSections
+        guard presented, sections.indices.contains(index) else { return }
+        if index == 0 { configure(force: true) }
+        coordinator.scroll(to: EmojiScrollRequest(id: sections[index].id, animated: false),
+                           in: collection, animated: false)
+    }
+
+    private func configure(force: Bool) {
+        guard bounds.width > 1, bounds.height > 1,
+              force || configuredSize != bounds.size else { return }
+        configuredSize = bounds.size
+        let count = EmojiSurfaceModel.columnCount(gridWidth: bounds.width, horizontalPadding: 0, minimumTargetWidth: 44)
+        if force || count != columns {
+            columns = count
+            pages = makeEmojiPages(recents: RecentEmojis.load(limit: count * 4), columns: count)
+            revision &+= 1
+        }
+        let height = EmojiSurfaceModel.rowHeight(
+            gridHeight: bounds.height - CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap),
+            rowSpacing: 2, gridVerticalInset: 4
+        )
+        coordinator.configure(
+            pages: pages, columns: columns, rowHeight: height, rowSpacing: 2,
+            verticalInset: 4, keySpacing: 3, horizontalPadding: 0,
+            pageWidths: emojiPageWidths(pages, width: bounds.width, columns: columns, spacing: 3, padding: 0),
+            pageGap: 0, reduceMotion: UIAccessibility.isReduceMotionEnabled,
+            pageRevision: revision,
+            onVisibleCategory: { [weak self] id in
+                if let index = CategoryInfo.emojiBarSections.firstIndex(where: { $0.id == id }) {
+                    self?.onCategoryChanged?(index)
+                }
+            },
+            onManualScroll: {},
+            onTap: { [weak self] in self?.insert($0) }
+        )
+        coordinator.reloadIfIdle(collection)
+    }
+
+    private func insert(_ emoji: String) {
+        HapticFeedback.playInputClick()
+        onInsert?(emoji)
+        RecentEmojis.add(emoji, limit: max(1, columns * 4))
+    }
+}
+
+private func makeEmojiPages(recents: [String], columns: Int) -> [EmojiPage] {
+    EmojiSurfaceModel.pages(
+        recents: recents,
+        categories: EmojiStore.categories.map {
+            EmojiSurfaceCategory(id: $0.id, name: $0.name, icon: $0.icon, emojis: $0.emojis)
+        },
+        emojiColumnCount: columns
+    ).map { plan in
+        EmojiPage(id: plan.id, name: plan.name, icon: plan.icon, categoryID: plan.categoryID,
+                  columns: plan.columns, items: plan.items.map {
+            EmojiGridItem(id: $0.id, emoji: $0.emoji, categoryID: $0.categoryID)
+        })
+    }
+}
+
+private func emojiPageWidths(_ pages: [EmojiPage], width: CGFloat, columns: Int,
+                             spacing: CGFloat, padding: CGFloat) -> [CGFloat] {
+    let columnWidth = max(1, (width - padding * 2 - spacing * CGFloat(max(0, columns - 1))) / CGFloat(max(1, columns)))
+    return pages.map { page in
+        let count = min(max(1, page.columns), max(1, columns))
+        return count == columns ? max(1, width)
+            : max(1, padding * 2 + columnWidth * CGFloat(count) + spacing * CGFloat(max(0, count - 1)))
+    }
+}
+
 private struct EmojiScrollCanvas: UIViewRepresentable {
     let pages: [EmojiPage]
     let availableWidth: CGFloat
@@ -312,26 +428,13 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
     let onTap: (String) -> Void
 
     private var pageWidths: [CGFloat] {
-        let fullColumnWidth = max(
-            1,
-            (availableWidth - gridHorizontalPadding * 2
-                - keySpacing * CGFloat(max(0, columnCount - 1))) / CGFloat(max(1, columnCount))
-        )
-        return pages.map { page in
-            let columns = min(max(1, page.columns), max(1, columnCount))
-            guard columns < columnCount else { return max(1, availableWidth) }
-            return max(
-                1,
-                gridHorizontalPadding * 2
-                    + fullColumnWidth * CGFloat(columns)
-                    + keySpacing * CGFloat(max(0, columns - 1))
-            )
-        }
+        emojiPageWidths(pages, width: availableWidth, columns: columnCount,
+                        spacing: keySpacing, padding: gridHorizontalPadding)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> EmojiPagerCollectionView {
+    func makeUIView(context: Context) -> KeyboardNativeSurfaceHost<EmojiPagerCollectionView> {
         let flowLayout = UICollectionViewFlowLayout()
         flowLayout.scrollDirection = .horizontal
         flowLayout.minimumLineSpacing = pageGap
@@ -340,34 +443,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         flowLayout.itemSize = CGSize(width: availableWidth, height: gridHeight)
 
         let view = EmojiPagerCollectionView(frame: .zero, collectionViewLayout: flowLayout)
-        view.backgroundColor = .clear
-        view.isOpaque = false
-        view.clipsToBounds = true
-        view.isPagingEnabled = false
-        view.isMultipleTouchEnabled = true
-        view.isScrollEnabled = true
-        view.panGestureRecognizer.minimumNumberOfTouches = 1
-        view.panGestureRecognizer.maximumNumberOfTouches = 1
-        view.alwaysBounceHorizontal = true
-        view.alwaysBounceVertical = false
-        // Let UIScrollView own the horizontal gesture from the first pixel.
-        // Directional locking can keep a child button's cancelled touch in a
-        // pending state after a diagonal swipe on the compact emoji grid.
-        view.isDirectionalLockEnabled = false
-        view.delaysContentTouches = false
-        view.canCancelContentTouches = true
-        view.panGestureRecognizer.delaysTouchesBegan = false
-        view.panGestureRecognizer.delaysTouchesEnded = false
-        view.panGestureRecognizer.cancelsTouchesInView = true
-        // Keep the native release momentum so a deliberate flick carries
-        // naturally across the small gaps between category pages.
-        view.decelerationRate = .fast
-        view.contentInsetAdjustmentBehavior = .never
-        view.contentInset = .zero
-        view.scrollIndicatorInsets = .zero
-        view.showsHorizontalScrollIndicator = false
         hideTopEdgeEffect(on: view)
-        view.register(EmojiPageCell.self, forCellWithReuseIdentifier: EmojiPageCell.reuseIdentifier)
         view.dataSource = context.coordinator
         view.delegate = context.coordinator
         if availableWidth > 1, gridHeight > 1 {
@@ -407,10 +483,11 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         view.reloadData()
         context.coordinator.needsReload = false
         context.coordinator.scroll(to: scrollRequest, in: view, animated: false)
-        return view
+        return KeyboardNativeSurfaceHost(surface: view, requiredMode: .emoji)
     }
 
-    func updateUIView(_ uiView: EmojiPagerCollectionView, context: Context) {
+    func updateUIView(_ host: KeyboardNativeSurfaceHost<EmojiPagerCollectionView>, context: Context) {
+        let uiView = host.surface
         context.coordinator.configure(
             pages: pages,
             columns: columnCount,
@@ -429,7 +506,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         )
         uiView.onEmojiInsert = onTap
         uiView.isPagingEnabled = false
-        uiView.decelerationRate = .fast
+        uiView.decelerationRate = .normal
         hideTopEdgeEffect(on: uiView)
         let size = CGSize(width: availableWidth, height: gridHeight)
         if let flowLayout = uiView.collectionViewLayout as? UICollectionViewFlowLayout,
@@ -467,6 +544,11 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         if #available(iOS 26.0, *) {
             view.topEdgeEffect.isHidden = true
         }
+    }
+
+    static func dismantleUIView(_ host: KeyboardNativeSurfaceHost<EmojiPagerCollectionView>, coordinator: Coordinator) {
+        host.surface.cancelVariantSelection()
+        host.unmount()
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIScrollViewDelegate {
@@ -625,6 +707,12 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             if (scrollView as? EmojiPagerCollectionView)?.hasVariantSelection == true { return }
+            #if DEBUG
+            PersistentLog.log(.diagnosticProbe(
+                component: "EmojiPager", instanceID: "pan", action: "began",
+                details: "offset=\(Int(scrollView.contentOffset.x))"
+            ))
+            #endif
             // The current request belongs to the last category-bar jump. Once
             // the user starts dragging, offset 0 is a valid manual destination
             // and must not be mistaken for an unfinished programmatic jump.
@@ -646,6 +734,12 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            #if DEBUG
+            PersistentLog.log(.diagnosticProbe(
+                component: "EmojiPager", instanceID: "pan", action: "ended",
+                details: "offset=\(Int(scrollView.contentOffset.x)) decelerate=\(decelerate)"
+            ))
+            #endif
             if !decelerate {
                 notifyVisiblePage(pageIndex(for: scrollView))
                 reloadWhenIdle(scrollView)
@@ -653,6 +747,12 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
         }
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            #if DEBUG
+            PersistentLog.log(.diagnosticProbe(
+                component: "EmojiPager", instanceID: "pan", action: "decelerated",
+                details: "offset=\(Int(scrollView.contentOffset.x))"
+            ))
+            #endif
             let index = pageIndex(for: scrollView)
             selectedIndex = index
             notifyVisiblePage(index)
@@ -674,7 +774,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
             }
         }
 
-        private func reloadIfIdle(_ view: EmojiPagerCollectionView) {
+        fileprivate func reloadIfIdle(_ view: EmojiPagerCollectionView) {
             guard needsReload, !view.hasVariantSelection,
                   !view.isTracking, !view.isDragging, !view.isDecelerating else { return }
             needsReload = false
@@ -725,6 +825,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
     private var hasMovedVariant = false
     var hasVariantSelection: Bool { variantSession != nil }
     private var lastItemLayoutSize: CGSize = .zero
+    private var lastBlankHitTimestamp: TimeInterval = -1
     // Match the keyboard's native long-press tolerance. The collection view
     // may report `isDragging` during ordinary finger jitter before the hold
     // reaches its recognition duration, so translation is the real swipe gate.
@@ -738,18 +839,48 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
 
     override init(frame: CGRect, collectionViewLayout layout: UICollectionViewLayout) {
         super.init(frame: frame, collectionViewLayout: layout)
+        if let flow = layout as? UICollectionViewFlowLayout {
+            flow.scrollDirection = .horizontal
+            flow.minimumLineSpacing = 0
+            flow.minimumInteritemSpacing = 0
+            flow.sectionInset = .zero
+        }
+        let view = self
+        view.backgroundColor = .clear
+        // The shared surface draws the inset behind the pager AND bottom bar.
+        // Blank swipes still belong to this collection, never its background.
+        view.isOpaque = false
+        view.clipsToBounds = true
+        view.layer.cornerRadius = 22
+        view.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        view.isPagingEnabled = false
+        view.isMultipleTouchEnabled = true
+        view.isScrollEnabled = true
+        view.panGestureRecognizer.minimumNumberOfTouches = 1
+        view.panGestureRecognizer.maximumNumberOfTouches = 1
+        view.alwaysBounceHorizontal = true
+        view.alwaysBounceVertical = false
+        view.isDirectionalLockEnabled = false
+        view.delaysContentTouches = false
+        view.canCancelContentTouches = true
+        view.panGestureRecognizer.delaysTouchesBegan = false
+        view.panGestureRecognizer.delaysTouchesEnded = false
+        view.panGestureRecognizer.cancelsTouchesInView = true
+        view.decelerationRate = .normal
+        view.contentInsetAdjustmentBehavior = .never
+        view.contentInset = .zero
+        view.scrollIndicatorInsets = .zero
+        view.showsHorizontalScrollIndicator = false
+        if #available(iOS 26.0, *) { view.topEdgeEffect.isHidden = true }
+        view.register(EmojiPageCell.self, forCellWithReuseIdentifier: EmojiPageCell.reuseIdentifier)
         // The pager, not a recycled button, owns the entire hold lifecycle.
         // Once the hold is recognized, cancel the button's pending tap so a
         // tone selection cannot also insert the base emoji on release.
         hold.delegate = self
-        // A real swipe wins only after the hold owner fails its jitter test.
-        // Once the hold begins, the pager pan is already blocked and must not
-        // be enabled or disabled during the same touch stream.
+        // The hold fails after a real swipe moves beyond its jitter allowance.
+        // Let the native pan start independently: a required-to-fail relation
+        // stalls blank Recents and the spaces between emoji cells on iOS.
         addGestureRecognizer(hold)
-        // The pan waits for the hold only while that hold can still become a
-        // variant popup. Blank Recents fails the hold in touchesBegan, and the
-        // pan must not keep waiting after that failure.
-        panGestureRecognizer.require(toFail: hold)
         hold.shouldBeginHold = { [weak self] point in
             self?.canBeginVariantHold(at: point) ?? false
         }
@@ -758,7 +889,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
     fileprivate func canBeginVariantHold(at point: CGPoint) -> Bool {
         guard KeyboardInteractionPreferences.accentVariantsEnabled,
               let button = emojiButton(at: point) else { return false }
-        return EmojiSkinToneVariants.options(for: button.item.emoji).count > 1
+        return KeyboardVariantPreferences.options(for: button.item.emoji, kind: .emoji).count > 1
     }
 
     required init?(coder: NSCoder) { nil }
@@ -768,12 +899,19 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         return false
     }
 
-    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UITouch) -> Bool {
-        // The pager pan waits until this hold fails. A touch the hold never
-        // receives never fails, so a swipe that starts on empty Recents space
-        // would sit still. Receive every touch and fail immediately unless the
-        // finger is on an emoji that actually has variants.
-        return true
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        #if DEBUG
+        if recognizer === panGestureRecognizer,
+           emojiButton(at: touch.location(in: self)) == nil {
+            PersistentLog.log(.diagnosticProbe(
+                component: "EmojiPager", instanceID: "pan", action: "blankCandidate",
+                details: "ready=\(numberOfItems(inSection: 0) > 0)"
+            ))
+        }
+        #endif
+        // Only eligible emoji participate in hold arbitration. Blank space and
+        // filler cells belong exclusively to the collection view's native pan.
+        return recognizer !== hold || canBeginVariantHold(at: touch.location(in: self))
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -786,7 +924,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         }
         let translation = panGestureRecognizer.translation(in: self)
         guard hypot(translation.x, translation.y) < preRecognitionMovement else { return false }
-        return EmojiSkinToneVariants.options(for: button.item.emoji).count > 1
+        return KeyboardVariantPreferences.options(for: button.item.emoji, kind: .emoji).count > 1
     }
 
     private func emojiButton(at point: CGPoint) -> EmojiKeyButton? {
@@ -802,7 +940,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         switch recognizer.state {
         case .began:
             guard let button = emojiButton(at: recognizer.location(in: self)) else { return }
-            let options = EmojiSkinToneVariants.options(for: button.item.emoji)
+            let options = KeyboardVariantPreferences.options(for: button.item.emoji, kind: .emoji)
             guard options.count > 1 else { return }
             button.suppressNextTapAfterVariantHold()
             let source = button.convert(button.bounds, to: self)
@@ -814,7 +952,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
             frame = frame.offsetBy(dx: bounds.minX, dy: bounds.minY)
             variantSession = KeyVariantSession(options: options, sourceFrame: source,
                 popupFrame: frame, isEmoji: true,
-                selectedIndex: options.firstIndex(of: button.item.emoji) ?? 0)
+                selectedIndex: options.firstIndex(of: button.inputEmoji) ?? 0)
             holdOrigin = recognizer.location(in: self)
             hasMovedVariant = false
             let host = UIHostingController(
@@ -912,19 +1050,28 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         true
     }
 
-    /// Empty cells and the gaps between emoji rows belong to the pager. Return
-    /// the collection view for those points so its horizontal pan recognizer
-    /// starts even when the finger does not land on an emoji button.
+    /// The scroll view itself owns blank space. Returning a decorative background
+    /// control can put the hit outside the scroll view's active content hierarchy.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard bounds.contains(point) else { return nil }
-        guard let hit = super.hitTest(point, with: event) else { return self }
-        var candidate: UIView? = hit
+        guard !isHidden, isUserInteractionEnabled, alpha > 0.01,
+              self.point(inside: point, with: event) else { return nil }
+        let hit = super.hitTest(point, with: event)
+        var candidate = hit
         while let view = candidate, view !== self {
             if view is EmojiKeyButton || view === popup {
                 return hit
             }
             candidate = view.superview
         }
+        #if DEBUG
+        if let timestamp = event?.timestamp, timestamp != lastBlankHitTimestamp {
+            lastBlankHitTimestamp = timestamp
+            PersistentLog.log(.diagnosticProbe(
+                component: "EmojiPager", instanceID: "hit", action: "blank",
+                details: "items=\(numberOfItems(inSection: 0))"
+            ))
+        }
+        #endif
         return self
     }
 
@@ -948,6 +1095,7 @@ private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecogni
         }
         onLayoutReady?()
     }
+
 }
 
 private final class EmojiPageCell: UICollectionViewCell {
@@ -971,7 +1119,7 @@ private final class EmojiPageCell: UICollectionViewCell {
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard bounds.contains(point), isUserInteractionEnabled, !isHidden, alpha > 0.01 else {
+        guard bounds.contains(point), !isHidden, alpha > 0.01 else {
             return nil
         }
         // Prefer an emoji button when the finger lands on one. Blank Recent
@@ -1004,8 +1152,8 @@ private final class EmojiPageCell: UICollectionViewCell {
 
         let panHost = UIView()
         panHost.backgroundColor = .clear
-        // Blank Recents space belongs to the collection view's pan. A full-page
-        // host here keeps the swipe, and the category bar never hears the page change.
+        // This is visual-only; the cell returns itself for blank areas so the
+        // collection view's pan receives the touch even on empty Recents.
         panHost.isUserInteractionEnabled = false
         panHost.isAccessibilityElement = false
         panHost.translatesAutoresizingMaskIntoConstraints = false
@@ -1022,7 +1170,7 @@ private final class EmojiPageCell: UICollectionViewCell {
         vertical.alignment = .fill
         vertical.distribution = .fill
         vertical.spacing = rowSpacing
-        vertical.isUserInteractionEnabled = !page.items.isEmpty
+        vertical.isUserInteractionEnabled = true
         vertical.translatesAutoresizingMaskIntoConstraints = false
 
         let columnCount = max(1, columns)
@@ -1032,7 +1180,7 @@ private final class EmojiPageCell: UICollectionViewCell {
             horizontal.alignment = .fill
             horizontal.distribution = .fillEqually
             horizontal.spacing = keySpacing
-            horizontal.isUserInteractionEnabled = !page.items.isEmpty
+            horizontal.isUserInteractionEnabled = true
             horizontal.translatesAutoresizingMaskIntoConstraints = false
             horizontal.heightAnchor.constraint(equalToConstant: rowHeight).isActive = true
             for column in 0..<columnCount {
@@ -1049,6 +1197,8 @@ private final class EmojiPageCell: UICollectionViewCell {
                     let filler = UIView()
                     filler.isUserInteractionEnabled = false
                     filler.isAccessibilityElement = false
+                    filler.isOpaque = false
+                    filler.backgroundColor = .clear
                     horizontal.addArrangedSubview(filler)
                 }
             }
@@ -1064,13 +1214,16 @@ private final class EmojiPageCell: UICollectionViewCell {
             vertical.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: edgeBreathingRoom),
             vertical.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -edgeBreathingRoom),
             vertical.topAnchor.constraint(equalTo: contentView.topAnchor, constant: verticalInset),
-            vertical.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -verticalInset)
+            vertical.heightAnchor.constraint(equalToConstant: rowHeight * 4 + rowSpacing * 3)
         ])
         grid = vertical
     }
 }
 
 private final class EmojiKeyButton: UIButton {
+    var inputEmoji: String {
+        item.categoryID == "recents" ? item.emoji : KeyboardVariantPreferences.preferredEmoji(item.emoji)
+    }
     let item: EmojiGridItem
     let reduceMotion: Bool
     var onTap: ((String) -> Void)?
@@ -1085,7 +1238,7 @@ private final class EmojiKeyButton: UIButton {
         // A UILabel is the reliable way to draw emoji glyphs.
         configuration = nil
         setTitle(nil, for: .normal)
-        glyph.text = item.emoji
+        glyph.text = inputEmoji
         glyph.textAlignment = .center
         glyph.adjustsFontSizeToFitWidth = true
         glyph.minimumScaleFactor = 0.5
@@ -1102,7 +1255,7 @@ private final class EmojiKeyButton: UIButton {
         backgroundColor = .clear
         isMultipleTouchEnabled = true
         isExclusiveTouch = false
-        accessibilityLabel = item.emoji
+        accessibilityLabel = inputEmoji
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
 
         accessibilityCustomActions = EmojiSkinToneVariants.options(for: item.emoji).map { option in
@@ -1144,7 +1297,7 @@ private final class EmojiKeyButton: UIButton {
     }
 
     override func accessibilityActivate() -> Bool {
-        onTap?(item.emoji)
+        onTap?(inputEmoji)
         return true
     }
 
@@ -1153,7 +1306,7 @@ private final class EmojiKeyButton: UIButton {
             suppressNextTap = false
             return
         }
-        onTap?(item.emoji)
+        onTap?(inputEmoji)
     }
 
 }

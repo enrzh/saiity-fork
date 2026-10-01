@@ -8,7 +8,7 @@ import DictusCore
 /// timer decides when it begins, and movement is never a cancellation path
 /// after that point. Keep the same contract for emoji variants.
 final class EmojiGestureCoordinator: UIGestureRecognizer {
-    private let holdDuration: TimeInterval
+    private let holdSession = KeyboardHoldSession()
     private let allowableMovement: CGFloat
     private var holdToken: UUID?
     private var initialPoint = CGPoint.zero
@@ -17,7 +17,6 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
 
     init(target: Any?, action: Selector?, minimumPressDuration: TimeInterval,
          allowableMovement: CGFloat) {
-        self.holdDuration = minimumPressDuration
         self.allowableMovement = allowableMovement
         self.arbitration = EmojiHoldArbitration(movementAllowance: allowableMovement)
         super.init(target: target, action: action)
@@ -33,8 +32,11 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
     var shouldBeginHold: ((CGPoint) -> Bool)?
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard state == .possible, trackedTouch == nil, let touch = touches.first,
-              let view else { return }
+        guard state == .possible, trackedTouch == nil else { return }
+        guard let touch = touches.first, let view else {
+            state = .failed
+            return
+        }
         let point = touch.location(in: view)
         let eligible = shouldBeginHold?(point) ?? true
         arbitration.beginTouch(eligible: eligible)
@@ -44,7 +46,7 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
         initialPoint = point
         let token = UUID()
         holdToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + holdDuration) { [weak self] in
+        holdSession.begin(after: KeyboardDeletion.holdRecognitionDuration) { [weak self] in
             guard let self, self.holdToken == token, self.arbitration.phase == .possible else { return }
             self.arbitration.recognize()
             self.applyArbitration()
@@ -52,9 +54,11 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard arbitration.isTracking else { return }
+        guard let trackedTouch, touches.contains(where: { $0 === trackedTouch }) else { return }
         let distance: CGFloat
-        if let touch = trackedTouch, let view {
-            let point = touch.location(in: view)
+        if let view {
+            let point = trackedTouch.location(in: view)
             distance = hypot(point.x - initialPoint.x, point.y - initialPoint.y)
         } else {
             distance = allowableMovement + 1
@@ -67,6 +71,7 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         if let trackedTouch, !touches.contains(where: { $0 === trackedTouch }) { return }
         holdToken = nil
+        holdSession.cancel()
         arbitration.endTouch()
         applyArbitration()
     }
@@ -74,6 +79,7 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         if let trackedTouch, !touches.contains(where: { $0 === trackedTouch }) { return }
         holdToken = nil
+        holdSession.cancel()
         arbitration.cancelTouch()
         applyArbitration()
     }
@@ -104,10 +110,10 @@ final class EmojiGestureCoordinator: UIGestureRecognizer {
 
     override func reset() {
         holdToken = nil
+        holdSession.cancel()
         trackedTouch = nil
         initialPoint = .zero
         arbitration = EmojiHoldArbitration(movementAllowance: allowableMovement)
         super.reset()
     }
 }
-

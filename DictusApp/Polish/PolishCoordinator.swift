@@ -91,6 +91,8 @@ public final class PolishCoordinator {
             validOllamaIDs: Set(validOllama.map(\.id))
         )
         switch kind {
+        case .local(let model):
+            return CleanupModelManager.shared.engine(for: model)
         case .appleIntelligence:
             return appleFMEngine ?? passthroughEngine
         case .ollama(let id):
@@ -128,6 +130,11 @@ public final class PolishCoordinator {
     /// no polish will run) or when the engine has nothing to warm.
     public func prewarm() {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else { return }
+        if case .local(let model) = PolishCleanupBackend.load(from: defaults) {
+            let engine = CleanupModelManager.shared.engine(for: model)
+            Task { try? await engine.prepare() }
+            return
+        }
         guard let engineToWarm = appleFMEngine, PolishAvailability.isAppleFMAvailable else { return }
         let validOllama = validCleanupOllamaModels
         let preference = PolishCleanupBackend.load(from: defaults, customModels: validOllama)

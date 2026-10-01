@@ -5,20 +5,31 @@ import Foundation
 import UIKit
 #endif
 
-/// User-facing keyboard haptic switch. `off` keeps the legacy
+/// User-facing keyboard haptic preset. `off` keeps the legacy
 /// `hapticsEnabled=false` contract so older builds stay in sync.
 public enum HapticIntensity: String, CaseIterable, Sendable {
     case off
-    case on
+    case `default`
+    case snappy
 
     public var displayName: String {
         switch self {
         case .off: return "Off"
-        case .on: return "On"
+        case .default: return "Default"
+        case .snappy: return "Snappy"
         }
     }
 
     public var isEnabled: Bool { self != .off }
+
+    /// The existing ordinary-key tick and full-strength Emoji Delete impulse.
+    var keyTapIntensity: Double? {
+        switch self {
+        case .off: return nil
+        case .default: return 0.42
+        case .snappy: return 1
+        }
+    }
 
     public static var current: HapticIntensity {
         load(from: UserDefaults(suiteName: AppGroup.identifier))
@@ -26,12 +37,13 @@ public enum HapticIntensity: String, CaseIterable, Sendable {
 
     public static func load(from defaults: UserDefaults?) -> HapticIntensity {
         if let raw = defaults?.string(forKey: SharedKeys.hapticIntensity) {
-            return raw == "off" ? .off : .on
+            // Older on/light/medium/strong values keep the ordinary-key feel.
+            return Self(rawValue: raw) ?? .default
         }
         if defaults?.object(forKey: SharedKeys.hapticsEnabled) as? Bool == false {
             return .off
         }
-        return .on
+        return .default
     }
 
     public func persist(to defaults: UserDefaults? = UserDefaults(suiteName: AppGroup.identifier)) {
@@ -61,7 +73,7 @@ public enum HapticIntensity: String, CaseIterable, Sendable {
 /// - recordingStarted: medium impact -- user needs to feel that recording is actively happening
 /// - recordingStopped: light impact -- subtle confirmation that recording stopped
 /// - textInserted: success notification -- distinct "done" feel when transcribed text appears
-/// - keyTapped: light impact -- the public stand-in for native keyboard taps
+    /// - keyTapped: selected keyboard preset -- shared by ordinary taps and delete
 /// - trackpadActivated: medium impact -- confirms spacebar trackpad mode activation
 public enum HapticFeedback {
 
@@ -192,29 +204,23 @@ public enum HapticFeedback {
         #endif
     }
 
-    /// Short rigid impulse for held-delete repeats.
+    /// Selected keyboard impulse, shared by delete and ordinary keys.
     ///
     /// `prepare()` before `impactOccurred()` delays the tick. Prime after the
     /// impulse so the next repeat is already warm.
     public static func keyTapped() {
         #if canImport(UIKit) && !os(macOS)
-        guard isEnabled() else { return }
-        keyGenerator.impactOccurred()
-        keyGenerator.prepare()
+        emitKeyTap()
         #endif
     }
 
     /// Native-style key tap: a short Taptic tick plus the system click sound.
     ///
-    /// `playInputClick()` alone is only a sound, and only when keyboard clicks
-    /// are enabled. The system keyboard's feel is the tick. A full-strength
-    /// rigid impact reads as a thunk, so the tick stays light.
+    /// `playInputClick()` alone is only a sound. Vibration uses the selected
+    /// preset; sound continues to follow the system keyboard-click setting.
     public static func playInputClick() {
         #if canImport(UIKit) && !os(macOS)
-        if isEnabled() {
-            keyGenerator.impactOccurred(intensity: 0.42)
-            keyGenerator.prepare()
-        }
+        emitKeyTap()
         // Keyboard clicks follow the system sound setting, not the vibration switch.
         UIDevice.current.playInputClick()
         #endif
@@ -271,16 +277,27 @@ public enum HapticFeedback {
     /// Selection tick feedback for each character of cursor movement during trackpad drag.
     /// Uses UISelectionFeedbackGenerator — the same subtle "tick" Apple uses for pickers
     /// and the native cursor. This is the #1 factor for perceived trackpad fluidity.
-    /// Ticks are rate-limited together with key taps so fast cursor drags do not
-    /// become a continuous buzz.
+    /// Called once for each actual character move; category scrubbing keeps its
+    /// separate rate limit.
     public static func cursorMoved() {
         #if canImport(UIKit) && !os(macOS)
         guard isEnabled() else { return }
-        emitSelectionTick()
+        selectionGenerator.selectionChanged()
+        selectionGenerator.prepare()
         #endif
     }
 
     #if canImport(UIKit) && !os(macOS)
+    private static func emitKeyTap() {
+        guard let intensity = _intensity.keyTapIntensity else { return }
+        if _intensity == .snappy {
+            keyGenerator.impactOccurred()
+        } else {
+            keyGenerator.impactOccurred(intensity: CGFloat(intensity))
+        }
+        keyGenerator.prepare()
+    }
+
     private static func emitSelectionTick() {
         let now = Date()
         guard now.timeIntervalSince(lastSelectionTick) >= minimumSelectionInterval else { return }

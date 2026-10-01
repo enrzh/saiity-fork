@@ -108,7 +108,8 @@ class SuggestionState: ObservableObject {
     private var suggestionRequestGate = SuggestionRequestGate()
     private struct SpaceCommit {
         let word: String
-        let correction: String
+        // Nil is a completed "no correction needed" result, not a cache miss.
+        let correction: String?
         let contextKey: String
     }
 
@@ -119,6 +120,7 @@ class SuggestionState: ObservableObject {
     private var suppressNextAutocorrectionBoundary = false
     private var adaptiveTouchWork: DispatchWorkItem?
     private var adaptiveTouchRequestGate = SuggestionRequestGate()
+    private var lastAutocorrectEnabled = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled) as? Bool ?? true
     /// Selected keyboard language last applied on `suggestionQueue`. Recent
     /// text detection may refine the engine language without changing this
     /// anchor, so ordinary keystrokes do not reload dictionaries.
@@ -174,11 +176,10 @@ class SuggestionState: ObservableObject {
                 && prepared?.contextKey == contextKey
             let queueIsFree = adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight
             let correction: String?
-            let checkedSynchronously: Bool
-            if let prepared, snapshotMatches,
-               TypingCommit.accepts(typed: word, correction: prepared.correction) {
-                correction = prepared.correction
-                checkedSynchronously = false
+            let checkedWord: Bool
+            if let prepared, snapshotMatches {
+                correction = prepared.correction.flatMap { TypingCommit.accepts(typed: word, correction: $0) ? $0 : nil }
+                checkedWord = true
             } else if queueIsFree {
                 let previousWord = extractPreviousWord(from: context, currentWord: word)
                 let sentenceStart = isAtSentenceStart(context: context, word: word)
@@ -188,10 +189,10 @@ class SuggestionState: ObservableObject {
                 } else {
                     correction = nil
                 }
-                checkedSynchronously = true
+                checkedWord = true
             } else {
                 correction = nil
-                checkedSynchronously = false
+                checkedWord = false
             }
             if let correction {
                 let prefix = prefixBeforeWord(in: context, word: word)
@@ -206,8 +207,10 @@ class SuggestionState: ObservableObject {
                 proxy.insertText(correction)
                 pendingAutocorrection = pending
                 suppressNextAutocorrectionBoundary = true
-            } else if checkedSynchronously {
-                _ = UserDictionary.shared.recordUsage(word)
+            } else if checkedWord {
+                // Keep dictionary persistence out of Space's touch dispatch,
+                // while retaining its existing main-thread mutation model.
+                DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(word) }
             }
         } else {
             pendingUndo = nil
@@ -452,8 +455,16 @@ class SuggestionState: ObservableObject {
         if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
 
         let allowsAutocorrect = hostPolicy.autocorrectAllowed && autocorrectEnabled
+        let selectedLanguage = SupportedLanguage.active.rawValue
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            if self.adaptiveSelectedLanguage != selectedLanguage {
+                self.adaptiveSelectedLanguage = selectedLanguage
+                self.engine.setSelectedLanguage(selectedLanguage)
+            }
+            // A completed word is the cheap, stable language boundary. This
+            // live path previously never called typed-language detection.
+            if isBoundary { self.engine.setLanguage(forRecentText: inputContext) }
             let abstains = self.engine.shouldAbstainFromPrediction(for: inputContext)
             let probabilities = rejected || abstains
                 ? NextCharacterProbabilities([:])
@@ -499,14 +510,14 @@ class SuggestionState: ObservableObject {
               !engine.dictionaryLoadInFlight,
               !engine.shouldSkipTokenPrediction(for: partial),
               !rejectedWords.contains(partial.lowercased()) else { return nil }
-        guard let result = engine.spellCheck(
+        let result = engine.spellCheck(
             partial,
             previousWord: previousWord,
             isAtSentenceStart: isAtSentenceStart
-        ), TypingCommit.accepts(typed: partial, correction: result.correction) else { return nil }
+        )
         return SpaceCommit(
             word: partial,
-            correction: result.correction,
+            correction: result.flatMap { TypingCommit.accepts(typed: partial, correction: $0.correction) ? $0.correction : nil },
             contextKey: String(context.suffix(240))
         )
     }
@@ -566,10 +577,12 @@ class SuggestionState: ObservableObject {
     /// Re-read preference-backed behavior after the app changes a setting while
     /// the keyboard extension is cached.
     func refreshPreferences() {
-        UserDictionary.shared.reload()
+        let enabled = autocorrectEnabled
+        guard enabled != lastAutocorrectEnabled else { return }
+        lastAutocorrectEnabled = enabled
         spaceCommit = nil
         clearAdaptiveTouchPrediction()
-        guard !autocorrectEnabled else { return }
+        guard !enabled else { return }
         pendingUndo = nil
         pendingAutocorrection = nil
         suppressNextAutocorrectionBoundary = false
@@ -578,6 +591,12 @@ class SuggestionState: ObservableObject {
             mode = .idle
             currentWord = ""
         }
+    }
+
+    func refreshVocabulary() {
+        UserDictionary.shared.reload()
+        spaceCommit = nil
+        clearAdaptiveTouchPrediction()
     }
 
     /// The keyboard gets selection callbacks for both its own insertions and a

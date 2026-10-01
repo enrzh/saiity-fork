@@ -70,14 +70,14 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(categories.contains("Image(systemName: section.icon)"))
         XCTAssertFalse(categories.contains("representativeEmoji"))
         XCTAssertFalse(categories.contains("Text(emoji)"))
-        XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(categories.contains("contentOffset"))
+        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertFalse(categories.contains("contentOffset"))
         let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
         XCTAssertTrue(control.contains("final class EmojiCategoryControl: UIControl"),
                        "the UIKit scrubber remains the single hit owner for the floating strip")
         XCTAssertTrue(control.contains("continueTracking"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
-        XCTAssertFalse(categories.contains("Color.secondary"), "category icons must keep the primary semantic tint")
+        XCTAssertTrue(categories.contains("Color.primary : Color.secondary"), "The full rail keeps semantic glyph tint")
         XCTAssertFalse(data.contains("representativeEmoji"), "category navigation must not retain emoji-only icon data")
     }
 
@@ -85,7 +85,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(categories.contains("Image(systemName: section.icon)"))
-        XCTAssertTrue(categories.contains(".foregroundStyle(.primary)"))
+        XCTAssertTrue(categories.contains("Color.primary"))
     }
 
     func testCurrentKeyboardSymbolPagesHaveFourRowsAndAllActions() throws {
@@ -246,17 +246,18 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let native = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
 
         XCTAssertFalse(picker.contains("EmojiCategoryBar("))
-        XCTAssertTrue(root.contains("EmojiCategoryBar("))
+        XCTAssertTrue(native.contains("EmojiCategoryBar("))
         XCTAssertTrue(root.contains("KeyboardDeleteButton("))
         XCTAssertTrue(controller.contains("emojiCategoryScrubber"))
-        XCTAssertTrue(controller.contains("floatingEmojiCategoryFrame"))
+        XCTAssertTrue(native.contains("floatingEmojiCategoryFrame"))
         XCTAssertTrue(picker.contains("AuxiliaryBottomBar("))
         XCTAssertTrue(picker.contains("showsEmojiControl: false"))
         XCTAssertTrue(picker.contains("chromeWideSpaceFrame"))
         XCTAssertFalse(picker.contains("systemName: \"mic.fill\""))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("emojiCategoryHorizontalInset"))
+        XCTAssertTrue(categories.contains("EmojiCategoryBarMetrics.railInset"))
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
     }
 

@@ -6,6 +6,7 @@ import Foundation
 /// Ollama is only used when the user picks a valid registered cleanup model.
 public enum PolishCleanupBackend: Hashable, Sendable {
     case appleIntelligence
+    case local(LocalCleanupModel)
     case ollama(UUID)
 
     public static let appleIntelligenceStorageValue = "appleIntelligence"
@@ -14,6 +15,7 @@ public enum PolishCleanupBackend: Hashable, Sendable {
         switch self {
         case .appleIntelligence:
             return Self.appleIntelligenceStorageValue
+        case .local(let model): return "local:\(model.rawValue)"
         case .ollama(let id):
             return "ollama:\(id.uuidString)"
         }
@@ -22,12 +24,14 @@ public enum PolishCleanupBackend: Hashable, Sendable {
     public var displayName: String {
         switch self {
         case .appleIntelligence: return "Apple Intelligence"
+        case .local(let model): return model.displayName
         case .ollama: return "Ollama"
         }
     }
 
     public static func parse(_ raw: String) -> PolishCleanupBackend? {
         if raw == appleIntelligenceStorageValue { return .appleIntelligence }
+        if raw.hasPrefix("local:"), let model = LocalCleanupModel(rawValue: String(raw.dropFirst(6))) { return .local(model) }
         guard raw.hasPrefix("ollama:") else { return nil }
         let rest = String(raw.dropFirst("ollama:".count))
         guard let id = UUID(uuidString: rest) else { return nil }
@@ -93,6 +97,7 @@ public enum PolishCleanupBackend: Hashable, Sendable {
         switch stored {
         case .appleIntelligence:
             return .appleIntelligence
+        case .local: return stored
         case .ollama(let id):
             if validOllama.contains(where: { $0.id == id }) {
                 return .ollama(id)
@@ -114,6 +119,7 @@ public enum PolishCleanupBackend: Hashable, Sendable {
         switch preference {
         case .appleIntelligence:
             return appleFMAvailable ? .appleIntelligence : .passthrough
+        case .local(let model): return .local(model)
         case .ollama(let id):
             if validOllamaIDs.contains(id) {
                 return .ollama(id)
@@ -125,6 +131,7 @@ public enum PolishCleanupBackend: Hashable, Sendable {
 
 public enum PolishCleanupEngineKind: Equatable, Sendable {
     case appleIntelligence
+    case local(LocalCleanupModel)
     case ollama(UUID)
     case passthrough
 }

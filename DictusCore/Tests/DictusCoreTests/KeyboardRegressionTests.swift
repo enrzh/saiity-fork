@@ -50,8 +50,8 @@ final class KeyboardRegressionTests: XCTestCase {
         // under the touch and stores it, and the redraw is driven from there.
         XCTAssertTrue(grid.contains("press.selectedVariant = index"),
                       "the accent popup must follow the finger on the letter page")
-        XCTAssertTrue(grid.contains("variantIndex("),
-                      "the accent popup must resolve the option under the touch")
+        XCTAssertTrue(grid.contains("KeyVariantPopup.selectedIndex("),
+                      "the accent popup must share emoji's drag-selection geometry")
         let engine = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
         XCTAssertTrue(engine.contains("func swipeWord(from path: String)"))
         let settings = try source("DictusApp/Views/SettingsView.swift")
@@ -61,20 +61,41 @@ final class KeyboardRegressionTests: XCTestCase {
 
     func testLetterSurfaceAddsARealPeriodKeyWithSharedHoldRouting() throws {
         let root = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let liveRoot = try source("DictusKeyboard/KeyboardRootView.swift")
         let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         XCTAssertTrue(root.contains("periodFrame: surfaceLayout.letterPeriodFrame"))
         XCTAssertTrue(root.contains("showsPeriodKey: true"))
         XCTAssertTrue(layouts.contains("KeyDefinition(type: .fullStop"))
         XCTAssertTrue(bar.contains("ImmediateVariantKey("))
         XCTAssertTrue(bar.contains("SymbolKeyVariants.options(for: \".\")"))
+        XCTAssertTrue(liveRoot.contains("showsPeriodKey: false"),
+                      "the live page must not install a second period target")
+        let native = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
+        XCTAssertTrue(native.contains("let bottomBar = KeyboardBottomBarView()"))
+        XCTAssertTrue(bar.contains("period.isHidden = mode != .letters || self.fieldKeys.rightInsert != nil"))
+        XCTAssertTrue(bar.contains("nativeMode: .letters"))
+        XCTAssertFalse(controller.contains("placePeriod("),
+                       "the period target must follow its visible component, not an independent frame")
+        XCTAssertTrue(bar.contains(".position(x: localX(returnHit), y: localY(returnHit))"))
+        XCTAssertTrue(bar.contains(".position(x: periodSourceFrame.midX, y: periodSourceFrame.midY)"))
+        XCTAssertTrue(bar.contains(".zIndex(10)"))
     }
 
     func testEmojiSelectionDoesNotCloseThePicker() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertTrue(root.contains("routeText(emoji)"))
         XCTAssertFalse(root.contains("routeText(emoji)\n                    state.closeArea()"))
+    }
+
+    func testBlankEmojiViewportHasAScrollHitShape() throws {
+        let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+        XCTAssertTrue(picker.contains(".frame(width: emojiGridWidth, height: emojiGridHeight + commandRowGap)\n                .contentShape(Rectangle())"))
+        XCTAssertTrue(picker.contains("vertical.heightAnchor.constraint(equalToConstant: rowHeight * 4 + rowSpacing * 3)"),
+                      "the pager owns the blank command gap without stretching emoji rows")
+        XCTAssertTrue(picker.contains("return self"), "blank cells must fall through to the pager")
     }
 
     func testSymbolPageDoesNotPlaceACompetingDragGestureAboveTapButtons() throws {
@@ -153,8 +174,9 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(popup.contains("transaction.animation = nil"))
         XCTAssertTrue(popup.contains(".keyboardGlass("),
                       "key popups use the same plate as the keys")
-        XCTAssertFalse(popup.contains("KeyboardInteractionPreferences.liquidGlassEnabled"),
-                       "popup material must not fork away from KeyboardGlassSurface")
+        XCTAssertTrue(popup.contains(".environment(\\.keyboardLiquidGlassEnabled, liquidGlassEnabled)"),
+                      "popup material must feed the shared KeyboardGlassSurface environment")
+        XCTAssertFalse(popup.contains(".glassEffect("), "popups must not implement a separate material renderer")
         XCTAssertTrue(popup.contains("cornerRadius"))
         XCTAssertFalse(popup.contains("fill(Color(uiColor: .systemBackground))"))
         XCTAssertTrue(popup.contains("struct KeyPreviewPopup"),
@@ -199,8 +221,9 @@ final class KeyboardRegressionTests: XCTestCase {
             root.contains(".position(x: surfaceFrame.midX, y: surfaceFrame.midY)\n                    // Popups may extend into the suggestion lane. Keep the\n                    // entire surface above that lane's controls so the popup\n                    // is visible without changing the controls' hit targets.\n                    .zIndex(3)"),
             "the popup surface must outrank the suggestion bar's zIndex"
         )
-        XCTAssertTrue(root.contains(".zIndex(2)"),
-                      "the suggestion bar keeps a lower explicit stacking level")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(controller.contains("controls.layer.zPosition = 100"))
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyGridView.swift").contains("host.view.isUserInteractionEnabled = false"))
     }
 
     func testEmojiTapCannotBeRejectedByAStaleDragAxis() throws {
@@ -216,7 +239,7 @@ final class KeyboardRegressionTests: XCTestCase {
                       "a normal emoji tap must still commit if a prior drag left transient state")
         XCTAssertTrue(tap.contains("suppressNextTap"),
                       "only a recognized variant hold may suppress the base tap")
-        XCTAssertTrue(tap.contains("onTap?(item.emoji)"))
+        XCTAssertTrue(tap.contains("onTap?(inputEmoji)"))
         XCTAssertTrue(picker.contains("onTap: insertEmoji"))
         XCTAssertTrue(picker.contains("onTap: { [weak self] emoji in self?.onTap?(emoji) }"))
         XCTAssertTrue(picker.contains("button.onTap = onTap"))
@@ -298,9 +321,9 @@ final class KeyboardRegressionTests: XCTestCase {
         let state = try source("DictusKeyboard/KeyboardState.swift")
         XCTAssertTrue(controller.contains("handleMicPressBegan()"))
         XCTAssertTrue(controller.contains("handleMicPressEnded()"))
-        XCTAssertTrue(controller.contains("micButton?.isEnabled = false"))
-        XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = false"))
-        XCTAssertTrue(controller.contains("micButton?.frame = .zero"))
+        XCTAssertTrue(controller.contains("micButton?.isEnabled = dictateVisible"))
+        XCTAssertTrue(controller.contains("micButton?.isUserInteractionEnabled = dictateVisible"))
+        XCTAssertFalse(controller.contains("micButton?.frame = .zero"))
         XCTAssertTrue(state.contains("func handleMicPressBegan()"))
         XCTAssertTrue(state.contains("func handleMicPressEnded()"))
         let voice = try source("DictusKeyboard/VoiceBoardSurface.swift")
@@ -366,7 +389,7 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(controller.contains("dismissButton?.isHidden = false"))
         XCTAssertTrue(controller.contains("voiceBoardButton?.isHidden = !isAuxiliary"))
         XCTAssertTrue(controller.contains("emojiCategoryScrubber"))
-        XCTAssertTrue(controller.contains("floatingEmojiCategoryFrame"))
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("floatingEmojiCategoryFrame"))
         XCTAssertTrue(controller.contains("selectEmojiCategory(at:"))
         XCTAssertTrue(root.contains("bindEmojiCategoryScrubber()"))
         XCTAssertTrue(root.contains("emojiCategoryJumpToken"))
@@ -420,44 +443,27 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(picker.contains("guard request != lastScrollRequest"),
                       "the same SwiftUI request must not snap a live free scroll back")
         XCTAssertTrue(picker.contains("var onLayoutChanged"))
-        XCTAssertTrue(picker.contains("decelerationRate = .fast"),
-                      "emoji swipes should settle quickly instead of coasting")
+        XCTAssertTrue(picker.contains("decelerationRate = .normal"),
+                      "emoji swipes retain native momentum after release")
         XCTAssertFalse(pager.contains("reloadData()"),
                        "layoutSubviews must not invalidate the active collection pan")
     }
 
     func testEmojiCategoryScrubOffsetWinsWhileExpanded() throws {
-        let bar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
-        let state = try source("DictusKeyboard/KeyboardState.swift")
-
-        XCTAssertTrue(bar.contains("guard !isExpanded else { return }"),
-                      "category callbacks must not recenter an active scrub")
-        XCTAssertTrue(bar.contains(".onChange(of: isExpanded)"))
-        let surface = try source("DictusCore/Sources/DictusCore/KeyboardSurfaceState.swift")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("guard self.expanded != expanded else { return false }"))
-        XCTAssertTrue(surface.contains("guard selectionIndex != normalized else { return false }"))
-        XCTAssertTrue(state.contains("guard surface.setExpanded(expanded) else { return }"))
-        XCTAssertTrue(state.contains("guard surface.setSelectionIndex(index) else { return }"))
+        let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
+        XCTAssertTrue(control.contains("selectAccessibilityCategory(nearestIndex(toX: point.x))"))
+        XCTAssertTrue(control.contains("override func accessibilityIncrement()"))
+        XCTAssertTrue(control.contains("override func accessibilityDecrement()"))
     }
 
     func testEmojiCategoryScrubMovesByFingerDeltaAndReachesTheEdges() throws {
-        let bar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
-
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("setExpanded(true)"),
-                      "the compact category circle should expand when a horizontal drag starts")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("EmojiCategoryBarMetrics.travelGain"),
-                      "a short drag must be able to reach both ends of the category bar")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("selectCategory(at: scrollOffset)"),
-                      "selection must use the moving handle position")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("setScrollOffset(handleOffset(for: index))"),
-                      "release should snap the handle to the selected category")
-        XCTAssertFalse(bar.contains("select(centerMarkerPoint)"),
-                       "the old fixed-marker/content-translation model must be gone")
+        let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
+        XCTAssertTrue(control.contains("EmojiCategoryBarMetrics.index(atX:"))
+        XCTAssertTrue(control.contains("selectAccessibilityCategory(nearestIndex(toX:"))
     }
 
     func testEmojiCategoryScrubberProvidesAccessibleSelectionActions() throws {
-        let bar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
-        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let native = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
 
         XCTAssertTrue((try relocatedKeyboardSource()).contains("isAccessibilityElement = true"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("accessibilityTraits = [.button, .adjustable]"))
@@ -465,34 +471,17 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("override func accessibilityIncrement()"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("override func accessibilityDecrement()"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("onIndexChanged?(normalized)"))
-        XCTAssertTrue(controller.contains("categoryScrubber.categoryNames = CategoryInfo.emojiBarSections.map(\\.name)"))
+        XCTAssertTrue(native.contains("emojiCategory.categoryNames = CategoryInfo.emojiBarSections.map(\\.name)"))
     }
 
     func testEmojiCategoryControlStaysCenteredAndUsesCompactSlots() throws {
         let bar = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
-
-        XCTAssertTrue(bar.contains("let collapsedCenterX = trackWidth / 2"),
-                      "the collapsed current-category button must stay centered")
-        XCTAssertTrue(bar.contains("EmojiCategoryBarMetrics.renderedSlotWidth("),
-                      "category slots must fit the compact capsule without stretching")
-        XCTAssertTrue(bar.contains("static let slotSpacing: CGFloat = 2"),
-                      "category icons should retain a small native-style gap")
-        XCTAssertTrue(bar.contains("Circle()"),
-                      "the selected category should be represented by a circular center marker")
-        XCTAssertTrue(bar.contains("let handleCenterX ="),
-                      "the Liquid Glass handle must have its own moving position")
-        XCTAssertTrue(bar.contains(".position(x: handleCenterX"),
-                      "the complete capsule should move with the selected category")
-        XCTAssertTrue(bar.contains("glassSurface(in: Capsule())"),
-                      "Liquid Glass must be attached to the moving handle")
-        XCTAssertTrue(bar.contains("let barContentWidth ="),
-                      "the category icons should be rendered inside the moving glass bar")
-        XCTAssertTrue(bar.contains("let markerPositionInBar ="),
-                      "the fixed center selector must drive category selection")
-        XCTAssertTrue(bar.contains(".position(x: trackWidth / 2"),
-                      "the selected category marker must stay centered while the bar moves")
-        XCTAssertTrue(bar.contains("static let expandedBarWidth: CGFloat = 176"),
-                      "the expanded handle should remain compact")
+        XCTAssertTrue(bar.contains("HStack(spacing: 0)"))
+        XCTAssertTrue(bar.contains("ForEach(sections)"))
+        XCTAssertTrue(bar.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertTrue(bar.contains("section.id == selectedCategoryID"))
+        XCTAssertFalse(bar.contains("isExpanded"))
+        XCTAssertFalse(bar.contains("private var legacyBody"))
     }
 
     func testEmojiCategoryBarHasCompactWidthAndInsetContentClip() throws {
@@ -501,8 +490,8 @@ final class KeyboardRegressionTests: XCTestCase {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(bar.contains("static let slotWidth: CGFloat = 16"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("static let slotSpacing: CGFloat = 2"))
+        XCTAssertTrue(bar.contains("slotWidth(trackWidth:"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("EmojiCategoryBarMetrics.index(atX:"))
         XCTAssertTrue(policy.contains("floatingEmojiCategoryBarMaxWidth: Double = 176"))
         XCTAssertTrue(picker.contains("private let gridVerticalInset: CGFloat = 4"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".clipShape(shape.inset(by: 2))"),
@@ -536,18 +525,14 @@ final class KeyboardRegressionTests: XCTestCase {
         let arbitration = try source("DictusCore/Sources/DictusCore/EmojiHoldArbitration.swift")
         XCTAssertTrue(arbitration.contains("case .began, .changed:\n            phase = .changed"),
                       "movement after recognition keeps the hold instead of cancelling it")
-        XCTAssertTrue(owner.contains("panGestureRecognizer.require(toFail: hold)"),
-                      "the pager must wait for the hold to fail instead of resetting it mid-touch")
-        XCTAssertTrue(owner.contains("Receive every touch and fail immediately"),
-                      "empty Recents space must fail the hold so the pager can move")
-        XCTAssertFalse(owner.contains("return canBeginVariantHold(at: touch.location(in: self))"),
-                       "excluding a blank cell from the hold leaves the pager waiting forever")
+        XCTAssertFalse(owner.contains("panGestureRecognizer.require(toFail: hold)"),
+                       "blank Recents swipes must not wait for a hold recognizer")
+        XCTAssertTrue(owner.contains("return recognizer !== hold || canBeginVariantHold(at: touch.location(in: self))"),
+                      "only emoji with variants need hold arbitration")
         let categories = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
         let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
-        XCTAssertFalse(control.contains("collapsedCircleFrame"),
-                       "the bar must not collapse to a small circle: the full visible track is the target")
-        XCTAssertTrue(control.contains("return bounds.insetBy(dx: 0, dy: -hitExpansion)"),
-                      "the whole visible track must be the interaction target")
+        XCTAssertTrue(control.contains("bounds.insetBy(dx: 0, dy: -hitExpansion)"),
+                      "the visible category strip owns its buttons; blank pager space still swipes")
         XCTAssertTrue(control.contains("selectAccessibilityCategory(nearestIndex(toX:"),
                       "a stationary tap on the bar must select a category, not be dropped")
         XCTAssertTrue(control.contains("Tap or swipe left or right to choose an emoji category."))
@@ -561,11 +546,12 @@ final class KeyboardRegressionTests: XCTestCase {
 
     func testEmojiSurfaceKeepsTheSharedGlassInset() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertFalse(root.contains("withoutGlassRim: state.areaMode == .emoji"),
-                       "emoji must use the same inset surface treatment as the other pages")
+        XCTAssertFalse(root.contains("withoutGlassRim"))
+        XCTAssertTrue(try source("DictusKeyboard/KeyboardViewController.swift")
+            .contains("surfaceBackdrop.configureInset(layout"), "One inset surrounds every page and its bottom bar")
         XCTAssertTrue((try relocatedKeyboardSource()).contains("if state.areaMode == .emoji"),
                       "emoji content needs the rounded inset clipping path")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains(".clipShape(shape)"),
+        XCTAssertTrue((try relocatedKeyboardSource()).contains(".clipShape(shape.inset(by: 2))"),
                       "emoji glyphs must not render through the Liquid Glass edge")
     }
 
@@ -640,7 +626,7 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(controller.contains("identifier: \"open-saiity-button\""))
         XCTAssertTrue(controller.contains("let recoveryVisible = micVisible && KeyboardState.shared.showsRecoveryAction"))
         XCTAssertTrue(controller.contains("let dictateVisible = micVisible && !recoveryVisible"))
-        XCTAssertTrue(controller.contains("recoveryButton?.frame = layout.dictateFrame"))
+        XCTAssertTrue(controller.contains("recoveryButton?.frame = inputFrame(layout.dictateFrame)"))
         XCTAssertTrue(controller.contains("$0.accessibilityIdentifier == \"open-saiity-button\""))
 
         // Both the face and the hit owner label themselves from the one label.

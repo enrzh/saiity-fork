@@ -58,22 +58,39 @@ public enum CommandKeyStyle {
 
     /// The size a command key's visible plate is drawn at.
     ///
-    /// The emoji page's delete draws at 40x40, and every command key in the bottom bar
-    /// draws at that size. The grid's command keys were drawing at their full hit size
-    /// — 45x43 on the letter row, 48x43 on the symbol rows — which is close enough to
-    /// look alike at a glance and different enough that the family never read as one.
-    /// This is the one number, and it is what "the same styling as the emoji delete"
-    /// means for the grid.
+    /// Grid edge commands use the matching Emoji bottom-bar or Delete face width.
     public static let visualSize: CGFloat = 40
 
-    /// The visible plate for a command key, centred on its hit area.
+    /// The visible plate for a command key. Edge keys share Emoji Delete's
+    /// outer inset; interior keys stay centred on their hit area.
     ///
     /// The hit area stays at its resolved size so nothing changes about what can be
     /// pressed; only the plate the user sees is standardised.
-    public static func visualPlate(for hit: CGRect) -> CGRect {
-        let size = visualSize
-        return CGRect(x: hit.midX - size / 2, y: hit.midY - size / 2,
-                      width: size, height: size)
+    public static func visualPlate(for hit: CGRect, surfaceWidth: CGFloat? = nil) -> CGRect {
+        let leading = surfaceWidth != nil && hit.minX <= KeyGridPlacement.edgeInset + 1
+        let reference = surfaceWidth.map {
+            VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+                width: max(0, $0 - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
+                height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+            ))
+        } ?? CGSize(width: visualSize, height: visualSize)
+        // The pinned edge keys have a 14pt outer gap. Their visible face may
+        // use that gap without shrinking the native-sized middle letter keys.
+        let width = max(0, min(reference.width,
+                               hit.width + (surfaceWidth == nil ? 0 : KeyGridPlacement.edgeGap)))
+        let height = max(0, min(reference.height, hit.height))
+        let edgeInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
+            + VoiceOnlyKeyboardPolicy.commandVisualInset / 2
+        let x: CGFloat
+        if leading {
+            x = edgeInset
+        } else if let surfaceWidth, hit.maxX >= surfaceWidth - KeyGridPlacement.edgeInset - 1 {
+            x = surfaceWidth - edgeInset - width
+        } else {
+            x = hit.midX - width / 2
+        }
+        return CGRect(x: x, y: hit.midY - height / 2,
+                      width: width, height: height)
     }
 
     // MARK: - Glyph
@@ -86,6 +103,8 @@ public enum CommandKeyStyle {
     /// the system keyboard's own delete icon.
     public static let glyphSize: CGFloat = 16
     public static let glyphWeight: KeyGlyphWeight = .semibold
+    public static let textSize: CGFloat = 14
+    public static let deleteSymbolName = "delete.backward"
 
     // MARK: - Press treatment
 

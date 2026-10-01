@@ -2,6 +2,214 @@
 // Native pickers for keyboard defaults and interaction preferences.
 import SwiftUI
 import DictusCore
+import DeviceKit
+
+struct ModelSelectionProfilePicker: UIViewRepresentable {
+    @ObservedObject var modelManager: ModelManager
+    private var phoneName: String {
+        switch DeviceCapabilities.current().deviceModelIdentifier {
+        case "iPhone19,2": return "iPhone 18 Pro"
+        case "iPhone18,4": return "iPhone Air"
+        default: return Device.current.realDevice.description
+        }
+    }
+
+    func makeUIView(context: Context) -> UISegmentedControl {
+        let control = UISegmentedControl(items: ["Balanced", phoneName, "Precise"])
+        control.accessibilityLabel = "Model selection"
+        control.addAction(UIAction { [weak control] _ in
+            guard let index = control?.selectedSegmentIndex, ModelSelectionProfile.allCases.indices.contains(index) else { return }
+            modelManager.setSelectionProfile(ModelSelectionProfile.allCases[index])
+        }, for: .valueChanged)
+        return control
+    }
+    func updateUIView(_ control: UISegmentedControl, context: Context) {
+        control.selectedSegmentIndex = modelManager.selectionMode == .automatic
+            ? ModelSelectionProfile.allCases.firstIndex(of: modelManager.selectionProfile) ?? 0 : UISegmentedControl.noSegment
+        control.accessibilityHint = modelManager.selectionProfile.explanation
+    }
+}
+
+struct DictationModelQuickPicker: View {
+    @ObservedObject var modelManager: ModelManager
+    var body: some View {
+        Picker("Dictation model", selection: Binding(
+            get: { modelManager.selectionMode == .automatic ? "automatic" : modelManager.activeModel ?? "automatic" },
+            set: { value in
+                if value == "automatic" { modelManager.setSelectionMode(.automatic) }
+                else { modelManager.selectModel(value) }
+            })) {
+            Text("Automatic").tag("automatic")
+            ForEach(modelManager.downloadedModels, id: \.self) { id in
+                Text(ModelInfo.forIdentifier(id)?.displayName ?? id).tag(id)
+            }
+        }
+        .accessibilityHint("Switch between installed dictation models. Download more from Models.")
+    }
+}
+
+struct CleanupModelPicker: View {
+    @ObservedObject var manager: ModelManager
+    @ObservedObject private var local = CleanupModelManager.shared
+    var body: some View {
+        Picker("Processing model", selection: Binding(
+            get: { manager.cleanupBackend.storageValue },
+            set: { value in
+                guard let backend = PolishCleanupBackend.parse(value) else { return }
+                if case .local(let model) = backend { local.select(model, manager: manager) }
+                else { manager.selectCleanupBackend(backend) }
+            })) {
+            Text("Apple Foundation Models").tag(PolishCleanupBackend.appleIntelligence.storageValue)
+            ForEach(LocalCleanupModel.allCases, id: \.self) { model in
+                Text(model.displayName).tag(PolishCleanupBackend.local(model).storageValue)
+            }
+            ForEach(PolishCleanupBackend.validOllamaCleanupModels(from: manager.customModels)) { model in
+                Text(model.name).tag(PolishCleanupBackend.ollama(model.id).storageValue)
+            }
+        }
+        .disabled(local.preparing != nil)
+        .accessibilityHint("One model handles punctuation, cleanup and grammar. Local models download once before selection.")
+        if let model = local.preparing {
+            ProgressView("Preparing \(model.displayName)", value: local.progress)
+            Button("Cancel download") { local.cancel() }
+        }
+        if let error = local.error { Text(error).font(.footnote).foregroundStyle(.red) }
+        if case .local(let model) = manager.cleanupBackend { Text(model.explanation).font(.footnote).foregroundStyle(.secondary) }
+    }
+}
+
+struct KeyboardHoldSpeedPicker: View {
+    @AppStorage(SharedKeys.keyboardHoldSpeed, store: AppGroup.defaults) private var speed = KeyboardHoldSpeed.default.rawValue
+    var body: some View {
+        Picker("Tap and hold speed", selection: $speed) {
+            ForEach(KeyboardHoldSpeed.allCases, id: \.self) { Text($0.displayName).tag($0.rawValue) }
+        }
+        .onChange(of: speed) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+    }
+}
+
+/// The catalog is shared with the keyboard. Every alternate can be disabled;
+/// the ordinary tap remains available on each key.
+struct KeyboardHoldOptionsView: View {
+    @State private var page = 0
+    @State private var selectedKey: String?
+    @State private var revision = 0
+    @State private var padStyle: HostFieldPolicy.NumberPadStyle = .digits
+    @State private var emojiCategoryID = "people"
+    @State private var showEmojiOverrides = false
+    private var kind: KeyboardVariantKind {
+        page == 0 ? .letter : page == 3 ? .emoji : page == 4 && padStyle == .phone ? .phone : .symbol
+    }
+    private var rows: [[String]] {
+        switch page {
+        case 0:
+            var rows = KeyboardVariantLayout.rows(for: .active)
+            if let last = rows.indices.last { rows[last] = ["⇧"] + rows[last] + ["⌫"] }
+            return rows + [["123", "☺", "space", ".", "return"]]
+        case 1, 2:
+            return (page == 1 ? KeyboardSymbolsLayout.numbers : KeyboardSymbolsLayout.symbols).map { row in
+                row.compactMap {
+                    switch $0.kind {
+                    case .insert(let value): return value
+                    case .pageToggle: return page == 1 ? "#+=" : "123"
+                    case .delete: return "⌫"
+                    default: return nil
+                    }
+                }
+            } + [["ABC", "☺", "space", "return"]]
+        case 4: return [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"],
+            [padStyle == .phone ? "*" : padStyle == .decimal ? Locale.current.decimalSeparator ?? "." : "ABC", "0", "⌫"]]
+        default: return (EmojiStore.categories.first { $0.id == emojiCategoryID }?.emojis ?? [])
+            .filter { KeyboardVariantPreferences.allOptions(for: $0, kind: .emoji).count > 1 }
+            .reduce(into: [[String]]()) { rows, value in
+                if rows.isEmpty || rows[rows.count - 1].count == 8 { rows.append([]) }
+                rows[rows.count - 1].append(value)
+            }
+        }
+    }
+    var body: some View {
+        let _ = revision
+        List {
+            Section {
+                Picker("Page", selection: $page) {
+                    Text("ABC").tag(0); Text("123").tag(1); Text("#+=").tag(2); Text("Emoji").tag(3); Text("Pad").tag(4)
+                }.pickerStyle(.segmented)
+            }
+            if page == 3 {
+                Section {
+                    Picker("Default skin tone", selection: Binding(
+                        get: { KeyboardVariantPreferences.defaultSkinTone },
+                        set: { KeyboardVariantPreferences.setDefaultSkinTone($0); revision += 1 })) {
+                        Text("👋 Original").tag("")
+                        ForEach(Array(EmojiSkinToneVariants.modifiers.enumerated()), id: \.element) { index, tone in
+                            Text("👋" + tone + " " + ["Light", "Medium light", "Medium", "Medium dark", "Dark"][index]).tag(tone)
+                        }
+                    }
+                    ForEach(Array(EmojiSkinToneVariants.modifiers.enumerated()), id: \.element) { index, tone in
+                        Toggle(isOn: Binding(
+                            get: { KeyboardVariantPreferences.isToneEnabled(tone) },
+                            set: { KeyboardVariantPreferences.setToneEnabled($0, tone: tone); revision += 1 })) {
+                            HStack(spacing: 12) {
+                                Text("\u{1F44B}" + tone).font(.title2)
+                                Text(["Light", "Medium light", "Medium", "Medium dark", "Dark"][index])
+                            }
+                        }
+                    }
+                    Toggle("Customize individual emoji", isOn: $showEmojiOverrides)
+                } header: { Text("Skin tones") }
+                  footer: { Text("The default tone applies to ordinary emoji. Recents keep the tone you chose. Holding lets you choose another tone; joined combinations keep their individual options below.") }
+            }
+            Section {
+                if page == 4 {
+                    Picker("Field type", selection: $padStyle) {
+                        Text("Numbers").tag(HostFieldPolicy.NumberPadStyle.digits)
+                        Text("Decimal").tag(HostFieldPolicy.NumberPadStyle.decimal)
+                        Text("Phone").tag(HostFieldPolicy.NumberPadStyle.phone)
+                    }
+                }
+                if page == 3 && showEmojiOverrides {
+                    Picker("Emoji category", selection: $emojiCategoryID) {
+                        ForEach(EmojiStore.categories.filter { $0.emojis.contains { EmojiSkinToneVariants.options(for: $0).count > 1 } }) { Text($0.name).tag($0.id) }
+                    }
+                }
+                ForEach(Array((page == 3 && !showEmojiOverrides ? [] : rows).enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 4) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, key in
+                            let hasOptions = KeyboardVariantPreferences.allOptions(for: key, kind: kind).count > 1
+                            Button {
+                                selectedKey = key
+                            } label: {
+                                Text(key).font(.system(size: page == 3 ? 23 : 18))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .background(selectedKey == key ? Color.accentColor.opacity(0.2) : Color(.tertiarySystemFill),
+                                                in: RoundedRectangle(cornerRadius: 8))
+                                    .overlay(alignment: .bottom) { if hasOptions { Circle().fill(Color.accentColor).frame(width: 3, height: 3).padding(3) } }
+                            }.buttonStyle(.plain).disabled(!hasOptions)
+                        }
+                    }
+                }
+            } footer: {
+                if page != 3 || showEmojiOverrides {
+                    Text("Keys with a dot have alternate characters or emoji tones. Select a key, then keep only the alternates you use. Ordinary taps always stay enabled.")
+                }
+            }
+            if let selectedKey, page != 3 || showEmojiOverrides {
+                Section("Options for \(selectedKey)") {
+                    ForEach(KeyboardVariantPreferences.allOptions(for: selectedKey, kind: kind).dropFirst(), id: \.self) { option in
+                        Toggle(option, isOn: Binding(
+                            get: { KeyboardVariantPreferences.isEnabled(option, for: selectedKey, kind: kind) },
+                            set: { KeyboardVariantPreferences.setEnabled($0, option: option, key: selectedKey, kind: kind); revision += 1 }))
+                    }
+                }
+            }
+        }
+        .navigationTitle("Tap and hold options")
+        .onAppear { KeyboardVariantPreferences.reload() }
+        .onChange(of: page) { _, _ in selectedKey = nil }
+        .onChange(of: emojiCategoryID) { _, _ in selectedKey = nil }
+        .onChange(of: padStyle) { _, _ in selectedKey = nil }
+    }
+}
 
 /// Native picker for the model policy. The resolver changes only among models
 /// already installed on the device; it never starts a download by itself.
@@ -87,6 +295,8 @@ struct TypingLanguagesPanel: View {
 struct KeyboardMaterialPicker: View {
     @AppStorage(SharedKeys.liquidGlassEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
     private var liquidGlassEnabled = true
+    @AppStorage(SharedKeys.keyboardInsetEnabled, store: AppGroup.defaults)
+    private var insetEnabled = true
 
     var body: some View {
         Picker("Keyboard material", selection: $liquidGlassEnabled) {
@@ -97,6 +307,9 @@ struct KeyboardMaterialPicker: View {
         .onChange(of: liquidGlassEnabled) { _, _ in
             KeyboardInteractionPreferences.notifyChanged()
         }
+        Toggle("Keyboard inset", isOn: $insetEnabled)
+            .accessibilityHint("Shows the shared background behind every keyboard page and its bottom bar, in either material.")
+            .onChange(of: insetEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
     }
 }
 

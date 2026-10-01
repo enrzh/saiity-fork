@@ -13,53 +13,48 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testFullAccessHandshakeUsesADeclaredDarwinNotificationAndCrossProcessRefresh() throws {
         let notifications = try source("DictusCore/Sources/DictusCore/DarwinNotifications.swift")
         let keyboard = try source("DictusKeyboard/KeyboardViewController.swift")
-        let availability = try source("DictusApp/Onboarding/OnboardingView.swift")
+        let availability = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
 
         XCTAssertTrue(notifications.contains("keyboardFullAccessChanged"))
         XCTAssertTrue(keyboard.contains("publishFullAccessHandshake()"))
-        XCTAssertTrue(keyboard.contains("AppGroup.defaults.set(hasFullAccess"))
+        XCTAssertTrue(keyboard.contains("let granted = hasFullAccess"))
+        XCTAssertTrue(keyboard.contains("guard isAttached, isOnScreen"))
         XCTAssertTrue(keyboard.contains("SharedKeys.onboardingFullAccessHandshakeDate"))
         XCTAssertTrue(keyboard.contains("DarwinNotificationCenter.post(DarwinNotificationName.keyboardFullAccessChanged)"))
         XCTAssertTrue(availability.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
-        XCTAssertTrue(availability.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
-        XCTAssertTrue(availability.contains("refreshKeyboard()"))
+        XCTAssertTrue(availability.contains("static let shared = KeyboardSetupModel()"))
+        XCTAssertTrue(availability.contains("DarwinNotificationName.keyboardFullAccessDenied"))
+        XCTAssertTrue(availability.contains("Self.shared.refresh()"))
         XCTAssertTrue(availability.contains("isCurrentFullAccessHandshake"))
-        XCTAssertTrue(availability.contains("let status = KeyboardSetupStatus"))
-        XCTAssertTrue(availability.contains("let installed = status.keyboardDetected"))
+        XCTAssertTrue(availability.contains("keyboardInstalled = installed || verified"))
         XCTAssertFalse(availability.contains("AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessVerified)"))
         XCTAssertFalse(availability.contains("AppGroup.defaults.removeObject(forKey: SharedKeys.onboardingFullAccessHandshakeDate)"))
-        XCTAssertFalse(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"))
-        XCTAssertTrue(availability.contains("ensureFullAccessProbe()"))
-        XCTAssertTrue(availability.contains("fullAccessVerified = handshake"))
-        XCTAssertTrue(availability.contains("if handshake, let handshakeDate"))
-        XCTAssertTrue(availability.contains("keyboardInstalled: inputModeInstalled"))
+        XCTAssertTrue(availability.contains("AppGroup.defaults.set(false, forKey: SharedKeys.onboardingFullAccessVerified)"), "an explicit denied event must clear the old permission result")
+        XCTAssertTrue(availability.contains("func beginVerification()"))
+        XCTAssertTrue(availability.contains("fullAccessVerified = verified"))
+        XCTAssertTrue(availability.contains("AppGroup.defaults.synchronize()"))
     }
 
     func testKeyboardSetupPagePassesHandshakeDateForDiagnostics() throws {
         let source = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
 
-        XCTAssertTrue(source.contains("handshakeDate: fullAccessHandshakeDate > 0 ? Date(timeIntervalSince1970: fullAccessHandshakeDate) : nil"))
-        XCTAssertTrue(source.contains("let status = KeyboardSetupStatus("))
-        XCTAssertTrue(source.contains("keyboardDetected = status.keyboardDetected"))
-        XCTAssertTrue(source.contains("keyboardInstalled: inputModeInstalled"))
-        XCTAssertFalse(source.contains("keyboardDetected = inputModeInstalled"))
-        XCTAssertTrue(source.contains("if !fullAccessHandshake && !Task.isCancelled"),
-                      "setup must retry when the keyboard is installed but Full Access has not reached the app yet")
-        XCTAssertFalse(source.contains("if !keyboardDetected && !Task.isCancelled"),
-                       "keyboard installation alone must not stop the Full Access retry")
+        let keyboard = try self.source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(keyboard.contains("SharedKeys.onboardingFullAccessHandshakeDate"))
+        XCTAssertTrue(source.contains("isCurrentFullAccessHandshake"))
+        XCTAssertTrue(source.contains("while !Task.isCancelled && !setup.fullAccessVerified"))
+        XCTAssertTrue(source.contains("setup.requestProbe()"))
+        XCTAssertTrue(source.contains(".task(id: checkingKeyboard && scenePhase == .active)"))
     }
 
     func testVisibleOnboardingAvailabilityPageRefreshesAfterReturningFromSettings() throws {
-        let source = try source("DictusApp/Onboarding/OnboardingView.swift")
+        let source = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
 
-        XCTAssertTrue(source.contains("@State private var keyboardCheckTask: Task<Void, Never>?"))
+        XCTAssertTrue(source.contains("KeyboardSetupModel: ObservableObject"))
         XCTAssertTrue(source.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
-        XCTAssertTrue(source.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
-        XCTAssertTrue(source.contains("keyboardCheckTask?.cancel()"))
-        XCTAssertTrue(source.contains("Task { @MainActor in"))
-        XCTAssertTrue(source.contains("for delay in [250, 750, 1500, 3000, 6000, 10000]"),
-                      "the visible setup page must retry long enough for the keyboard extension to publish its handshake")
-        XCTAssertTrue(source.contains("if fullAccessVerified { return }"))
+        XCTAssertTrue(source.contains("if returningFromSettings { checkingKeyboard = true"))
+        XCTAssertTrue(source.contains(".onChange(of: scenePhase)"))
+        XCTAssertTrue(source.contains("Task.sleep(for: .seconds(1))"))
+        XCTAssertTrue(source.contains("!setup.fullAccessVerified"))
     }
 
     func testColorsUseSemanticSystemSourcesWithoutFixedLowContrast() throws {
@@ -185,32 +180,29 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(home.contains("coordinator.disableKeyboardSession()"))
         XCTAssertTrue(home.contains("coordinator.cancelDictation()"))
         XCTAssertTrue(attributes.contains("serviceEnabled"))
-        XCTAssertTrue(activity.contains("context.state.serviceEnabled"))
+        XCTAssertTrue(activity.contains("state.serviceEnabled"))
         XCTAssertTrue(intent.contains("activity.update"))
     }
 
     func testLiveActivityLockScreenKeepsSemanticForegroundOnSystemBackground() throws {
         let activity = try source("DictusWidgets/DictusLiveActivity.swift")
-        guard let lockScreen = activity.components(separatedBy: "private func lockScreenView").last else {
+        guard let lockScreen = activity.components(separatedBy: "struct DictationActivityCard: View").last else {
             XCTFail("Missing lock screen Live Activity view")
             return
         }
 
         XCTAssertFalse(lockScreen.contains("foregroundColor(.white)"))
-        XCTAssertTrue(lockScreen.contains("foregroundColor(.primary)"))
-        XCTAssertTrue(lockScreen.contains("foregroundColor(.secondary)"))
+        XCTAssertTrue(lockScreen.contains(".white : .primary"))
+        XCTAssertTrue(lockScreen.contains("foregroundStyle(.secondary)"))
     }
 
     func testLiveActivityUsesOwnBrandingWithoutLegacyLogoAssets() throws {
         let activity = try source("DictusWidgets/DictusLiveActivity.swift")
         XCTAssertFalse(activity.contains("Text(\"sAI\")"))
         XCTAssertFalse(activity.contains("MiniLogoBars"))
-        XCTAssertFalse(activity.contains("DictusLogo"))
-        XCTAssertTrue(activity.contains("private struct SaiityMark"))
-        XCTAssertTrue(activity.contains("SaiityMark(size: 20)"))
-        XCTAssertTrue(activity.contains("SaiityMark(size: 24)"))
-        XCTAssertTrue(activity.contains("SaiityMark(size: 40)"))
-        XCTAssertTrue(activity.contains("statusSymbol(for: context.state.phase)"))
+        XCTAssertTrue(activity.contains("DictusLogo(height: 20, foregroundOnly: true)"))
+        XCTAssertTrue(activity.contains("DictusLogo(height: 24, foregroundOnly: true)"))
+        XCTAssertTrue(activity.contains("ActivitySignal(state: context.state, compact: true)"))
     }
 
     func testRecordingIsModalAndExposesAccessibleRecoveryAndTranscriptStages() throws {
@@ -272,7 +264,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let onboarding = try String(contentsOf: repository.appending(path: "DictusApp/Onboarding/OnboardingView.swift"), encoding: .utf8)
 
         XCTAssertTrue(onboarding.contains("keyboardInstalled"))
-        XCTAssertTrue(onboarding.contains("fullAccessVerified"))
+        XCTAssertTrue(onboarding.contains("KeyboardSetupCard()"))
         XCTAssertTrue(onboarding.contains("modelReady"))
         XCTAssertTrue(onboarding.contains("polishEnabled"))
         XCTAssertTrue(onboarding.contains("downloadProgress"))
@@ -347,16 +339,17 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let onboarding = try source("DictusApp/Onboarding/OnboardingView.swift")
         let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
 
-        XCTAssertTrue(onboarding.contains("keyboardStatus.keyboardDetected && modelReady"))
+        let setup = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
+        XCTAssertTrue(onboarding.contains("setup.keyboardInstalled && modelReady"))
         XCTAssertFalse(onboarding.contains("keyboardInstalled && fullAccessVerified && modelReady"))
         XCTAssertTrue(onboarding.contains("switch to the sAiity keyboard and complete Full Access verification"))
-        XCTAssertTrue(onboarding.contains("Open Keyboard Settings"))
-        XCTAssertTrue(onboarding.contains("Full Access is verified only by the keyboard extension."))
+        XCTAssertTrue(setup.contains("Open Keyboard Settings"))
+        XCTAssertTrue(setup.contains("Permission is confirmed by the actual keyboard."))
         XCTAssertTrue(tutorial.contains("Return to setup"))
         XCTAssertTrue(tutorial.contains("Full Access required"))
         XCTAssertTrue(tutorial.contains("Open Settings"))
-        XCTAssertTrue(tutorial.contains("AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
-        XCTAssertTrue(tutorial.contains("fullAccessVerified = handshake"))
+        XCTAssertTrue(tutorial.contains("KeyboardSetupModel.shared"))
+        XCTAssertTrue(tutorial.contains("setup.requestProbe()"))
         XCTAssertFalse(tutorial.contains("fullAccessVerified = status.fullAccessVerified"))
     }
 
@@ -467,7 +460,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(diagnostic.contains(".isModal"), "A pushed diagnostics page must not trap VoiceOver as a modal")
         XCTAssertTrue(diagnostic.contains(".accessibilityValue(passed ? \"OK\" : \"Failed\")"))
         XCTAssertTrue(licenses.contains("List"))
-        XCTAssertTrue(licenses.contains("Section("))
+        XCTAssertTrue(licenses.contains("Section {"))
         XCTAssertTrue(paywall.contains("purchaseState == .pending"))
         XCTAssertTrue(paywall.contains("Restore purchases"))
         XCTAssertTrue(paywall.contains("Terms of Service"))
@@ -605,11 +598,12 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let policy = try source("DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift")
 
-        XCTAssertTrue(controller.contains("micButton?.frame = .zero"),
-                      "an unavailable mic frame must not leave a stale touch interceptor behind")
+        XCTAssertFalse(controller.contains("micButton?.frame = .zero"),
+                       "relayout must not clear an active mic before restoring the same frame")
+        XCTAssertTrue(controller.contains("micButton?.isHidden = !dictateVisible"))
         XCTAssertTrue(controller.contains("topAccessoryHeight: currentSuggestionLaneHeight"))
         XCTAssertTrue(root.contains("topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight"))
-        XCTAssertTrue(policy.contains("public static let suggestionLaneHeight: Double = 36"))
+        XCTAssertTrue(policy.contains("public static let suggestionLaneHeight: Double = 32"))
     }
 
     func testKeyboardEmojiAndCategoryTargetsUseCompactVisualsAndNativeHitOwners() throws {
@@ -627,13 +621,12 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(picker.contains("private let rowSpacing: CGFloat"))
         XCTAssertTrue(picker.contains("emojiKeySpacing"))
         XCTAssertFalse(picker.contains("Search Emoji"))
-        XCTAssertTrue(categories.contains("glassEffect(.regular.interactive(), in: shape)"),
+        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"),
                       "the category strip needs one shared functional glass surface")
-        XCTAssertTrue(categories.contains("contentOffset"),
-                      "category scrolling must move one continuous horizontal strip")
+        XCTAssertFalse(categories.contains("contentOffset"), "The full category rail remains stationary")
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("emojiCategoryHorizontalInset"))
-        XCTAssertTrue(categories.contains("isExpanded"))
+        XCTAssertTrue(categories.contains("EmojiCategoryBarMetrics.railInset"))
+        XCTAssertFalse(categories.contains("isExpanded"))
         XCTAssertFalse(categories.contains("magnifyingglass"))
     }
 
@@ -642,10 +635,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
 
         XCTAssertTrue(tutorial.contains("scenePhase"))
         XCTAssertTrue(tutorial.contains("refreshFullAccess()"))
-        XCTAssertTrue(tutorial.contains("DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
-        XCTAssertTrue(tutorial.contains("DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)"))
+        XCTAssertTrue(tutorial.contains("KeyboardSetupModel.shared"))
+        XCTAssertTrue(tutorial.contains(".onChange(of: setup.fullAccessVerified)"))
         XCTAssertTrue(tutorial.contains("DispatchQueue.main.async"))
-        XCTAssertTrue(tutorial.contains("AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)"))
+        XCTAssertTrue(tutorial.contains("setup.fullAccessVerified"))
         XCTAssertTrue(tutorial.contains("fullAccessRequired = false"))
         XCTAssertTrue(tutorial.contains("dictationFailed = false"))
         XCTAssertTrue(tutorial.contains("sAiity keyboard is active. Tap the microphone to dictate."))
@@ -663,7 +656,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let availability = try source("DictusApp/Onboarding/OnboardingView.swift")
         let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
 
-        XCTAssertTrue(availability.contains("coordinator.enableKeyboardSession()"))
+        XCTAssertFalse(availability.contains("coordinator.enableKeyboardSession()"), "setup verification and video playback must not arm the microphone")
         XCTAssertTrue(tutorial.contains("coordinator.enableKeyboardSession()"))
     }
 

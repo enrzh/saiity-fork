@@ -11,6 +11,18 @@ import DictusCore
 /// is typed as UIInputView?. Using .keyboard style tells iOS this view behaves
 /// like a keyboard, which is necessary for playInputClick() to work.
 class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
+    /// Front-to-back native owners, published with their frames by the controller.
+    /// Material hosts and legacy placement markers never participate in routing.
+    var nativeTouchOwners: [UIView] = []
+    weak var emojiPager: UIView?
+    weak var periodKey: UIView?
+    private let nativeMounts = NSHashTable<UIView>.weakObjects()
+    private var lastHitTimestamp: TimeInterval = -1
+    private var lastHitPoint = CGPoint(x: -1, y: -1)
+
+    func registerNativeMount(_ mount: UIView) {
+        nativeMounts.add(mount)
+    }
     /// Return true to enable keyboard click sounds via playInputClick().
     var enableInputClicksWhenVisible: Bool { true }
 
@@ -43,18 +55,41 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
     override func layoutSubviews() {
         super.layoutSubviews()
         reassertTransparentBackdrop()
+        // The hosting view can move while its child's local size stays fixed.
+        // Reconvert placement on input-view layout, not only child-size changes.
+        for mount in nativeMounts.allObjects {
+            mount.setNeedsLayout()
+            mount.layoutIfNeeded()
+        }
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
+        guard !isHidden, isUserInteractionEnabled, alpha > 0.01,
+              bounds.contains(point) else { return nil }
+        let hit: UIView?
+        if nativeTouchOwners.isEmpty {
+            hit = super.hitTest(point, with: event)
+        } else {
+            hit = nativeTouchOwners.lazy.compactMap { owner -> UIView? in
+                guard owner.superview === self, !owner.isHidden,
+                      owner.isUserInteractionEnabled, owner.alpha > 0.01 else { return nil }
+                return owner.hitTest(owner.convert(point, from: self), with: event)
+            }.first ?? self
+        }
         #if DEBUG
-        // Arrival counting lives in `PassthroughControlsView.traceArrival`, which
-        // every routed touch must pass through. An earlier gate here tested
-        // `phase == .began` and logged exactly zero lines for an entire typing
-        // session: UIKit does not expose the touch list in the expected state at
-        // this point in hit-testing, so the condition was never true. A stage that
-        // cannot fail loudly is worse than no stage, because "no lines" looked
-        // like a finding rather than a broken probe.
+        let mode = KeyboardState.shared.areaMode
+        let timestamp = event?.timestamp ?? -1
+        let probePoint = CGPoint(x: point.x.rounded(), y: point.y.rounded())
+        if event != nil,
+           (mode == .emoji || hit?.isDescendant(of: nativeTouchOwners.first ?? self) != true),
+           probePoint != lastHitPoint || (event != nil && timestamp != lastHitTimestamp) {
+            lastHitTimestamp = timestamp
+            lastHitPoint = probePoint
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardTouchRoute", instanceID: "root", action: "hit",
+                details: "mode=\(mode.rawValue) point=\(Int(point.x)),\(Int(point.y)) winner=\(hit.map { String(describing: type(of: $0)) } ?? "none") event=\(event == nil ? "preflight" : "touch") glass=\(KeyboardInteractionPreferences.liquidGlassEnabled) height=\(Int(bounds.height))"
+            ))
+        }
         #endif
         return hit
     }

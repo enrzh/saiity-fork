@@ -138,6 +138,7 @@ class KeyboardState: ObservableObject {
     ///
     /// The mechanics are at the bottom of this file.
     @Published private(set) var displayedDictationStatus: DictationStatus = .idle
+    @Published private(set) var keyboardPreferenceRevision: UInt = 0
 
     /// The rule behind the property above. Pure and tested in DictusCore.
     private var transcribingHold = TranscribingStageHold()
@@ -347,16 +348,16 @@ class KeyboardState: ObservableObject {
     /// Opening a URL must use the currently visible controller. iOS can retain a
     /// detached UIInputViewController, so a weak controller property alone is not
     /// a reliable routing authority for the recovery button.
-    var openContainingApp: ((URL, @escaping (Bool) -> Void) -> Void)?
+    var openContainingApp: ((URL, @escaping (Bool) -> Void) -> Void)? {
+        (controller as? KeyboardViewController)?.openContainingApp
+    }
 
     /// UIKit suggestion-lane category scrubber reports an index; SwiftUI maps it
     /// onto the emoji picker's category jump.
     var onSelectEmojiCategory: ((Int) -> Void)?
     @Published private(set) var emojiCategoryJumpIndex = 0
     @Published private(set) var emojiCategoryJumpToken = UUID()
-    @Published private(set) var emojiCategoryBarOffset: CGFloat = 0
     @Published private(set) var emojiCategorySelectionIndex = 0
-    @Published private(set) var emojiCategoryBarExpanded = false
 
     func selectEmojiCategory(at index: Int) {
         var surface = currentSurface
@@ -373,24 +374,8 @@ class KeyboardState: ObservableObject {
         emojiCategorySelectionIndex = surface.selectionIndex
     }
 
-    func setEmojiCategoryBarExpanded(_ expanded: Bool) {
-        var surface = currentSurface
-        guard surface.setExpanded(expanded) else { return }
-        emojiCategoryBarExpanded = surface.expanded
-    }
-
-    func setEmojiCategoryBarOffset(_ offset: CGFloat) {
-        var surface = currentSurface
-        guard surface.setOffset(offset) else { return }
-        emojiCategoryBarOffset = surface.offset
-    }
-
     private var currentSurface: KeyboardSurfaceState {
-        KeyboardSurfaceState(
-            offset: emojiCategoryBarOffset,
-            selectionIndex: emojiCategorySelectionIndex,
-            expanded: emojiCategoryBarExpanded
-        )
+        KeyboardSurfaceState(selectionIndex: emojiCategorySelectionIndex)
     }
 
     /// The active model's actual input-language detection capability.
@@ -733,8 +718,21 @@ class KeyboardState: ObservableObject {
             for: DarwinNotificationName.keyboardPreferencesChanged
         ) { [weak self] in
             DispatchQueue.main.async {
-                self?.objectWillChange.send()
+                HapticFeedback.refreshEnabledState()
+                self?.keyboardPreferenceRevision &+= 1
                 SuggestionState.shared.refreshPreferences()
+            }
+        }
+
+        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessProbeRequested) { [weak self] in
+            DispatchQueue.main.async { (self?.controller as? KeyboardViewController)?.publishFullAccessHandshake(force: true) }
+        }
+
+        DarwinNotificationCenter.addObserver(
+            for: DarwinNotificationName.keyboardVocabularyChanged
+        ) {
+            DispatchQueue.main.async {
+                SuggestionState.shared.refreshVocabulary()
             }
         }
 
@@ -750,6 +748,8 @@ class KeyboardState: ObservableObject {
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.waveformUpdate)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.modelReadinessChanged)
         DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardPreferencesChanged)
+        DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessProbeRequested)
+        DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardVocabularyChanged)
     }
 
     // MARK: - Watchdog
@@ -2043,6 +2043,31 @@ class KeyboardState: ObservableObject {
     /// Label for whichever control currently occupies the board's primary slot.
     var primaryBoardActionLabel: String {
         showsRecoveryAction ? "Open sAiity to prepare dictation" : "Hold to dictate"
+    }
+
+    var recoveryBoardTitle: String {
+        if isOpeningForDictation { return "Opening sAiity…" }
+        if dictationStatus == .failed, statusMessage != nil { return "Try again" }
+        return "Open sAiity"
+    }
+
+    var dictationBoardTitle: String {
+        switch dictationStatus {
+        case .idle, .ready, .failed: return "Hold to dictate"
+        case .requested: return "Getting ready..."
+        case .recording: return isFinishingRecording ? "Finishing..." : "Listening..."
+        case .transcribing: return "Cancel transcription"
+        case .processing: return "Cancel cleanup"
+        }
+    }
+
+    var dictationBoardSymbol: String {
+        switch dictationStatus {
+        case .recording: return isFinishingRecording ? "ellipsis" : "waveform"
+        case .requested: return "ellipsis"
+        case .transcribing, .processing: return "xmark"
+        case .failed, .idle, .ready: return "mic.fill"
+        }
     }
 
     var dictationActionLabel: String { primaryBoardActionLabel }

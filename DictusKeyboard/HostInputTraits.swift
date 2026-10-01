@@ -39,10 +39,23 @@ enum HostInputTraits {
     }
 
     static func letterFieldKeys(for proxy: UITextDocumentProxy) -> HostFieldPolicy.LetterFieldKeys {
-        HostFieldPolicy.letterFieldKeys(
+        var keys = HostFieldPolicy.letterFieldKeys(
             keyboard: keyboardKind(proxy.keyboardType),
             content: contentKind(proxy.textContentType)
         )
+        switch proxy.returnKeyType {
+        case .go: keys.returnTitle = "Go"
+        case .search, .google, .yahoo: keys.returnTitle = "Search"
+        case .send: keys.returnTitle = "Send"
+        case .done: keys.returnTitle = "Done"
+        case .next: keys.returnTitle = "Next"
+        case .continue: keys.returnTitle = "Continue"
+        case .join: keys.returnTitle = "Join"
+        case .route: keys.returnTitle = "Route"
+        case .emergencyCall: keys.returnTitle = "Call"
+        default: break
+        }
+        return keys
     }
 
     static func prefersSymbolPage(for proxy: UITextDocumentProxy) -> Bool {
@@ -80,6 +93,13 @@ enum HostInputTraits {
         case .URL: return .url
         case .emailAddress: return .email
         case .oneTimeCode: return .oneTimeCode
+        case .name, .namePrefix, .givenName, .middleName, .familyName, .nameSuffix, .nickname, .organizationName, .jobTitle:
+            return .name
+        case .fullStreetAddress, .streetAddressLine1, .streetAddressLine2, .addressCity, .addressState, .addressCityAndState, .countryName:
+            return .address
+        case .postalCode: return .postalCode
+        case .creditCardNumber: return .creditCard
+        case .telephoneNumber: return .telephone
         default: return .other
         }
     }

@@ -46,7 +46,7 @@ final class ModelRepoDownloader {
         }
     }
 
-    struct Configuration: Sendable {
+    struct Configuration: Sendable, Codable, Equatable {
         /// Seconds without a single received byte before a file attempt is aborted.
         /// Applied as `timeoutIntervalForRequest`, which for download tasks is an
         /// IDLE timeout that resets whenever data arrives — a slow-but-alive
@@ -65,6 +65,8 @@ final class ModelRepoDownloader {
         /// Repo-relative paths that must exist on disk after the download —
         /// the final-verification tripwire (see Phase 4 in `download`).
         let requiredPaths: [String]
+        /// Quantized local cleanup weights and tokenizer assets at the repo root.
+        var includesRootWeights = false
         /// Parakeet v3 repo. Matches FluidAudio's `Repo.parakeet.remotePath`,
         /// its file selection, and mirrors `AsrModels.modelsExist` verification.
         static func parakeet(version: AsrModelVersion = .v3) -> Configuration {
@@ -164,6 +166,13 @@ final class ModelRepoDownloader {
         modelName: String,
         onProgress: @escaping @Sendable (Progress) -> Void
     ) async throws {
+        try Task.checkCancellation()
+        if let receipt = Self.validReceipt(in: cacheDir, configuration: configuration) {
+            let bytes = receipt.files.reduce(Int64(0)) { $0 + Int64(max(0, $1.size)) }
+            onProgress(Progress(bytesDownloaded: bytes, totalBytes: bytes,
+                                completedFiles: receipt.files.count, totalFiles: receipt.files.count))
+            return
+        }
         // Phase 1: list the repo tree and select files (engine parity via Configuration).
         let files = try await listRequiredFiles()
 
@@ -225,6 +234,41 @@ final class ModelRepoDownloader {
                 throw DownloadError.missingRequiredFile(requiredPath)
             }
         }
+        if configuration.includesRootWeights && !files.contains(where: { $0.path.hasSuffix(".safetensors") && $0.size > 0 }) {
+            throw DownloadError.missingRequiredFile("model weights")
+        }
+        // Keep the successfully downloaded snapshot usable offline. Refreshing
+        // upstream weights is an explicit delete/download operation.
+        let receipt = DownloadReceipt(version: 1, configuration: configuration, files: files)
+        try JSONEncoder().encode(receipt).write(to: Self.receiptURL(in: cacheDir), options: .atomic)
+    }
+
+    private struct DownloadReceipt: Codable {
+        let version: Int
+        let configuration: Configuration
+        let files: [RepoFile]
+    }
+
+    private static func receiptURL(in directory: URL) -> URL { directory.appendingPathComponent(".dictus-download-receipt.json") }
+
+    private static func validReceipt(in directory: URL, configuration: Configuration) -> DownloadReceipt? {
+        guard let size = try? receiptURL(in: directory).resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 4_000_000,
+              let data = try? Data(contentsOf: receiptURL(in: directory)),
+              let receipt = try? JSONDecoder().decode(DownloadReceipt.self, from: data),
+              receipt.version == 1, receipt.configuration == configuration, !receipt.files.isEmpty,
+              Set(receipt.files.map(\.path)).count == receipt.files.count,
+              !configuration.includesRootWeights || receipt.files.contains(where: { $0.path.hasSuffix(".safetensors") && $0.size > 0 }),
+              configuration.requiredPaths.allSatisfy({ FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }),
+              receipt.files.allSatisfy({ file in
+                  shouldInclude(filePath: file.path, patterns: configuration.directoryPatterns,
+                      includesRootMetadata: configuration.includesRootMetadata, includesRootWeights: configuration.includesRootWeights)
+                      && isCompleteDownloadedFile(directory.appendingPathComponent(file.path), expectedSize: file.size)
+              }) else { return nil }
+        return receipt
+    }
+
+    static func completedDownloadSize(in directory: URL, configuration: Configuration) -> Int64? {
+        validReceipt(in: directory, configuration: configuration)?.files.reduce(0) { $0 + Int64(max(0, $1.size)) }
     }
 
     /// A directory can be left behind by an interrupted Core ML extraction.
@@ -240,10 +284,31 @@ final class ModelRepoDownloader {
 
     // MARK: - File listing (HuggingFace tree API)
 
-    struct RepoFile: Sendable {
+    struct RepoFile: Sendable, Codable {
         let path: String
         let size: Int
     }
+
+    #if DEBUG
+    static func checkDownloadReceipt() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-receipt-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = Configuration(repoPath: "fixture/model", directoryPatterns: [], includesRootMetadata: true,
+                                   requiredPaths: ["config.json", "model.safetensors"], includesRootWeights: true)
+        try Data("{}".utf8).write(to: directory.appendingPathComponent("config.json"))
+        try Data([1, 2, 3]).write(to: directory.appendingPathComponent("model.safetensors"))
+        let files = [RepoFile(path: "config.json", size: 2), RepoFile(path: "model.safetensors", size: 3)]
+        try JSONEncoder().encode(DownloadReceipt(version: 1, configuration: config, files: files)).write(to: receiptURL(in: directory))
+        precondition(completedDownloadSize(in: directory, configuration: config) == 5)
+        try Data([1]).write(to: directory.appendingPathComponent("model.safetensors"))
+        precondition(completedDownloadSize(in: directory, configuration: config) == nil, "Truncated weights passed validation")
+        try JSONEncoder().encode(DownloadReceipt(version: 1, configuration: config,
+            files: [RepoFile(path: "../model.safetensors", size: 1)])).write(to: receiptURL(in: directory))
+        precondition(completedDownloadSize(in: directory, configuration: config) == nil, "Traversal receipt passed validation")
+        NSLog("MODEL_DOWNLOAD_PROBE passed: offline receipt, truncated weights and relative paths")
+    }
+    #endif
 
     private struct TreeItem: Decodable {
         let path: String
@@ -273,7 +338,8 @@ final class ModelRepoDownloader {
                     if Self.shouldInclude(
                         filePath: item.path,
                         patterns: patterns,
-                        includesRootMetadata: configuration.includesRootMetadata
+                        includesRootMetadata: configuration.includesRootMetadata,
+                        includesRootWeights: configuration.includesRootWeights
                     ) {
                         files.append(RepoFile(path: item.path, size: item.size ?? -1))
                     }
@@ -296,9 +362,17 @@ final class ModelRepoDownloader {
     static func shouldInclude(
         filePath: String,
         patterns: [String],
-        includesRootMetadata: Bool
+        includesRootMetadata: Bool,
+        includesRootWeights: Bool = false
     ) -> Bool {
+        let components = filePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard !filePath.contains("\0"), !components.isEmpty,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
         if patterns.contains(where: { filePath.hasPrefix($0) }) {
+            return true
+        }
+        if includesRootWeights,
+           filePath.hasSuffix(".safetensors") || filePath.hasSuffix(".model") || filePath.hasSuffix(".jinja") {
             return true
         }
         guard includesRootMetadata else { return false }

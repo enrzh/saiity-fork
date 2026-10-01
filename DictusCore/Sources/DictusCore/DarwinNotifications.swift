@@ -7,6 +7,8 @@ import Foundation
 public enum DarwinNotificationName {
     /// Posted by the keyboard extension after publishing its current Full Access handshake.
     public static let keyboardFullAccessChanged = "de.aiity.saiity.keyboardFullAccessChanged" as CFString
+    public static let keyboardFullAccessDenied = "de.aiity.saiity.keyboardFullAccessDenied" as CFString
+    public static let keyboardFullAccessProbeRequested = "de.aiity.saiity.keyboardFullAccessProbeRequested" as CFString
 
     /// Posted by DictusApp when transcription result is written to App Group.
     public static let transcriptionReady = "de.aiity.saiity.transcriptionReady" as CFString
@@ -47,6 +49,9 @@ public enum DarwinNotificationName {
     /// Posted by DictusApp when keyboard interaction preferences change
     /// (key popups, material). The keyboard re-reads App Group defaults.
     public static let keyboardPreferencesChanged = "de.aiity.saiity.keyboardPreferencesChanged" as CFString
+
+    /// Posted only after the user adds, removes, or resets learned words.
+    public static let keyboardVocabularyChanged = "de.aiity.saiity.keyboardVocabularyChanged" as CFString
 
     /// Posted by the keyboard after it writes `serviceEnabled`. DictusApp applies
     /// the same enable or disable path as the Home Screen toggle.

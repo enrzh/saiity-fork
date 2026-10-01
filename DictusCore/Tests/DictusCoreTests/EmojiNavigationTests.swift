@@ -2,6 +2,43 @@ import XCTest
 @testable import DictusCore
 
 final class EmojiNavigationTests: XCTestCase {
+    func testBlankPagerAndCategoryDragKeepTouchOwnership() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        func source(_ name: String) throws -> String {
+            try String(contentsOf: root.appendingPathComponent("DictusKeyboard/Views/\(name).swift"), encoding: .utf8)
+        }
+
+        let picker = try source("EmojiPickerView")
+        let hold = try source("EmojiGestureCoordinator")
+        let category = try source("EmojiCategoryControl")
+        XCTAssertFalse(picker.contains("panGestureRecognizer.require(toFail: hold)"),
+                       "blank pager swipes must not wait on emoji hold arbitration")
+        XCTAssertTrue(picker.contains("return recognizer !== hold || canBeginVariantHold(at: touch.location(in: self))"))
+        XCTAssertTrue(picker.contains("return self\n    }\n\n    func configure("),
+                      "a blank page cell must remain in the pager's hit hierarchy")
+        XCTAssertTrue(hold.contains("let eligible = shouldBeginHold?(point) ?? true"))
+        XCTAssertTrue(hold.contains("guard let touch = touches.first, let view else {\n            state = .failed"),
+                      "a missing hold target must not leave the pager pan waiting")
+        XCTAssertTrue(category.contains("bounds.insetBy(dx: 0, dy: -hitExpansion).contains(point)"))
+        XCTAssertFalse(category.contains("isTracking || interactionBounds.contains(point)"),
+                       "tracking must not steal a new touch outside the visible category handle")
+        XCTAssertTrue(category.contains("if dragging { selectAccessibilityCategory(nearestIndex(toX: point.x)) }"),
+                      "UIKit tracking keeps the original drag even when it leaves the handle")
+    }
+
+    func testEmptyRecentsAndIncompletePageRetainPagerSlots() {
+        let pages = EmojiSurfaceModel.pages(
+            recents: [],
+            categories: [.init(id: "smileys", name: "Smileys", icon: "face.smiling", emojis: ["😀"])],
+            emojiColumnCount: 8
+        )
+        XCTAssertEqual(pages.map(\.columns), [8, 1])
+        XCTAssertTrue(pages[0].items.isEmpty)
+        XCTAssertEqual(pages[1].items.count, 1)
+    }
+
     func testEmptyRecentsLandOnFirstStandardCategory() {
         XCTAssertEqual(
             EmojiNavigation.landingCategoryID(recents: [], firstCategoryID: "smileys"),

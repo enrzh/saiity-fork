@@ -50,21 +50,16 @@ enum KeyGridPageFactory {
     /// keys are rebuilt here with the user's language labels and the emoji control
     /// the product expects.
     static func letters() -> KeyGridPage {
-        let layout = KeyboardLayouts.current().currentDeviceLayout
-        guard var rows = layout?.normal, !rows.isEmpty else {
-            return KeyGridPage(id: "letters", rows: [])
+        var rows = KeyboardVariantLayout.rows(for: .active)
+        if KeyboardLayouts.drawsDigitRow { rows.insert(Array("1234567890").map(String.init), at: 0) }
+        var built = rows.enumerated().map { row, values in
+            values.enumerated().map { column, value in
+                let variants = KeyboardVariantPreferences.options(for: value, kind: .letter)
+                return KeyGridKey(id: "letter-\(row)-\(column)",
+                    action: variants.count > 1 ? .character(base: value, variants: variants) : .insert(value),
+                    label: value, glyphSize: 22, glyphWeight: .light, isInvisiblePlate: true)
+            }
         }
-        if rows.count > 1 { rows.removeLast() }
-
-        var built: [[KeyGridKey]] = translate(
-            rows,
-            // The layout's own command keys are dropped: this page supplies its
-            // own shift, delete and bottom bar, and keeping the originals produced
-            // two shift keys and two delete keys side by side.
-            dropping: suppliedByTheBar,
-            glyphSize: 22,
-            glyphWeight: .light
-        )
 
         // Shift and delete go on the lowest letter row, pinned to its edges.
         if built.count >= 2 {
@@ -82,7 +77,7 @@ enum KeyGridPageFactory {
             )
             lowest.append(
                 KeyGridKey(id: "delete", action: .deleteRepeating, weight: 1.5,
-                           label: "⌫", isCommand: true,
+                           label: "⌫", systemImage: CommandKeyStyle.deleteSymbolName, isCommand: true,
                            glyphSize: CommandKeyStyle.glyphSize,
                            glyphWeight: CommandKeyStyle.glyphWeight)
             )
@@ -104,7 +99,8 @@ enum KeyGridPageFactory {
         _ rows: [[KeyDefinition]],
         dropping: Set<String>,
         glyphSize: CGFloat,
-        glyphWeight: KeyGlyphWeight
+        glyphWeight: KeyGlyphWeight,
+        symbolVariants: Bool = false
     ) -> [[KeyGridKey]] {
         // Spacers go as well as the keys in `dropping`.
         //
@@ -123,7 +119,8 @@ enum KeyGridPageFactory {
                     row: 0,
                     column: column,
                     glyphSize: glyphSize,
-                    glyphWeight: glyphWeight
+                    glyphWeight: glyphWeight,
+                    symbolVariants: symbolVariants
                 )
             }
         }
@@ -171,7 +168,8 @@ enum KeyGridPageFactory {
             rows,
             dropping: suppliedByTheBar,
             glyphSize: 17,
-            glyphWeight: .regular
+            glyphWeight: .regular,
+            symbolVariants: true
         )
         if var last = built.last, !last.isEmpty {
             // Appended, not substituted. `translate` *removes* the layout's own
@@ -185,6 +183,7 @@ enum KeyGridPageFactory {
                     action: .deleteRepeating,
                     weight: 2.25,
                     label: "⌫",
+                    systemImage: CommandKeyStyle.deleteSymbolName,
                     isCommand: true,
                     glyphSize: CommandKeyStyle.glyphSize,
                     glyphWeight: CommandKeyStyle.glyphWeight
@@ -204,8 +203,8 @@ enum KeyGridPageFactory {
                     weight: 1.4,
                     label: page == .symbolsNumbers ? "#+=" : "123",
                     isCommand: true,
-                    glyphSize: 15,
-                    glyphWeight: .medium
+                    glyphSize: CommandKeyStyle.textSize,
+                    glyphWeight: CommandKeyStyle.glyphWeight
                 ),
                 at: 0
             )
@@ -230,19 +229,16 @@ enum KeyGridPageFactory {
         ]
         var rows = digits.enumerated().map { rowIndex, row in
             row.enumerated().map { column, entry in
-                digitKey(label: entry.0, row: rowIndex, column: column)
+                digitKey(label: entry.0, row: rowIndex, column: column, style: style)
             }
         }
-        // The last row is a centred `0` and a delete on the right, exactly as the
-        // system pad draws it — measured there, `0` occupies the middle column at
-        // x=137..263 and the delete sits in the right one. The leading cell carries
-        // the width and draws nothing, which is what puts `0` in the middle column
-        // rather than off to the left.
+        let leading = style == .digits
+            ? KeyGridKey(id: "pad-letters", action: .letters, label: "ABC", isCommand: true)
+            : digitKey(label: style == .phone ? "*" : (Locale.current.decimalSeparator ?? "."), row: 3, column: 0)
         rows.append([
-            KeyGridKey(id: "pad-spacer", action: .none, glyphSize: 17,
-                       glyphWeight: .regular),
-            digitKey(label: "0", row: 3, column: 1),
-            KeyGridKey(id: "pad-delete", action: .delete, isCommand: true,
+            leading,
+            digitKey(label: "0", row: 3, column: 1, style: style),
+            KeyGridKey(id: "pad-delete", action: .deleteRepeating, systemImage: CommandKeyStyle.deleteSymbolName, isCommand: true,
                        glyphSize: CommandKeyStyle.glyphSize,
                        glyphWeight: CommandKeyStyle.glyphWeight)
         ])
@@ -252,10 +248,15 @@ enum KeyGridPageFactory {
                         topInset: KeyGridPageFactory.letterGridTopInset)
     }
 
-    private static func digitKey(label: String, row: Int, column: Int) -> KeyGridKey {
-        KeyGridKey(
+    private static func digitKey(label: String, row: Int, column: Int,
+                                 style: HostFieldPolicy.NumberPadStyle = .digits) -> KeyGridKey {
+        let variants = style == .phone ? KeyboardVariantPreferences.options(for: label, kind: .phone)
+            : KeyboardVariantPreferences.options(for: label, kind: .symbol)
+        return KeyGridKey(
             id: "pad-\(row)-\(column)",
-            action: .character(base: label, variants: []),
+            action: variants.count > 1
+                ? .character(base: label, variants: variants)
+                : .insert(label),
             label: label,
             glyphSize: 22,
             glyphWeight: .light
@@ -295,16 +296,19 @@ enum KeyGridPageFactory {
         row: Int,
         column: Int,
         glyphSize: CGFloat,
-        glyphWeight: KeyGlyphWeight
+        glyphWeight: KeyGlyphWeight,
+        symbolVariants: Bool
     ) -> KeyGridKey {
         let id = "k-\(row)-\(column)"
         switch key.type {
         case .input(let value, _):
-            let variants = AccentedCharacters.accents(for: value) ?? []
-            if value.count == 1, !variants.isEmpty {
+            let variants = symbolVariants
+                ? KeyboardVariantPreferences.options(for: value, kind: .symbol)
+                : KeyboardVariantPreferences.options(for: value, kind: .letter)
+            if value.count == 1, variants.count > 1 {
                 return KeyGridKey(
                     id: id,
-                    action: .character(base: value, variants: [value] + variants),
+                    action: .character(base: value, variants: variants),
                     label: value,
                     glyphSize: glyphSize,
                     glyphWeight: glyphWeight,
@@ -320,10 +324,10 @@ enum KeyGridPageFactory {
                               glyphSize: glyphSize, glyphWeight: glyphWeight)
         case .fullStop:
             // The period key gets comma and other punctuation variants on hold.
-            let variants = [",", ";", ":", "..."]
+            let variants = KeyboardVariantPreferences.options(for: ".", kind: .symbol)
             return KeyGridKey(
                 id: id,
-                action: .character(base: ".", variants: ["."] + variants),
+                action: .character(base: ".", variants: variants),
                 label: ".",
                 glyphSize: glyphSize,
                 glyphWeight: glyphWeight,

@@ -20,58 +20,55 @@ import SwiftUI
 import UIKit
 import DictusCore
 
-/// One key's plate of Liquid Glass, drawn by SwiftUI.
-///
-/// `UIGlassEffect` in a bare `UIVisualEffectView` renders flat — measured about 20
-/// luma lighter than the SwiftUI bar and uniform across the plate, with none of the
-/// variation that reads as glass. So the plate is hosted from SwiftUI and drawn with
-/// `glassEffect`, the same call the emoji page's delete and the bottom bar make.
-///
-/// Hosting rather than calling `UIGlassEffect` directly is the whole point: the two
-/// renderers do not produce the same material, and the difference is visible.
-private final class GlassPlateView: UIView {
-    let host = UIHostingController(rootView: GlassPlate(radius: 0))
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        addSubview(host.view)
-        host.view.frame = bounds
-        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        // The glass is the only thing this view draws, and it must not take touches:
-        // the grid below owns those.
-        host.view.isUserInteractionEnabled = false
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not implemented") }
-
-    /// Sets the corner radius and repaints the glass.
-    func setRadius(_ radius: CGFloat) {
-        host.rootView.radius = radius
-        // The hosting view's layer rounds the glass to the plate's shape.
-        layer.cornerCurve = .continuous
-        layer.cornerRadius = radius
-        clipsToBounds = true
-    }
-}
-
-/// The SwiftUI side of a glass plate: a clear fill with the material over it.
-private struct GlassPlate: View {
-    var radius: CGFloat
+/// One hosted material layer, with independent plates drawn at the grid's
+/// resolved rectangles. The UIKit grid remains the only touch owner.
+private struct GlassPlates: View {
+    let pageID: String
+    let specs: [KeyGridView.GlassSpec]
+    let commands: [KeyGridView.CommandSpec]
+    let liquidGlassEnabled: Bool
 
     var body: some View {
-        // `glassEffect` is iOS 26 and later. Below that there is no material to host,
-        // and a clear fill is the honest fallback: the plate simply has no glass.
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: radius, style: .continuous)
-                )
-                .allowsHitTesting(false)
-        } else {
-            Color.clear
+        ZStack(alignment: .topLeading) {
+            if #available(iOS 26.0, *) {
+                ForEach(specs.indices, id: \.self) { index in
+                    let spec = specs[index]
+                    Color.clear
+                        .frame(width: spec.rect.width, height: spec.rect.height)
+                        .glassEffect(
+                            .regular,
+                            in: RoundedRectangle(cornerRadius: spec.radius, style: .continuous)
+                        )
+                        .position(x: spec.rect.midX, y: spec.rect.midY)
+                        .transaction { transaction in
+                            transaction.animation = nil
+                            transaction.disablesAnimations = true
+                        }
+                }
+            }
+            ForEach(commands.indices, id: \.self) { index in
+                let command = commands[index]
+                Group {
+                    if let systemName = command.systemName {
+                        CommandKeyFace(systemName: systemName,
+                                       plateWidth: command.rect.width,
+                                       plateHeight: command.rect.height,
+                                       isPressed: command.pressed)
+                    } else if let label = command.text {
+                        CommandKeyFace(text: label,
+                                       plateWidth: command.rect.width,
+                                       plateHeight: command.rect.height,
+                                       isPressed: command.pressed)
+                    }
+                }
+                .position(x: command.rect.midX, y: command.rect.midY)
+            }
         }
+        .id(pageID)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .environment(\.keyboardLiquidGlassEnabled, liquidGlassEnabled)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -81,6 +78,7 @@ protocol NextKeyboardHostDelegate: AnyObject {
     func nextKeyboardHostDidRequestLetters(_ host: NextKeyboardHost)
     func nextKeyboardHostDidRequestSymbols(_ host: NextKeyboardHost)
     func nextKeyboardHostDidRequestEmoji(_ host: NextKeyboardHost)
+    func nextKeyboardHostDidRequestWordDeletion(_ host: NextKeyboardHost)
     func nextKeyboardHost(_ host: NextKeyboardHost, didSelectSymbolPage id: String)
 }
 
@@ -92,11 +90,14 @@ final class NextKeyboardHost: NSObject {
 
     /// Sits directly below the grid and carries the real key material.
     private let glassLayer: UIView
-    /// One glass plate view per spec, reconciled against the grid's layout.
-    private var glassViews: [GlassPlateView] = []
+    private var glassHost: UIHostingController<GlassPlates>?
+    private var glassSpecs: [KeyGridView.GlassSpec] = []
+    private var commandSpecs: [KeyGridView.CommandSpec] = []
+    private var commandRowCenterY: CGFloat?
 
     /// Which symbol page is showing. The bar's toggle flips this.
     private var symbolPage: KeyGridPageFactory.Page = .symbolsNumbers
+    private var numberPadStyle: HostFieldPolicy.NumberPadStyle = .digits
 
     // MARK: - Delete repeat
     //
@@ -104,8 +105,7 @@ final class NextKeyboardHost: NSObject {
     // knows how long a delete must be held before it repeats. Two constants, from
     // `KeyboardDeletion`, so the keyboard and the system agree.
 
-    private var repeatTimer: Timer?
-    private var isRepeatingDelete = false
+    private let deleteRepeat = KeyboardDeleteRepeatSession()
 
     // MARK: - Init
 
@@ -131,10 +131,10 @@ final class NextKeyboardHost: NSObject {
         gridView.onGlassLayoutChanged = { [weak self] specs in
             self?.applyGlass(specs)
         }
-    }
-
-    deinit {
-        repeatTimer?.invalidate()
+        gridView.onCommandFacesChanged = { [weak self] specs in
+            self?.commandSpecs = specs
+            self?.updateFaceHost()
+        }
     }
 
     // MARK: - Mounting
@@ -144,8 +144,10 @@ final class NextKeyboardHost: NSObject {
     /// The frame is in the container's own coordinates, which is what makes the
     /// geometry and the touch targets the same rectangles: the grid resolves a
     /// point in its own space and the plates were drawn in that same space.
-    func mount(in container: UIView, frame: CGRect, page: Page) {
-        if glassLayer.superview !== container {
+    func mount(in container: UIView, frame: CGRect, page: Page, commandRowCenterY: CGFloat? = nil) {
+        self.commandRowCenterY = commandRowCenterY
+        let materialWasDetached = glassLayer.superview !== container
+        if materialWasDetached {
             glassLayer.removeFromSuperview()
             container.addSubview(glassLayer)
         }
@@ -157,7 +159,10 @@ final class NextKeyboardHost: NSObject {
         gridLayerPosition()
         gridView.frame = frame
         show(page)
-        gridView.setNeedsLayout()
+        gridView.layoutIfNeeded()
+        // Returning from emoji can reuse the same solved page. Reattach its
+        // material even when setPage correctly skips a redundant geometry solve.
+        if materialWasDetached { gridView.refreshAppearance() }
     }
 
     /// Keeps the grid above the material without letting either claim touches.
@@ -169,46 +174,51 @@ final class NextKeyboardHost: NSObject {
         glassLayer.layer.zPosition = gridView.layer.zPosition - 1
     }
 
-    /// Reconciles the effect views against the grid's current plates.
-    ///
-    /// Reuses views by index so a re-solve does not churn the material, which is
-    /// what makes the blur expensive.
+    /// Replaces the material layout without moving any visual plate or hit box.
     private func applyGlass(_ specs: [KeyGridView.GlassSpec]) {
-        let wanted = KeyboardInteractionPreferences.liquidGlassEnabled
-            && !UIAccessibility.isReduceTransparencyEnabled
-        guard wanted, !specs.isEmpty else {
-            glassViews.forEach { $0.removeFromSuperview() }
-            glassViews.removeAll()
+        if #available(iOS 26.0, *) {
+            glassSpecs = KeyboardInteractionPreferences.liquidGlassEnabled
+                && !UIAccessibility.isReduceTransparencyEnabled
+                ? specs : []
+        } else {
+            glassSpecs = []
+        }
+        updateFaceHost()
+    }
+
+    private func updateFaceHost() {
+        guard !glassSpecs.isEmpty || !commandSpecs.isEmpty else {
+            detachKeyboardVisualController(glassHost)
+            glassHost = nil
             return
         }
-        while glassViews.count < specs.count {
-            let view = GlassPlateView()
-            view.host.view.backgroundColor = .clear
-            glassLayer.addSubview(view)
-            glassViews.append(view)
+        let content = GlassPlates(pageID: gridView.page?.id ?? "",
+                                 specs: glassSpecs, commands: commandSpecs,
+                                 liquidGlassEnabled: KeyboardInteractionPreferences.liquidGlassEnabled)
+        if let glassHost {
+            glassHost.rootView = content
+        } else {
+            let host = UIHostingController(rootView: content)
+            host.view.frame = glassLayer.bounds
+            host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            glassHost = host
         }
-        while glassViews.count > specs.count {
-            glassViews.removeLast().removeFromSuperview()
-        }
-        for (view, spec) in zip(glassViews, specs) {
-            // No animation: a plate that slides or fades reads as a transition on
-            // every re-solve, including the ones caused by an orientation change.
-            UIView.performWithoutAnimation {
-                view.frame = spec.rect
-                view.setRadius(spec.radius)
-            }
-        }
+        if let glassHost { attachKeyboardVisualController(glassHost, from: glassLayer) }
     }
 
     func unmount() {
+        guard gridView.superview != nil || glassLayer.superview != nil else { return }
         // A gesture still in flight when the page goes away would otherwise commit
         // into a field the user has already left.
         gridView.reset()
         gridView.isHidden = true
         gridView.isUserInteractionEnabled = false
         gridView.removeFromSuperview()
-        glassViews.forEach { $0.removeFromSuperview() }
-        glassViews.removeAll()
+        detachKeyboardVisualController(glassHost)
+        glassHost = nil
+        glassSpecs = []
+        commandSpecs = []
+        commandRowCenterY = nil
         glassLayer.removeFromSuperview()
         stopDeleteRepeat()
     }
@@ -226,12 +236,50 @@ final class NextKeyboardHost: NSObject {
         gridView.isUserInteractionEnabled = true
         switch page {
         case .letters:
-            gridView.setPage(KeyGridPageFactory.letters())
+            gridView.setPage(aligned(KeyGridPageFactory.letters()))
         case .symbols:
-            gridView.setPage(KeyGridPageFactory.symbols(symbolPage))
+            gridView.setPage(aligned(KeyGridPageFactory.symbols(symbolPage)))
         case .numberPad(let style):
+            numberPadStyle = style
             gridView.setPage(KeyGridPageFactory.numberPad(style: style))
         }
+        gridView.layoutIfNeeded()
+    }
+
+    /// A language or layout change must rebuild the active page, not only redraw
+    /// its old keys. This is never called for visual-only preferences.
+    func refreshKeyLayout() {
+        guard let current = gridView.page else { return }
+        let next: KeyGridPage
+        switch current.id {
+        case "letters":
+            next = aligned(KeyGridPageFactory.letters())
+        case "symbols1", "symbols2":
+            next = aligned(KeyGridPageFactory.symbols(symbolPage))
+        case "numberPad":
+            next = KeyGridPageFactory.numberPad(style: numberPadStyle)
+        default: return
+        }
+        guard next.fingerprint != current.fingerprint || next.topInset != current.topInset else { return }
+        gridView.setPage(next, force: true)
+        gridView.layoutIfNeeded()
+    }
+
+    private func aligned(_ page: KeyGridPage) -> KeyGridPage {
+        guard let commandRowCenterY else { return page }
+        return KeyGridPlacement.alignLastRow(
+            page, in: gridView.bounds.size,
+            centerY: commandRowCenterY - gridView.frame.minY
+        )
+    }
+
+    /// Re-read shared appearance preferences for an already mounted page.
+    func refreshAppearance() {
+        gridView.refreshAppearance()
+    }
+
+    func updateHitPrediction(_ prediction: NextCharacterProbabilities?, enabled: Bool) {
+        gridView.updateHitPrediction(prediction, enabled: enabled)
     }
 
     // MARK: - Geometry
@@ -258,7 +306,6 @@ final class NextKeyboardHost: NSObject {
     static func gridFrame(
         for layout: VoiceOnlyKeyboardPolicy.Layout,
         surfaceHeight: CGFloat,
-        bottomBarHeight: CGFloat,
         page: Page
     ) -> CGRect {
         let surface = layout.surfaceFrame
@@ -269,9 +316,7 @@ final class NextKeyboardHost: NSObject {
         if case .numberPad = page {
             return surface
         }
-        let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
-            + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
-            + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
+        let lane = KeyGridPlacement.bottomBarLaneHeight
         let height = max(0, surface.height - lane)
         return CGRect(x: surface.minX, y: surface.minY,
                       width: surface.width, height: height)
@@ -339,33 +384,16 @@ extension NextKeyboardHost: KeyGridViewDelegate {
     // MARK: - Delete repeat
 
     private func startDeleteRepeat() {
-        stopDeleteRepeat()
-        isRepeatingDelete = true
-        // A pause before the first repeat, so a normal tap is never repeated.
-        repeatTimer = Timer.scheduledTimer(
-            withTimeInterval: KeyboardDeletion.repeatDelay,
-            repeats: false
-        ) { [weak self] _ in
+        deleteRepeat.begin { [weak self] action in
             guard let self else { return }
-            self.repeatTimer = Timer.scheduledTimer(
-                withTimeInterval: KeyboardDeletion.repeatInterval,
-                repeats: true
-            ) { [weak self] _ in
-                guard let self, self.isRepeatingDelete else { return }
-                self.delegate?.nextKeyboardHost(self, perform: .delete)
+            switch action {
+            case .character: self.delegate?.nextKeyboardHost(self, perform: .delete)
+            case .word: self.delegate?.nextKeyboardHostDidRequestWordDeletion(self)
             }
-        }
-        if let repeatTimer {
-            // Repeating while a finger is held in a menu, a popover or a scroll
-            // view is the behaviour people expect, and `common` keeps it alive when
-            // the touch is momentarily stationary.
-            RunLoop.main.add(repeatTimer, forMode: .common)
         }
     }
 
     private func stopDeleteRepeat() {
-        isRepeatingDelete = false
-        repeatTimer?.invalidate()
-        repeatTimer = nil
+        deleteRepeat.cancel()
     }
 }
