@@ -149,6 +149,25 @@ if !\(baseline) {
                     let plate = control.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
                     precondition(plate.frame.height == 45, "Bottom face must match character height")
                 }
+                func visiblePlate(_ owner: UIView) -> CGRect {
+                    owner.layoutIfNeeded()
+                    let face = owner.subviews.compactMap { $0 as? KeyboardNativeControlFace }.first
+                    face?.layoutIfNeeded()
+                    let plate = (face ?? owner).subviews.compactMap { $0 as? UIVisualEffectView }.first!
+                    return plate.convert(plate.bounds, to: bar)
+                }
+                var owners: [UIView] = [bar.firstControl, bar.secondControl, bar.spaceControl]
+                if mode == .letters {
+                    bar.period.layoutIfNeeded()
+                    let period = bar.period.subviews.compactMap { $0 as? KeyboardKeyTouchControl }.first!
+                    owners.append(period)
+                }
+                owners.append(bar.returnControl)
+                let plates = owners.map(visiblePlate)
+                for index in 1..<plates.count {
+                    precondition(abs(plates[index].minX - plates[index - 1].maxX - 2) < 0.01,
+                                 "Every visible bottom-row gap must be 2pt, including Period and Return")
+                }
             }
         }
         defaults.set(false, forKey: SharedKeys.keyboardInsetEnabled)

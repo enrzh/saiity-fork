@@ -419,10 +419,12 @@ final class KeyboardBottomBarView: UIView {
         secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil,
             visualSize: circle, radius: circle.height / 2)
         fieldControl.keyboardFace.configure(text: fieldKeys.rightInsert,
+            visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: fieldControl.bounds.size),
             textPointSize: (fieldKeys.rightInsert?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
         let title = fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle
             ? nil : fieldKeys.returnTitle
         returnControl.keyboardFace.configure(text: title, symbol: title == nil ? "return" : nil,
+            visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: returnControl.bounds.size),
             textPointSize: (title?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
         spaceControl.keyboardFace.configure(text: "space",
             visualSize: CGSize(width: spaceControl.bounds.width, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
@@ -1075,10 +1077,7 @@ private extension AuxiliaryBottomBar {
     }
 
     private func widePlateSize(hitWidth: CGFloat, hitHeight: CGFloat) -> CGSize {
-        CGSize(
-            width: max(36, hitWidth - VoiceOnlyKeyboardPolicy.commandVisualInset),
-            height: VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(width: hitWidth, height: hitHeight)).height
-        )
+        VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(width: hitWidth, height: hitHeight))
     }
 
 }

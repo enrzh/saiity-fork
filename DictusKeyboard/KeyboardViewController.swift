@@ -1948,6 +1948,7 @@ class KeyboardViewController: UIInputViewController,
             let circular = button === keyboardModeButton || button === numberButton || button === emojiButton
             let size = circular
                 ? CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
+                : button === returnButton ? VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: button.bounds.size)
                 : VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
             let accessory = button === dismissButton || button === voiceBoardButton
                 || button === pasteButton || button === languageButton

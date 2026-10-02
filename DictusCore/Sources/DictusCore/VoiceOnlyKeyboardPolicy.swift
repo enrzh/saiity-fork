@@ -286,8 +286,8 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let numberPadEdgeInset: CGFloat = 14
     public static let numberPadKeySpacing: CGFloat = 10
     public static let numberPadRowSpacing: CGFloat = 8
-    /// ABC-page period slot is a command hit target. The plate stays letter-sized.
-    public static let periodKeyPlateWidth: CGFloat = 34
+    /// Period fills its bottom-row target so its visible gaps match Space/Return.
+    public static let periodKeyPlateWidth: CGFloat = CGFloat(controlSize)
     public static let utilityVisualSize: Double = 40
     /// Glass face inside a command hit target. Matches dictation-board delete.
     public static func commandVisualSize(for hit: CGSize) -> CGSize {
@@ -315,6 +315,9 @@ public enum VoiceOnlyKeyboardPolicy {
     /// keeps vertical breathing room and the shared Space/Return alignment.
     public static let bottomBarControlWidth: Double = bottomBarVisualHeight
     public static let bottomBarSpacing: Double = 2
+    public static func bottomBarVisualSize(for hit: CGSize) -> CGSize {
+        CGSize(width: max(0, hit.width), height: bottomBarVisualHeight)
+    }
     public static let railSpacing: Double = 4
     public static let horizontalPadding: Double = 8
     public static let controlEdgeInset: Double = 12

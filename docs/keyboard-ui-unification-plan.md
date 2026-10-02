@@ -618,6 +618,33 @@ the isolated QA simulator; these changes were not uploaded to TestFlight.
 Artifacts: `/tmp/saiity-round-bottom-after-{letters,symbols,emoji}-{solid,glass}.png`.
 Logs: `/tmp/saiity-round-bottom-{full-core,core,native,simulator-build,device-build}.log`.
 
+### Whole bottom-row spacing correction — October 2
+
+The user clarified that the smaller gaps must cover the complete row, including
+Space, punctuation and Return. The earlier change reduced the target spacing but
+kept a 5pt horizontal inset on Period and 4pt on Return, leaving their visible
+gaps larger than the circles' gaps.
+
+All bottom-row faces now fill their horizontal targets. Period uses its existing
+44pt target width, and Return and field-specific inserts share the bottom-row
+face sizing. Every visible gap is 2pt. The existing button centres, touch targets,
+keyboard height, circular left controls and 45pt face heights stay anchored.
+The board and retained SwiftUI renderer use the same sizing rule.
+
+A regression check measures the actual native plate rectangles across the
+complete row and both materials; it fails against the prior build and passes
+afterward. All 136 focused geometry checks and the production UIKit input harness
+pass. The first broad UIKit run had a held-Delete timer assertion while building
+and rendering concurrently; its isolated rerun passes without changing that test.
+Simulator Debug and signed Release builds and deep strict signatures pass.
+Native Solid previews were inspected; layer renders do not establish system Glass
+compositing. The updated local development build 227 is installed on the isolated
+QA simulator. These changes are newer than the uploaded build 227 and were not
+committed, pushed or uploaded in this follow-up.
+
+Preview: `/tmp/saiity-round-bottom-whole-row-letters-solid.png`.
+Logs: `/tmp/saiity-whole-row-{before,core,native,render,simulator-build,device-build}.log`.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,
