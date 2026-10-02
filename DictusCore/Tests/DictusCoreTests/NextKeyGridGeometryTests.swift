@@ -96,8 +96,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
                     XCTAssertEqual(leading.size, deleteSize)
                     XCTAssertEqual(trailing.size, deleteSize)
                     XCTAssertEqual(layout.surfaceFrame.minX + leading.minX,
-                                   layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.horizontalPadding
-                                       + VoiceOnlyKeyboardPolicy.commandVisualInset / 2,
+                                   layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.horizontalPadding,
                                    accuracy: 0.001)
                     XCTAssertEqual(layout.surfaceFrame.minX + trailing.midX,
                                    layout.boardDeleteFrame.midX, accuracy: 0.001)
@@ -111,7 +110,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
             width: (size.width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
             height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
         )
-        let emojiDeleteFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: emojiDeleteHit)
+        let emojiDeleteFace = VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: emojiDeleteHit)
         for page in [
             KeyGridPage(id: "letters", rows: [[
                 KeyGridKey(id: "shift", action: .shift, weight: 1.5, isCommand: true),
@@ -149,10 +148,9 @@ final class NextKeyGridGeometryTests: XCTestCase {
         let leading = CommandKeyStyle.visualPlate(for: pinned[0].plate, surfaceWidth: width)
         let trailing = CommandKeyStyle.visualPlate(for: pinned[8].plate, surfaceWidth: width)
         let emojiDeleteInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
-            + VoiceOnlyKeyboardPolicy.commandVisualInset / 2
         XCTAssertEqual(leading.minX, emojiDeleteInset, accuracy: 0.01)
         XCTAssertEqual(width - trailing.maxX, emojiDeleteInset, accuracy: 0.01)
-        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+        let emojiFace = VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(
             width: (width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
             height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
         ))
@@ -491,7 +489,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
         // Keep native plate placement; the wider visual face spends empty gap.
         XCTAssertEqual(shift.plate.width / 33.5, 1.36, accuracy: 0.05)
         XCTAssertEqual(del.plate.width / 33.5, 1.36, accuracy: 0.05)
-        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+        let emojiFace = VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(
             width: (screen.width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
             height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
         ))
@@ -553,7 +551,7 @@ final class NextKeyGridGeometryTests: XCTestCase {
             XCTAssertGreaterThan(b.plate.minX, a.plate.maxX, "keys must not overlap")
         }
         XCTAssertEqual(402 - delete.plate.maxX, 7, accuracy: 0.5)
-        let emojiFace = VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+        let emojiFace = VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(
             width: (402 - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
             height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
         ))

@@ -5,6 +5,7 @@ import DictusCore
 
 struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var textSize
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @AppStorage(SharedKeys.transcriptionOutputMode, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
     @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
@@ -18,14 +19,91 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            Section {
+            Section("Preferences") {
+                NavigationLink { dictationSettings } label: {
+                    settingsLabel("Dictation", systemImage: "waveform")
+                }
+                .accessibilityIdentifier("settings.dictation")
+                NavigationLink { keyboardSettings } label: {
+                    settingsLabel("Keyboard", systemImage: "keyboard")
+                }
+                .accessibilityIdentifier("settings.keyboard")
                 NavigationLink {
                     ModelManagerView(modelManager: modelManager)
                 } label: {
-                    Label("Models", systemImage: "square.stack.3d.up")
+                    settingsLabel("Models", systemImage: "square.stack.3d.up")
                 }
+                .accessibilityIdentifier("settings.models")
+            }
+
+            Section("Your words") {
+                NavigationLink { wordsSettings } label: {
+                    settingsLabel("Words & shortcuts", systemImage: "character.book.closed")
+                }
+                .accessibilityIdentifier("settings.words")
+                NavigationLink {
+                    DictationHistoryView()
+                } label: {
+                    settingsLabel("Dictation history", systemImage: "clock.arrow.circlepath")
+                }
+                .accessibilityIdentifier("settings.history")
+            }
+
+            Section("Help") {
+                NavigationLink { helpSettings } label: {
+                    settingsLabel("Setup & help", systemImage: "questionmark.circle")
+                }
+                .accessibilityIdentifier("settings.help")
+                NavigationLink { aboutSettings } label: {
+                    settingsLabel("About", systemImage: "info.circle")
+                }
+                .accessibilityIdentifier("settings.about")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            microphonePermission = AVAudioSession.sharedInstance().recordPermission
+            diagnosticResult = AppGroupDiagnostic.run()
+            let intensity = HapticIntensity.load(from: UserDefaults(suiteName: AppGroup.identifier))
+            hapticIntensityRaw = intensity.rawValue
+            intensity.persist()
+            modelManager.loadState()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                microphonePermission = AVAudioSession.sharedInstance().recordPermission
+                diagnosticResult = AppGroupDiagnostic.run()
+            }
+        }
+    }
+
+    @ViewBuilder private func settingsLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+        if textSize.isAccessibilitySize { Text(title) }
+        else { Label(title, systemImage: systemImage) }
+    }
+
+    private func settingsPage<Content: View>(
+        _ title: LocalizedStringKey, @ViewBuilder content: () -> Content
+    ) -> some View {
+        List { content() }
+            .listStyle(.insetGrouped)
+            .contentMargins(.bottom, 88, for: .scrollContent)
+            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var dictationSettings: some View {
+        settingsPage("Dictation") {
+            Section("Recognition") {
                 DictationModelQuickPicker(modelManager: modelManager)
-                CleanupModelPicker(manager: modelManager)
+            }
+            Section {
                 if cleanupAvailable {
                     Toggle("Automatic cleanup", isOn: $polishEnabled)
                         .accessibilityHint("Cleans up dictation after speech recognition.")
@@ -42,9 +120,8 @@ struct SettingsView: View {
                         }
                     }
                 }
-                DictationPresencePicker()
             } header: {
-                Text("Dictation")
+                Text("Writing")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(activeOutputMode.explanation)
@@ -55,7 +132,18 @@ struct SettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
+            Section("Advanced") {
+                DisclosureGroup("Models and Live Activity") {
+                    CleanupModelPicker(manager: modelManager)
+                    DictationPresencePicker()
+                }
+                .accessibilityIdentifier("settings.dictation.advanced")
+            }
+        }
+    }
 
+    private var keyboardSettings: some View {
+        settingsPage("Keyboard") {
             Section {
                 LabeledContent("Keyboard layout") {
                     TypingLanguagesPanel()
@@ -66,6 +154,13 @@ struct SettingsView: View {
                     .onChange(of: autocorrectEnabled) { _, _ in
                         KeyboardInteractionPreferences.notifyChanged()
                     }
+            } header: {
+                Text("Typing")
+            } footer: {
+                Text("Typing follows the language of the sentence. Autocorrection and adaptive touch support English, German, French and Spanish. Other scripts, names, codes and web addresses stay unchanged.")
+            }
+            Section("Appearance & feedback") {
+                KeyboardMaterialPicker()
                 Picker("Keyboard haptics", selection: hapticPresetBinding) {
                     ForEach(HapticIntensity.allCases, id: \.self) { preset in
                         Text(preset.displayName).tag(preset)
@@ -73,26 +168,33 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("keyboard-haptics-setting")
                 .accessibilityHint("Choose Off, the default key vibration, or the stronger Snappy vibration.")
-                Toggle("Key containers", isOn: $keyContainersEnabled)
-                    .accessibilityHint("Draws plates behind character rows. The bottom bar, including Period, always keeps its plates.")
-                    .onChange(of: keyContainersEnabled) { _, _ in
-                        KeyboardInteractionPreferences.notifyChanged()
-                    }
-                Toggle("Adaptive hit prediction", isOn: $adaptiveHitPredictionEnabled)
-                    .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter. Off uses neutral seams.")
-                    .onChange(of: adaptiveHitPredictionEnabled) { _, _ in
-                        KeyboardInteractionPreferences.notifyChanged()
-                    }
-                KeyPopupPicker()
-                KeyboardHoldSpeedPicker()
-                NavigationLink("Tap and hold options") { KeyboardHoldOptionsView() }
-                KeyboardMaterialPicker()
-            } header: {
-                Text("Keyboard")
-            } footer: {
-                Text("The keyboard starts in the iPhone language. After a few words, typing follows the language of the sentence until another language takes over. Autocorrection and adaptive touch targets support English, German, French and Spanish. Other scripts, names, codes and web addresses are left unchanged.")
             }
+            Section("Press and hold") {
+                NavigationLink("Emoji & key variants") { KeyboardHoldOptionsView() }
+                    .accessibilityIdentifier("settings.keyboard.variants")
+            }
+            Section("Advanced") {
+                DisclosureGroup("Advanced keyboard options") {
+                    Toggle("Key containers", isOn: $keyContainersEnabled)
+                        .accessibilityHint("Draws plates behind character rows. The bottom bar, including Period, always keeps its plates.")
+                        .onChange(of: keyContainersEnabled) { _, _ in
+                            KeyboardInteractionPreferences.notifyChanged()
+                        }
+                    Toggle("Adaptive hit prediction", isOn: $adaptiveHitPredictionEnabled)
+                        .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter. Off uses neutral seams.")
+                        .onChange(of: adaptiveHitPredictionEnabled) { _, _ in
+                            KeyboardInteractionPreferences.notifyChanged()
+                        }
+                    KeyPopupPicker()
+                    KeyboardHoldSpeedPicker()
+                }
+                .accessibilityIdentifier("settings.keyboard.advanced")
+            }
+        }
+    }
 
+    private var wordsSettings: some View {
+        settingsPage("Words & shortcuts") {
             Section("Personalization") {
                 NavigationLink {
                     VocabularyView()
@@ -105,17 +207,15 @@ struct SettingsView: View {
                     Label("Text replacements", systemImage: "text.badge.plus")
                 }
             }
+        }
+    }
 
+    private var helpSettings: some View {
+        settingsPage("Setup & help") {
             Section("Help") {
                 NavigationLink("Keyboard setup") {
                     KeyboardSetupPage(onNext: {})
                 }
-                NavigationLink {
-                    DictationHistoryView()
-                } label: {
-                    Label("Dictation history", systemImage: "clock.arrow.circlepath")
-                }
-
                 Button(action: openSystemSettings) {
                     HStack {
                         Label("Microphone", systemImage: "mic.fill")
@@ -137,7 +237,11 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
 
+    private var aboutSettings: some View {
+        settingsPage("About") {
             Section("About") {
                 NavigationLink { LicensesView() } label: {
                     Label("Licenses", systemImage: "doc.text")
@@ -150,25 +254,6 @@ struct SettingsView: View {
                 }
 
                 LabeledContent("Version", value: appVersionText)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            microphonePermission = AVAudioSession.sharedInstance().recordPermission
-            diagnosticResult = AppGroupDiagnostic.run()
-            let intensity = HapticIntensity.load(from: UserDefaults(suiteName: AppGroup.identifier))
-            hapticIntensityRaw = intensity.rawValue
-            intensity.persist()
-            modelManager.loadState()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                microphonePermission = AVAudioSession.sharedInstance().recordPermission
-                diagnosticResult = AppGroupDiagnostic.run()
             }
         }
     }

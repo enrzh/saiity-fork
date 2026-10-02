@@ -65,8 +65,8 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             XCTAssertEqual(frame.height, VoiceOnlyKeyboardPolicy.spacebarHeight)
             XCTAssertTrue(layout.surfaceFrame.contains(frame), "frame=\(frame)")
         }
-        XCTAssertEqual(layout.boardDeleteFrame.height, 44)
-        XCTAssertEqual(layout.boardDeleteFrame.maxY + VoiceOnlyKeyboardPolicy.railSpacing,
+        XCTAssertEqual(layout.boardDeleteFrame.height, VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
+        XCTAssertEqual(layout.boardDeleteFrame.midY + VoiceOnlyKeyboardPolicy.bottomActionHitHeight / 2 + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.chromeReturnFrame.minY,
                        accuracy: 0.001)
     }
@@ -165,7 +165,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             XCTAssertEqual(frames.first?.size, CGSize(width: layout.boardDeleteFrame.width, height: layout.boardDeleteFrame.height))
             XCTAssertEqual(frames.last?.size, CGSize(width: layout.boardDeleteFrame.width, height: layout.boardDeleteFrame.height))
             XCTAssertEqual(
-                VoiceOnlyKeyboardPolicy.commandVisualSize(for: frames.last?.size ?? .zero),
+                VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: frames.last?.size ?? .zero),
                 layout.commandKeyVisualSize
             )
         }
@@ -179,9 +179,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                 topAccessoryHeight: 44
             )
             let gridHeight = layout.surfaceFrame.height
-                - VoiceOnlyKeyboardPolicy.chromeCommandRowGap
-                - VoiceOnlyKeyboardPolicy.spacebarHeight
-                - VoiceOnlyKeyboardPolicy.chromeBottomInset
+                - KeyGridPlacement.bottomBarLaneHeight
             XCTAssertEqual(
                 gridHeight,
                 layout.boardDeleteFrame.maxY - layout.surfaceFrame.minY,
@@ -214,15 +212,16 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             let short = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 260, topAccessoryHeight: 44)
             let tall = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 340, topAccessoryHeight: 44)
             XCTAssertEqual(short.commandKeyVisualSize, tall.commandKeyVisualSize)
-            XCTAssertEqual(tall.commandKeyVisualSize.height, 36)
-            XCTAssertEqual(Double(tall.commandKeyVisualSize.width) + 8, tall.boardDeleteFrame.width, accuracy: 0.001)
+            XCTAssertEqual(tall.commandKeyVisualSize.height, VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
+            XCTAssertEqual(tall.commandKeyVisualSize.width, tall.boardDeleteFrame.width, accuracy: 0.001)
             XCTAssertEqual(
                 Double(tall.boardDeleteFrame.maxX),
                 tall.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,
                 accuracy: 0.001
             )
             XCTAssertEqual(
-                Double(tall.boardDeleteFrame.maxY) + VoiceOnlyKeyboardPolicy.railSpacing,
+                Double(tall.boardDeleteFrame.midY) + Double(VoiceOnlyKeyboardPolicy.bottomActionHitHeight) / 2
+                    + VoiceOnlyKeyboardPolicy.railSpacing,
                 Double(tall.chromeReturnFrame.minY),
                 accuracy: 0.001
             )

@@ -1962,7 +1962,8 @@ class KeyboardViewController: UIInputViewController,
                 radius: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight / 2)
         }
         if let boardDeleteButton, !boardDeleteButton.isHidden {
-            boardDeleteButton.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName)
+            boardDeleteButton.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName,
+                visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: boardDeleteButton.bounds.size))
         }
         if let serviceToggle, !serviceToggle.isHidden {
             let enabled = state.keyboardDictationEnabled

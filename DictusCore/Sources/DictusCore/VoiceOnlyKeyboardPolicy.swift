@@ -72,7 +72,7 @@ public enum VoiceOnlyKeyboardPolicy {
             in height: CGFloat,
             rowSpacing: CGFloat
         ) -> CGFloat {
-            let commandHeight = VoiceOnlyKeyboardPolicy.bottomActionHitHeight
+            let commandHeight = VoiceOnlyKeyboardPolicy.bottomBarVisualHeight
             let minimumUpperRows = CGFloat(36 * 2)
             let maxPinned = max(1, height - rowSpacing * 2 - minimumUpperRows)
             return min(commandHeight, maxPinned)
@@ -267,8 +267,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let symbolBottomControlBudget: Double = symbolBottomControlLaneHeight + symbolBottomControlBottomInset
     public static let actionHitSize = CGSize(width: 88, height: 44)
     public static let bottomActionHitHeight: CGFloat = 44
-    /// Inset from the command hit rectangle to the glass face. Shared by the
-    /// dictation-board delete key, Caps, #+=, and the 123/ABC/emoji chrome.
+    /// Inset for compact accessory faces and vertical bottom-bar breathing room.
     public static let commandVisualInset: CGFloat = 8
     /// Inner padding of the emoji category well inside the compact suggestion lane.
     public static let emojiCategoryHorizontalInset: CGFloat = 4
@@ -289,7 +288,7 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Period fills its bottom-row target so its visible gaps match Space/Return.
     public static let periodKeyPlateWidth: CGFloat = CGFloat(controlSize)
     public static let utilityVisualSize: Double = 40
-    /// Glass face inside a command hit target. Matches dictation-board delete.
+    /// Compact accessory face inside its hit target.
     public static func commandVisualSize(for hit: CGSize) -> CGSize {
         CGSize(
             width: max(0, hit.width - commandVisualInset),
@@ -574,10 +573,10 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var boardReturnFrame: CGRect { dismissFrame }
 
-        /// All large command keys use the dictation board's compact glass face,
+        /// All large command keys share the bottom bar's full-width face,
         /// independent of the height available to the surrounding character row.
         public var commandKeyVisualSize: CGSize {
-            VoiceOnlyKeyboardPolicy.commandVisualSize(for: boardDeleteFrame.size)
+            VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: boardDeleteFrame.size)
         }
 
         public var boardDeleteFrame: CGRect {
@@ -587,9 +586,11 @@ public enum VoiceOnlyKeyboardPolicy {
             // overlap Enter.
             let width = max(0, surfaceFrame.width - horizontalPadding * 2) * 0.15
             let returnFrame = boardReturnFrame
-            let height = bottomActionHitHeight
+            let height = VoiceOnlyKeyboardPolicy.bottomBarVisualHeight
+            // Grow around the existing centre so the character rows stay put.
+            let centerY = returnFrame.minY - railSpacing - bottomActionHitHeight / 2
             return CGRect(x: returnFrame.maxX - width,
-                          y: returnFrame.minY - railSpacing - height,
+                          y: centerY - height / 2,
                           width: width, height: height)
         }
 

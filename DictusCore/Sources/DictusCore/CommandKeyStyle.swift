@@ -59,7 +59,7 @@ public enum CommandKeyStyle {
     /// The size a command key's visible plate is drawn at.
     ///
     /// Grid edge commands use the matching Emoji bottom-bar or Delete face width.
-    public static let visualSize: CGFloat = 40
+    public static let visualSize: CGFloat = VoiceOnlyKeyboardPolicy.bottomBarVisualHeight
 
     /// The visible plate for a command key. Edge keys share Emoji Delete's
     /// outer inset; interior keys stay centred on their hit area.
@@ -68,23 +68,25 @@ public enum CommandKeyStyle {
     /// pressed; only the plate the user sees is standardised.
     public static func visualPlate(for hit: CGRect, surfaceWidth: CGFloat? = nil) -> CGRect {
         let leading = surfaceWidth != nil && hit.minX <= KeyGridPlacement.edgeInset + 1
+        let trailing = surfaceWidth.map { hit.maxX >= $0 - KeyGridPlacement.edgeInset - 1 } ?? false
         let reference = surfaceWidth.map {
-            VoiceOnlyKeyboardPolicy.commandVisualSize(for: CGSize(
+            VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(
                 width: max(0, $0 - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
                 height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
             ))
         } ?? CGSize(width: visualSize, height: visualSize)
-        // The pinned edge keys have a 14pt outer gap. Their visible face may
-        // use that gap without shrinking the native-sized middle letter keys.
-        let width = max(0, min(reference.width,
-                               hit.width + (surfaceWidth == nil ? 0 : KeyGridPlacement.edgeGap)))
-        let height = max(0, min(reference.height, hit.height))
+        // Spend the pinned row's empty gap, accounting for the face's edge
+        // alignment so a wide landscape command never covers its neighbour.
         let edgeInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
-            + VoiceOnlyKeyboardPolicy.commandVisualInset / 2
+        let edgeShift = leading ? max(0, edgeInset - hit.minX)
+            : trailing ? max(0, hit.maxX - ((surfaceWidth ?? hit.maxX) - edgeInset)) : 0
+        let width = max(0, min(reference.width,
+                               hit.width + (surfaceWidth == nil ? 0 : KeyGridPlacement.edgeGap) - edgeShift))
+        let height = max(0, min(reference.height, hit.height))
         let x: CGFloat
         if leading {
             x = edgeInset
-        } else if let surfaceWidth, hit.maxX >= surfaceWidth - KeyGridPlacement.edgeInset - 1 {
+        } else if let surfaceWidth, trailing {
             x = surfaceWidth - edgeInset - width
         } else {
             x = hit.midX - width / 2

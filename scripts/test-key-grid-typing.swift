@@ -130,6 +130,11 @@ if !\(baseline) {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
         surface.show(.emoji, layout: layout, inputHeight: 269, fieldKeys: .standard)
         surface.layoutIfNeeded()
+        surface.emojiDelete.keyboardFace.layoutIfNeeded()
+        let deletePlate = surface.emojiDelete.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
+        precondition(deletePlate.frame.size == layout.commandKeyVisualSize
+                     && surface.emojiDelete.bounds.contains(deletePlate.frame),
+                     "Emoji Delete must use the enlarged command face inside its touch target")
         let inset = KeyboardNativeControlFace()
         defaults.set(true, forKey: SharedKeys.keyboardInsetEnabled)
         inset.configureInset(layout, inputHeight: 269)
@@ -196,6 +201,33 @@ if !\(baseline) {
         precondition(surface.emoji.frame.maxY <= surface.emojiCategory.frame.minY - surface.emojiCategory.hitExpansion,
                      "Category hit expansion covers the last emoji row")
     }
+
+    var commandFaces: [KeyGridView.CommandSpec] = []
+    grid.onCommandFacesChanged = { commandFaces = $0 }
+    for glass in [true, false] {
+        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+        for size in [CGSize(width: 402, height: 175), CGSize(width: 852, height: 90)] {
+            grid.frame.size = size
+            for page in [KeyGridPageFactory.letters(),
+                         KeyGridPageFactory.symbols(.symbolsNumbers),
+                         KeyGridPageFactory.symbols(.symbolsPunctuation),
+                         KeyGridPageFactory.numberPad(style: .digits)] {
+                grid.setPage(page)
+                grid.layoutIfNeeded()
+                grid.refreshAppearance()
+                let commands = grid.layout.placed.filter { $0.key.isCommand }
+                precondition(!commands.isEmpty && commandFaces.count == commands.count)
+                for (command, face) in zip(commands, commandFaces) {
+                    let expected = min(45, command.plate.height)
+                    precondition(face.rect.height == expected && command.target.contains(face.rect),
+                                 "Command sizing failed: \\(page.id) \\(size) \\(command.key.id) expected=\\(expected) face=\\(face.rect) target=\\(command.target)")
+                }
+            }
+        }
+    }
+    grid.onCommandFacesChanged = nil
+    grid.setPage(KeyGridPageFactory.letters())
+    print("PASS: shared command sizing in portrait and cramped landscape, both materials and all grid pages")
 
     for glass in [true, false] {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
@@ -439,6 +471,7 @@ if !\(baseline) {
     }
     print("PASS: 45pt bottom faces on every shared page, all category icon taps, drags and accessibility")
     func namedControl(_ id: String, in view: UIView) -> UIView? {
+        guard !view.isHidden else { return nil }
         if view.accessibilityIdentifier == id { return view }
         return view.subviews.lazy.compactMap { namedControl(id, in: $0) }.first
     }
@@ -454,6 +487,15 @@ if !\(baseline) {
     }
     for glass in [true, false] {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+        KeyboardState.shared.presentArea(.keys)
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        controller.viewDidLayoutSubviews()
+        let boardDelete = namedControl("board-delete", in: controller.view) as! KeyboardDeleteRepeatControl
+        boardDelete.keyboardFace.layoutIfNeeded()
+        let boardDeletePlate = boardDelete.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
+        precondition(boardDeletePlate.frame.height == 45 && boardDeletePlate.frame.width == boardDelete.bounds.width
+                     && boardDelete.bounds.contains(boardDeletePlate.frame), "Dictation-board Delete kept its compact face")
         for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad] {
             KeyboardState.shared.presentArea(mode)
             controller.view.setNeedsLayout()

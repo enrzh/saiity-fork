@@ -396,7 +396,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let settings = try source("DictusApp/Views/SettingsView.swift")
 
         for section in ["Dictation", "Keyboard", "Help", "About"] {
-            XCTAssertTrue(settings.contains("Text(\"\(section)\")") || settings.contains("Section(\"\(section)\")"), "Missing native settings section: \(section)")
+            XCTAssertTrue(settings.contains("Text(\"\(section)\")") || settings.contains("Section(\"\(section)\")")
+                || settings.contains("settingsPage(\"\(section)\")"), "Missing native settings destination: \(section)")
         }
         XCTAssertTrue(settings.contains("List {"))
         XCTAssertTrue(settings.contains(".listStyle(.insetGrouped)"))

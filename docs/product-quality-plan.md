@@ -368,6 +368,38 @@ Require manual review of protected-fact flags and silence hallucination. Keep
 cold/warm timing distributions separate; compare the same device, OS, model,
 revision, style and thermal conditions.
 
+## Settings simplification — October 3
+
+The Settings landing page now has seven native navigation rows: Dictation,
+Keyboard, Models, Words & shortcuts, Dictation history, Setup & help and About.
+It fits on one screen at normal text size, with a scrollable layout at larger
+sizes. Everyday dictation and typing preferences stay visible in their relevant
+pages. Processing backend/Live Activity choices and advanced keyboard controls
+start collapsed. Emoji tones and per-key variants keep a direct Keyboard entry.
+Models remains directly accessible from Settings, and the shared recognition
+selector retains Streaming/Whisper, pending downloads and independent keyboard
+selection. No preference keys, defaults, model choices or saved values were removed.
+The shorter typing explanation retains supported-language and preservation limits.
+
+One native grouped-list shell supplies the detail pages and reserves bottom
+scroll space above the floating tab bar. Help groups setup, microphone access,
+troubleshooting and support; About retains licenses, privacy and version. The
+existing English-only app localization policy is retained.
+
+Verification: 63 focused app/settings/model/lifecycle checks pass, along with
+simulator Debug, signed Release and strict signature checks. Physical-style
+simulator taps verify the seven landing rows, recognition and keyboard-model
+selectors, both advanced disclosures and Vocabulary/Text replacements navigation.
+At accessibility text sizes, decorative row icons give way to the full labels
+in the scrollable native list; normal text size is restored after QA.
+No model download, microphone capture, preference
+change, commit, push or TestFlight upload was started by these checks.
+The updated development build 228 is installed on the isolated QA simulator.
+Physical-device integration gates remain separate.
+
+Preview: `/tmp/saiity-simple-settings-root.png`.
+Logs: `/tmp/saiity-simple-settings-{core,simulator-build,device-build}.log`.
+
 ## Source of truth
 
 This document and the current PRD define product direction. The

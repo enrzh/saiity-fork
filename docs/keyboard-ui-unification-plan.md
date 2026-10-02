@@ -645,6 +645,31 @@ committed, pushed or uploaded in this follow-up.
 Preview: `/tmp/saiity-round-bottom-whole-row-letters-solid.png`.
 Logs: `/tmp/saiity-whole-row-{before,core,native,render,simulator-build,device-build}.log`.
 
+### Larger Caps, layer toggles and Delete — October 3
+
+Caps/Shift, the row-level 123 and #+= toggles, and Delete now reuse the bottom
+bar's 45pt face height and full-width sizing. Emoji and dictation-board Delete
+share that geometry. The board's target grows from 44pt to 45pt around its existing
+centre, preserving character-row and bottom-bar positions. Command radius, glyphs,
+press treatment and compact accessory controls retain their existing settings.
+
+Cramped landscape faces remain bounded by their resolved row height. The shared
+edge calculation also accounts for the face's offset from the grid inset, keeping
+wide commands inside their touch targets and clear of neighbouring keys.
+
+Verification: **141 focused geometry/style checks pass**. The production UIKit
+harness checks both symbol toggles, Caps and Delete across portrait and cramped
+landscape in both materials, plus the actual native Emoji and board Delete faces.
+Its existing typing, holds, cursor and service-control checks pass. Simulator Debug
+and signed Release builds and deep strict signature checks pass. Native Solid
+component previews were rendered and inspected; layer renders do not verify system
+Glass compositing or physical typing feel. The updated local development build
+**228** is installed on the isolated QA simulator. These changes are newer than the
+uploaded build 228; no commit, push or TestFlight upload occurred.
+
+Previews: `/tmp/saiity-round-bottom-command-size-{letters,symbols,emoji}-solid.png`.
+Logs: `/tmp/saiity-command-size-{before,core,native,render,simulator-build,device-build}.log`.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,
