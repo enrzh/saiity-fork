@@ -571,6 +571,30 @@ enable returns to Off. Largest-text labels wrap in the scrollable list.
 These are newer local build-224 changes; physical Air installation is
 blocked by the most recent CoreDevice 4016 failure. No additional upload occurred.
 
+### Spacebar cursor stops at a line boundary — October 2
+
+Horizontal Space movement previously clamped to an estimated visual row and
+accumulated a preferred column past that row's end. This stopped travel at wraps,
+newlines or the edge of the proxy's nearby-text window, and made reversal wait
+for the accumulated overshoot to be undone.
+
+The shared cursor mapper now sends horizontal deltas directly to the host and
+clears that stale preferred column. The host owns actual document boundaries;
+nearby context no longer imposes a horizontal limit. Existing vertical/diagonal
+row mapping, movement density, stationary-finger behavior and Space tap/hold
+ownership are retained. This change applies to the board and typing Space owners.
+
+The regression checks fail before the change; **100 focused cursor and keyboard
+contract checks pass** afterward. The production UIKit Space control moves a native
+text view across multiple newlines and rolling 12-character context windows in
+one hold, reverses back to its starting position, stays still without travel and
+inserts no Space. Existing typing, hold, cursor-feedback and material checks pass.
+Debug simulator and signed Release builds and deep strict signatures pass.
+The patched local development build **225** is installed on the isolated QA
+simulator. Physical host-app feel remains pending on the previously unavailable
+Air. No microphone capture, commit, push or TestFlight upload was performed.
+Logs: `/tmp/saiity-space-cursor-{before,core,native,simulator-build,device-build}.log`.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

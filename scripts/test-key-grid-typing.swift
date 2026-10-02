@@ -325,6 +325,45 @@ if !\(baseline) {
     }
     spaceSamples.sort()
     print("MEASURE: Space press/release, median=\\(spaceSamples[50]) ms p95=\\(spaceSamples[95]) ms")
+    let cursorText = UITextView()
+    cursorText.text = String(repeating: "abcdefghijklmnop\\n", count: 20)
+    cursorText.selectedRange = NSRange(location: 80, length: 0)
+    var cursorColumn: Int?
+    space.onCursorMoved = { step in
+        let text = cursorText.text as NSString
+        let caret = cursorText.selectedRange.location
+        let start = max(0, caret - 12)
+        let offset = KeyboardCursorTrackpad.visualOffset(
+            beforeInput: text.substring(with: NSRange(location: start, length: caret - start)),
+            afterInput: text.substring(with: NSRange(location: caret, length: min(12, text.length - caret))),
+            columns: step.characters, rows: step.lines, wrap: 8, preferredColumn: &cursorColumn)
+        guard let current = cursorText.selectedTextRange,
+              let target = cursorText.position(from: current.start, offset: offset) else {
+            preconditionFailure("Fixture cursor escaped its native text view")
+        }
+        cursorText.selectedTextRange = cursorText.textRange(from: target, to: target)
+    }
+    let cursorFinger = Finger()
+    cursorFinger.point = CGPoint(x: 60, y: 20)
+    let spacesBeforeCursor = spaces
+    _ = space.beginTracking(cursorFinger, with: nil)
+    RunLoop.current.run(until: Date().addingTimeInterval(KeyboardDeletion.cursorHoldDuration + 0.05))
+    for _ in 0..<40 {
+        cursorFinger.point.x += KeyboardCursorTrackpad.pointsPerCharacter
+        _ = space.continueTracking(cursorFinger, with: nil)
+    }
+    precondition(cursorText.selectedRange.location == 120,
+                 "Space cursor stopped at a newline, soft wrap or rolling proxy context")
+    _ = space.continueTracking(cursorFinger, with: nil)
+    precondition(cursorText.selectedRange.location == 120, "A stationary held finger moved the cursor")
+    for _ in 0..<40 {
+        cursorFinger.point.x -= KeyboardCursorTrackpad.pointsPerCharacter
+        _ = space.continueTracking(cursorFinger, with: nil)
+    }
+    space.endTracking(cursorFinger, with: nil)
+    precondition(cursorText.selectedRange.location == 80 && spaces == spacesBeforeCursor,
+                 "Cursor reversal lost travel or inserted a space")
+    print("PASS: held Space crosses newlines, wraps and rolling context, reverses and leaves text untouched")
     print("PASS: repeated Delete haptics, each cursor tick, immediate Space feedback and cursor hold without insertion")
     print("PASS: live alternate reload, reserved category lane, held Delete and cancellation")
 

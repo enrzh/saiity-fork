@@ -73,9 +73,9 @@ final class KeyboardCursorTrackpadTests: XCTestCase {
         )
     }
 
-    func testHorizontalMoveStaysOnTheVisualLineInsteadOfWalkingNewlines() {
+    func testHorizontalMoveCrossesNewlinesInsteadOfStoppingAtTheCurrentLine() {
         var preferred: Int?
-        // "|abc\ndef" dragging far right clamps to "abc|" rather than entering the next line.
+        // The host owns document boundaries; the nearby text is only a window.
         XCTAssertEqual(
             KeyboardCursorTrackpad.visualOffset(
                 beforeInput: "",
@@ -85,8 +85,38 @@ final class KeyboardCursorTrackpadTests: XCTestCase {
                 wrap: 0,
                 preferredColumn: &preferred
             ),
-            3
+            20
         )
+    }
+
+    func testHorizontalTravelCrossesSoftWrapsAndRollingContextWindows() {
+        let text = String(repeating: "abcdefghij", count: 30) as NSString
+        var caret = 50
+        var preferred: Int?
+        for direction in [1, -1] {
+            for _ in 0..<100 {
+                let before = text.substring(with: NSRange(location: max(0, caret - 12), length: min(caret, 12)))
+                let after = text.substring(with: NSRange(location: caret, length: min(12, text.length - caret)))
+                let offset = KeyboardCursorTrackpad.visualOffset(beforeInput: before, afterInput: after,
+                    columns: direction, rows: 0, wrap: 8, preferredColumn: &preferred)
+                XCTAssertEqual(offset, direction)
+                caret += offset
+            }
+        }
+        XCTAssertEqual(caret, 50)
+        XCTAssertNil(preferred, "Horizontal travel must not retain a column from an older context window")
+    }
+
+    func testHorizontalReversalDoesNotHaveToUndoTravelPastADocumentEdge() {
+        var preferred: Int?
+        XCTAssertEqual(KeyboardCursorTrackpad.visualOffset(beforeInput: "abc", afterInput: "",
+            columns: 20, rows: 0, wrap: 0, preferredColumn: &preferred), 20)
+        // The host clamps the forward request at its end. One left step must
+        // move immediately, without paying back the previous overshoot.
+        XCTAssertEqual(KeyboardCursorTrackpad.visualOffset(beforeInput: "abc", afterInput: "",
+            columns: -1, rows: 0, wrap: 0, preferredColumn: &preferred), -1)
+        XCTAssertEqual(KeyboardCursorTrackpad.visualOffset(beforeInput: nil, afterInput: nil,
+            columns: -2, rows: 0, wrap: 40, preferredColumn: &preferred), -2)
     }
 
     func testPreferredColumnRestoresAfterAShortLine() {

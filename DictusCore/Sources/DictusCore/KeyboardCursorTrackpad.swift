@@ -41,10 +41,9 @@ public enum KeyboardCursorTrackpad {
         )
     }
 
-    /// One 2D jump: `columns` is visual X, `rows` is visual Y (wrapped lines
-    /// when `wrap` > 0). Horizontal travel stays on the current visual line
-    /// instead of walking through newlines. `preferredColumn` remembers the
-    /// unclamped X so a later vertical move can restore it on a longer line.
+    /// Horizontal travel goes directly to the host, which owns document bounds.
+    /// Vertical/diagonal travel uses nearby visual rows (soft wraps when `wrap`
+    /// is positive). `preferredColumn` preserves X across shorter vertical rows.
     public static func visualOffset(
         beforeInput: String?,
         afterInput: String?,
@@ -54,6 +53,12 @@ public enum KeyboardCursorTrackpad {
         preferredColumn: inout Int?
     ) -> Int {
         guard columns != 0 || rows != 0 else { return 0 }
+        if rows == 0 {
+            // Proxy context can end at a newline or a cached window even when
+            // the document continues. Never use it to bound horizontal travel.
+            preferredColumn = nil
+            return columns
+        }
         let before = (beforeInput ?? "") as NSString
         let after = (afterInput ?? "") as NSString
         let text = ((before as String) + (after as String)) as NSString
