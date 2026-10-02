@@ -53,6 +53,14 @@
 import Foundation
 
 public enum DictationUndo {
+    /// One synchronous replacement cannot interleave with typing. Longer or
+    /// partly visible insertions retain Copy original and the existing Undo.
+    public static func originalRestorationCount(context: String?, insertedText: String) -> Int? {
+        guard insertedText.count <= 200,
+              case .ok(let count, _, let truncated) = verify(context: context, insertedText: insertedText),
+              !truncated else { return nil }
+        return count
+    }
 
     /// Result of validating a pending dictation undo against the live context.
     public enum CheckResult: Equatable {

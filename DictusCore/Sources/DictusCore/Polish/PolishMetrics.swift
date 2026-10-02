@@ -236,6 +236,14 @@ public struct PolishMetrics: Sendable, Codable {
     }
 }
 
+/// Diagnostic consent never overrides the user's history preference.
+public enum DiagnosticTranscriptPolicy {
+    public static func allowsText(in defaults: UserDefaults) -> Bool {
+        (defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true)
+            && defaults.bool(forKey: SharedKeys.polishDebugTranscriptsEnabled)
+    }
+}
+
 private enum PolishLog {
     @available(iOS 14.0, macOS 11.0, *)
     static let logger = Logger(subsystem: "de.aiity.saiity", category: "polish")

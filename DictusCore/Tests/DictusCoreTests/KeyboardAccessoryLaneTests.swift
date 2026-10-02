@@ -128,6 +128,8 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                         + VoiceOnlyKeyboardPolicy.railSpacing,
                        accuracy: 0.001)
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+                       layout.accessoryServiceToggleFrame.minX, accuracy: 0.001)
+        XCTAssertEqual(layout.accessoryServiceToggleFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
                        layout.accessoryDictationBoardFrame.minX, accuracy: 0.001)
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.height, 32, accuracy: 0.001)
         XCTAssertGreaterThan(layout.accessoryEmojiCategoryFrame.width, 80)

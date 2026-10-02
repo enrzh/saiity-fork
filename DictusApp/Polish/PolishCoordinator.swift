@@ -20,6 +20,21 @@ public final class PolishCoordinator {
 
     public static let shared = PolishCoordinator()
 
+    public struct Settings: Sendable {
+        let enabled: Bool
+        let spanAware: Bool
+        let style: WritingStyle
+        let engine: PolishEngineProtocol
+        let vocabulary: [String]
+    }
+
+    public func snapshotSettings() -> Settings {
+        let enabled = defaults.bool(forKey: SharedKeys.polishEnabled)
+        return Settings(enabled: enabled, spanAware: PolishSpanPipeline.isEnabled(in: defaults),
+                        style: WritingStyle.active(from: defaults), engine: enabled ? activeEngine : passthroughEngine,
+                        vocabulary: DictationVocabulary.hints(in: defaults))
+    }
+
     // MARK: - Private state
 
     /// Apple Foundation Models engine. Created once on iOS 26+ when the SDK is
@@ -33,6 +48,7 @@ public final class PolishCoordinator {
     private let passthroughEngine: PolishEngineProtocol = PassthroughPolishEngine()
     private let defaults: UserDefaults
     private let metricsRing = PolishMetricsRing()
+    private let metricsEvents: AsyncStream<PolishDebugEntry>.Continuation
     private var resultCache = PolishResultCache(capacity: 12)
     private var inflight: Task<PolishPipeline.Result, Never>?
     private var spanInflight: Task<PolishSpanPipeline.Result, Never>?
@@ -59,6 +75,14 @@ public final class PolishCoordinator {
 
     private init() {
         self.defaults = AppGroup.defaults
+        // One ordered writer, capped at 64 events. On process termination,
+        // undrained diagnostics may be lost; text delivery never waits for disk.
+        let events = AsyncStream<PolishDebugEntry>.makeStream(bufferingPolicy: .bufferingOldest(64))
+        self.metricsEvents = events.continuation
+        let ring = metricsRing
+        Task {
+            for await event in events.stream { await ring.append(event) }
+        }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             self.appleFMEngine = AppleFoundationModelsPolishEngine()
@@ -132,7 +156,12 @@ public final class PolishCoordinator {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else { return }
         if case .local(let model) = PolishCleanupBackend.load(from: defaults) {
             let engine = CleanupModelManager.shared.engine(for: model)
-            Task { try? await engine.prepare() }
+            Task {
+                _ = try? await PolishExecution.shared.run(deadline: PolishDeadline()) {
+                    try await engine.prepare()
+                    return ""
+                }
+            }
             return
         }
         guard let engineToWarm = appleFMEngine, PolishAvailability.isAppleFMAvailable else { return }
@@ -155,12 +184,19 @@ public final class PolishCoordinator {
         // best-effort, and `polish()` resolves the real target from scratch.
         let selection = TranscriptionLanguagePolicy.snapshot()
             .polishPromptSelection(detectedLanguage: nil)
+        let style = WritingStyle.active(from: defaults)
+        let vocabulary = DictationVocabulary.hints(in: defaults)
         Task {
-            switch selection {
-            case .language(let target):
-                await engineToWarm.prewarm(mode: .natural, targetLanguage: target)
-            case .autoDetected:
-                await engineToWarm.prewarm(mode: .auto, targetLanguage: .english)
+            _ = try? await PolishExecution.shared.run(deadline: PolishDeadline()) {
+                await DictationVocabulary.$currentHints.withValue(vocabulary) {
+                    switch selection {
+                    case .language(let target):
+                        await engineToWarm.prewarm(mode: .natural, targetLanguage: target, style: style)
+                    case .autoDetected:
+                        await engineToWarm.prewarm(mode: .auto, targetLanguage: .english, style: style)
+                    }
+                }
+                return ""
             }
         }
     }
@@ -210,12 +246,29 @@ public final class PolishCoordinator {
                        recordingDuration: TimeInterval,
                        translationTarget: TranslationLanguage? = nil,
                        regions: [SpeechRegionTranscript] = [],
+                       settings: Settings? = nil,
                        onEngineWillRun: (() -> Void)? = nil) async -> String {
-        guard defaults.bool(forKey: SharedKeys.polishEnabled) else {
+        let settings = settings ?? snapshotSettings()
+        return await DictationVocabulary.$currentHints.withValue(settings.vocabulary) {
+            await polishResolved(raw: raw, languagePolicy: languagePolicy, recordingDuration: recordingDuration,
+                translationTarget: translationTarget, regions: regions, settings: settings,
+                onEngineWillRun: onEngineWillRun)
+        }
+    }
+
+    private func polishResolved(raw: String,
+                       languagePolicy: TranscriptionLanguagePolicy,
+                       recordingDuration: TimeInterval,
+                       translationTarget: TranslationLanguage? = nil,
+                       regions: [SpeechRegionTranscript] = [],
+                       settings: Settings? = nil,
+                       onEngineWillRun: (() -> Void)? = nil) async -> String {
+        let settings = settings ?? snapshotSettings()
+        guard settings.enabled else {
             return raw
         }
-        let engine = activeEngine
-        let writingStyle = WritingStyle.active(from: defaults)
+        let engine = settings.engine
+        let writingStyle = settings.style
         let cacheEligible = PolishResultCache.Admission.isEligible(
             recordingDuration: recordingDuration,
             minimumDuration: Self.engineMinDuration
@@ -225,7 +278,7 @@ public final class PolishCoordinator {
             engine: engine.identifier,
             target: translationTarget.map { String(describing: $0) },
             spanAware: languagePolicy.skipsModelPolish(translationTarget: translationTarget)
-                && PolishSpanPipeline.isEnabled(in: defaults),
+                && settings.spanAware,
             regionSignature: regionSignature(for: regions),
             writingStyle: writingStyle.rawValue,
             modelIdentifier: languagePolicy.modelIdentifier,
@@ -250,6 +303,7 @@ public final class PolishCoordinator {
             translationTarget: translationTarget,
             regions: regions,
             writingStyle: writingStyle,
+            settings: settings,
             onEngineWillRun: onEngineWillRun,
             onCacheableSuccess: { engineSucceeded = true }
         )
@@ -269,19 +323,21 @@ public final class PolishCoordinator {
                        translationTarget: TranslationLanguage? = nil,
                        regions: [SpeechRegionTranscript] = [],
                        writingStyle: WritingStyle = .balanced,
+                       settings: Settings,
                        onEngineWillRun: (() -> Void)? = nil,
                        onCacheableSuccess: (() -> Void)? = nil) async -> String {
-        guard defaults.bool(forKey: SharedKeys.polishEnabled) else {
+        guard settings.enabled else {
             return raw
         }
         if languagePolicy.skipsModelPolish(translationTarget: translationTarget) {
-            if PolishSpanPipeline.isEnabled(in: defaults) {
+            if settings.spanAware {
                 return await polishMultilingualSpans(
                     raw: raw,
                     languagePolicy: languagePolicy,
                     recordingDuration: recordingDuration,
                     regions: regions,
                     writingStyle: writingStyle,
+                    currentEngine: settings.engine,
                     onEngineWillRun: onEngineWillRun,
                     onCacheableSuccess: onCacheableSuccess
                 )
@@ -293,7 +349,7 @@ public final class PolishCoordinator {
         // for, detection and the deterministic passes included. Captured here
         // rather than inside each path (#332) so moving detection above the
         // branch does not quietly drop its cost out of `preprocessMs`.
-        let methodStart = Date()
+        let methodStart = DispatchTime.now().uptimeNanoseconds
 
         // Detection runs BEFORE the branch (#332). The polish target is
         // resolved from it — an explicit choice aside, the language the STT
@@ -336,6 +392,7 @@ public final class PolishCoordinator {
                 request,
                 target: target,
                 writingStyle: writingStyle,
+                currentEngine: settings.engine,
                 onEngineWillRun: onEngineWillRun,
                 onCacheableSuccess: onCacheableSuccess
             )
@@ -343,6 +400,7 @@ public final class PolishCoordinator {
             return await polishAutoDetected(
                 request,
                 writingStyle: writingStyle,
+                currentEngine: settings.engine,
                 onEngineWillRun: onEngineWillRun,
                 onCacheableSuccess: onCacheableSuccess
             )
@@ -362,7 +420,7 @@ public final class PolishCoordinator {
         let recordingDuration: TimeInterval
         /// Anchors the wall-clock the user waits for. Captured before
         /// detection so its cost lands in `preprocessMs` like everything else.
-        let methodStart: Date
+        let methodStart: UInt64
         /// Raw `NLLanguage` code, the whole long tail ("it", "zh-Hans", …).
         /// What the auto path gates and pre-processes on.
         let detectedCode: String?
@@ -385,6 +443,7 @@ public final class PolishCoordinator {
     private func polishTargeted(_ request: Request,
                                 target: SupportedLanguage,
                                 writingStyle: WritingStyle,
+                                currentEngine: PolishEngineProtocol,
                                 onEngineWillRun: (() -> Void)?,
                                 onCacheableSuccess: (() -> Void)? = nil) async -> String {
         let raw = request.raw
@@ -407,16 +466,16 @@ public final class PolishCoordinator {
         // consistent with longer clips. No language detection / guardrail here
         // since the engine never runs.
         if request.recordingDuration < Self.engineMinDuration {
-            let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
-            let postStart = Date()
+            let preprocessMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
+            let postStart = DispatchTime.now().uptimeNanoseconds
             // No engine ran → no newline markers to decode; this only applies
             // the language typography (French NBSP).
             let finalShort = PolishPostpass.cleanupFloor(
                 PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
             )
-            let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+            let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
             let m = PolishMetrics(
-                engine: activeEngine.identifier,
+                engine: currentEngine.identifier,
                 mode: nil,
                 targetLanguage: target,
                 // Detection ran before the target was chosen (#332), so it is
@@ -445,14 +504,14 @@ public final class PolishCoordinator {
             // punctuation pre-pass already ran (~0ms) and the user expects their
             // spoken "virgule"/"point" turned into marks even when the LLM is
             // skipped. Same value the < engineMinDuration gate returns. (#185)
-            let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
-            let postStart = Date()
+            let preprocessMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
+            let postStart = DispatchTime.now().uptimeNanoseconds
             let fallback = PolishPostpass.cleanupFloor(
                 PolishPostpass.decodeFromEngine(preprocessed, language: target), language: target
             )
-            let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+            let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
             let m = PolishMetrics(
-                engine: activeEngine.identifier,
+                engine: currentEngine.identifier,
                 mode: nil,
                 targetLanguage: target,
                 // The raw code, not nil: this exit is reached BOTH when
@@ -478,15 +537,13 @@ public final class PolishCoordinator {
         let mode = PolishPipeline.mode(sttEngine: sttEngine, detected: detected, target: target)
 
         // Resolve the engine for this call — see `activeEngine` doc-comment.
-        let currentEngine = activeEngine
-
         inflight?.cancel()
         spanInflight?.cancel()
         announceEngineStage(currentEngine, to: onEngineWillRun)
         // Everything above (pre-pass + detection + mode) is the preprocess cost;
         // the engine-facing transform (encode → engine → decode → guardrail) is
         // delegated to `PolishPipeline` so the eval harness runs identical code.
-        let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let preprocessMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
 
         let task = Task {
             // Read inside the task, not snapshotted above (#315): a polish call
@@ -501,11 +558,11 @@ public final class PolishCoordinator {
         }
         inflight = task
 
-        let bundle = await task.value
+        let bundle = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         recordAvailability(bundle, engine: currentEngine)
         // True total, methodStart → here. Any gap vs (pre+engine+post) is
         // Swift Task scheduling / actor-hop overhead — itself worth seeing.
-        let totalMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let totalMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
         // On any non-success (engine failed, guardrail rejected, cancelled) fall
         // back to the deterministic floor, never the literal raw — see
         // `PolishPipeline.resolvedOutput`. (#185)
@@ -562,7 +619,8 @@ public final class PolishCoordinator {
     /// how device tests validate output language == input language. Engine
     /// runs are identified by `mode == .auto` in the debug export.
     private func polishAutoDetected(_ request: Request,
-                                    writingStyle: WritingStyle,
+                                   writingStyle: WritingStyle,
+                                   currentEngine: PolishEngineProtocol,
                                     onEngineWillRun: (() -> Void)?,
                                     onCacheableSuccess: (() -> Void)? = nil) async -> String {
         let raw = request.raw
@@ -582,10 +640,10 @@ public final class PolishCoordinator {
         // Duration gate (#141): on a flash dictation the user wants instant
         // text, so the LLM is skipped — but the deterministic floor is kept.
         if request.recordingDuration < Self.engineMinDuration {
-            let detectMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+            let detectMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
             let m = autoEventMetrics(
                 outcome: .skippedShort, raw: raw, finalCount: preprocessed.count,
-                languagePolicy: languagePolicy, engineID: activeEngine.identifier,
+                languagePolicy: languagePolicy, engineID: currentEngine.identifier,
                 detectedLanguage: request.detectedCode, latencyMs: detectMs,
                 timings: PolishTimings(preprocessMs: detectMs, engineMs: 0, postprocessMs: 0)
             )
@@ -598,10 +656,10 @@ public final class PolishCoordinator {
         // accept the whole long tail (zh, it, pt, …), not just the four
         // supported languages. No detection → no pre-pass ran → raw is intact.
         guard let detectedCode = request.detectedCode else {
-            let detectMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+            let detectMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
             let m = autoEventMetrics(
                 outcome: .skipped, raw: raw, finalCount: raw.count,
-                languagePolicy: languagePolicy, engineID: activeEngine.identifier,
+                languagePolicy: languagePolicy, engineID: currentEngine.identifier,
                 latencyMs: detectMs,
                 timings: PolishTimings(preprocessMs: detectMs, engineMs: 0, postprocessMs: 0)
             )
@@ -609,12 +667,11 @@ public final class PolishCoordinator {
             return PolishPostpass.cleanupFloor(raw, language: nil)
         }
 
-        let currentEngine = activeEngine
         inflight?.cancel()
         spanInflight?.cancel()
         announceEngineStage(currentEngine, to: onEngineWillRun)
         // Pre-engine work in auto mode: detection + detected-language pre-pass.
-        let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let preprocessMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
         let task = Task {
             // Read inside the task rather than snapshotted — same reason as the
             // per-language path above (#315).
@@ -625,9 +682,9 @@ public final class PolishCoordinator {
         }
         inflight = task
 
-        let bundle = await task.value
+        let bundle = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         recordAvailability(bundle, engine: currentEngine)
-        let totalMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let totalMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
         let returned = PolishPipeline.resolvedOutput(
             bundle, preprocessed: preprocessed, target: contextLanguage, mode: .auto
         )
@@ -659,17 +716,17 @@ public final class PolishCoordinator {
                                          recordingDuration: TimeInterval,
                                          regions: [SpeechRegionTranscript],
                                          writingStyle: WritingStyle,
+                                         currentEngine: PolishEngineProtocol,
                                          onEngineWillRun: (() -> Void)?,
                                          onCacheableSuccess: (() -> Void)? = nil) async -> String {
-        let methodStart = Date()
+        let methodStart = DispatchTime.now().uptimeNanoseconds
         let skipEngine = recordingDuration < Self.engineMinDuration
-        let currentEngine = activeEngine
         inflight?.cancel()
         spanInflight?.cancel()
         if !skipEngine {
             announceEngineStage(currentEngine, to: onEngineWillRun)
         }
-        let preprocessMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let preprocessMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
         let task = Task {
             if regions.isEmpty {
                 return await PolishSpanPipeline.polish(
@@ -691,7 +748,7 @@ public final class PolishCoordinator {
             )
         }
         spanInflight = task
-        let bundle = await task.value
+        let bundle = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         recordAvailability(
             PolishPipeline.Result(
                 engineOutput: bundle.text,
@@ -702,7 +759,7 @@ public final class PolishCoordinator {
             ),
             engine: currentEngine
         )
-        let totalMs = Int(Date().timeIntervalSince(methodStart) * 1000)
+        let totalMs = DictationRuntimeMetrics.elapsedMilliseconds(since: methodStart)
         let detected = bundle.detectedLanguages.joined(separator: ",")
         let m = autoEventMetrics(
             outcome: bundle.outcome,
@@ -822,7 +879,9 @@ public final class PolishCoordinator {
                 engineMs: m.timings?.engineMs ?? 0
             ))
         }
-        await metricsRing.append(PolishDebugEntry(raw: raw, polished: polished, metrics: m))
+        let retainText = DiagnosticTranscriptPolicy.allowsText(in: defaults)
+        metricsEvents.yield(PolishDebugEntry(raw: retainText ? raw : nil,
+                                           polished: retainText ? polished : nil, metrics: m))
     }
 
     /// Recording duration (seconds) below which the LLM polish is skipped (#141).
@@ -870,12 +929,16 @@ private struct OllamaPolishEngine: PolishEngineProtocol {
                 targetLanguage: SupportedLanguage,
                 mode: PolishMode,
                 style: WritingStyle) async throws -> String {
+        let instructions = DictationVocabulary.$currentHints.withValue(DictationVocabulary.serverHints(for: raw)) {
+            PolishPromptEnvelope.resolve(raw: raw, style: style).instructions
+        }
         let body: [String: Any] = [
             "model": model,
             "temperature": 0.0,
             "stream": false,
+            "max_tokens": PolishContextBudget.outputLimit(for: raw),
             "messages": [
-                ["role": "system", "content": AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)],
+                ["role": "system", "content": instructions],
                     ["role": "user", "content": PolishPromptEnvelope.userTurn(raw: raw, style: style)]
             ],
             "reasoning_effort": "none",

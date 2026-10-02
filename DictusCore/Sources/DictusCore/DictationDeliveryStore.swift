@@ -8,12 +8,14 @@ public enum DictationDeliveryStore {
     public static func publishReady(
         text: String,
         request: DictationLanguageRequest,
-        to defaults: UserDefaults
+        to defaults: UserDefaults,
+        timings: DictationRuntimeMetrics? = nil,
+        originalText: String? = nil
     ) {
         defaults.set(text, forKey: SharedKeys.lastTranscription)
         defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.lastTranscriptionTimestamp)
-        RecentDictations.append(text, in: defaults)
-        DictationDelivery.publish(text, for: request, to: defaults)
+        RecentDictations.append(text, in: defaults, originalText: originalText)
+        DictationDelivery.publish(text, for: request, to: defaults, timings: timings, originalText: originalText)
         defaults.set(DictationStatus.ready.rawValue, forKey: SharedKeys.dictationStatus)
         defaults.synchronize()
     }

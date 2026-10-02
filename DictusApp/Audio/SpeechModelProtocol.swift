@@ -26,6 +26,8 @@ protocol SpeechModelProtocol {
     /// This is used after a memory warning and must never be called during preparation
     /// or an active transcription.
     func releaseLoadedModel()
+    func releaseLoadedModelAndWait() async
+    func cancelCurrentInference()
 
     /// Transcribe audio samples to text.
     /// - Parameters:
@@ -71,6 +73,8 @@ struct SpeechTranscriptionOutput {
 }
 
 extension SpeechModelProtocol {
+    func releaseLoadedModelAndWait() async { releaseLoadedModel() }
+    func cancelCurrentInference() {}
     /// Compatibility default for engines that only return text.
     func transcribeDetailed(audioSamples: [Float], language: String?) async throws -> SpeechTranscriptionOutput {
         SpeechTranscriptionOutput(
@@ -245,7 +249,9 @@ enum WhisperKitTranscriptionSupport {
             throw TranscriptionError.emptyAudio
         }
 
-        let options = decodingOptions(language: language)
+        let hintTokens = DictationVocabulary.recognitionPrompt.isEmpty ? nil
+            : whisperKit.tokenizer.map { Array($0.encode(text: DictationVocabulary.recognitionPrompt).prefix(96)) }
+        let options = decodingOptions(language: language, promptTokens: hintTokens)
         let audioQuality = SpeechAudioQuality.analyze(audioSamples)
         let gain = SpeechAudioGain.gain(for: audioSamples)
         let regions = segmenter.regions(in: audioSamples)
@@ -289,7 +295,7 @@ enum WhisperKitTranscriptionSupport {
                         let retry = try await decode(
                             whisperKit: whisperKit,
                             audioSamples: retrySamples,
-                            options: decodingOptions(language: language, temperature: 0.2)
+                            options: decodingOptions(language: language, temperature: 0.2, promptTokens: hintTokens)
                         )
                         if isBetter(retry, than: first) {
                             selected = retry
@@ -449,7 +455,8 @@ enum WhisperKitTranscriptionSupport {
 
     private static func decodingOptions(
         language: String?,
-        temperature: Float = 0.0
+        temperature: Float = 0.0,
+        promptTokens: [Int]? = nil
     ) -> DecodingOptions {
         DecodingOptions(
             task: .transcribe,
@@ -470,6 +477,7 @@ enum WhisperKitTranscriptionSupport {
             detectLanguage: language == nil,
             skipSpecialTokens: true,
             withoutTimestamps: true,
+            promptTokens: promptTokens,
             chunkingStrategy: .vad
         )
     }

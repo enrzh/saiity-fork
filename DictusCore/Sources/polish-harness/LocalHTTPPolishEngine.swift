@@ -79,12 +79,14 @@ struct LocalHTTPPolishEngine: PolishEngineProtocol {
                 targetLanguage: SupportedLanguage,
                 mode: PolishMode,
                 style: WritingStyle) async throws -> String {
-        let instructions = AppleFoundationModelsPolishEngine.instructions(for: mode, language: targetLanguage)
-        let userPrompt = PolishPromptEnvelope.userTurn(raw: raw, style: style)
+        let resolved = PolishPromptEnvelope.resolve(raw: raw, style: style)
+        let instructions = resolved.instructions
+        let userPrompt = resolved.userTurn
         var body: [String: Any] = [
             "model": model,
             "temperature": temperature,
             "stream": false,
+            "max_tokens": PolishContextBudget.outputLimit(for: raw),
             "messages": [
                 ["role": "system", "content": instructions],
                 ["role": "user", "content": userPrompt]

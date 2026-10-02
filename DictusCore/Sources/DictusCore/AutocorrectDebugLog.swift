@@ -28,6 +28,7 @@ public enum AutocorrectDebugLog {
     /// Defaults to false — must be explicitly enabled in Settings.
     private static var enabled: Bool {
         AppGroup.defaults.bool(forKey: SharedKeys.autocorrectDebugLogging)
+            && (AppGroup.defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true)
     }
 
     /// Reusable ISO timestamp formatter (same as PersistentLog).

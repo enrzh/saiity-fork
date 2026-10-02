@@ -132,7 +132,9 @@ public struct ModelInfo: Identifiable {
         "openai_whisper-base",
         "openai_whisper-medium",
         "openai_whisper-large-v3_947MB",
-        "openai_whisper-large-v3_turbo_954MB"
+        "openai_whisper-large-v3_turbo_954MB",
+        QwenASRModel.small.rawValue,
+        QwenASRModel.large.rawValue
     ]
 
     public static let all: [ModelInfo] = {
@@ -383,7 +385,15 @@ public struct ModelInfo: Identifiable {
             engine: .whisperKit, accuracyScore: 0.8, speedScore: 0.5,
             description: "More compressed multilingual Turbo export. Preview; accuracy may differ.",
             visibility: .available
-        )
+        ),
+        ModelInfo(identifier: QwenASRModel.small.rawValue, displayName: "Qwen3-ASR 0.6B",
+                  sizeLabel: "~700 MB", sizeBytes: 700 * 1_048_576, engine: .qwenASR,
+                  accuracyScore: 0.8, speedScore: 0.7,
+                  description: "Local multilingual recognition. Pause-based realtime text. Requires the app in the foreground; iPhone performance is not yet measured.", visibility: .available),
+        ModelInfo(identifier: QwenASRModel.large.rawValue, displayName: "Qwen3-ASR 1.7B",
+                  sizeLabel: "~2.1 GB", sizeBytes: 2_200 * 1_048_576, engine: .qwenASR,
+                  accuracyScore: 0.85, speedScore: 0.45,
+                  description: "Larger local multilingual recognizer. Requires more memory and the foreground app; iPhone performance is not yet measured.", visibility: .available)
     ]
 
     /// Preview exports have the expected WhisperKit bundle layout, but are not
@@ -526,6 +536,10 @@ public struct ModelInfo: Identifiable {
     /// "is it gated" and "why is it gated" would be visible as a greyed card with no
     /// explanation, or an explanation on a tappable card. One function, no drift.
     public func incompatibilityReason(on capabilities: DeviceCapabilities) -> IncompatibilityReason? {
+        if let qwen = QwenASRModel(rawValue: identifier) {
+            return capabilities.physicalMemoryGB >= qwen.requiredMemoryGB ? nil
+                : .insufficientMemory(requiredGB: qwen.requiredMemoryGB)
+        }
         // WHY this branch comes first: on A12/A13 the limit is the Core ML support
         // matrix, not memory. Falling through to the RAM rule would leave Small,
         // Small (Quantized) and Medium selectable in Settings on an iPhone 11, and

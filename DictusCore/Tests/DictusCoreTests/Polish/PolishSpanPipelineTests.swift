@@ -2,6 +2,16 @@ import XCTest
 @testable import DictusCore
 
 final class PolishSpanPipelineTests: XCTestCase {
+    func testShortCapitalizedSentenceStillReceivesGrammarCorrection() async {
+        let engine = CountingPolishEngine { text, _, _ in
+            text.replacingOccurrences(of: "He go to work.", with: "He goes to work.")
+        }
+        let region = SpeechRegionTranscript(region: SpeechRegion(startSample: 0, endSample: 16000),
+            text: "He go to work.", detectedLanguage: "en", validatedLanguage: "en")
+        let result = await PolishSpanPipeline.polish(regions: [region], engine: engine)
+        XCTAssertGreaterThan(engine.calls, 0)
+        XCTAssertEqual(result.text, "He goes to work.")
+    }
 
     func testFixturesScoreArtifactRemovalAndMixedPreservation() throws {
         let url = try XCTUnwrap(Bundle.module.url(

@@ -8,7 +8,7 @@ struct HomeView: View {
     @ObservedObject var modelManager: ModelManager
     @EnvironmentObject var coordinator: DictationCoordinator
     @EnvironmentObject var proStatus: ProStatusManager
-    @AppStorage(SharedKeys.modelReady, store: AppGroup.defaults) private var modelReady = false
+    @AppStorage(SharedKeys.appDictationModelReady, store: AppGroup.defaults) private var modelReady = false
 
     @State private var showCopiedFeedback = false
     @State private var microphonePermission = MicrophonePermissionState.undetermined
@@ -19,18 +19,20 @@ struct HomeView: View {
 
     var body: some View {
         List {
-            Section("Model selection") {
-                ModelSelectionProfilePicker(modelManager: modelManager)
-                Text(modelManager.selectionMode == .manual ? "Using your selected model. Choose a preset for automatic selection." : modelManager.selectionProfile.explanation)
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
             Section {
                 readinessPanel
-                Toggle("Keyboard dictation", isOn: $serviceEnabled)
-                    .onChange(of: serviceEnabled) { _, enabled in
-                        updateServiceEnabled(enabled)
-                    }
-                    .accessibilityIdentifier("home.keyboardDictationToggle")
+                Button {
+                    coordinator.setKeyboardDictationEnabled(!serviceEnabled)
+                } label: {
+                    Label(serviceEnabled ? "Disable keyboard dictation" : "Enable keyboard dictation", systemImage: "power")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.bordered)
+                .accessibilityAddTraits(serviceEnabled ? .isSelected : [])
+                .accessibilityValue(serviceEnabled ? "On" : "Off")
+                .accessibilityIdentifier("home.keyboardDictationToggle")
                 readinessAction
             } header: {
                 Text("Dictation")
@@ -40,14 +42,22 @@ struct HomeView: View {
 
             Section {
                 modelRow
+                DictationModelQuickPicker(modelManager: modelManager)
+                ModelSelectionProfilePicker(modelManager: modelManager)
             } header: {
                 Text("Voice model")
             } footer: {
-                Text("Used for new dictations. Recognition and speed depend on your device and spoken languages.")
+                Text(modelManager.selectionMode == .manual ? "Using your selected model. Choose a preset for automatic selection." : modelManager.selectionProfile.explanation)
             }
 
             if !recentDictationItems.isEmpty {
                 Section("Recent dictations") {
+                    let rated = recentDictationItems.filter { $0.feedback != nil }
+                    if !rated.isEmpty {
+                        let accepted = rated.filter { $0.feedback == .accepted }.count
+                        Text("\(accepted) of \(rated.count) rated dictations were usable unchanged.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     recentActivity(items: recentDictationItems)
                     NavigationLink {
                         DictationHistoryView()
@@ -252,7 +262,8 @@ struct HomeView: View {
     }
 
     private var currentReadiness: DictationReadiness {
-        DictationReadiness(serviceEnabled: serviceEnabled, microphonePermission: microphonePermission,
+        DictationReadiness(serviceEnabled: true,
+                           microphonePermission: microphonePermission,
                            modelReady: modelReady, modelLoadState: ModelLoadState(rawValue: modelLoadStateRaw) ?? .idle,
                            status: coordinator.status, modelLoadFailure: modelLoadFailure)
     }
@@ -288,19 +299,6 @@ struct HomeView: View {
         @unknown default:
             microphonePermission = .restricted
         }
-    }
-
-    private func updateServiceEnabled(_ enabled: Bool) {
-        if enabled {
-            coordinator.enableKeyboardSession()
-            return
-        }
-
-        coordinator.disableKeyboardSession()
-        if DictationSessionLivenessPolicy.isActive(coordinator.status) {
-            coordinator.cancelDictation()
-        }
-        LiveActivityManager.shared.updateServiceEnabled(false)
     }
 
     private func openSystemSettings() {
@@ -441,6 +439,88 @@ struct DictationHistoryView: View {
     }
 }
 
+/// Shared comparison/copy/recovery controls for a live result and saved history.
+struct DictationTranscriptResult: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let result: String
+    let original: String?
+    var onRestore: ((String) -> Void)?
+    var onFeedback: ((RecentDictation.Feedback) -> Void)?
+    @State private var showOriginal = false
+    @State private var copied = false
+    @State private var restoreBackup: String?
+    @State private var rated = false
+
+    private var differs: Bool {
+        guard let original else { return false }
+        return original.trimmingCharacters(in: .whitespacesAndNewlines) != result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var displayed: String { showOriginal ? original ?? result : result }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if differs {
+                Picker("Transcript version", selection: $showOriginal) {
+                    Text("Result").tag(false)
+                    Text("Original").tag(true)
+                }.pickerStyle(.segmented).accessibilityIdentifier("dictation.resultVariant")
+                Text("Original is speech recognition before cleanup or translation.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(displayed).font(.title3).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack { copyButton; shareButton }
+                VStack(alignment: .leading) { copyButton; shareButton }
+            }
+            if let onRestore, let original, differs || restoreBackup != nil {
+                Button(restoreBackup == nil ? (typeSize.isAccessibilitySize ? "Original" : "Use original")
+                       : (typeSize.isAccessibilitySize ? "Result" : "Restore previous result")) {
+                    let replacement = restoreBackup ?? original
+                    restoreBackup = restoreBackup == nil ? result : nil
+                    showOriginal = false
+                    onRestore(replacement)
+                }.buttonStyle(.bordered).accessibilityIdentifier("dictation.restoreOriginal")
+                    .accessibilityLabel(restoreBackup == nil ? "Use original transcript" : "Restore previous result")
+            }
+            if onFeedback != nil {
+                if rated { Text("Feedback saved on this device.").font(.caption).foregroundStyle(.secondary) }
+                else {
+                    Text("Could you use the delivered result without editing? Optional feedback stays on this device.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    ViewThatFits(in: .horizontal) {
+                        HStack { feedbackButton(.accepted, "Usable unchanged", "hand.thumbsup"); feedbackButton(.needsEditing, "Needs editing", "pencil") }
+                        VStack(alignment: .leading) { feedbackButton(.accepted, "Usable unchanged", "hand.thumbsup"); feedbackButton(.needsEditing, "Needs editing", "pencil") }
+                    }
+                }
+            }
+        }
+        .onChange(of: showOriginal) { _, _ in copied = false }
+        .onChange(of: result) { _, _ in copied = false; showOriginal = false }
+    }
+
+    private var copyButton: some View {
+        Button {
+            UIPasteboard.general.string = displayed
+            copied = true
+            UIAccessibility.post(notification: .announcement, argument: "Copied")
+        } label: { Label(copied ? "Copied" : (typeSize.isAccessibilitySize ? "Copy" : "Copy transcript"), systemImage: copied ? "checkmark" : "doc.on.doc").frame(minHeight: 32) }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(copied ? "Copied transcript" : "Copy transcript")
+    }
+    private var shareButton: some View {
+        ShareLink(item: displayed) { Label("Share", systemImage: "square.and.arrow.up").frame(minHeight: 32) }
+            .buttonStyle(.bordered)
+    }
+    private func feedbackButton(_ feedback: RecentDictation.Feedback, _ label: String, _ icon: String) -> some View {
+        let title = typeSize.isAccessibilitySize ? (feedback == .accepted ? "Usable" : "Edit") : label
+        return Button { onFeedback?(feedback); rated = true } label: { Label(title, systemImage: icon).frame(minHeight: 32) }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(label)
+    }
+}
+
 private struct DictationHistoryEditView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
@@ -460,6 +540,15 @@ private struct DictationHistoryEditView: View {
                     .frame(minHeight: 180)
                     .accessibilityLabel("Dictation text")
             }
+            Section {
+                DisclosureGroup("Compare and recover") {
+                    DictationTranscriptResult(result: text, original: item.originalText,
+                        onRestore: { text = $0 }, onFeedback: {
+                            RecentDictations.recordFeedback(text == item.text ? $0 : .needsEditing,
+                                for: item.id, in: AppGroup.defaults)
+                        })
+                }
+            }
         }
         .navigationTitle("Edit dictation")
         .navigationBarTitleDisplayMode(.inline)
@@ -469,7 +558,8 @@ private struct DictationHistoryEditView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    onSave(RecentDictation(id: item.id, text: text, createdAt: item.createdAt))
+                    onSave(RecentDictation(id: item.id, text: text, createdAt: item.createdAt,
+                        originalText: item.originalText, feedback: text == item.text ? item.feedback : .needsEditing))
                     dismiss()
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

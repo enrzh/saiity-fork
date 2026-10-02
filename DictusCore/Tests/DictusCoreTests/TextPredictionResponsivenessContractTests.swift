@@ -128,6 +128,8 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
         XCTAssertTrue(vocabularyBody.contains("UserDictionary.shared.reload()"))
 
         let settings = try source("DictusApp/Views/SettingsView.swift")
-        XCTAssertEqual(settings.components(separatedBy: "KeyboardInteractionPreferences.notifyVocabularyChanged()").count - 1, 3)
+        let vocabularyView = try XCTUnwrap(settings.range(of: "struct VocabularyView:"))
+        XCTAssertFalse(settings[..<vocabularyView.lowerBound].contains("KeyboardInteractionPreferences.notifyVocabularyChanged()"))
+        XCTAssertTrue(settings[vocabularyView.lowerBound...].contains("DictationVocabulary.approve"))
     }
 }

@@ -636,12 +636,11 @@ class KeyboardState: ObservableObject {
     /// the session change when it receives the Darwin ping.
     func setKeyboardDictationEnabled(_ enabled: Bool) {
         guard keyboardDictationEnabled != enabled else { return }
-        defaults.set(enabled, forKey: SharedKeys.serviceEnabled)
-        defaults.synchronize()
+        KeyboardDictationService.setEnabled(enabled, in: defaults)
         keyboardDictationEnabled = enabled
         HapticFeedback.keyTapped()
-        DarwinNotificationCenter.post(DarwinNotificationName.serviceToggleRequested)
         refreshFromDefaults()
+        if enabled, appNeedsAppAction { openDictusForRecovery() }
     }
 
     private let defaults = AppGroup.defaults
@@ -1365,8 +1364,9 @@ class KeyboardState: ObservableObject {
         guard isKeyboardVisible, let controller,
               controller.isViewLoaded, controller.view.window != nil,
               request.hasSameIdentity(as: DictationLanguageRequest.load(from: defaults)),
-              let transcription = DictationDelivery.consume(for: request, from: defaults) else { return false }
-        insertTranscription(transcription)
+              var result = DictationDelivery.consumeResult(for: request, from: defaults) else { return false }
+        result.timings?.mark("deliveryConsumed")
+        insertTranscription(result.text, timings: result.timings, originalText: result.originalText)
         return true
     }
 
@@ -1383,10 +1383,15 @@ class KeyboardState: ObservableObject {
     /// The App Group key is deliberately NOT read here: the caller clears it before
     /// calling, which is what stops a redelivered Darwin notification from inserting
     /// the same text twice.
-    private func insertTranscription(_ transcription: String) {
+    private func insertTranscription(_ transcription: String, timings: DictationRuntimeMetrics? = nil,
+                                     originalText: String? = nil) {
         cancelDictationReleaseTail()
         guard let proxy = controller?.textDocumentProxy else { return }
         proxy.insertText(transcription)
+        var timings = timings
+        timings?.mark("proxyInserted")
+        timings?.log()
+        SuggestionState.shared.clear(resetLanguage: false)
         PersistentLog.log(.keyboardTextInserted)
         HapticFeedback.textInserted()
 
@@ -1408,7 +1413,7 @@ class KeyboardState: ObservableObject {
         // Offer the undo control for this insertion, and only this one. Armed after
         // the idle reset above because that reset is what ends the dictation session
         // the undo belongs to.
-        armDictationUndo(transcription)
+        armDictationUndo(transcription, originalText: originalText)
     }
 
     // MARK: - Dictation undo (#266)
@@ -1427,6 +1432,9 @@ class KeyboardState: ObservableObject {
     /// What that costs is the risk of a record outliving the field it belongs to,
     /// which is what the invalidations below and the tail check exist to prevent.
     private var dictationUndoText: String?
+    private var dictationOriginalText: String?
+    private var dictationUndoDocumentID: UUID?
+    private var dictationUndoContextAfter: String?
 
     /// Whether the toolbar should offer the undo control.
     ///
@@ -1468,8 +1476,11 @@ class KeyboardState: ObservableObject {
     /// proxy's view of the document are not guaranteed to be in step within the same
     /// turn, and a check that runs too early reads the field as it was *before* the
     /// insertion and refuses. One hop costs a frame nobody sees.
-    private func armDictationUndo(_ transcription: String) {
+    private func armDictationUndo(_ transcription: String, originalText: String? = nil) {
         dictationUndoText = transcription
+        dictationOriginalText = originalText
+        dictationUndoDocumentID = controller?.textDocumentProxy.documentIdentifier
+        dictationUndoContextAfter = controller?.textDocumentProxy.documentContextAfterInput
         dictationUndoAvailable = false
         dictationUndoTimer?.invalidate()
         dictationUndoTimer = Timer.scheduledTimer(
@@ -1542,6 +1553,9 @@ class KeyboardState: ObservableObject {
     func invalidateDictationUndo(reason: String) {
         guard dictationUndoText != nil else { return }
         dictationUndoText = nil
+        dictationOriginalText = nil
+        dictationUndoDocumentID = nil
+        dictationUndoContextAfter = nil
         dictationUndoAvailable = false
         dictationUndoTimer?.invalidate()
         dictationUndoTimer = nil
@@ -1561,6 +1575,13 @@ class KeyboardState: ObservableObject {
             return
         }
 
+        guard proxy.documentIdentifier == dictationUndoDocumentID,
+              proxy.selectedText?.isEmpty != false,
+              proxy.documentContextAfterInput == dictationUndoContextAfter else {
+            invalidateDictationUndo(reason: "perform-field-changed")
+            return
+        }
+
         switch DictationUndo.verify(
             context: proxy.documentContextBeforeInput,
             insertedText: transcription
@@ -1569,6 +1590,10 @@ class KeyboardState: ObservableObject {
             HapticFeedback.actionRefused()
             invalidateDictationUndo(reason: "perform-\(reason)")
         case .ok(let deleteCount, let verifiedCount, let windowTruncated):
+            guard !windowTruncated else {
+                HapticFeedback.actionRefused()
+                return
+            }
             logProbe(
                 "dictationUndoStarted",
                 details: "deleteCount=\(deleteCount) verified=\(verifiedCount) truncated=\(windowTruncated)"
@@ -1579,6 +1604,80 @@ class KeyboardState: ObservableObject {
             invalidateDictationUndo(reason: "performed")
             deleteInsertedText(transcription, remaining: deleteCount, proxy: proxy)
         }
+    }
+
+    /// Lives in the existing output-language menu; no extra input layer or lane.
+    func dictationResultMenuItems() -> [UIMenuElement] {
+        guard dictationUndoAvailable else { return [] }
+        var actions: [UIMenuElement] = []
+        if let original = dictationOriginalText, let delivered = dictationUndoText,
+           original.trimmingCharacters(in: .whitespacesAndNewlines) != delivered.trimmingCharacters(in: .whitespacesAndNewlines) {
+            actions.append(UIAction(title: "Copy original", image: UIImage(systemName: "doc.on.doc")) { _ in
+                UIPasteboard.general.string = original
+            })
+            if canRestoreOriginal {
+                actions.append(UIAction(title: "Restore original", image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in
+                    self?.restoreOriginalDictation()
+                })
+            }
+        }
+        if let proxy = controller?.textDocumentProxy, let inserted = dictationUndoText,
+           proxy.documentIdentifier == dictationUndoDocumentID,
+           case .ok(_, _, false) = DictationUndo.verify(context: proxy.documentContextBeforeInput, insertedText: inserted) {
+            actions.append(UIAction(title: "Undo dictation", image: UIImage(systemName: "delete.left")) { [weak self] _ in
+                self?.performDictationUndo()
+            })
+        }
+        return [UIMenu(title: "Last dictation", options: .displayInline, children: actions)]
+    }
+
+    private var canRestoreOriginal: Bool {
+        guard dictationUndoAvailable, !isUndoingDictation, dictationStatus == .idle,
+              let proxy = controller?.textDocumentProxy,
+              proxy.documentIdentifier == dictationUndoDocumentID,
+              proxy.selectedText?.isEmpty != false,
+              proxy.documentContextAfterInput == dictationUndoContextAfter,
+              let inserted = dictationUndoText, dictationOriginalText != nil else { return false }
+        return DictationUndo.originalRestorationCount(context: proxy.documentContextBeforeInput, insertedText: inserted) != nil
+    }
+
+    func restoreOriginalDictation() {
+        guard canRestoreOriginal, let proxy = controller?.textDocumentProxy,
+              let inserted = dictationUndoText, let original = dictationOriginalText,
+              let count = DictationUndo.originalRestorationCount(context: proxy.documentContextBeforeInput, insertedText: inserted) else {
+            HapticFeedback.actionRefused()
+            return
+        }
+        // ponytail: one main-turn replacement, capped at 200 graphemes; longer
+        // transcripts use Copy original + Undo until chunked restoration is measured.
+        let replacement = original + (inserted.hasSuffix(" ") && !original.hasSuffix(" ") ? " " : "")
+        let documentID = proxy.documentIdentifier
+        let prefix = String((proxy.documentContextBeforeInput ?? "").dropLast(count))
+        invalidateDictationUndo(reason: "restored-original")
+        for remaining in stride(from: count, to: 0, by: -1) {
+            guard controller?.textDocumentProxy.documentIdentifier == documentID,
+                  proxy.documentContextBeforeInput?.hasSuffix(String(inserted.prefix(remaining))) == true else {
+                HapticFeedback.actionRefused()
+                return
+            }
+            proxy.deleteBackward()
+        }
+        guard controller?.textDocumentProxy.documentIdentifier == documentID,
+              (proxy.documentContextBeforeInput ?? "") == prefix else {
+            HapticFeedback.actionRefused()
+            return
+        }
+        proxy.insertText(replacement)
+        SuggestionState.shared.clear(resetLanguage: false)
+        onDictationUndone?()
+        armDictationUndo(replacement)
+        HapticFeedback.textInserted()
+    }
+
+    func interruptDictationUndoForTyping() {
+        guard isUndoingDictation else { return }
+        isUndoingDictation = false
+        logProbe("dictationUndoAborted", details: "reason=user-input")
     }
 
     /// Issue the deletion in chunks, yielding to the main queue between them.
@@ -1628,8 +1727,15 @@ class KeyboardState: ObservableObject {
         remaining: Int,
         proxy: UITextDocumentProxy
     ) {
+        guard isUndoingDictation else { return }
+        guard proxy.documentIdentifier == controller?.textDocumentProxy.documentIdentifier else {
+            isUndoingDictation = false
+            logProbe("dictationUndoAborted", details: "reason=field-changed")
+            return
+        }
         guard remaining > 0 else {
             isUndoingDictation = false
+            SuggestionState.shared.clear(resetLanguage: false)
             onDictationUndone?()
             logProbe("dictationUndoCompleted")
             return

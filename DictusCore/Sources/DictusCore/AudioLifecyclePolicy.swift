@@ -14,6 +14,10 @@ public enum AudioLifecycleState: String, Equatable, Sendable {
 
 /// Pure rules for deciding which audio lifecycle transitions are safe.
 public enum AudioLifecyclePolicy {
+    public static func shouldRestoreStandby(serviceEnabled: Bool, onboardingComplete: Bool,
+                                            microphoneGranted: Bool) -> Bool {
+        serviceEnabled && onboardingComplete && microphoneGranted
+    }
     public static func state(
         engineRunning: Bool,
         sessionConfigured: Bool,

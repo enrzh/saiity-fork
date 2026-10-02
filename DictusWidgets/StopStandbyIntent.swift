@@ -34,8 +34,7 @@ struct StopStandbyIntent: LiveActivityIntent {
         if toggleDetection {
             let defaults = UserDefaults(suiteName: AppGroup.identifier)
             let enabled = !KeyboardDictationService.isEnabled(in: defaults)
-            defaults?.set(enabled, forKey: SharedKeys.serviceEnabled)
-            defaults?.synchronize()
+            KeyboardDictationService.setEnabled(enabled, in: defaults)
 
             for activity in Activity<DictusLiveActivityAttributes>.activities {
                 let current = activity.content.state
@@ -54,6 +53,11 @@ struct StopStandbyIntent: LiveActivityIntent {
                     name: Notification.Name("DictusServiceToggleRequested"),
                     object: nil
                 )
+            }
+            // A cold microphone needs foreground preparation; disabling stays
+            // in the Live Activity. Older systems use the same URL as a Link.
+            if enabled, #available(iOS 18.2, *), let url = KeyboardDictationBridge.recoveryURL() {
+                return .result(opensIntent: OpenURLIntent(url))
             }
             return .result()
         }

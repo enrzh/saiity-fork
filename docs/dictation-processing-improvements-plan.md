@@ -1,3 +1,9 @@
+> Archived scope. Current product decisions are in `PRD.md` and
+> `docs/product-quality-plan.md`; runtime/keyboard evidence is in their current
+> plans. Historical instructions below about excluding Qwen, removing the
+> suggestion bar or removing the Settings model entry are superseded. Preserve
+> this document as evidence; do not execute its old implementation prompt.
+
 # Dictation and Processing Improvements Plan
 
 Status: implemented for the non-Qwen scope. The full DictusCore suite and the

@@ -69,6 +69,8 @@ extension ModelLanguageSupport.Coverage {
             return String(localized: "English only")
         case .parakeetEuropean:
             return String(localized: "25 European languages")
+        case .qwenMultilingual:
+            return String(localized: "30 languages, including Chinese")
         }
     }
 }

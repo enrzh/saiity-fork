@@ -117,6 +117,13 @@ public enum SharedKeys {
     public static let hapticIntensity = "dictus.hapticIntensity"
     public static let keyboardHoldSpeed = "dictus.keyboardHoldSpeed"
     public static let modelSelectionProfile = "dictus.modelSelectionProfile"
+    public static let dictationRecognizer = "dictus.dictationRecognizer"
+    public static let dictationStreamingModel = "dictus.dictationStreamingModel"
+    public static let dictationWhisperModel = "dictus.dictationWhisperModel"
+    public static let dictationRealtimeText = "dictus.dictationRealtimeText"
+    public static let appDictationModel = "dictus.appDictationModel"
+    public static let appDictationModelReady = "dictus.appDictationModelReady"
+    public static let keyboardDictationModel = "dictus.keyboardDictationModel"
     public static let disabledKeyVariants = "dictus.disabledKeyVariants"
     public static let defaultEmojiSkinTone = "dictus.defaultEmojiSkinTone"
     public static let keyboardInsetEnabled = "dictus.keyboardInsetEnabled"
@@ -252,8 +259,12 @@ public enum SharedKeys {
     public static let smartModeEnabled = "dictus.smartModeEnabled"
     /// Bool: per-feature toggle for History, default true (registered by ProStatusManager)
     public static let historyEnabled = "dictus.historyEnabled"
+    /// Explicit consent for transcript-bearing cleanup diagnostics; off by default.
+    public static let polishDebugTranscriptsEnabled = "dictus.debug.polishTranscriptsEnabled"
     /// Bool: per-feature toggle for Vocabulary, default true (registered by ProStatusManager)
     public static let vocabularyEnabled = "dictus.vocabularyEnabled"
+    /// Case-preserving spellings explicitly approved for ASR and cleanup hints.
+    public static let dictationVocabulary = "dictus.dictationVocabulary"
 
     // MARK: - #357 spike (throwaway)
     /// Bool: arms exactly ONE Apple Foundation Models probe run inside the

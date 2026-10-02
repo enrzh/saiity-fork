@@ -31,11 +31,16 @@ public enum LocalCleanupModel: String, CaseIterable, Sendable {
         case .qwen2_5_1_5b: return "Larger multilingual model · 4-bit · keep sAiity open while processing"
         }
     }
+
+    public func supportsCleanup(languageCode: String?, mixedScript: Bool) -> Bool {
+        self != .gemma3_1b || (languageCode == "en" && !mixedScript)
+    }
 }
 
 /// One concise pass for punctuation, cleanup and grammar. Dictated instructions
 /// remain data, and code-switching never becomes an instruction to translate.
 public enum DictationCleanupPrompt {
+    public static let revision = "cleanup-v2"
     public static func instructions(style: WritingStyle = .balanced) -> String {
         """
         Edit the transcript into ready-to-send text in one pass. Return only the edited transcript.
@@ -49,7 +54,9 @@ public enum DictationCleanupPrompt {
         Keep <<NL>> line-break markers exactly. No heading, explanation, quotation wrapper or reasoning.
         Example: "uh i i will send the invoice tomorrow" → "I will send the invoice tomorrow."
         Mixed-language example: "Ich schicke the invoice tomorrow und 我晚上确认。" → "Ich schicke the invoice tomorrow und 我晚上确认。"
-        \(style.promptInstruction)
+        Writing style: \(style.promptInstruction)
+        Style never authorizes translation, omitted facts or unnecessary synonyms.
+        \(PolishGlossary.promptBlock)
         """
     }
 }

@@ -33,6 +33,7 @@ public struct ModelLanguageSupport: Equatable, Sendable {
         /// Parakeet TDT v3: exactly the 25 European languages documented by
         /// NVIDIA. No Chinese or other non-European languages.
         case parakeetEuropean
+        case qwenMultilingual
     }
 
     /// A curated quality note attached to a highlighted language on a
@@ -242,6 +243,11 @@ extension ModelInfo {
     /// curated data in one reviewable block instead of repeating it across
     /// the seven catalog entries.
     public var languageSupport: ModelLanguageSupport {
+        if engine == .qwenASR {
+            return ModelLanguageSupport(coverage: .qwenMultilingual,
+                highlights: ["fr", "en", "es", "de", "zh"].map { .init(code: $0) },
+                additionalCodes: ["yue", "ja", "ko", "pt", "it", "ru", "th", "vi", "id", "ms", "ar", "hi", "he", "tr", "fa", "nl", "pl", "sv", "da", "fi", "cs", "fil", "el", "hu", "ro"])
+        }
         switch identifier {
         case "openai_whisper-medium",
              "openai_whisper-large-v3_turbo_954MB",
@@ -270,6 +276,8 @@ extension ModelInfo {
                 return .whisperSmallClass
             case .parakeet:
                 return .parakeetV3
+            case .qwenASR:
+                return .whisperHighAccuracy // handled above
             }
         }
     }

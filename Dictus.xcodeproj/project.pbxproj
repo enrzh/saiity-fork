@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        QW000003 /* QwenSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = QW100003; };
+        QW000001 /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = QW900001 /* Qwen3ASR */; };
+        QW000002 /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = QW900002 /* SpeechVAD */; };
         RR000201 /* EmojiData.swift in App Sources */ = {isa = PBXBuildFile; fileRef = AA1000B0 /* EmojiData.swift */; };
         RR000202 /* LocalPolishEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100202 /* LocalPolishEngine.swift */; };
         RR000203 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = RR900201 /* MLXLLM */; };
@@ -118,7 +121,6 @@
 		AA000P20 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA100P20 /* PrivacyInfo.xcprivacy */; };
 		AA00P201 /* PolishAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10P201 /* PolishAvailability.swift */; };
 		AA00P203 /* PolishCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10P203 /* PolishCoordinator.swift */; };
-		AA00P204 /* PolishMetricsRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10P204 /* PolishMetricsRing.swift */; };
 		AA00P205 /* PolishDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10P205 /* PolishDebugView.swift */; };
 		AA00P207 /* PolishDebugExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10P207 /* PolishDebugExporter.swift */; };
 		AA357002 /* AppleFMExtensionProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA357001 /* AppleFMExtensionProbe.swift */; };
@@ -191,6 +193,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        QW100003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenSpeechEngine.swift; sourceTree = "<group>"; };
         RR100202 /* LocalPolishEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPolishEngine.swift; sourceTree = "<group>"; };
         RR100205 /* Saiity.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = DictusApp/Saiity.icon; sourceTree = SOURCE_ROOT; };
         RR100206 /* KeyboardSetupGuide.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = DictusApp/Resources/KeyboardSetupGuide.mp4; sourceTree = SOURCE_ROOT; };
@@ -299,7 +302,6 @@
 		AA100P20 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA10P201 /* PolishAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishAvailability.swift; sourceTree = "<group>"; };
 		AA10P203 /* PolishCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishCoordinator.swift; sourceTree = "<group>"; };
-		AA10P204 /* PolishMetricsRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishMetricsRing.swift; sourceTree = "<group>"; };
 		AA10P205 /* PolishDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishDebugView.swift; sourceTree = "<group>"; };
 		AA10P207 /* PolishDebugExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishDebugExporter.swift; sourceTree = "<group>"; };
 		AA200001 /* DictusApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DictusApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -356,6 +358,8 @@
 			buildActionMask = 2147483647;
 			files = (
                 RR000203 /* MLXLLM in Frameworks */,
+                QW000001 /* Qwen3ASR in Frameworks */,
+                QW000002 /* SpeechVAD in Frameworks */,
                 RR000204 /* MLXLMCommon in Frameworks */,
                 RR000208 /* DeviceKit in App Frameworks */,
 				4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */,
@@ -520,6 +524,7 @@
 		AA400007 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
+                QW100003 /* QwenSpeechEngine.swift */,
 				AA1000F1 /* ParakeetEngine.swift */,
 				AA1000F0 /* SpeechModelProtocol.swift */,
 				AA100041 /* TranscriptionService.swift */,
@@ -652,7 +657,6 @@
                 RR100202 /* LocalPolishEngine.swift */,
 				AA10P201 /* PolishAvailability.swift */,
 				AA10P203 /* PolishCoordinator.swift */,
-				AA10P204 /* PolishMetricsRing.swift */,
 				AA10P205 /* PolishDebugView.swift */,
 				AA10P207 /* PolishDebugExporter.swift */,
 				AA40P210 /* Prompts */,
@@ -791,6 +795,8 @@
 			name = DictusApp;
 			packageProductDependencies = (
                 RR900201 /* MLXLLM */,
+                QW900001 /* Qwen3ASR */,
+                QW900002 /* SpeechVAD */,
                 RR900202 /* MLXLMCommon */,
                 CC900001 /* DeviceKit */,
 				AA900010 /* DictusCore */,
@@ -876,6 +882,7 @@
 			mainGroup = AA400000;
 			packageReferences = (
                 RR800201 /* mlx-swift-lm */,
+                QW800001 /* QwenASRRuntime */,
 				AA800001 /* XCLocalSwiftPackageReference "DictusCore" */,
 				AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
@@ -1003,6 +1010,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000001 /* DictusApp.swift in Sources */,
+                QW000003 /* QwenSpeechEngine.swift in Sources */,
 				AA000002 /* ContentView.swift in Sources */,
 				AA000005 /* DictationCoordinator.swift in Sources */,
 				RR000010 /* CleanupPipeline.swift in Sources */,
@@ -1016,7 +1024,6 @@
 				AA00P203 /* PolishCoordinator.swift in Sources */,
                 RR000201 /* EmojiData.swift in App Sources */,
                 RR000202 /* LocalPolishEngine.swift in Sources */,
-				AA00P204 /* PolishMetricsRing.swift in Sources */,
 				AA00P205 /* PolishDebugView.swift in Sources */,
 				AA00P207 /* PolishDebugExporter.swift in Sources */,
 				AA000045 /* UnifiedAudioEngine.swift in Sources */,
@@ -1460,6 +1467,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+        QW800001 /* QwenASRRuntime */ = {
+            isa = XCLocalSwiftPackageReference;
+            relativePath = Vendor/QwenASRRuntime;
+        };
         RR800201 /* mlx-swift-lm */ = {
             isa = XCRemoteSwiftPackageReference;
             repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
@@ -1492,6 +1503,8 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+        QW900001 /* Qwen3ASR */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = Qwen3ASR; };
+        QW900002 /* SpeechVAD */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = SpeechVAD; };
         RR900201 /* MLXLLM */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLLM; };
         RR900202 /* MLXLMCommon */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLMCommon; };
 		AA900010 /* DictusCore */ = {

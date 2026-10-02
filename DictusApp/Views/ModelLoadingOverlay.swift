@@ -342,7 +342,8 @@ struct ModelLoadingOverlay: View {
         // Model readiness alone must not dismiss microphone preparation. Check
         // errors and latch model work first so failures cannot strand this cover.
         if activeContext.isPrepareOnly {
-            guard coordinator.keyboardSessionEnabled && coordinator.isEngineRunning else { return }
+            guard coordinator.keyboardSessionEnabled && coordinator.isEngineRunning
+                    && coordinator.isKeyboardModelReady else { return }
         }
         // The model is ready, but if we have never seen any actual work happen
         // yet, the parent likely just opened the overlay and the state will

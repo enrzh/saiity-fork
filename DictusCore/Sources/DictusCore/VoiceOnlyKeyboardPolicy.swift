@@ -512,12 +512,17 @@ public enum VoiceOnlyKeyboardPolicy {
             )
         }
 
+        public var accessoryServiceToggleFrame: CGRect {
+            CGRect(x: max(0, accessoryDictationBoardFrame.minX - railSpacing - accessoryControlSize),
+                   y: 0, width: accessoryControlSize, height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        }
+
         /// Emoji category scrubber in the suggestion lane, between the language
-        /// chip and the dictation-board control. UIKit owns this hit target
+        /// chip and the service control. UIKit owns this hit target
         /// because keyboard hosts often drop SwiftUI taps in the top lane.
         public var accessoryEmojiCategoryFrame: CGRect {
             let minX = accessoryEdgeInset + languageVisualWidth + railSpacing
-            let maxX = accessoryDictationBoardFrame.minX - railSpacing
+            let maxX = accessoryServiceToggleFrame.minX - railSpacing
             let width = max(0, maxX - minX)
             return CGRect(
                 x: minX,

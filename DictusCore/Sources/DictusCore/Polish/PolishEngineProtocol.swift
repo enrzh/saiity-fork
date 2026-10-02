@@ -3,9 +3,8 @@ import Foundation
 
 /// Pluggable polish backend.
 ///
-/// Round 1 has one production implementation (`AppleFoundationModelsPolishEngine`
-/// in DictusApp). `PassthroughPolishEngine` exists to validate the wiring on
-/// devices without Apple Foundation Models and during early development.
+/// Apple Foundation Models, app-only MLX and configured Ollama share this
+/// contract. Passthrough supports unavailable backends and deterministic tests.
 public protocol PolishEngineProtocol: Sendable {
     /// Stable identifier for metrics (e.g. "apple-fm", "passthrough").
     var identifier: String { get }
@@ -44,6 +43,7 @@ public protocol PolishEngineProtocol: Sendable {
     /// (#239). Default implementation is a no-op for engines that have
     /// nothing to warm.
     func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage) async
+    func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage, style: WritingStyle) async
 
     /// Whether a `polish(raw:targetLanguage:mode:)` call with this exact input
     /// would fit inside the backend's context window (#270).
@@ -64,6 +64,9 @@ public protocol PolishEngineProtocol: Sendable {
                     targetLanguage: SupportedLanguage,
                     mode: PolishMode) -> PolishContextFit
 
+    func contextFit(input: String, targetLanguage: SupportedLanguage,
+                    mode: PolishMode, style: WritingStyle) -> PolishContextFit
+
     /// Name the failure `error` — thrown by this engine's own `polish(...)` —
     /// so an engine failure stops being one opaque bucket (#315).
     ///
@@ -82,6 +85,13 @@ public protocol PolishEngineProtocol: Sendable {
 }
 
 public extension PolishEngineProtocol {
+    func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage, style: WritingStyle) async {
+        await prewarm(mode: mode, targetLanguage: targetLanguage)
+    }
+    func contextFit(input: String, targetLanguage: SupportedLanguage,
+                    mode: PolishMode, style: WritingStyle) -> PolishContextFit {
+        contextFit(input: input, targetLanguage: targetLanguage, mode: mode)
+    }
     var announcesProcessingStage: Bool { true }
 
     func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage) async {}

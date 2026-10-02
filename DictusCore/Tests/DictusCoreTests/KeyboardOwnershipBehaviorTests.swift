@@ -170,9 +170,13 @@ final class KeyboardOwnershipBehaviorTests: XCTestCase {
             return
         }
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(false, forKey: SharedKeys.serviceEnabled)
+        KeyboardDictationService.setEnabled(false, in: defaults)
         XCTAssertFalse(KeyboardDictationService.isEnabled(in: defaults))
-        defaults.set(true, forKey: SharedKeys.serviceEnabled)
+        KeyboardDictationService.setEnabled(true, in: defaults)
         XCTAssertTrue(KeyboardDictationService.isEnabled(in: defaults))
+        KeyboardDictationService.setEnabled(true, in: defaults)
+        XCTAssertTrue(KeyboardDictationService.isEnabled(in: defaults))
+        XCTAssertNil(defaults.object(forKey: SharedKeys.keyboardAudioReady), "Enabling is not evidence of a warm microphone")
+        XCTAssertNil(defaults.object(forKey: SharedKeys.modelReady), "Enabling must not invent an installed model")
     }
 }

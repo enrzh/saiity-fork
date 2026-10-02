@@ -88,6 +88,10 @@ final class DictationDeliveryTests: XCTestCase {
     }
 
     func testDuplicateStopsDuringFinalizationAreIgnored() {
+        XCTAssertEqual(DictationStopAction.resolve(status: .recording, isRecording: false,
+            isTranscribingInFlight: true), .ignore)
+        XCTAssertEqual(DictationStopAction.resolve(status: .requested, isRecording: false,
+            isTranscribingInFlight: true), .ignore)
         for status in [DictationStatus.transcribing, .processing, .ready, .failed] {
             XCTAssertEqual(DictationStopAction.resolve(status: status, isRecording: false), .ignore)
         }

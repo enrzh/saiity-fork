@@ -20,10 +20,14 @@ struct ModelManagerView: View {
     private let deviceCapabilities = DeviceCapabilities.current()
 
     private var catalogModels: [ModelInfo] {
-        var models = ModelInfo.available(on: deviceCapabilities)
-        let preferred = modelManager.selectionProfile.preferredIdentifier(for: deviceCapabilities)
+        var models = ModelInfo.available(on: deviceCapabilities).filter {
+            $0.runtimeCapability.minimumOSMajorVersion <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        }
+        let preferred = modelManager.preferredModelIdentifier
         if !models.contains(where: { $0.identifier == preferred }),
-           let model = ModelInfo.forIdentifier(preferred), model.isSupported(on: deviceCapabilities) {
+           let model = ModelInfo.forIdentifier(preferred),
+           model.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                    capabilities: deviceCapabilities) {
             models.append(model)
         }
         return models
@@ -151,6 +155,7 @@ struct ModelManagerView: View {
         List {
             Section {
                 ModelSelectionProfilePicker(modelManager: modelManager)
+                DictationModelQuickPicker(modelManager: modelManager)
                 ModelSelectionModePicker(modelManager: modelManager)
             } header: {
                 Text("Selection")

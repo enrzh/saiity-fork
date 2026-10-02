@@ -61,7 +61,8 @@ public enum PolishPipeline {
                                  target: SupportedLanguage,
                                  mode: PolishMode,
                                  style: WritingStyle = .balanced,
-                                 gate: PolishAvailabilityGate = PolishAvailabilityGate()) async -> Result {
+                                 gate: PolishAvailabilityGate = PolishAvailabilityGate(),
+                                 deadline: PolishDeadline = PolishDeadline()) async -> Result {
         guard !Task.isCancelled else {
             return Result(engineOutput: nil, outcome: .cancelled, engineMs: 0, postprocessMs: 0)
         }
@@ -85,7 +86,7 @@ public enum PolishPipeline {
         // a single pass over the strings (tens of microseconds), and folding it
         // into `engineMs` would pollute the one number that measures the LLM.
         if case .exceeds(let estimated, let budget) = engine.contextFit(
-            input: engineInput, targetLanguage: target, mode: mode
+            input: engineInput, targetLanguage: target, mode: mode, style: style
         ) {
             // The engine is NOT called. `resolvedOutput` returns the
             // deterministic floor for this outcome exactly as it does for an
@@ -94,14 +95,14 @@ public enum PolishPipeline {
             PolishMetrics.logContextOverflow(estimatedTokens: estimated, budgetTokens: budget, mode: mode)
             return Result(engineOutput: nil, outcome: .exceededContextBudget, engineMs: 0, postprocessMs: 0)
         }
-        let engineStart = Date()
+        let engineStart = DispatchTime.now().uptimeNanoseconds
         do {
             try Task.checkCancellation()
-            let polishedRaw = try await engine.polish(
-                raw: engineInput, targetLanguage: target, mode: mode, style: style
-            )
-            let engineMs = Int(Date().timeIntervalSince(engineStart) * 1000)
-            let postStart = Date()
+            let polishedRaw = try await PolishExecution.shared.run(deadline: deadline) {
+                try await engine.polish(raw: engineInput, targetLanguage: target, mode: mode, style: style)
+            }
+            let engineMs = DictationRuntimeMetrics.elapsedMilliseconds(since: engineStart)
+            let postStart = DispatchTime.now().uptimeNanoseconds
             // Restore newlines (+ target typography outside auto mode) BEFORE
             // the guardrail so the char-ratio compares apples to apples (both
             // sides use `\n`).
@@ -110,32 +111,32 @@ public enum PolishPipeline {
                 : PolishPostpass.decodeFromEngine(polishedRaw, language: target)
             let polished = PolishPostpass.cleanupFloor(decoded, language: mode == .auto ? nil : target)
             if Task.isCancelled {
-                let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+                let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
                 return Result(engineOutput: polished, outcome: .cancelled, engineMs: engineMs, postprocessMs: postMs)
             }
             // Guardrail baseline is the preprocessed text — what the engine
             // actually saw (modulo the newline marker the post-pass undid).
             guard PolishGuardrail.accepts(raw: preprocessed, polished: polished, mode: mode) else {
-                let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+                let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
             guard PolishGuardrail.preservesStructure(raw: preprocessed, polished: polished, mode: mode),
                   PolishGuardrail.preservesFacts(raw: preprocessed, polished: polished, mode: mode) else {
-                let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+                let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
             guard languageGuardrailPasses(polished: polished, preprocessed: preprocessed,
                                           target: target, mode: mode) else {
-                let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+                let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
                 return Result(engineOutput: polished, outcome: .rejectedGuardrail, engineMs: engineMs, postprocessMs: postMs)
             }
-            let postMs = Int(Date().timeIntervalSince(postStart) * 1000)
+            let postMs = DictationRuntimeMetrics.elapsedMilliseconds(since: postStart)
             return Result(engineOutput: polished, outcome: .success, engineMs: engineMs, postprocessMs: postMs)
         } catch is CancellationError {
-            let engineMs = Int(Date().timeIntervalSince(engineStart) * 1000)
+            let engineMs = DictationRuntimeMetrics.elapsedMilliseconds(since: engineStart)
             return Result(engineOutput: nil, outcome: .cancelled, engineMs: engineMs, postprocessMs: 0)
         } catch {
-            let engineMs = Int(Date().timeIntervalSince(engineStart) * 1000)
+            let engineMs = DictationRuntimeMetrics.elapsedMilliseconds(since: engineStart)
             // URLSession reports cancellation as URLError, not CancellationError.
             if Task.isCancelled || (error as? URLError)?.code == .cancelled {
                 return Result(engineOutput: nil, outcome: .cancelled, engineMs: engineMs, postprocessMs: 0)
@@ -146,7 +147,8 @@ public enum PolishPipeline {
             // Nothing else in this `do` block throws, so the error is always the
             // engine's.
             return Result(engineOutput: nil, outcome: .engineFailed, engineMs: engineMs, postprocessMs: 0,
-                          failureReason: engine.failureReason(for: error))
+                          failureReason: (error as? PolishExecutionError).map { PolishFailureReason(slug: $0.rawValue) }
+                            ?? engine.failureReason(for: error))
         }
     }
 
@@ -279,7 +281,7 @@ public enum PolishPipeline {
                             detected: SupportedLanguage,
                             target: SupportedLanguage) -> PolishMode {
         switch sttEngine {
-        case .whisperKit:
+        case .whisperKit, .qwenASR:
             return .natural
         case .parakeet:
             return detected == target ? .natural : .repair

@@ -16,6 +16,7 @@ public struct PolishResultCache: Sendable {
         public let transcriptionMode: String
         public let outputMode: String
         public let keyboardLanguage: String
+        public let promptRevision: String
 
         public init(raw: String,
                     engine: String,
@@ -26,7 +27,8 @@ public struct PolishResultCache: Sendable {
                     modelIdentifier: String = "",
                     transcriptionMode: String = "",
                     outputMode: String = "",
-                    keyboardLanguage: String = "") {
+                    keyboardLanguage: String = "",
+                    promptRevision: String = DictationCleanupPrompt.revision + "\n" + PolishGlossary.promptBlock) {
             self.raw = raw
             self.engine = engine
             self.target = target
@@ -37,6 +39,7 @@ public struct PolishResultCache: Sendable {
             self.transcriptionMode = transcriptionMode
             self.outputMode = outputMode
             self.keyboardLanguage = keyboardLanguage
+            self.promptRevision = promptRevision
         }
     }
 

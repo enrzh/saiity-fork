@@ -847,6 +847,24 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         }
     }
 
+    func testAccessoryServiceControlFitsBesideTheBoardWithoutStealingOtherTargets() {
+        for width in [320.0, 375, 402, 430, 667, 852] {
+            let layout = VoiceOnlyKeyboardPolicy.layout(for: width)
+            let toggle = layout.accessoryServiceToggleFrame
+            let board = layout.accessoryDictationBoardFrame
+            let pasteLane = layout.accessoryEmojiCategoryFrame
+            XCTAssertGreaterThanOrEqual(toggle.width, 44)
+            XCTAssertGreaterThanOrEqual(toggle.height, 28)
+            XCTAssertEqual(toggle.midY, board.midY)
+            XCTAssertLessThan(toggle.maxX, board.minX)
+            XCTAssertLessThan(pasteLane.maxX, toggle.minX)
+            XCTAssertGreaterThanOrEqual(pasteLane.width, VoiceOnlyKeyboardPolicy.accessoryControlSize)
+            XCTAssertTrue(CGRect(x: 0, y: 0, width: width,
+                height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight).contains(toggle))
+            XCTAssertFalse(toggle.intersects(layout.accessoryDismissFrame))
+        }
+    }
+
     func testPasteFrameSitsBesideLanguageFrameWithoutChangingActionGeometry() {
         for width in [320.0, 375, 390, 430] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width)

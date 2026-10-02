@@ -30,7 +30,7 @@ public enum ModelSelectionMode: String, CaseIterable, Codable, Sendable {
     public var explanation: String {
         switch self {
         case .automatic:
-            return "Chooses an installed model that fits this iPhone's memory, temperature, and measured warm-up time."
+            return "Chooses an installed compatible model using this iPhone's memory, temperature, and catalog size and speed estimates."
         case .manual:
             return "Keeps the model you select until you change it."
         }
@@ -70,9 +70,11 @@ public enum ModelSelectionProfile: String, CaseIterable, Sendable {
             ? preferred : ModelInfo.recommendedIdentifier(for: capabilities)
     }
 
-    public func resolvedIdentifier(installed: Set<String>, osMajor: Int, capabilities: DeviceCapabilities) -> String? {
+    public func resolvedIdentifier(installed: Set<String>, osMajor: Int, capabilities: DeviceCapabilities,
+                                   recognizer: DictationRecognizer? = nil) -> String? {
         let compatible = ModelInfo.allIncludingDeprecated.filter {
             installed.contains($0.identifier) && $0.isRuntimeAvailable(onOSMajor: osMajor, capabilities: capabilities)
+                && (recognizer?.contains($0) ?? ($0.engine != .qwenASR))
         }
         let multilingual = compatible.filter { $0.runtimeCapability.supportsAutomaticLanguageDetection }
         let candidates = multilingual.isEmpty ? compatible : multilingual
@@ -80,7 +82,9 @@ public enum ModelSelectionProfile: String, CaseIterable, Sendable {
         if capabilities.prefersFastRuntimeModel {
             return candidates.max { $0.speedScore < $1.speedScore }?.identifier
         }
-        let preferred = preferredIdentifier(for: capabilities)
+        let preferred = recognizer == .streaming
+            ? (self == .precise ? QwenASRModel.large.rawValue : QwenASRModel.small.rawValue)
+            : preferredIdentifier(for: capabilities)
         if candidates.contains(where: { $0.identifier == preferred }) { return preferred }
         if self == .precise { return candidates.max { $0.accuracyScore < $1.accuracyScore }?.identifier }
         let sizeBudget = ModelInfo.forIdentifier(preferred)?.sizeBytes ?? 0

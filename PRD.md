@@ -1,3 +1,37 @@
+# Current product specification — October 1, 2026
+
+sAiity is an everyday iOS keyboard with private dictation, multilingual typing
+and conservative, reversible text cleanup. The current accepted scope is
+[the product quality plan](/Users/enricomini/Documents/Github/sAiity-dictus/docs/product-quality-plan.md).
+
+- Speak puts readiness and recording first. Balanced/device-recommended/Precise
+  presets and direct model selection remain available. Models is reachable from
+  Speak and Settings.
+- WhisperKit and Parakeet provide speech recognition within their documented
+  language/device limits. Apple Foundation Models, Gemma 3 1B and Qwen 2.5
+  0.5B/1.5B provide processing. Local MLX requires foreground. Configured server
+  processing is optional; no service/account is mandatory for core dictation.
+- Mixed spoken languages remain in place by default. Translation is explicit.
+  Cleanup preserves facts, names, negation and unfinished thoughts, with safe
+  fallback. A selected model is not a guarantee of availability or measured quality.
+- Typing includes suggestions, reversible autocorrection, shared key/hold/haptic
+  controls, original/result recovery, explicit personal vocabulary and field-specific
+  layouts. The current full emoji category rail remains above Space.
+- History is bounded and optional, including original/result pairs. Feedback is
+  voluntary/local. Text-bearing model diagnostics require explicit consent.
+- The main product metric is explicitly rated dictations usable unchanged.
+  Real-device insertion, typing, haptics, setup, power and quality remain separate
+  verification gates. Unit/build success does not replace them.
+
+See the current keyboard/runtime plans for implemented behavior and outstanding
+device checks. Read older material below as historical research only; competitor
+prices, availability and exclusivity claims have not been revalidated. Commits,
+pushes, messaging testers and release uploads need their own authorization.
+
+---
+
+## Archived March 2026 draft
+
 # Dictus — Product Requirements Document
 
 > **Version** 1.1 · Draft  

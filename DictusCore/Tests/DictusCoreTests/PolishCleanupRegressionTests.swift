@@ -2,6 +2,18 @@ import XCTest
 @testable import DictusCore
 
 final class PolishCleanupRegressionTests: XCTestCase {
+    func testForeignLanguageAnnotationIsRemovedWithoutRewritingTraditionalChinese() {
+        let chinese = "那會不會是暗吧"
+        for label in ["(speaking in foreign language)", "[speaking in foreign language]", "*speaking in foreign language*", "(Speaking In Foreign Language)"] {
+            let input = label + chinese
+            XCTAssertEqual(PolishPostpass.cleanupFloor(input, language: nil), chinese)
+            XCTAssertEqual(TranscriptionPipeline.assemble(cleaned: input, grammarLanguage: nil,
+                insertAsIs: true).formatted, chinese)
+        }
+        let ordinary = "They are speaking in a foreign language (see attached)."
+        XCTAssertEqual(PolishPostpass.cleanupFloor(ordinary, language: nil), ordinary)
+        XCTAssertEqual(PolishPostpass.removeNonSpeechEventLabels("(foreign language department)"), "(foreign language department)")
+    }
     func testAutoCleanupPreservesMixedLanguageTranscript() {
         let input = "Ich schicke dir the invoice tomorrow und 我晚上再确认。"
         let cleaned = PolishPostpass.cleanupFloor(input, language: nil)

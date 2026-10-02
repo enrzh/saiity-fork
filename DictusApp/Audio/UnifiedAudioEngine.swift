@@ -7,6 +7,7 @@ import Foundation
 import DictusCore
 
 extension Notification.Name {
+    static let dictusDictationSessionEnded = Notification.Name("DictusDictationSessionEnded")
     /// In-process signal that the AVAudioSession was interrupted or the media
     /// services stack was reset. Consumers (LiveActivityManager, DictationCoordinator)
     /// must treat the audio engine as dead until a successful `warmUp()` returns.
@@ -144,7 +145,10 @@ class UnifiedAudioEngine: ObservableObject {
     var isHealthy: Bool { engine.isRunning && !isInterrupted }
 
     /// Current accumulated sample count (for zombie engine health check).
-    var currentSampleCount: Int { audioSamples.count }
+    var currentSampleCount: Int { captureBuffer.count }
+    func previewAudio(after sampleCount: Int) -> AudioCaptureBuffer.Capture? {
+        captureBuffer.read(after: sampleCount)
+    }
 
     /// What AVAudioSession actually reports for the system-haptics allowance.
     ///
@@ -163,7 +167,7 @@ class UnifiedAudioEngine: ObservableObject {
     private var engine = AVAudioEngine()
 
     /// Accumulated audio samples in 16kHz mono Float32 (WhisperKit/Parakeet expected format).
-    private var audioSamples: [Float] = []
+    private nonisolated let captureBuffer = AudioCaptureBuffer()
 
     /// Converter from hardware sample rate (typically 48kHz) to 16kHz mono.
     /// WHY nonisolated(unsafe): Written once from main thread in startEngine(),
@@ -252,12 +256,6 @@ class UnifiedAudioEngine: ObservableObject {
     /// independently without changing the normal capture lifecycle.
     private static let warmUpIdleReleaseInterval: TimeInterval = idleReleaseInterval
 
-    /// Sample gating flag read from the audio thread.
-    /// WHY nonisolated(unsafe): Read from audio callback thread (single reader pattern).
-    /// Written from main thread via startRecording()/collectSamples()/stopEngine().
-    /// The flag is a simple Bool — partial reads are impossible on ARM64.
-    private nonisolated(unsafe) var isRecordingFlag = false
-
     /// Timestamp of last heartbeat write to App Group.
     /// Throttled to ~1Hz to avoid excessive UserDefaults writes from the audio thread.
     /// WHY nonisolated(unsafe): Written only from the audio callback thread (single writer).
@@ -284,7 +282,7 @@ class UnifiedAudioEngine: ObservableObject {
 
     /// Accumulated sample count on the audio thread for elapsed time calculation.
     /// WHY nonisolated(unsafe): Single writer (audio callback thread).
-    private nonisolated(unsafe) var audioThreadSampleCount: Int = 0
+    private nonisolated(unsafe) var audioThreadCaptureSessionID: UInt64?
 
     private nonisolated(unsafe) var waveformSessionID: UInt64?
     private nonisolated(unsafe) var lastUIWaveformUpdate: TimeInterval = 0
@@ -399,7 +397,7 @@ class UnifiedAudioEngine: ObservableObject {
 
             isInterrupted = true
             isRecording = false
-            isRecordingFlag = false
+            _ = captureBuffer.stop()
             cancelIdleRelease()
             endWaveformSession()
 
@@ -485,6 +483,7 @@ class UnifiedAudioEngine: ObservableObject {
 
         cancelIdleRelease()
         endWaveformSession()
+        _ = captureBuffer.stop()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         publishKeyboardAudioReadiness()
@@ -497,7 +496,6 @@ class UnifiedAudioEngine: ObservableObject {
         sessionConfigured = false
         isInterrupted = true
         isRecording = false
-        isRecordingFlag = false
 
         NotificationCenter.default.post(name: .dictusAudioSessionInterrupted, object: nil)
         DarwinNotificationCenter.post(DarwinNotificationName.audioSessionInterrupted)
@@ -527,8 +525,13 @@ class UnifiedAudioEngine: ObservableObject {
     func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         if !sessionConfigured {
-            try session.setCategory(.playAndRecord, options: [.allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers])
+            // Dictation has no playback to echo-cancel. Keep ordinary input routing
+            // throughout standby and capture; voice-chat processing can suppress
+            // keyboard feedback even when the session reports haptics allowed.
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.allowBluetoothA2DP, .defaultToSpeaker, .mixWithOthers])
         }
+        applyHapticsAllowance(context: "configureAudioSession-beforeActivation")
         try session.setActive(true)
         sessionConfigured = true
 
@@ -649,11 +652,10 @@ class UnifiedAudioEngine: ObservableObject {
         if !engine.isRunning {
             try startEngine(context: "startRecording")
         }
-        configureRecordingAudioProcessing()
         purgeState()
         waveformSessionID = waveformWriter.beginSession()
+        if let waveformSessionID { captureBuffer.start(sessionID: waveformSessionID) }
         isRecording = true
-        isRecordingFlag = true
 
         PersistentLog.log(.audioEngineStarted)
 
@@ -677,12 +679,10 @@ class UnifiedAudioEngine: ObservableObject {
     }
 
     private func collectSamples(armingIdleRelease: Bool) -> [Float] {
+        let samples = captureBuffer.stop()
         isRecording = false
-        isRecordingFlag = false
-        restoreIdleAudioProcessing()
         endWaveformSession()
 
-        let samples = audioSamples
         let quality = SpeechAudioQuality.analyze(samples)
         PersistentLog.log(.diagnosticProbe(
             component: "UnifiedAudioEngine",
@@ -690,8 +690,6 @@ class UnifiedAudioEngine: ObservableObject {
             action: "measured",
             details: "sampleRate=16000 channels=1 samples=\(samples.count) condition=\(quality.condition.rawValue) rms=\(String(format: "%.4f", quality.rms)) peak=\(String(format: "%.4f", quality.peak)) noise=\(String(format: "%.4f", quality.estimatedNoiseFloor)) snrDB=\(String(format: "%.1f", quality.signalToNoiseRatioDB)) clipping=\(String(format: "%.4f", quality.clippingRatio))"
         ))
-        audioSamples = []
-
         PersistentLog.log(.engineCollectResult(sampleCount: samples.count, engineRunning: engine.isRunning))
 
         if #available(iOS 14.0, *) {
@@ -731,17 +729,13 @@ class UnifiedAudioEngine: ObservableObject {
     /// - Returns: Audio samples ready for transcription.
     func stopEngine() -> [Float] {
         cancelIdleRelease()
+        let samples = captureBuffer.stop()
         isRecording = false
-        isRecordingFlag = false
-        restoreIdleAudioProcessing()
         endWaveformSession()
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         publishKeyboardAudioReadiness()
-
-        let samples = audioSamples
-        audioSamples = []
 
         if #available(iOS 14.0, *) {
             DictusLogger.app.info("UnifiedAudioEngine stopped. Samples: \(samples.count, privacy: .public), Duration: \(String(format: "%.1f", Double(samples.count) / 16000.0), privacy: .public)s")
@@ -758,13 +752,11 @@ class UnifiedAudioEngine: ObservableObject {
     func deactivateSession() {
         cancelIdleRelease()
         isRecording = false
-        isRecordingFlag = false
-        restoreIdleAudioProcessing()
+        _ = captureBuffer.stop()
         endWaveformSession()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         publishKeyboardAudioReadiness()
-        audioSamples = []
         PersistentLog.log(.audioEngineStopped)
         do {
             try AVAudioSession.sharedInstance().setActive(
@@ -909,7 +901,7 @@ class UnifiedAudioEngine: ObservableObject {
         }()
 
         isRecording = false
-        isRecordingFlag = false
+        _ = captureBuffer.stop()
         endWaveformSession()
 
         engine.inputNode.removeTap(onBus: 0)
@@ -950,68 +942,23 @@ class UnifiedAudioEngine: ObservableObject {
         waveformWriter.endSession()
     }
 
-    /// Ask the system audio stack for its native echo/noise processing while a
-    /// recording is active. Unsupported routes keep the raw capture path.
-    private func configureRecordingAudioProcessing(inputNode: AVAudioInputNode? = nil) {
-        do {
-            try AVAudioSession.sharedInstance().setMode(.voiceChat)
-        } catch {
-            PersistentLog.log(.diagnosticProbe(
-                component: "UnifiedAudioEngine",
-                instanceID: "audioProcessing",
-                action: "voiceChatModeUnavailable",
-                details: error.localizedDescription
-            ))
-        }
-
-        guard let inputNode else { return }
-        if #available(iOS 13.0, *) {
-            do {
-                try inputNode.setVoiceProcessingEnabled(true)
-            } catch {
-                PersistentLog.log(.diagnosticProbe(
-                    component: "UnifiedAudioEngine",
-                    instanceID: "audioProcessing",
-                    action: "voiceProcessingUnavailable",
-                    details: error.localizedDescription
-                ))
-            }
-        }
-    }
-
-    /// Restore the neutral session mode after capture so an idle keyboard does
-    /// not keep the system in a voice-chat route.
-    private func restoreIdleAudioProcessing() {
-        do {
-            try AVAudioSession.sharedInstance().setMode(.default)
-        } catch {
-            PersistentLog.log(.diagnosticProbe(
-                component: "UnifiedAudioEngine",
-                instanceID: "audioProcessing",
-                action: "restoreDefaultModeFailed",
-                details: error.localizedDescription
-            ))
-        }
-    }
-
     /// Start the AVAudioEngine with a tap on the input node.
     ///
     /// - Parameter context: names the path that started the engine, so the
     ///   haptics-allowance line emitted on success says which one it came from
     ///   (issue #293).
     private func startEngine(context: String) throws {
-        audioSamples = []
+        _ = captureBuffer.stop()
         reusableOutputBuffer = nil
         audioThreadEnergy = []
         audioThreadWaveformBins = []
-        audioThreadSampleCount = 0
+        audioThreadCaptureSessionID = nil
         lastHeartbeatWrite = 0
         lastWaveformWrite = 0
         lastWaveformDiagnosticsWrite = 0
         lastUIWaveformUpdate = 0
 
         let inputNode = engine.inputNode
-        configureRecordingAudioProcessing(inputNode: inputNode)
         var hwFormat = inputNode.outputFormat(forBus: 0)
 
         // Guard: zero-channel format means hardware is unavailable (phone call active)
@@ -1131,6 +1078,13 @@ class UnifiedAudioEngine: ObservableObject {
         // the session implicitly. This is the funnel every start path goes
         // through (issue #293).
         applyHapticsAllowance(context: "startEngine-\(context)")
+        let session = AVAudioSession.sharedInstance()
+        PersistentLog.log(.diagnosticProbe(
+            component: "UnifiedAudioEngine",
+            instanceID: "audioProcessing",
+            action: "inputStarted",
+            details: "context=\(context) mode=\(session.mode.rawValue) voiceProcessing=\(inputNode.isVoiceProcessingEnabled) allowsHaptics=\(session.allowHapticsAndSystemSoundsDuringRecording)"
+        ))
 
         if #available(iOS 14.0, *) {
             DictusLogger.app.info("UnifiedAudioEngine started (hw: \(hwFormat.sampleRate, privacy: .public)Hz -> 16kHz)")
@@ -1139,43 +1093,48 @@ class UnifiedAudioEngine: ObservableObject {
 
     /// Reset recording state without stopping the engine.
     private func purgeState() {
-        audioSamples = []
+        _ = captureBuffer.stop()
         bufferEnergy = []
         bufferSeconds = 0
-        audioThreadEnergy = []
-        audioThreadWaveformBins = []
-        audioThreadSampleCount = 0
-        lastWaveformWrite = 0
-        lastWaveformDiagnosticsWrite = 0
-        lastUIWaveformUpdate = 0
     }
 
     /// Process incoming audio buffer: convert to 16kHz and compute energy for waveform.
     ///
     /// WHY nonisolated: This callback fires on the audio thread. We do the CPU-intensive
-    /// conversion here, then dispatch UI updates and sample accumulation to main thread.
+    /// conversion and accumulation here, then dispatch throttled UI updates only.
     ///
-    /// SAMPLE GATING: Samples only accumulate when isRecordingFlag is true. When idle,
+    /// SAMPLE GATING: Samples only accumulate inside the active capture session. When idle,
     /// the engine still processes buffers for heartbeat + waveform (keeps background alive)
     /// but discards audio data. This prevents the 64M idle sample accumulation bug (#38).
     ///
-    /// IDLE FAST PATH (issue #106 Phase C): When `isRecordingFlag` is false, we skip the
+    /// IDLE FAST PATH (issue #106 Phase C): Without an active session, we skip the
     /// converter, waveform compute, energy buffer maintenance, and the main-thread
     /// dispatch — none of those outputs are consumed when no one is dictating. We only
     /// emit a sparse heartbeat (every 3s instead of 1s) so the keyboard's watchdog
     /// can still see the app is alive when a future dictation starts.
     ///
-    /// WHY 3s (not 10s): `isRecordingFlag` is false during `.transcribing` too —
-    /// `collectSamples()` flips it to false before transcription begins. The keyboard
+    /// WHY 3s (not 10s): Capture is stopped during `.transcribing` too. The keyboard
     /// watchdog falls back to the heartbeat with a 5s threshold during active dictation.
     /// A 10s throttle let transcriptions longer than 5s falsely trip the watchdog.
     /// 3s keeps us safely below the threshold; the per-buffer drain reduction comes
     /// from skipping conversion + waveform compute, not from the heartbeat cadence.
     private nonisolated func processBuffer(_ buffer: AVAudioPCMBuffer) {
         let now = Date().timeIntervalSince1970
-
-        // Idle fast path — sparse heartbeat only.
-        if !isRecordingFlag {
+        var conversionError: NSError?
+        let captured = captureBuffer.capture {
+            guard let converter, let outputBuffer = reusableOutputBuffer else { return nil }
+            outputBuffer.frameLength = 0
+            converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            guard conversionError == nil, let channelData = outputBuffer.floatChannelData else { return nil }
+            return Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
+        }
+        guard let captured else {
+            if let conversionError {
+                DictusLogger.app.warning("Audio conversion error: \(conversionError.localizedDescription, privacy: .public)")
+            }
             let idleHeartbeatThrottle: TimeInterval = 3.0
             if now - lastHeartbeatWrite >= idleHeartbeatThrottle {
                 lastHeartbeatWrite = now
@@ -1183,28 +1142,15 @@ class UnifiedAudioEngine: ObservableObject {
             }
             return
         }
-
-        guard let converter, let outputBuffer = reusableOutputBuffer else { return }
-        outputBuffer.frameLength = 0
-
-        // Convert from hardware format to 16kHz mono
-        var error: NSError?
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            outStatus.pointee = .haveData
-            return buffer
+        let samples = captured.samples
+        if audioThreadCaptureSessionID != captured.sessionID {
+            audioThreadCaptureSessionID = captured.sessionID
+            audioThreadEnergy = []
+            audioThreadWaveformBins = []
+            lastWaveformWrite = 0
+            lastWaveformDiagnosticsWrite = 0
+            lastUIWaveformUpdate = 0
         }
-
-        if let error {
-            if #available(iOS 14.0, *) {
-                DictusLogger.app.warning("Audio conversion error: \(error.localizedDescription, privacy: .public)")
-            }
-            return
-        }
-
-        // Extract Float32 samples from the converted buffer
-        guard let channelData = outputBuffer.floatChannelData else { return }
-        let frameLength = Int(outputBuffer.frameLength)
-        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
 
         // Compute RMS energy for this buffer (0.0-1.0 range)
         let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
@@ -1239,8 +1185,6 @@ class UnifiedAudioEngine: ObservableObject {
 
         // Update the sample count before publishing elapsed time so the value
         // represents the complete callback rather than the previous one.
-        audioThreadSampleCount += samples.count
-
         let shouldWriteWaveform = now - lastWaveformWrite >= 0.2
         let shouldPublishUI = now - lastUIWaveformUpdate >= 0.1
         var waveformSnapshot: [Float]?
@@ -1251,13 +1195,12 @@ class UnifiedAudioEngine: ObservableObject {
         }
 
         // Persist waveform data away from the real-time audio callback (~5Hz).
-        if shouldWriteWaveform, let waveformSnapshot,
-           let waveformSessionID {
+        if shouldWriteWaveform, let waveformSnapshot {
             lastWaveformWrite = now
             waveformWriter.enqueueWaveform(
                 waveformSnapshot,
-                elapsed: Double(audioThreadSampleCount) / 16000.0,
-                sessionID: waveformSessionID
+                elapsed: Double(captured.totalSampleCount) / 16000.0,
+                sessionID: captured.sessionID
             )
 
             if now - lastWaveformDiagnosticsWrite >= 1.0 {
@@ -1271,19 +1214,15 @@ class UnifiedAudioEngine: ObservableObject {
             }
         }
 
+        // Delayed UI updates cannot mutate capture or reach another recording.
         if shouldPublishUI, let waveformSnapshot {
             lastUIWaveformUpdate = now
-        }
-
-        // === Main thread dispatch (for in-app UI: RecordingView, SwiftUI) ===
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            // SAMPLE GATE: only accumulate when recording
-            guard self.isRecording else { return }
-            self.audioSamples.append(contentsOf: samples)
-            if let waveformSnapshot {
-                self.bufferSeconds = Double(self.audioSamples.count) / 16000.0
+            let sessionID = captured.sessionID
+            let elapsed = Double(captured.totalSampleCount) / 16000.0
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isRecording,
+                      self.waveformSessionID == sessionID else { return }
+                self.bufferSeconds = elapsed
                 self.bufferEnergy = waveformSnapshot
             }
         }

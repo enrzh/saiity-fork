@@ -146,6 +146,12 @@ public struct PolishContextBudget: Sendable, Equatable {
 
     // MARK: - Fit
 
+    /// Cleanup output is close to transcript length. Bound generation in tokens,
+    /// with room for corrections; exact local token counts override the estimate.
+    public static func outputLimit(for transcript: String, tokenCount: Int? = nil) -> Int {
+        min(2048, max(64, Int(ceil(Double(tokenCount ?? estimatedTokens(in: transcript)) * 1.5)) + 32))
+    }
+
     /// Estimated total token cost of one call: instructions + scaffolding +
     /// input + the output reserve, all multiplied by the safety margin.
     public func estimatedTokens(instructions: String, input: String) -> Int {

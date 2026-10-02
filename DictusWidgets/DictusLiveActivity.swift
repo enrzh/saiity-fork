@@ -174,23 +174,34 @@ private struct ActivityAction: View {
     var dark = false
     private var status: DictationActivityStatus { .init(state: state) }
     var body: some View {
-        Group {
-            if state.phase == .standby, !status.paused {
-                Button(intent: StopStandbyIntent(toggleDetection: true)) {
-                    actionLabel("mic.slash", title: "Pause")
-                }.accessibilityLabel("Pause keyboard dictation")
-            } else if state.phase == .recording, let url = URL(string: "saiity://stop") {
+        HStack(spacing: 8) {
+            if #available(iOS 18.2, *) {
+                serviceButton
+            } else if state.serviceEnabled {
+                serviceButton
+            } else if let url = KeyboardDictationBridge.recoveryURL() {
+                Link(destination: url) { actionLabel("power", title: "Off") }
+                    .accessibilityLabel("Enable keyboard dictation")
+            }
+            if state.phase == .recording, let url = URL(string: "saiity://stop") {
                 Link(destination: url) {
                     actionLabel("stop.fill", title: "Finish")
                 }.accessibilityLabel("Finish dictation")
-            } else if state.phase == .standby || state.phase == .failed,
+            } else if state.phase == .failed,
                       let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") {
                 Link(destination: url) {
-                    actionLabel("arrow.up.forward", title: state.phase == .failed ? "Open" : "Resume")
+                    actionLabel("arrow.up.forward", title: "Open")
                 }.accessibilityLabel("Open sAiity to prepare dictation")
             }
         }
         .buttonStyle(.plain)
+    }
+    private var serviceButton: some View {
+        Button(intent: StopStandbyIntent(toggleDetection: true)) {
+            actionLabel("power", title: state.serviceEnabled ? "On" : "Off")
+        }
+        .accessibilityLabel(state.serviceEnabled ? "Disable keyboard dictation" : "Enable keyboard dictation")
+        .accessibilityValue(state.serviceEnabled ? "On" : "Off")
     }
     private func actionLabel(_ symbol: String, title: String) -> some View {
         Label(title, systemImage: symbol).font(.caption.weight(.semibold))

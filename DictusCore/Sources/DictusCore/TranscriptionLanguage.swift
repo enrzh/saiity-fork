@@ -264,7 +264,7 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// Parakeet ignores the parameter either way; it receives the keyboard
     /// code exactly as it did before #226 so its flows stay byte-identical.
     public var sttLanguageCode: String? {
-        guard engine == .whisperKit else {
+        guard engine != .parakeet else {
             // Parakeet ignores this parameter; retain its existing call shape
             // and expose the limitation through `sttLanguageIsEffective`.
             return keyboardLanguage.rawValue
@@ -377,7 +377,7 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// when the raw text was French; recording this alongside it is what
     /// removes the ambiguity.
     public var sttLanguageIsEffective: Bool {
-        engine == .whisperKit
+        engine != .parakeet
     }
 
     /// `sttLanguageCode` rendered for logs and the debug export, with `nil`

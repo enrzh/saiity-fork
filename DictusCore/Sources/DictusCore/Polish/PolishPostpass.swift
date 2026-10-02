@@ -219,6 +219,7 @@ public enum PolishPostpass {
         "clears throat",
         "clearing throat",
         "speaking foreign language",
+        "speaking in foreign language",
     ]
 
     private static let nonSpeechModifiers: Set<String> = [

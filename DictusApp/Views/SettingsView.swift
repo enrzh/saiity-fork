@@ -278,6 +278,8 @@ struct SettingsView: View {
 struct VocabularyView: View {
     @State private var newWord = ""
     @State private var words: [String] = []
+    @State private var hints: [String] = []
+    @State private var vocabularyError: String?
     @State private var showingResetConfirmation = false
 
     var body: some View {
@@ -292,7 +294,7 @@ struct VocabularyView: View {
                         .disabled(newWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } footer: {
-                Text("These words are protected from local autocorrection and improve your personal dictionary.")
+                Text("Words you add are protected from autocorrection. Whisper recognition and cleanup use approved spellings; Parakeet uses them during cleanup. Automatically learned words become hints only when you choose Use in dictation. Server processing receives only hints already present in its transcript.")
             }
 
             Section("Learned words") {
@@ -301,7 +303,24 @@ struct VocabularyView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(words, id: \.self) { word in
-                        Text(word)
+                        HStack {
+                            Text(hints.first { $0.caseInsensitiveCompare(word) == .orderedSame } ?? word)
+                            Spacer()
+                            if isHint(word) {
+                                Image(systemName: "mic.fill").foregroundStyle(.secondary)
+                                    .accessibilityLabel("Dictation hint enabled")
+                            }
+                        }
+                        .contextMenu {
+                            Button(isHint(word) ? "Remove dictation hint" : "Use in dictation") {
+                                if isHint(word) { DictationVocabulary.remove(word, in: AppGroup.defaults) }
+                                else if !DictationVocabulary.approve(word, in: AppGroup.defaults) {
+                                    vocabularyError = "Keep up to 32 dictation hints, each under 65 characters and six words."
+                                }
+                                reload()
+                                KeyboardInteractionPreferences.notifyVocabularyChanged()
+                            }
+                        }
                     }
                     .onDelete(perform: deleteWords)
                 }
@@ -324,18 +343,24 @@ struct VocabularyView: View {
         ) {
             Button("Reset", role: .destructive) {
                 UserDictionary.shared.resetAll()
+                DictationVocabulary.clear(in: AppGroup.defaults)
                 reload()
                 KeyboardInteractionPreferences.notifyVocabularyChanged()
             }
         } message: {
-            Text("This removes every word sAiity learned from your typing.")
+            Text("This removes your learned words and approved dictation hints.")
         }
+        .alert("Could not add dictation hint", isPresented: Binding(get: { vocabularyError != nil },
+            set: { if !$0 { vocabularyError = nil } })) {
+                Button("OK") { vocabularyError = nil }
+            } message: { Text(vocabularyError ?? "") }
         .onAppear(perform: reload)
     }
 
     private func reload() {
         UserDictionary.shared.reload()
-        words = UserDictionary.shared.allLearnedWords.keys.sorted {
+        hints = DictationVocabulary.stored(in: AppGroup.defaults)
+        words = Set(Array(UserDictionary.shared.allLearnedWords.keys) + hints.map { $0.lowercased() }).sorted {
             $0.localizedStandardCompare($1) == .orderedAscending
         }
     }
@@ -343,6 +368,10 @@ struct VocabularyView: View {
     private func addWord() {
         let word = newWord.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty else { return }
+        guard DictationVocabulary.approve(word, in: AppGroup.defaults) else {
+            vocabularyError = "Keep up to 32 dictation hints, each under 65 characters and six words. Line breaks are not allowed."
+            return
+        }
         _ = UserDictionary.shared.learn(word)
         newWord = ""
         reload()
@@ -352,9 +381,14 @@ struct VocabularyView: View {
     private func deleteWords(at offsets: IndexSet) {
         for index in offsets where words.indices.contains(index) {
             UserDictionary.shared.forget(words[index])
+            DictationVocabulary.remove(words[index], in: AppGroup.defaults)
         }
         reload()
         KeyboardInteractionPreferences.notifyVocabularyChanged()
+    }
+
+    private func isHint(_ word: String) -> Bool {
+        hints.contains { $0.caseInsensitiveCompare(word) == .orderedSame }
     }
 }
 

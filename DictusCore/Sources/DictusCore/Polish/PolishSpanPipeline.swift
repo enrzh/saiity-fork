@@ -52,23 +52,13 @@ public enum PolishSpanPipeline {
                               gate: PolishAvailabilityGate = PolishAvailabilityGate(),
                               skipEngine: Bool = false,
                               placeholderLanguage: SupportedLanguage = .english,
-                              style: WritingStyle = .balanced) async -> Result {
+                              style: WritingStyle = .balanced,
+                              deadline: PolishDeadline = PolishDeadline()) async -> Result {
         let floor = PolishPostpass.cleanupFloor(raw, language: nil)
         let spans = PolishSpanDetector.spans(in: floor)
         let polishable = spans.filter(\.polishable)
         let passthroughCount = spans.count - polishable.count
         let languages = Array(Set(polishable.compactMap(\.languageCode))).sorted()
-
-        // A short, already-punctuated sentence has no useful model work left.
-        // Keep the deterministic floor authoritative and avoid paying the local
-        // model startup cost for the common "send this one sentence" case.
-        if isAlreadyCleanShort(floor) {
-            return Result(
-                text: floor, outcome: .skipped, engineMs: 0, postprocessMs: 0,
-                polishedSpanCount: 0, passthroughSpanCount: max(spans.count, 1),
-                detectedLanguages: languages
-            )
-        }
 
         if skipEngine {
             return Result(
@@ -120,7 +110,8 @@ public enum PolishSpanPipeline {
                 target: placeholderLanguage,
                 mode: .auto,
                 style: style,
-                gate: gate
+                gate: gate,
+                deadline: deadline
             )
             engineMs += transform.engineMs
             postprocessMs += transform.postprocessMs
@@ -191,7 +182,8 @@ public enum PolishSpanPipeline {
                               gate: PolishAvailabilityGate = PolishAvailabilityGate(),
                               skipEngine: Bool = false,
                               placeholderLanguage: SupportedLanguage = .english,
-                              style: WritingStyle = .balanced) async -> Result {
+                              style: WritingStyle = .balanced,
+                              deadline: PolishDeadline = PolishDeadline()) async -> Result {
         guard !regions.isEmpty else {
             return await polish(
                 raw: "",
@@ -199,7 +191,8 @@ public enum PolishSpanPipeline {
                 gate: gate,
                 skipEngine: skipEngine,
                 placeholderLanguage: placeholderLanguage,
-                style: style
+                style: style,
+                deadline: deadline
             )
         }
 
@@ -276,12 +269,6 @@ public enum PolishSpanPipeline {
                 continue
             }
 
-            if isAlreadyCleanShort(region.text) {
-                cleanedRegions.append(region)
-                passthroughCount += 1
-                continue
-            }
-
             let transformed = await PolishPipeline.transform(
                 preprocessed: region.text,
                 engine: engine,
@@ -289,6 +276,7 @@ public enum PolishSpanPipeline {
                 mode: .auto,
                 style: style,
                 gate: gate,
+                deadline: deadline
             )
             let transformedText = PolishPipeline.resolvedOutput(
                 transformed,
@@ -373,27 +361,4 @@ public enum PolishSpanPipeline {
         )
     }
 
-    private static func isAlreadyCleanShort(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 32,
-              trimmed == text,
-              let last = trimmed.last,
-              ".?!。！？".contains(last),
-              !trimmed.contains("  "),
-              !trimmed.contains("\n") else {
-            return false
-        }
-
-        guard let first = trimmed.first else { return false }
-        if first.isUppercase { return true }
-        return first.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
-                 0xAC00...0xD7AF, 0xF900...0xFAFF:
-                return true
-            default:
-                return false
-            }
-        }
-    }
 }

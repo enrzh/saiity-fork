@@ -12,6 +12,7 @@ actor LocalPolishEngine: PolishEngineProtocol {
     nonisolated var identifier: String { "local:\(model.rawValue)" }
     private var container: ModelContainer?
     private var loading: Task<ModelContainer, Error>?
+    private var contextWindowTokens = 0
 
     init(model: LocalCleanupModel) { self.model = model }
 
@@ -28,21 +29,28 @@ actor LocalPolishEngine: PolishEngineProtocol {
         }
     }
 
-    func prepare(progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+    func prepare() async throws {
         if container != nil { return }
         if let loading { container = try await loading.value; return }
         #if targetEnvironment(simulator)
         throw NSError(domain: "LocalCleanup", code: 1, userInfo: [NSLocalizedDescriptionKey: "Local cleanup models require a physical iPhone."])
         #else
         try await requireForeground()
+        let directory = configuration.modelDirectory(hub: defaultHubApi)
+        guard ModelRepoDownloader.completedDownloadSize(in: directory,
+            configuration: Self.downloadConfiguration(for: model)) != nil,
+              let data = try? Data(contentsOf: directory.appendingPathComponent("config.json")),
+              let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let contextLimit = config["max_position_embeddings"] as? Int, contextLimit > 0 else {
+            throw PolishExecutionError.artifactsUnavailable
+        }
+        // ponytail: cap local contexts at 32K; raise only with phone memory evidence.
+        contextWindowTokens = min(32_768, contextLimit)
         // MLX's desktop-sized buffer pool can retain the previous model's
         // allocations during a switch. Keep the iPhone cache bounded.
         Memory.cacheLimit = 16 * 1024 * 1024
         Memory.clearCache()
         let task = Task {
-            let directory = configuration.modelDirectory(hub: defaultHubApi)
-            let download = ModelRepoDownloader(configuration: Self.downloadConfiguration(for: model))
-            try await download.download(to: directory, modelName: model.displayName) { progress($0.fraction) }
             try Task.checkCancellation()
             try await requireForeground()
             let loaded = try await LLMModelFactory.shared.loadContainer(configuration: ModelConfiguration(
@@ -65,23 +73,39 @@ actor LocalPolishEngine: PolishEngineProtocol {
     func polish(raw: String, targetLanguage: SupportedLanguage, mode: PolishMode, style: WritingStyle) async throws -> String {
         try Task.checkCancellation()
         try await requireForeground()
+        let language = PolishPipeline.detectLanguageCode(in: raw)
+        guard model.supportsCleanup(languageCode: language,
+            mixedScript: SpeechLanguageEvidence.analyze(text: raw, detectedLanguage: language).isMixedScript) else {
+            throw PolishExecutionError.unsupportedLanguage
+        }
         try await prepare()
         guard let container else { throw CancellationError() }
+        let contextLimit = contextWindowTokens
         defer { Memory.clearCache() }
-        let prompt = DictationCleanupPrompt.instructions(style: style)
-            + "\n\n<DICTATION_TRANSCRIPT>\n" + raw + "\n</DICTATION_TRANSCRIPT>"
+        let request = PolishPromptEnvelope.resolve(raw: raw, style: style)
         let evaluation = Task {
             try await requireForeground()
             return try await container.perform { context in
-                let chat: [Chat.Message] = self.model == .gemma3_1b ? [.user(prompt)]
-                    : [.system(DictationCleanupPrompt.instructions(style: style)), .user(raw)]
+                let chat: [Chat.Message] = self.model == .gemma3_1b ? [.user(request.combined)]
+                    : [.system(request.instructions), .user(request.userTurn)]
                 let input = try await context.processor.prepare(input: UserInput(chat: chat))
+                let outputLimit = PolishContextBudget.outputLimit(for: raw,
+                    tokenCount: context.tokenizer.encode(text: raw).count)
+                guard input.text.tokens.size + outputLimit <= contextLimit else {
+                    throw PolishExecutionError.contextExceeded
+                }
                 let stream = try generate(input: input,
-                    parameters: GenerateParameters(maxTokens: min(2048, max(128, raw.count)), temperature: 0), context: context)
+                    parameters: GenerateParameters(maxTokens: outputLimit, temperature: 0), context: context)
                 var output = ""
                 for try await item in stream {
                     try Task.checkCancellation()
-                    if case .chunk(let text) = item { output += text }
+                    switch item {
+                    case .chunk(let text): output += text
+                    case .info(let info):
+                        if info.stopReason == .length { throw PolishExecutionError.outputTruncated }
+                        if info.stopReason == .cancelled { throw CancellationError() }
+                    default: break
+                    }
                 }
                 try Task.checkCancellation()
                 return output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,7 +118,29 @@ actor LocalPolishEngine: PolishEngineProtocol {
     }
 
     nonisolated func contextFit(input: String, targetLanguage: SupportedLanguage, mode: PolishMode) -> PolishContextFit {
-        PolishContextBudget.appleFoundationModels.fit(instructions: DictationCleanupPrompt.instructions(), input: input)
+        contextFit(input: input, targetLanguage: targetLanguage, mode: mode, style: .balanced)
+    }
+
+    nonisolated func contextFit(input: String, targetLanguage: SupportedLanguage,
+                               mode: PolishMode, style: WritingStyle) -> PolishContextFit {
+        let request = PolishPromptEnvelope.resolve(raw: input, style: style)
+        // Cheap preflight only. The loaded model's real tokenizer/config is the
+        // authoritative check immediately before generation.
+        return PolishContextBudget(contextWindowTokens: 32_768, scaffoldingTokens: 64,
+            outputReserveRatio: 1.8, safetyMargin: 1.15)
+            .fit(instructions: request.instructions, input: request.userTurn)
+    }
+
+    func downloadAndPrepare(progress: @escaping @Sendable (Double) -> Void) async throws {
+        try await requireForeground()
+        let directory = configuration.modelDirectory(hub: defaultHubApi)
+        let download = ModelRepoDownloader(configuration: Self.downloadConfiguration(for: model))
+        try await download.download(to: directory, modelName: model.displayName) { progress($0.fraction) }
+        try Task.checkCancellation()
+        _ = try await PolishExecution.shared.run(deadline: PolishDeadline()) {
+            try await self.prepare()
+            return ""
+        }
     }
 
     private func requireForeground() async throws {
@@ -129,9 +175,7 @@ enum CleanupModelProbe {
                 for model in requested.map({ [$0] }) ?? [.gemma3_1b] {
                     let engine = LocalPolishEngine(model: model)
                     let start = Date()
-                    try await engine.prepare { value in
-                        print("CLEANUP_PROBE model=\(model.rawValue) download=\(Int(value * 100))")
-                    }
+                    try await engine.prepare()
                     print("CLEANUP_PROBE model=\(model.rawValue) preparedSeconds=\(Date().timeIntervalSince(start)) memoryMB=\(Memory.activeMemory / 1_000_000)")
                     for raw in ["uh i i will send the invoice tomorrow", "Ich schicke dir the invoice tomorrow und 我晚上再确认。"] {
                         let began = Date()
@@ -195,7 +239,7 @@ enum CleanupModelProbe {
         preparationTask = Task {
             defer { preparing = nil; preparationTask = nil; refreshArtifacts() }
             do {
-                try await engine.prepare { value in
+                try await engine.downloadAndPrepare { value in
                     Task { @MainActor in self.progress = value }
                 }
                 try Task.checkCancellation()

@@ -43,7 +43,7 @@ func optionValue(_ name: String, in args: [String]) -> String? {
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
-guard let command = args.first, ["show", "eval", "ab", "prompt", "spans"].contains(command), args.count >= 2 else {
+guard let command = args.first, ["show", "eval", "ab", "prompt", "spans", "quality", "quality-template"].contains(command), args.count >= 2 else {
     print("""
     polish-harness — off-device polish eval (macOS + Apple Intelligence)
 
@@ -52,6 +52,8 @@ guard let command = args.first, ["show", "eval", "ab", "prompt", "spans"].contai
       ab     <fixtures.json> --a <promptA.txt> --b <promptB.txt>
       prompt <fixtures.json> [--id <fixtureID>] [--out <dir>]
       spans  <fixtures.json>
+      quality <product-fixtures.json> <captured-run.json>
+      quality-template <product-fixtures.json> --model <installed-model-id>
 
     --spans  multilingual coordinator path (floor + per-sentence engine)
     spans    print floor + sentence-span decisions; no model required
@@ -62,6 +64,51 @@ guard let command = args.first, ["show", "eval", "ab", "prompt", "spans"].contai
       --base-url <url>            default http://127.0.0.1:11434
     """)
     exit(2)
+}
+
+if command == "quality" || command == "quality-template" {
+    do {
+        let fixtures = try JSONDecoder().decode([ASREvaluation.Fixture].self,
+            from: Data(contentsOf: URL(fileURLWithPath: args[1])))
+        if command == "quality-template" {
+            guard let id = optionValue("--model", in: args), let model = ModelInfo.forIdentifier(id) else {
+                print("Provide a known model identifier with --model"); exit(2)
+            }
+            var run = ASREvaluation.emptyRun(model: model, fixtures: fixtures, device: "FILL_DEVICE",
+                osVersion: "FILL_OS", modelRevision: "FILL_MODEL_REVISION", runtimeRevision: "FILL_RUNTIME_REVISION")
+            let eligible = ASREvaluation.eligibleFixtures(fixtures, for: model)
+            run.outcomes = Dictionary(uniqueKeysWithValues: eligible.map { ($0.id, .pending) })
+            run.finalTranscripts = Dictionary(uniqueKeysWithValues: eligible.map { ($0.id, "") })
+            run.stopToProxyMs = [:]; run.cold = [:]; run.acceptedWithoutEdits = [:]
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            print(String(decoding: try encoder.encode(run), as: UTF8.self))
+        } else {
+            guard args.count >= 3 else { print("Provide a captured-run JSON path"); exit(2) }
+            let run = try JSONDecoder().decode(ASREvaluation.CapturedRun.self,
+                from: Data(contentsOf: URL(fileURLWithPath: args[2])))
+            guard let model = ModelInfo.forIdentifier(run.modelIdentifier) else { print("Unknown model"); exit(2) }
+            let scores = try ASREvaluation.score(run, fixtures: fixtures, model: model)
+            let summary = try ASREvaluation.productSummary(run, fixtures: fixtures, model: model)
+            print("Device: \(run.device), OS: \(run.osVersion), model: \(run.modelIdentifier)")
+            print("Cases: \(summary.cases); inserted: \(summary.inserted); failures: \(summary.failures); cancelled: \(summary.cancelled)")
+            print("Unsupported cases excluded: \(fixtures.count - summary.cases)")
+            print("Usable unchanged: \(summary.acceptedUnchanged) / \(summary.rated) explicitly rated results")
+            print("Protected-fact failures: \(summary.protectedFactFailures); hallucinated silence: \(summary.hallucinatedSilence)")
+            for metric in ["wer", "cer"] {
+                let cases = scores.filter { $0.metric == metric }
+                let units = cases.reduce(0) { $0 + $1.units }
+                if units > 0 { print("\(metric.uppercased()): \(Double(cases.reduce(0) { $0 + $1.errors }) / Double(units))") }
+            }
+            for (label, values) in [("Cold", summary.coldLatencyMs), ("Warm", summary.warmLatencyMs)] where !values.isEmpty {
+                let sorted = values.sorted()
+                let median = sorted[max(0, Int(ceil(Double(sorted.count) * 0.5)) - 1)]
+                let p95 = sorted[max(0, Int(ceil(Double(sorted.count) * 0.95)) - 1)]
+                print("\(label) Stop-to-proxy n=\(values.count), p50=\(median)ms, p95=\(p95)ms")
+                if values.count < 20 { print("Too few samples for a reliable p95 comparison.") }
+            }
+        }
+        exit(0)
+    } catch { print("Invalid capture: \(error)"); exit(1) }
 }
 
 let fixturesPath = args[1]
@@ -335,39 +382,50 @@ func runHarness() async {
             print("error: no fixture with id \(promptFixtureID ?? "-") in \(fixturesPath)")
             exit(1)
         }
+        let override = loadInstructions(instructionsFile)
         for fx in selected {
-            guard let target = fx.language else {
-                print("error: [\(fx.id)] routes through auto mode, which has no per-language prompt")
-                exit(1)
-            }
-            let preprocessed = VerbalPunctuationPrepass.apply(fx.raw, language: target)
-            guard let detected = PolishPipeline.detectLanguage(in: preprocessed) else {
-                print("error: [\(fx.id)] language detection returned nil — the pipeline "
-                      + "would skip the engine entirely, so there is no prompt to print")
-                exit(1)
-            }
-            let mode = PolishPipeline.mode(sttEngine: fx.speechEngine, detected: detected, target: target)
-            let system = AppleFoundationModelsPolishEngine.instructions(for: mode, language: target)
-            let user = LocalHTTPPolishEngine.userTurn(raw: preprocessed)
-            print("━━ [\(fx.id)] lang=\(fx.lang) stt=\(fx.sttEngine ?? "PK") "
-                  + "detected=\(detected.rawValue) mode=\(mode.rawValue) "
-                  + "systemChars=\(system.count) userChars=\(user.count)")
-            if let dir = promptOutputDir {
-                let base = URL(fileURLWithPath: dir).appendingPathComponent(fx.id)
-                do {
-                    try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-                    try system.write(to: base.appendingPathComponent("system.txt"), atomically: true, encoding: .utf8)
-                    try user.write(to: base.appendingPathComponent("user.txt"), atomically: true, encoding: .utf8)
-                } catch {
-                    print("error: cannot write to \(base.path): \(error)")
-                    exit(1)
+            var requests: [(text: String, mode: PolishMode, target: SupportedLanguage)] = []
+            if useSpans {
+                let floor = PolishPostpass.cleanupFloor(fx.raw, language: nil)
+                requests = PolishSpanDetector.spans(in: floor).filter(\.polishable)
+                    .map { ($0.text, .auto, .english) }
+            } else if let target = fx.language {
+                let text = VerbalPunctuationPrepass.apply(fx.raw, language: target)
+                if let detected = PolishPipeline.detectLanguage(in: text) {
+                    requests = [(text, PolishPipeline.mode(sttEngine: fx.speechEngine, detected: detected, target: target), target)]
                 }
-                print("  wrote \(base.path)/{system,user}.txt")
-            } else {
-                print("──── system ────")
-                print(system)
-                print("──── user ────")
-                print(user)
+            } else if let code = PolishPipeline.detectLanguageCode(in: fx.raw) {
+                requests = [(PolishPipeline.autoPreprocess(fx.raw, detectedCode: code), .auto, .english)]
+            }
+            if requests.isEmpty {
+                print("[\(fx.id)] skipped: no eligible model request")
+            }
+            for (index, request) in requests.enumerated() {
+                let engineInput = PolishPostpass.encodeForEngine(request.text)
+                let resolved = PolishPromptEnvelope.resolve(raw: engineInput)
+                let system = override?(request.mode, request.target) ?? resolved.instructions
+                let user = resolved.userTurn
+                print("━━ [\(fx.id)] lang=\(fx.lang) stt=\(fx.sttEngine ?? "PK") "
+                      + "span=\(index) mode=\(request.mode.rawValue) "
+                      + "systemChars=\(system.count) userChars=\(user.count)")
+                if let dir = promptOutputDir {
+                    let name = requests.count == 1 ? fx.id : "\(fx.id)-span\(index)"
+                    let base = URL(fileURLWithPath: dir).appendingPathComponent(name)
+                    do {
+                        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+                        try system.write(to: base.appendingPathComponent("system.txt"), atomically: true, encoding: .utf8)
+                        try user.write(to: base.appendingPathComponent("user.txt"), atomically: true, encoding: .utf8)
+                    } catch {
+                        print("error: cannot write to \(base.path): \(error)")
+                        exit(1)
+                    }
+                    print("  wrote \(base.path)/{system,user}.txt")
+                } else {
+                    print("──── system ────")
+                    print(system)
+                    print("──── user ────")
+                    print(user)
+                }
             }
         }
 

@@ -23,11 +23,14 @@ let packages: [(String, String, String)] = [
 var notices = try packages.map { name, package, file in
     Notice(name: name, source: "https://github.com/" + [
         "DeviceKit": "devicekit/DeviceKit", "FluidAudio": "FluidInference/FluidAudio", "WhisperKit": "argmaxinc/WhisperKit",
+        "speech-swift": "soniqo/speech-swift",
         "mlx-swift": "ml-explore/mlx-swift", "mlx-swift-lm": "ml-explore/mlx-swift-lm",
         "swift-transformers": "huggingface/swift-transformers", "swift-jinja": "huggingface/swift-jinja", "yyjson": "ibireme/yyjson"
     ][package, default: "apple/" + package],
     text: try String(contentsOf: checkouts.appendingPathComponent(package).appendingPathComponent(file), encoding: .utf8))
 }
+notices.append(Notice(name: "Qwen3 Speech Swift", source: "https://github.com/soniqo/speech-swift",
+    text: try String(contentsOf: root.appendingPathComponent("Vendor/QwenASRRuntime/LICENSE"), encoding: .utf8)))
 notices.append(Notice(name: "Dictus", source: "https://github.com/getdictus/dictus-ios",
                      text: try String(contentsOf: root.appendingPathComponent("LICENSE"), encoding: .utf8)))
 let mit = try String(contentsOf: checkouts.appendingPathComponent("DeviceKit/LICENSE"), encoding: .utf8)

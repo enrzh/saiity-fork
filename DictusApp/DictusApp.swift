@@ -1,5 +1,6 @@
 // DictusApp/DictusApp.swift
 import SwiftUI
+import AVFoundation
 import StoreKit
 import DictusCore
 #if canImport(Translation)
@@ -171,12 +172,13 @@ struct DictusApp: App {
                         return
                     }
                     #endif
-                    // The preference is enabled by default. Re-arm the warm
-                    // microphone session when the app process starts so the first
-                    // keyboard hold does not become a needless recovery handoff.
+                    // Automatic restoration must not request microphone access
+                    // on Welcome. Setup and explicit dictation own that request.
                     let serviceEnabled = AppGroup.defaults.object(forKey: SharedKeys.serviceEnabled) == nil
                         || AppGroup.defaults.bool(forKey: SharedKeys.serviceEnabled)
-                    if serviceEnabled {
+                    if AudioLifecyclePolicy.shouldRestoreStandby(serviceEnabled: serviceEnabled,
+                        onboardingComplete: hasCompletedOnboarding,
+                        microphoneGranted: AVAudioSession.sharedInstance().recordPermission == .granted) {
                         coordinator.enableKeyboardSession()
                     }
 
@@ -205,6 +207,7 @@ struct DictusApp: App {
                     case .active:
                         PersistentLog.log(.appDidBecomeActive)
                     case .inactive:
+                        coordinator.stopForegroundOnlyRecognitionIfNeeded()
                         PersistentLog.log(.appWillResignActive)
                     case .background:
                         PersistentLog.log(.appDidEnterBackground)

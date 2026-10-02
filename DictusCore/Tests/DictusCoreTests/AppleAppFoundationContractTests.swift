@@ -175,13 +175,15 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let activity = try source("DictusWidgets/DictusLiveActivity.swift")
         let intent = try source("DictusWidgets/StopStandbyIntent.swift")
 
-        XCTAssertTrue(home.contains("Toggle(\"Keyboard dictation\", isOn: $serviceEnabled)"))
-        XCTAssertTrue(home.contains("coordinator.enableKeyboardSession()"))
-        XCTAssertTrue(home.contains("coordinator.disableKeyboardSession()"))
-        XCTAssertTrue(home.contains("coordinator.cancelDictation()"))
+        XCTAssertTrue(home.contains("coordinator.setKeyboardDictationEnabled(!serviceEnabled)"))
+        XCTAssertTrue(home.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(home.contains("home.keyboardDictationToggle"))
+        XCTAssertTrue(intent.contains("KeyboardDictationService.setEnabled"))
         XCTAssertTrue(attributes.contains("serviceEnabled"))
         XCTAssertTrue(activity.contains("state.serviceEnabled"))
         XCTAssertTrue(intent.contains("activity.update"))
+        XCTAssertTrue(intent.contains("opensIntent: OpenURLIntent(url)"),
+                      "Enabling a cold microphone must request foreground preparation")
     }
 
     func testLiveActivityLockScreenKeepsSemanticForegroundOnSystemBackground() throws {
@@ -211,7 +213,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(recording.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(recording.contains("UIAccessibility.post(notification: .announcement"))
         XCTAssertTrue(recording.contains("Transcript"))
-        XCTAssertTrue(recording.contains("textSelection(.enabled)"))
+        let sharedResult = try String(contentsOf: repository.appending(path: "DictusApp/Views/HomeView.swift"), encoding: .utf8)
+        XCTAssertTrue(recording.contains("DictationTranscriptResult(result:"))
+        XCTAssertTrue(sharedResult.contains("textSelection(.enabled)"))
+        XCTAssertTrue(sharedResult.contains("dictation.resultVariant"))
         XCTAssertTrue(recording.contains("Button(\"Try again\""))
         XCTAssertTrue(recording.contains("Button(action: dismissRecording)"))
         XCTAssertTrue(recording.contains("accessibilityLabel(\"Close dictation\")"))
@@ -589,8 +594,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("SuggestionBarIconButton("))
         XCTAssertTrue(root.contains("action: routeDismiss"))
         let app = try source("DictusApp/DictusApp.swift")
-        XCTAssertTrue(app.contains("if serviceEnabled {\n                        coordinator.enableKeyboardSession()"),
-                      "enabled keyboard dictation must be re-armed when the app process starts")
+        XCTAssertTrue(app.contains("AudioLifecyclePolicy.shouldRestoreStandby(serviceEnabled: serviceEnabled"))
+        XCTAssertTrue(app.contains("onboardingComplete: hasCompletedOnboarding"))
+        XCTAssertTrue(app.contains("recordPermission == .granted"),
+                      "automatic restoration must not ask for microphone permission on Welcome")
     }
 
     func testAccessoryRelayoutKeepsTheActiveMicFrameAndUsesTheSharedTopLane() throws {

@@ -1,23 +1,36 @@
-// DictusApp/Polish/PolishMetricsRing.swift
+// Shared diagnostic persistence; transcript text requires explicit consent.
 import Foundation
-import DictusCore
 
 /// One observable polish event for the debug screen and export pipeline.
 ///
-/// `polished` is `nil` when the engine never produced an output (skipped,
+/// `raw` and `polished` are nil when consent excludes transcript text.
+/// With consent, `polished` is `nil` when the engine never produced an output (skipped,
 /// cancelled, engine failure). When the guardrail rejected the polished
 /// output, `polished` still carries the engine's response so the developer
 /// can see *what* was rejected.
 public struct PolishDebugEntry: Identifiable, Sendable, Codable {
     public let id: UUID
     public let timestamp: Date
-    public let raw: String
+    public let raw: String?
     public let polished: String?
     public let metrics: PolishMetrics
 
-    public init(raw: String, polished: String?, metrics: PolishMetrics) {
+    public init(raw: String?, polished: String?, metrics: PolishMetrics) {
         self.id = UUID()
         self.timestamp = Date()
+        self.raw = raw
+        self.polished = polished
+        self.metrics = metrics
+    }
+
+    func applyingConsent(_ allowed: Bool) -> Self {
+        guard !allowed else { return self }
+        return Self(id: id, timestamp: timestamp, raw: nil, polished: nil, metrics: metrics)
+    }
+
+    private init(id: UUID, timestamp: Date, raw: String?, polished: String?, metrics: PolishMetrics) {
+        self.id = id
+        self.timestamp = timestamp
         self.raw = raw
         self.polished = polished
         self.metrics = metrics
@@ -34,7 +47,7 @@ public struct PolishDebugEntry: Identifiable, Sendable, Codable {
 /// `PersistentLog` already does for debug logs.
 ///
 /// Layout:
-/// - On-disk format: JSON Lines (`polish_events.jsonl` in the App Group
+/// - On-disk format: JSON Lines (`polish_events_v2.jsonl` in the App Group
 ///   container). One JSON-encoded `PolishDebugEntry` per line. Append-only
 ///   writes, no in-place edits, so concurrent appends don't tear earlier
 ///   entries.
@@ -44,27 +57,33 @@ public struct PolishDebugEntry: Identifiable, Sendable, Codable {
 ///   resident for fast UI snapshots; full-window reads (used by export) hit
 ///   disk.
 ///
-/// Privacy stance: `raw` and `polished` are user dictation text. They never
-/// leave the device — the file lives in the App Group container, only the
-/// main app reads/writes it, and the export-to-share flow is explicitly user-
-/// triggered. Behavior is identical to `PersistentLog`, which already stores
-/// transcription metadata in the same container.
+/// Metadata is stored by default. Text requires explicit diagnostic consent
+/// and history enabled, checked again at write and export. Legacy logs remain
+/// recoverable and redacted until the user enables consent or chooses Clear.
 public actor PolishMetricsRing {
 
     /// In-memory cap for the UI snapshot. The full 7-day window stays on disk.
     private static let memoryCacheLimit = 200
     private static let retentionPeriod: TimeInterval = 7 * 24 * 3600
-    private static let fileName = "polish_events.jsonl"
+    // Older transcript logs stay recoverable until the user explicitly clears
+    // them. Their contents are redacted on reads unless consent is enabled.
+    private static let fileName = "polish_events_v2.jsonl"
 
     private var memoryCache: [PolishDebugEntry] = []
     private var bootstrapped = false
+    private let defaults: UserDefaults
+    private let directory: URL?
 
-    public init() {}
+    public init(defaults: UserDefaults = AppGroup.defaults, directory: URL? = AppGroup.containerURL) {
+        self.defaults = defaults
+        self.directory = directory
+    }
 
     // MARK: - Public API
 
     public func append(_ entry: PolishDebugEntry) async {
         await bootstrapIfNeeded()
+        let entry = entry.applyingConsent(DiagnosticTranscriptPolicy.allowsText(in: defaults))
         memoryCache.append(entry)
         if memoryCache.count > Self.memoryCacheLimit {
             memoryCache.removeFirst(memoryCache.count - Self.memoryCacheLimit)
@@ -75,25 +94,30 @@ public actor PolishMetricsRing {
     /// Most recent entries (capped at `memoryCacheLimit`) for the debug UI.
     public func snapshot() async -> [PolishDebugEntry] {
         await bootstrapIfNeeded()
-        return memoryCache
+        return memoryCache.map { $0.applyingConsent(DiagnosticTranscriptPolicy.allowsText(in: defaults)) }
     }
 
     /// All entries within the 7-day retention window — used by the JSON export.
     /// Reads from disk to bypass the memory cap.
     public func allEntries() async -> [PolishDebugEntry] {
         await bootstrapIfNeeded()
-        return readAllFromDisk(applyingRetention: true)
+        return (readAllFromDisk(applyingRetention: true) + readLegacyEntries())
+            .sorted { $0.timestamp < $1.timestamp }
+            .map { $0.applyingConsent(DiagnosticTranscriptPolicy.allowsText(in: defaults)) }
     }
 
     /// Total entries within the retention window. Cheap-enough disk read.
     public func storedCount() async -> Int {
         await bootstrapIfNeeded()
-        return readAllFromDisk(applyingRetention: true).count
+        return readAllFromDisk(applyingRetention: true).count + readLegacyEntries().count
     }
 
     public func clear() async {
         memoryCache.removeAll()
         clearDisk()
+        if let url = directory?.appendingPathComponent("polish_events.jsonl") {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: - Bootstrap
@@ -102,7 +126,8 @@ public actor PolishMetricsRing {
         guard !bootstrapped else { return }
         bootstrapped = true
         pruneOldEntries()
-        let recent = readAllFromDisk(applyingRetention: true)
+        let recent = (readAllFromDisk(applyingRetention: true) + readLegacyEntries())
+            .sorted { $0.timestamp < $1.timestamp }
         let tail = recent.suffix(Self.memoryCacheLimit)
         memoryCache = Array(tail)
     }
@@ -110,7 +135,7 @@ public actor PolishMetricsRing {
     // MARK: - Disk I/O
 
     private var fileURL: URL? {
-        AppGroup.containerURL?.appendingPathComponent(Self.fileName)
+        directory?.appendingPathComponent(Self.fileName)
     }
 
     private func appendToDisk(_ entry: PolishDebugEntry) {
@@ -134,7 +159,15 @@ public actor PolishMetricsRing {
     }
 
     private func readAllFromDisk(applyingRetention: Bool) -> [PolishDebugEntry] {
-        guard let url = fileURL,
+        readEntries(at: fileURL, applyingRetention: applyingRetention)
+    }
+
+    private func readLegacyEntries() -> [PolishDebugEntry] {
+        readEntries(at: directory?.appendingPathComponent("polish_events.jsonl"), applyingRetention: true)
+    }
+
+    private func readEntries(at url: URL?, applyingRetention: Bool) -> [PolishDebugEntry] {
+        guard let url,
               let raw = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

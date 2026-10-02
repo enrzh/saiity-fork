@@ -547,6 +547,30 @@ verification remains pending. These changes are newer than uploaded TestFlight
 223. No additional upload, commit, push, saved text fixture or room recording
 was performed.
 
+### Service controls on every surface — October 2
+
+The existing native service button now moves into the accessory lane beside
+Return to dictation board on Letters, Symbols, Emoji and number pads. One shared
+layout reserves its target without changing the 32pt lane or key/bottom-bar
+geometry. The filled/unfilled power glyph, selected state and On/Off accessibility value
+are used across both materials. Speak uses a native button toggle; the Lock Screen
+and expanded Island keep a reversible power control in every dictation phase.
+
+All writers share the service preference. The app owns preparation and disable
+cleanup. An explicit enable from a cold keyboard/Live Activity can open sAiity
+for preparation; recording requires a separate dictation action. Permission or
+model failures revert to Off. Existing physical Full Access and service/microphone
+verification requirements remain open.
+
+Verification: 1,890 Core tests, one skip, zero failures; production UIKit checks
+verify reachable power targets beside the board control on all four pages in
+both materials. Signed Release and simulator Debug builds and strict signatures
+pass. The native action disables the service and refreshes On/Off without changing
+pages. Speak's full-width hit target reaches its action; a denied-microphone
+enable returns to Off. Largest-text labels wrap in the scrollable list.
+These are newer local build-224 changes; physical Air installation is
+blocked by the most recent CoreDevice 4016 failure. No additional upload occurred.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

@@ -13,6 +13,25 @@ final class AudioLifecycleContractTests: XCTestCase {
         try String(contentsOf: repository.appending(path: path), encoding: .utf8)
     }
 
+    func testMicrophoneSessionPreservesKeyboardHapticsWithoutVoiceChatProcessing() throws {
+        let audio = try source("DictusApp/Audio/UnifiedAudioEngine.swift")
+        let start = try XCTUnwrap(audio.range(of: "func configureAudioSession()"))
+        let end = try XCTUnwrap(audio.range(of: "// MARK: - System Haptics Allowance"))
+        let configuration = String(audio[start.lowerBound..<end.lowerBound])
+        let allowance = try XCTUnwrap(configuration.range(of: "applyHapticsAllowance("))
+        let activation = try XCTUnwrap(configuration.range(of: "session.setActive(true)"))
+
+        XCTAssertTrue(configuration.contains("mode: .default"))
+        XCTAssertLessThan(allowance.lowerBound, activation.lowerBound,
+                          "Request haptics before the microphone session becomes active")
+        XCTAssertFalse(audio.contains("setMode(.voiceChat)"),
+                       "Voice-chat routing must not suppress typing feedback during standby or capture")
+        XCTAssertFalse(audio.contains("setVoiceProcessingEnabled(true)"),
+                       "Changing only the session mode leaves the voice-processing input unit enabled")
+        XCTAssertFalse(audio.contains("restoreIdleAudioProcessing()"),
+                       "Keep one stable input mode instead of changing routes while the engine runs")
+    }
+
     func testCoordinatorPreloadsModelsWithoutActivatingAudioAtStartup() throws {
         let coordinator = try source("DictusApp/DictationCoordinator.swift")
         let initStart = try XCTUnwrap(coordinator.range(of: "private init()"))
@@ -91,7 +110,7 @@ final class AudioLifecycleContractTests: XCTestCase {
         XCTAssertTrue(prepare.contains("guard !Task.isCancelled, self.keyboardSessionEnabled,"))
         XCTAssertTrue(prepare.contains("try self.audioEngine.warmUp()"))
         let audio = try source("DictusApp/Audio/UnifiedAudioEngine.swift")
-        XCTAssertTrue(audio.contains("if !isRecordingFlag {"), "standby must discard idle buffers")
+        XCTAssertTrue(audio.contains("captureBuffer.capture {"), "standby must use the synchronized session gate")
         XCTAssertTrue(audio.contains("scheduleIdleRelease(after: Self.idleReleaseInterval)"))
     }
 
@@ -105,7 +124,14 @@ final class AudioLifecycleContractTests: XCTestCase {
         )
         let service = String(coordinator[serviceStart.lowerBound..<interruptionStart.lowerBound])
 
-        XCTAssertTrue(service.contains("DictationSessionLivenessPolicy.isActive(self.status)"))
-        XCTAssertTrue(service.contains("self.audioEngine.deactivateIfIdle()"))
+        XCTAssertTrue(service.contains("self.setKeyboardDictationEnabled(enabled)"))
+        let changeStart = try XCTUnwrap(coordinator.range(of: "func setKeyboardDictationEnabled("))
+        let changeEnd = try XCTUnwrap(coordinator.range(of: "func enableKeyboardSession()"))
+        let change = String(coordinator[changeStart.lowerBound..<changeEnd.lowerBound])
+        XCTAssertTrue(change.contains("DictationSessionLivenessPolicy.isActive(status) { cancelDictation() }"))
+        XCTAssertTrue(change.contains("disableKeyboardSession()"))
+        let disableStart = try XCTUnwrap(coordinator.range(of: "func disableKeyboardSession()"))
+        let disableEnd = try XCTUnwrap(coordinator.range(of: "private func collectCompletedRecording()"))
+        XCTAssertTrue(coordinator[disableStart.lowerBound..<disableEnd.lowerBound].contains("audioEngine.deactivateIfIdle()"))
     }
 }

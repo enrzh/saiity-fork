@@ -129,6 +129,7 @@ class KeyboardViewController: UIInputViewController,
     private var voiceBoardButton: UIButton?
     private var pasteButton: UIButton?
     private var languageButton: UIButton?
+    private var dictationResultCancellable: AnyCancellable?
     private var serviceToggle: UIButton?
     private var boardDeleteButton: KeyboardDeleteRepeatControl?
     private var emojiCategoryScrubber: EmojiCategoryScrubControl? { keyboardSurfaceView?.emojiCategory }
@@ -1121,6 +1122,12 @@ class KeyboardViewController: UIInputViewController,
     /// notification posts — and it is precisely the NotificationCenter round-trip
     /// that #271 removed.
     private func observeKeyboardAreaMode() {
+        dictationResultCancellable = KeyboardState.shared.$dictationUndoAvailable
+            .removeDuplicates()
+            .combineLatest(KeyboardState.shared.$keyboardDictationEnabled.removeDuplicates())
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in self?.layoutVoiceActionControls() }
+            }
         areaModeCancellable = KeyboardState.shared.areaModePublisher
             // No .receive(on: .main) — areaMode is only ever set on the main thread
             // (Darwin observer dispatches to main, key taps are UI actions).
@@ -1574,7 +1581,7 @@ class KeyboardViewController: UIInputViewController,
         language.isExclusiveTouch = false
         language.menu = UIMenu(children: [
             UIDeferredMenuElement.uncached { completion in
-                completion(LanguageMenuButton.menuItems())
+                completion(KeyboardState.shared.dictationResultMenuItems() + LanguageMenuButton.menuItems())
             }
         ])
         languageButton = language
@@ -1761,10 +1768,11 @@ class KeyboardViewController: UIInputViewController,
         pasteButton?.isHidden = layout.accessoryEmojiCategoryFrame.width < VoiceOnlyKeyboardPolicy.accessoryControlSize
         languageButton?.isHidden = false
         boardDeleteButton?.isHidden = !uikitOwnsVoiceChrome || !rightRailVisible
-        let serviceToggleFrame = layout.dictationServiceToggleFrame
-        serviceToggle?.isHidden = !uikitOwnsVoiceChrome || serviceToggleFrame.isEmpty
-        serviceToggle?.isEnabled = uikitOwnsVoiceChrome && !serviceToggleFrame.isEmpty
-        serviceToggle?.isUserInteractionEnabled = uikitOwnsVoiceChrome && !serviceToggleFrame.isEmpty
+        let serviceToggleFrame = isAuxiliary ? layout.accessoryServiceToggleFrame : layout.dictationServiceToggleFrame
+        let serviceToggleVisible = (uikitOwnsVoiceChrome || isAuxiliary) && !serviceToggleFrame.isEmpty
+        serviceToggle?.isHidden = !serviceToggleVisible
+        serviceToggle?.isEnabled = serviceToggleVisible
+        serviceToggle?.isUserInteractionEnabled = serviceToggleVisible
         serviceToggle?.accessibilityTraits = KeyboardState.shared.keyboardDictationEnabled ? [.button, .selected] : [.button]
         // Keep the keyboard hosting view registered with UIKit. Only the
         // SwiftUI visual content is non-hittable; native siblings own input.
@@ -1798,6 +1806,8 @@ class KeyboardViewController: UIInputViewController,
         ))
         if let serviceToggle {
             serviceToggle.frame = inputFrame(serviceToggleFrame)
+            serviceToggle.accessibilityLabel = KeyboardState.shared.keyboardDictationEnabled
+                ? "Disable keyboard dictation" : "Enable keyboard dictation"
             serviceToggle.accessibilityValue = KeyboardState.shared.keyboardDictationEnabled ? "On" : "Off"
             serviceToggle.accessibilityHint = "Turns keyboard dictation on or off."
         }
@@ -1923,6 +1933,8 @@ class KeyboardViewController: UIInputViewController,
     }
 
     private func updateNativeControlFaces() {
+        let hasResult = KeyboardState.shared.dictationUndoAvailable
+        languageButton?.accessibilityLabel = hasResult ? "Last dictation and output language" : "Output language"
         let state = KeyboardState.shared
         for (button, text, symbol) in [
             (keyboardModeButton, "ABC", nil), (numberButton, "123", nil),
@@ -1930,7 +1942,7 @@ class KeyboardViewController: UIInputViewController,
             (dismissButton, nil, "keyboard.chevron.compact.down"),
             (voiceBoardButton, nil, "mic.fill"),
             (pasteButton, nil, state.isOneTimeCodeField ? "number.square" : "doc.on.clipboard"),
-            (languageButton, state.selectedTranslationTarget?.shortCode ?? "AUTO", nil)
+            (languageButton, hasResult ? nil : state.selectedTranslationTarget?.shortCode ?? "AUTO", hasResult ? "arrow.uturn.backward" : nil)
         ] as [(UIButton?, String?, String?)] {
             guard let button, !button.isHidden else { continue }
             let size = VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
@@ -1950,7 +1962,10 @@ class KeyboardViewController: UIInputViewController,
         }
         if let serviceToggle, !serviceToggle.isHidden {
             let enabled = state.keyboardDictationEnabled
-            serviceToggle.keyboardFace.configure(symbol: enabled ? "mic.fill" : "mic.slash",
+            let accessory = state.areaMode != .keys && state.areaMode != .recording
+            let size = VoiceOnlyKeyboardPolicy.commandVisualSize(for: serviceToggle.bounds.size)
+            serviceToggle.keyboardFace.configure(symbol: enabled ? "power.circle.fill" : "power", visualSize: size,
+                radius: accessory ? size.height / 2 : CommandKeyStyle.cornerRadius,
                 tint: enabled ? .systemGreen : nil, foreground: enabled ? .black : .label)
         }
         if let micButton, !micButton.isHidden {
@@ -2074,6 +2089,7 @@ class KeyboardViewController: UIInputViewController,
     }
 
     func routeProxyCommand(_ command: KeyboardCommand) {
+        KeyboardState.shared.interruptDictationUndoForTyping()
         let ownerAvailable = KeyboardInputRouter.canRoute(
             isAttached: isAttached,
             isOnScreen: isOnScreen,
@@ -2111,6 +2127,7 @@ class KeyboardViewController: UIInputViewController,
     }
 
     func routeProxyText(_ text: String) {
+        KeyboardState.shared.interruptDictationUndoForTyping()
         let ownerAvailable = KeyboardInputRouter.canRoute(
             isAttached: isAttached,
             isOnScreen: isOnScreen,
@@ -2207,6 +2224,7 @@ class KeyboardViewController: UIInputViewController,
     /// every SwiftUI keyboard surface. The first ordinary tap remains a single
     /// `deleteBackward()` through `KeyboardCommand.delete`.
     func deletePreviousWord() {
+        KeyboardState.shared.interruptDictationUndoForTyping()
         let ownerAvailable = isAttached && isOnScreen
             && KeyboardState.shared.activeControllerID == controllerID
         guard ownerAvailable else {
@@ -2275,6 +2293,7 @@ class KeyboardViewController: UIInputViewController,
     }
 
     func applyCursorStep(_ step: KeyboardCursorStep) {
+        KeyboardState.shared.interruptDictationUndoForTyping()
         guard !step.isEmpty else { return }
         let ownerAvailable = isAttached && isOnScreen
             && KeyboardState.shared.activeControllerID == controllerID

@@ -65,7 +65,7 @@ struct MainTabView: View {
     }
 
     private var activeModelIdentifier: String {
-        modelManager.activeModel ?? Self.persistedActiveModelIdentifier
+        modelManager.keyboardModel ?? Self.persistedActiveModelIdentifier
     }
 
     var body: some View {

@@ -5,25 +5,33 @@ import Foundation
 /// This gives at-most-once consumption within a live extension; iOS offers no
 /// atomic transaction spanning UserDefaults and insertion into another app.
 public enum DictationDelivery {
-    private struct Result: Codable {
-        let text: String
-        let request: DictationLanguageRequest
+    public struct Result: Codable, Sendable {
+        public let text: String
+        public let request: DictationLanguageRequest
+        public var timings: DictationRuntimeMetrics?
+        public let originalText: String?
     }
 
-    public static func publish(_ text: String, for request: DictationLanguageRequest, to defaults: UserDefaults) {
+    public static func publish(_ text: String, for request: DictationLanguageRequest, to defaults: UserDefaults,
+                               timings: DictationRuntimeMetrics? = nil, originalText: String? = nil) {
         guard request.isBound, !text.isEmpty,
-              let data = try? JSONEncoder().encode(Result(text: text, request: request)) else { return }
+              let data = try? JSONEncoder().encode(Result(text: text, request: request, timings: timings,
+                                                         originalText: originalText)) else { return }
         defaults.set(data, forKey: SharedKeys.dictationDelivery)
         defaults.synchronize()
     }
 
     public static func consume(for request: DictationLanguageRequest, from defaults: UserDefaults) -> String? {
+        consumeResult(for: request, from: defaults)?.text
+    }
+
+    public static func consumeResult(for request: DictationLanguageRequest, from defaults: UserDefaults) -> Result? {
         guard request.isBound,
               let data = defaults.data(forKey: SharedKeys.dictationDelivery),
               let result = try? JSONDecoder().decode(Result.self, from: data),
               result.request.hasSameIdentity(as: request) else { return nil }
         clear(in: defaults)
-        return result.text
+        return result
     }
 
     public static func clear(in defaults: UserDefaults) {
@@ -41,7 +49,11 @@ public enum DictationStopAction: Equatable, Sendable {
     case transcribe
     case ignore
 
-    public static func resolve(status: DictationStatus, isRecording: Bool) -> Self {
+    public static func resolve(status: DictationStatus, isRecording: Bool,
+                               isTranscribingInFlight: Bool = false) -> Self {
+        // Stop has drained capture before its UI task updates the stage. A
+        // repeated release in that interval must not cancel the admitted result.
+        guard !isTranscribingInFlight else { return .ignore }
         switch status {
         case .requested: return isRecording ? .transcribe : .cancel
         case .recording: return isRecording ? .transcribe : .cancel

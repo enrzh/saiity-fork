@@ -65,7 +65,20 @@ final class ComparisonImprovementsTests: XCTestCase {
         XCTAssertEqual(WritingStyle.active(from: defaults), .balanced)
         WritingStyle.concise.persist(to: defaults)
         XCTAssertEqual(WritingStyle.active(from: defaults), .concise)
-        XCTAssertTrue(PolishPromptEnvelope.userTurn(raw: "hello", style: .concise).contains("Be concise"))
+        XCTAssertTrue(PolishPromptEnvelope.resolve(raw: "hello", style: .concise).instructions.contains("Be concise"))
+    }
+
+    func testGemmaLanguageAdmissionAndPromptRevisionInvalidation() {
+        XCTAssertTrue(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "en", mixedScript: false))
+        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "de", mixedScript: false))
+        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "en", mixedScript: true))
+        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: nil, mixedScript: false))
+        XCTAssertTrue(LocalCleanupModel.qwen2_5_0_5b.supportsCleanup(languageCode: "de", mixedScript: false))
+        let old = PolishResultCache.Key(raw: "hello", engine: "fixture", target: nil, spanAware: false, promptRevision: "old")
+        let new = PolishResultCache.Key(raw: "hello", engine: "fixture", target: nil, spanAware: false, promptRevision: "new")
+        var cache = PolishResultCache()
+        cache.insert("cached", for: old)
+        XCTAssertNil(cache.value(for: new))
     }
 
     func testCleanupCacheKeyIncludesWritingStyle() {

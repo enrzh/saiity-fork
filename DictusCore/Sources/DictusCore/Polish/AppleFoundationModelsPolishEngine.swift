@@ -32,8 +32,9 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         self.instructionsOverride = instructionsOverride
     }
 
-    private func resolvedInstructions(mode: PolishMode, language: SupportedLanguage) -> String {
-        instructionsOverride?(mode, language) ?? (DictationCleanupPrompt.instructions() + "\n" + PolishGlossary.promptBlock)
+    private func resolvedInstructions(mode: PolishMode, language: SupportedLanguage,
+                                      style: WritingStyle = .balanced) -> String {
+        instructionsOverride?(mode, language) ?? DictationCleanupPrompt.instructions(style: style)
     }
 
     /// Normalize the session-cache language for a mode. `.auto` has a single
@@ -57,9 +58,11 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
                        targetLanguage: SupportedLanguage,
                        mode: PolishMode,
                        style: WritingStyle) async throws -> String {
+        let instructions = resolvedInstructions(mode: mode, language: targetLanguage, style: style)
         let key = SessionKey(
             mode: mode,
-            language: Self.sessionLanguage(for: mode, requested: targetLanguage)
+            language: Self.sessionLanguage(for: mode, requested: targetLanguage),
+            instructions: instructions
         )
         // A session lives exactly one polish call. `prewarm()` (fired at
         // recording start) leaves a fresh, warmed session in the cache; we use
@@ -74,7 +77,7 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         // stateless transform, so we keep at most `instructions + 1 input`.
         let session = await cache.session(
             for: key,
-            instructions: resolvedInstructions(mode: mode, language: targetLanguage)
+            instructions: instructions
         )
         // Wrap the input with explicit Input/Output framing. Without this Apple
         // FM treats the raw as a conversational turn and emits chat-reply
@@ -95,8 +98,28 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
         // That part is ordering; the identity check above is what closes the
         // window, and neither substitutes for the other.
         do {
+            var outputLimit = PolishContextBudget.outputLimit(for: raw)
+            if #available(iOS 26.4, macOS 26.4, *) {
+                let model = SystemLanguageModel.default
+                outputLimit = PolishContextBudget.outputLimit(for: raw,
+                    tokenCount: try await model.tokenCount(for: raw))
+                let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
+                let inputTokens = try await model.tokenCount(for: prompt)
+                guard instructionTokens + inputTokens + outputLimit + 64 <= Self.contextBudget.contextWindowTokens else {
+                    throw PolishExecutionError.contextExceeded
+                }
+            }
             let response = try await session.respond(to: prompt,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: min(2048, max(128, raw.count))))
+                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: outputLimit))
+            if #available(iOS 27.0, macOS 27.0, *) {
+                guard response.usage.output.totalTokenCount < outputLimit else {
+                    throw PolishExecutionError.outputTruncated
+                }
+            } else if #available(iOS 26.4, macOS 26.4, *) {
+                // Older SDKs expose no finish reason; reject output at the cap.
+                let count = try await SystemLanguageModel.default.tokenCount(for: response.content)
+                guard count < outputLimit else { throw PolishExecutionError.outputTruncated }
+            }
             await cache.dropIfStillCurrent(key, session: session)
             return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
@@ -114,12 +137,17 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
     /// zero accumulated transcript) — the prerequisite for the stateless
     /// invariant in `polish()`.
     public func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage) async {
+        await prewarm(mode: mode, targetLanguage: targetLanguage, style: .balanced)
+    }
+
+    public func prewarm(mode: PolishMode, targetLanguage: SupportedLanguage, style: WritingStyle) async {
         let language = Self.sessionLanguage(for: mode, requested: targetLanguage)
-        let key = SessionKey(mode: mode, language: language)
+        let instructions = resolvedInstructions(mode: mode, language: language, style: style)
+        let key = SessionKey(mode: mode, language: language, instructions: instructions)
         await cache.drop(key)
         let session = await cache.session(
             for: key,
-            instructions: resolvedInstructions(mode: mode, language: language)
+            instructions: instructions
         )
         session.prewarm()
     }
@@ -143,9 +171,14 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
     public func contextFit(input: String,
                            targetLanguage: SupportedLanguage,
                            mode: PolishMode) -> PolishContextFit {
+        contextFit(input: input, targetLanguage: targetLanguage, mode: mode, style: .balanced)
+    }
+
+    public func contextFit(input: String, targetLanguage: SupportedLanguage,
+                           mode: PolishMode, style: WritingStyle) -> PolishContextFit {
         Self.contextBudget.fit(
-            instructions: resolvedInstructions(mode: mode, language: targetLanguage),
-            input: input
+            instructions: resolvedInstructions(mode: mode, language: targetLanguage, style: style),
+            input: PolishPromptEnvelope.userTurn(raw: input)
         )
     }
 
@@ -232,6 +265,7 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
 private struct SessionKey: Hashable, Sendable {
     let mode: PolishMode
     let language: SupportedLanguage
+    let instructions: String
 }
 
 /// Per-`(mode, language)` `LanguageModelSession` cache with naive LRU eviction.

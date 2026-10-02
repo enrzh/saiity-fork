@@ -5,11 +5,18 @@ public struct RecentDictation: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var text: String
     public var createdAt: TimeInterval
+    public var originalText: String?
+    public var feedback: Feedback?
 
-    public init(id: UUID = UUID(), text: String, createdAt: TimeInterval = Date().timeIntervalSince1970) {
+    public enum Feedback: String, Codable, Sendable { case accepted, needsEditing }
+
+    public init(id: UUID = UUID(), text: String, createdAt: TimeInterval = Date().timeIntervalSince1970,
+                originalText: String? = nil, feedback: Feedback? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
+        self.originalText = originalText
+        self.feedback = feedback
     }
 }
 
@@ -18,7 +25,7 @@ public enum RecentDictations {
     public static let retentionLimit = 30
     public static let maxTextCharacters = 8_000
 
-    public static func append(_ text: String, in defaults: UserDefaults, at date: Date = Date()) {
+    public static func append(_ text: String, in defaults: UserDefaults, at date: Date = Date(), originalText: String? = nil) {
         guard defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true else {
             ensureTombstone(in: defaults)
             return
@@ -28,7 +35,8 @@ public enum RecentDictations {
         let clamped = String(trimmed.prefix(maxTextCharacters))
         var items = load(from: defaults)
         items.removeAll { $0.text == clamped }
-        items.insert(RecentDictation(text: clamped, createdAt: date.timeIntervalSince1970), at: 0)
+        items.insert(RecentDictation(text: clamped, createdAt: date.timeIntervalSince1970,
+            originalText: originalText.map { String($0.prefix(maxTextCharacters)) }), at: 0)
         if items.count > retentionLimit {
             items = Array(items.prefix(retentionLimit))
         }
@@ -66,8 +74,17 @@ public enum RecentDictations {
         items[index] = RecentDictation(
             id: item.id,
             text: String(text.prefix(maxTextCharacters)),
-            createdAt: item.createdAt
+            createdAt: item.createdAt,
+            originalText: items[index].originalText,
+            feedback: text == items[index].text ? item.feedback ?? items[index].feedback : .needsEditing
         )
+        store(items, in: defaults)
+    }
+
+    public static func recordFeedback(_ feedback: RecentDictation.Feedback, for id: UUID, in defaults: UserDefaults) {
+        var items = load(from: defaults)
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].feedback = feedback
         store(items, in: defaults)
     }
 

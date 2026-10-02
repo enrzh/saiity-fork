@@ -28,7 +28,7 @@ public struct ASRCapability: Equatable, Sendable {
         let effectiveOutputMode = outputMode ?? (mode == .autoDetect ? .multilingual : .singleLanguage)
 
         switch model.languageSupport.coverage {
-        case .whisperMultilingual:
+        case .whisperMultilingual, .qwenMultilingual:
             switch mode {
             case .autoDetect:
                 return effectiveOutputMode == .multilingual

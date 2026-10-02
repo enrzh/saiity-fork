@@ -55,6 +55,8 @@ class ModelManager: ObservableObject {
     /// Whether the active model is chosen by the device-aware resolver or by the user.
     @Published var selectionMode: ModelSelectionMode = .automatic
     @Published var selectionProfile: ModelSelectionProfile = .balanced
+    @Published var recognizer: DictationRecognizer = .whisper
+    @Published private(set) var keyboardModel: String?
 
     /// Per-model download progress (0.0 to 1.0). Only populated during active downloads.
     @Published var downloadProgress: [String: Float] = [:]
@@ -80,6 +82,8 @@ class ModelManager: ObservableObject {
 
     private let defaults = AppGroup.defaults
     private var loadStateObserver: NSObjectProtocol?
+    private var sessionEndObserver: NSObjectProtocol?
+    private var selectionRefreshPending = false
     private var catalogDownloads: [String: Task<Void, Never>] = [:]
 
     /// Own download tasks outside recycled/filterable SwiftUI rows so Cancel always works.
@@ -128,6 +132,7 @@ class ModelManager: ObservableObject {
     // MARK: - Init
 
     init() {
+        DictationModelPreferences.migrate(in: defaults)
         loadState()
         // Initialize states for all known models (including deprecated Tiny/Base so
         // already-downloaded deprecated models still get their state set to .ready).
@@ -154,9 +159,17 @@ class ModelManager: ObservableObject {
                   let state = ModelLoadState(rawValue: raw) else { return }
             self?.modelLoadState = state
         }
+        sessionEndObserver = NotificationCenter.default.addObserver(forName: .dictusDictationSessionEnded,
+            object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.selectionRefreshPending else { return }
+            self.selectionRefreshPending = false
+            self.loadState()
+            DictationCoordinator.shared.preloadActiveModel()
+        }
     }
 
     deinit {
+        if let sessionEndObserver { NotificationCenter.default.removeObserver(sessionEndObserver) }
         if let observer = loadStateObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -172,6 +185,7 @@ class ModelManager: ObservableObject {
     func loadState() {
         selectionMode = ModelSelectionMode.active(from: defaults)
         selectionProfile = ModelSelectionProfile.active(from: defaults)
+        recognizer = DictationRecognizer.load(from: defaults)
         var didMigrateRemovedModels = false
         if let data = defaults.data(forKey: SharedKeys.downloadedModels),
            let models = try? JSONDecoder().decode([String].self, from: data) {
@@ -191,17 +205,18 @@ class ModelManager: ObservableObject {
             }
             didMigrateRemovedModels = downloadedModels != models
         }
-        let storedActiveModel = defaults.string(forKey: SharedKeys.activeModel)
-        let storedOrFirst = storedActiveModel.flatMap { downloadedModels.contains($0) ? $0 : nil }
-            ?? downloadedModels.first
-        activeModel = selectionMode == .automatic
-            ? automaticActiveModel() ?? storedOrFirst
-            : storedOrFirst
+        let storedActiveModel = defaults.string(forKey: SharedKeys.appDictationModel)
+        if DictationCoordinator.shared.canChangeSpeechRuntime {
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+                installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                capabilities: DeviceCapabilities.current())
+            keyboardModel = resolvedKeyboardModel()
+        } else { selectionRefreshPending = true }
         didMigrateRemovedModels = didMigrateRemovedModels || storedActiveModel != activeModel
         customModels = CustomModel.load(from: defaults)
         cleanupBackend = PolishCleanupBackend.load(from: defaults, customModels: customModels)
 
-        if didMigrateRemovedModels {
+        if didMigrateRemovedModels && DictationCoordinator.shared.canChangeSpeechRuntime {
             persistState()
         }
 
@@ -252,6 +267,9 @@ class ModelManager: ObservableObject {
     /// progress is simpler and sufficient. Users will have the app open during download.
     func downloadModel(_ identifier: String) async throws {
         switch ModelInfo.forIdentifier(identifier)?.engine {
+        case .qwenASR:
+            if #available(iOS 18.0, *) { try await downloadQwenModel(identifier) }
+            else { throw ModelManagerError.qwenUnavailable }
         case .parakeet:
             guard let version = parakeetVersion(for: identifier) else {
                 throw ModelManagerError.parakeetUnavailable
@@ -259,6 +277,39 @@ class ModelManager: ObservableObject {
             try await downloadParakeetModel(identifier, version: version)
         default:
             try await downloadWhisperKitModel(identifier)
+        }
+    }
+
+    @available(iOS 18.0, *)
+    private func downloadQwenModel(_ identifier: String) async throws {
+        guard let choice = QwenASRModel(rawValue: identifier), let directory = choice.directory else {
+            throw ModelManagerError.noContainer
+        }
+        guard ModelInfo.forIdentifier(identifier)?.isSupported(on: DeviceCapabilities.current()) == true else {
+            throw ModelManagerError.qwenUnavailable
+        }
+        modelStates[identifier] = .downloading
+        downloadProgress[identifier] = 0
+        defer { downloadProgress.removeValue(forKey: identifier); downloadByteInfo.removeValue(forKey: identifier) }
+        do {
+            let asr = ModelRepoDownloader(configuration: QwenSpeechEngine.configuration(for: choice))
+            try await asr.download(to: directory, modelName: identifier) { [weak self] progress in
+                Task { @MainActor in self?.updateDownloadProgress(progress, identifier: identifier,
+                                                                  fraction: progress.fraction * 0.9) }
+            }
+            let vad = ModelRepoDownloader(configuration: QwenSpeechEngine.vadConfiguration)
+            try await vad.download(to: directory.appendingPathComponent("vad"), modelName: identifier) { [weak self] progress in
+                Task { @MainActor in self?.updateDownloadProgress(progress, identifier: identifier,
+                                                                  fraction: 0.9 + progress.fraction * 0.1) }
+            }
+            try Task.checkCancellation()
+            guard QwenSpeechEngine.isInstalled(choice) else { throw ModelManagerError.qwenUnavailable }
+            if !downloadedModels.contains(identifier) { downloadedModels.append(identifier) }
+            modelStates[identifier] = .ready
+            applyDownloadedModels()
+        } catch {
+            modelStates[identifier] = .error(error.localizedDescription)
+            throw error
         }
     }
 
@@ -399,12 +450,8 @@ class ModelManager: ObservableObject {
             // Automatic mode resolves again so a newly installed compatible model
             // can take over without another tap. Manual mode keeps the explicit
             // download selection behavior from earlier builds.
-            activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? identifier
-                : identifier
-
             modelStates[identifier] = .ready
-            persistState()
+            applyDownloadedModels()
 
             PersistentLog.log(.modelCompilationCompleted(name: identifier, durationMs: prewarmDurationMs))
             PersistentLog.log(.modelPrewarmPeakMemory(modelName: identifier, peakMB: consumedMB))
@@ -413,7 +460,6 @@ class ModelManager: ObservableObject {
             // Issue #144: eagerly load the now-active model into the coordinator's
             // RAM-resident WhisperKit instance. The compile above used a throwaway
             // WhisperKit just to populate the Core ML cache.
-            DictationCoordinator.shared.preloadActiveModel()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
             downloadProgress.removeValue(forKey: identifier)
@@ -510,12 +556,8 @@ class ModelManager: ObservableObject {
                 downloadedModels.append(identifier)
             }
 
-            activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? identifier
-                : identifier
-
             modelStates[identifier] = .ready
-            persistState()
+            applyDownloadedModels()
 
             PersistentLog.log(.modelCompilationCompleted(name: identifier, durationMs: prewarmDurationMs))
             PersistentLog.log(.modelPrewarmPeakMemory(modelName: identifier, peakMB: consumedMB))
@@ -523,7 +565,6 @@ class ModelManager: ObservableObject {
             PersistentLog.log(.modelSelected(name: identifier))
 
             // Issue #144: same proactive load as the WhisperKit path — see comment there.
-            DictationCoordinator.shared.preloadActiveModel()
         } catch {
             modelStates[identifier] = .error(error.localizedDescription)
             downloadProgress.removeValue(forKey: identifier)
@@ -545,16 +586,20 @@ class ModelManager: ObservableObject {
     /// Applies one downloader progress tick: percentage bar, MB counter, and
     /// decile-throttled persistent logging (~10 log lines per download).
     /// Shared by the WhisperKit and Parakeet download paths (issue #210).
-    private func updateDownloadProgress(_ progress: ModelRepoDownloader.Progress, identifier: String) {
-        downloadProgress[identifier] = Float(progress.fraction)
+    private func updateDownloadProgress(_ progress: ModelRepoDownloader.Progress, identifier: String,
+                                        fraction: Double? = nil) {
+        // Queued callbacks must not resurrect a progress bar after Cancel or Ready.
+        guard modelStates[identifier] == .downloading else { return }
+        let fraction = fraction ?? progress.fraction
+        downloadProgress[identifier] = Float(fraction)
         downloadByteInfo[identifier] = ModelDownloadBytes(progress)
 
-        let decile = Int(progress.fraction * 10)
+        let decile = Int(fraction * 10)
         if decile > (lastLoggedDeciles[identifier] ?? -1) {
             lastLoggedDeciles[identifier] = decile
             PersistentLog.log(.modelDownloadProgress(
                 name: identifier,
-                percent: Int(progress.fraction * 100),
+                percent: Int(fraction * 100),
                 mbDownloaded: Int(progress.bytesDownloaded / 1_000_000),
                 mbTotal: Int(progress.totalBytes / 1_000_000)
             ))
@@ -574,12 +619,71 @@ class ModelManager: ObservableObject {
     /// up front. If the keyboard is tapped while a load is in flight, it opens
     /// Dictus in a prepare-only flow; `ModelLoadingOverlay` surfaces the wait.
     func selectModel(_ identifier: String) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         guard downloadedModels.contains(identifier), isArtifactInstalled(identifier) else { return }
         selectionMode = .manual
+        recognizer = ModelInfo.forIdentifier(identifier)?.engine == .whisperKit ? .whisper : .streaming
         activeModel = identifier
+        defaults.set(identifier, forKey: recognizer.modelPreferenceKey)
         persistState()
         PersistentLog.log(.modelSelected(name: identifier))
         // Trigger an eager load so the model is in RAM before the next mic tap.
+        DictationCoordinator.shared.preloadActiveModel()
+    }
+
+    func selectRecognizer(_ choice: DictationRecognizer) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
+        guard choice != recognizer else { return }
+        recognizer = choice
+        defaults.set(choice.rawValue, forKey: SharedKeys.dictationRecognizer)
+        activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: choice,
+            installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: DeviceCapabilities.current())
+        persistState()
+        if activeModel != nil { DictationCoordinator.shared.preloadActiveModel() }
+    }
+
+    private func belongsToRecognizer(_ identifier: String) -> Bool {
+        ModelInfo.forIdentifier(identifier).map(recognizer.contains) ?? false
+    }
+
+    func chooseDictationModel(_ identifier: String) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
+        guard belongsToRecognizer(identifier) else { return }
+        defaults.set(identifier, forKey: recognizer.modelPreferenceKey)
+        if downloadedModels.contains(identifier) { selectModel(identifier) }
+        else {
+            selectionMode = .manual; activeModel = nil
+            persistState()
+        }
+    }
+
+    func chooseKeyboardModel(_ identifier: String) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
+        if identifier == "automatic" { defaults.removeObject(forKey: SharedKeys.keyboardDictationModel) }
+        else {
+            guard let model = ModelInfo.forIdentifier(identifier), model.engine != .qwenASR,
+                  downloadedModels.contains(identifier), isArtifactInstalled(identifier) else { return }
+            defaults.set(identifier, forKey: SharedKeys.keyboardDictationModel)
+        }
+        keyboardModel = resolvedKeyboardModel()
+        persistState()
+        DictationCoordinator.shared.refreshKeyboardModel()
+    }
+
+    private func resolvedKeyboardModel() -> String? {
+        DictationModelPreferences.resolveKeyboardModel(in: defaults, installed: Set(downloadedModels),
+            osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion, capabilities: DeviceCapabilities.current())
+    }
+
+    private func applyDownloadedModels() {
+        if let data = try? JSONEncoder().encode(downloadedModels) { defaults.set(data, forKey: SharedKeys.downloadedModels) }
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { selectionRefreshPending = true; return }
+        activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+            installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: DeviceCapabilities.current())
+        keyboardModel = resolvedKeyboardModel()
+        persistState()
         DictationCoordinator.shared.preloadActiveModel()
     }
 
@@ -590,6 +694,9 @@ class ModelManager: ObservableObject {
     /// Without this guard, the user could delete all models and the keyboard
     /// would have no model to use, resulting in a broken experience.
     func deleteModel(_ identifier: String) throws {
+        guard !DictationSessionLivenessPolicy.isActive(DictationCoordinator.shared.status) else {
+            throw ModelManagerError.modelInUse
+        }
         guard downloadedModels.count > 1 else {
             PersistentLog.log(.modelDeleteFailed(name: identifier, error: "cannot delete last model"))
             throw ModelManagerError.cannotDeleteLastModel
@@ -634,8 +741,8 @@ class ModelManager: ObservableObject {
         // If deleted model was active, switch to first remaining
         if activeModel == identifier {
             activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? downloadedModels.first
-                : downloadedModels.first
+                ? automaticActiveModel() ?? downloadedModels.first(where: belongsToRecognizer)
+                : downloadedModels.first(where: belongsToRecognizer)
         }
 
         persistState()
@@ -649,10 +756,17 @@ class ModelManager: ObservableObject {
     /// (ModelInfo), not the state manager. This instance method preserves the
     /// call-site signature so views don't need to change.
     func isRecommended(_ identifier: String) -> Bool {
-        identifier == selectionProfile.preferredIdentifier(for: DeviceCapabilities.current())
+        identifier == preferredModelIdentifier
+    }
+
+    var preferredModelIdentifier: String {
+        recognizer == .streaming
+            ? (selectionProfile == .precise ? QwenASRModel.large.rawValue : QwenASRModel.small.rawValue)
+            : selectionProfile.preferredIdentifier(for: DeviceCapabilities.current())
     }
 
     func setSelectionProfile(_ profile: ModelSelectionProfile) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         selectionProfile = profile
         defaults.set(profile.rawValue, forKey: SharedKeys.modelSelectionProfile)
         setSelectionMode(.automatic)
@@ -660,10 +774,12 @@ class ModelManager: ObservableObject {
 
     /// Changes model policy and immediately applies the resulting model.
     func setSelectionMode(_ mode: ModelSelectionMode) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         let previousModel = activeModel
         selectionMode = mode
         if mode == .automatic {
-            activeModel = automaticActiveModel() ?? activeModel ?? downloadedModels.first
+            activeModel = automaticActiveModel() ?? activeModel.flatMap { belongsToRecognizer($0) ? $0 : nil }
+                ?? downloadedModels.first(where: belongsToRecognizer)
             persistState()
             if activeModel != nil && (activeModel != previousModel || modelLoadState != .ready && modelLoadState != .loading) {
                 DictationCoordinator.shared.preloadActiveModel()
@@ -712,8 +828,8 @@ class ModelManager: ObservableObject {
         downloadedModels.removeAll { $0 == identifier }
         if activeModel == identifier {
             activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? downloadedModels.first
-                : downloadedModels.first
+                ? automaticActiveModel() ?? downloadedModels.first(where: belongsToRecognizer)
+                : downloadedModels.first(where: belongsToRecognizer)
         }
         persistState()
     }
@@ -740,7 +856,8 @@ class ModelManager: ObservableObject {
         return selectionProfile.resolvedIdentifier(
             installed: Set(downloadedModels),
             osMajor: osMajor,
-            capabilities: DeviceCapabilities.current()
+            capabilities: DeviceCapabilities.current(),
+            recognizer: recognizer
         )
     }
 
@@ -755,6 +872,9 @@ class ModelManager: ObservableObject {
         case .parakeet:
             guard let version = parakeetVersion(for: identifier) else { return false }
             return ParakeetEngine.installedModelCacheDirectory(version: version) != nil
+        case .qwenASR:
+            guard #available(iOS 18.0, *), let choice = QwenASRModel(rawValue: identifier) else { return false }
+            return QwenSpeechEngine.isInstalled(choice)
         }
     }
 
@@ -764,9 +884,14 @@ class ModelManager: ObservableObject {
         if let data = try? JSONEncoder().encode(downloadedModels) {
             defaults.set(data, forKey: SharedKeys.downloadedModels)
         }
-        defaults.set(activeModel, forKey: SharedKeys.activeModel)
+        keyboardModel = resolvedKeyboardModel()
+        defaults.set(activeModel, forKey: SharedKeys.appDictationModel)
+        defaults.set(isModelReady, forKey: SharedKeys.appDictationModelReady)
+        defaults.set(keyboardModel, forKey: SharedKeys.activeModel)
+        defaults.set(recognizer.rawValue, forKey: SharedKeys.dictationRecognizer)
         defaults.set(selectionMode.rawValue, forKey: SharedKeys.modelSelectionMode)
-        defaults.set(!downloadedModels.isEmpty, forKey: SharedKeys.modelReady)
+        defaults.set(keyboardModel.map { downloadedModels.contains($0) && isArtifactInstalled($0) } ?? false,
+                     forKey: SharedKeys.modelReady)
         defaults.synchronize()
         DarwinNotificationCenter.post(DarwinNotificationName.modelReadinessChanged)
     }
@@ -777,6 +902,8 @@ enum ModelManagerError: Error, LocalizedError {
     case cannotDeleteLastModel
     case noContainer
     case parakeetUnavailable
+    case qwenUnavailable
+    case modelInUse
     case prewarmTimeout(seconds: Int)
     case prewarmBusy
 
@@ -788,6 +915,10 @@ enum ModelManagerError: Error, LocalizedError {
             return "App Group container not available"
         case .parakeetUnavailable:
             return "Parakeet requires iOS 17+ or FluidAudio is not linked"
+        case .qwenUnavailable:
+            return "Qwen requires iOS 18, a compatible iPhone and a complete model download."
+        case .modelInUse:
+            return "Finish or cancel dictation before changing model files."
         case .prewarmTimeout(let seconds):
             return "Model optimization did not complete within \(seconds)s"
         case .prewarmBusy:

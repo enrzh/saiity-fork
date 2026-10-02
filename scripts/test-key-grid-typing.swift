@@ -380,8 +380,54 @@ if !\(baseline) {
         precondition(selectedCategory == 8)
     }
     print("PASS: 45pt bottom faces on every shared page, all category icon taps, drags and accessibility")
+    func namedControl(_ id: String, in view: UIView) -> UIView? {
+        if view.accessibilityIdentifier == id { return view }
+        return view.subviews.lazy.compactMap { namedControl(id, in: $0) }.first
+    }
+    let controller = KeyboardViewController()
+    controller.loadViewIfNeeded()
+    controller.view.frame = CGRect(x: 0, y: 0, width: 402, height: 300)
+    controller.inputView?.frame = controller.view.frame
+    controller.viewWillAppear(false)
+    let savedArea = KeyboardState.shared.areaMode
+    defer {
+        KeyboardState.shared.presentArea(savedArea)
+        controller.viewWillDisappear(false)
+    }
+    for glass in [true, false] {
+        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+        for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad] {
+            KeyboardState.shared.presentArea(mode)
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            controller.viewDidLayoutSubviews()
+            let toggle = namedControl("dictation-service-toggle", in: controller.view)!
+            let board = namedControl("return-to-dictation-board", in: controller.view)!
+            precondition(!toggle.isHidden && toggle.isUserInteractionEnabled, "Service control must stay reachable on every page")
+            precondition(toggle.frame.midY == board.frame.midY && toggle.frame.maxX < board.frame.minX,
+                         "Service control must sit beside the dictation board control")
+            let point = CGPoint(x: toggle.bounds.midX, y: toggle.bounds.midY)
+            precondition(toggle.hitTest(point, with: nil) != nil, "Visible power control lost its native hit target")
+        }
+    }
+    let savedService = defaults.object(forKey: SharedKeys.serviceEnabled)
+    defer {
+        if let savedService { defaults.set(savedService, forKey: SharedKeys.serviceEnabled) }
+        else { defaults.removeObject(forKey: SharedKeys.serviceEnabled) }
+        KeyboardState.shared.refreshFromDefaults()
+    }
+    defaults.set(true, forKey: SharedKeys.serviceEnabled)
+    KeyboardState.shared.refreshFromDefaults()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    let service = namedControl("dictation-service-toggle", in: controller.view) as! UIButton
+    precondition(service.accessibilityValue == "On")
+    service.sendActions(for: .primaryActionTriggered)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    precondition(!KeyboardDictationService.isEnabled(in: defaults), "The native action did not disable dictation")
+    precondition(service.accessibilityValue == "Off", "The native control kept a stale enabled appearance")
+    print("PASS: native service controls on every keyboard page in both materials")
     let face = KeyboardNativeControlFace(frame: CGRect(x: 0, y: 0, width: 156, height: 54))
-    for symbol in ["mic.fill", "waveform", "ellipsis", "xmark", "waveform"] {
+    for symbol in ["mic.fill", "waveform", "ellipsis", "xmark", "power.circle.fill", "power"] {
         face.configure(text: "Dictation", symbol: symbol, visualSize: face.bounds.size, primary: true)
         face.layoutIfNeeded()
         let image = face.subviews.compactMap { $0 as? UIImageView }.first!

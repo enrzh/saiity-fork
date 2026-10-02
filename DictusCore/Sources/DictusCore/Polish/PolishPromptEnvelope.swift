@@ -5,40 +5,27 @@ import Foundation
 /// Keeping this in DictusCore prevents the Apple Foundation Models path and the
 /// local evaluation harness from silently measuring different prompts.
 public enum PolishPromptEnvelope {
+    public struct Request: Sendable {
+        public let instructions: String
+        public let userTurn: String
+
+        public var combined: String { instructions + "\n\n" + userTurn }
+    }
+
+    public static func resolve(raw: String, style: WritingStyle = .balanced) -> Request {
+        Request(instructions: DictationCleanupPrompt.instructions(style: style), userTurn: userTurn(raw: raw))
+    }
+
     public static func userTurn(raw: String) -> String {
         userTurn(raw: raw, style: .balanced)
     }
 
     public static func userTurn(raw: String, style: WritingStyle) -> String {
-        """
-        Edit the dictated transcript below conservatively. Output only the edited
-        transcript, with no explanation, label, preamble, or quotation marks.
-
-        Preserve the transcript's original language, meaning, tone, names,
-        numbers, dates, URLs, email addresses, technical terms, and uncertainty.
-        Restore grammar required by that language (German statement order after
-        dropping so grundsätzlich, um before Uhr, conjugating dich dafür einladen).
-        Remove clear fillers (uh, um, like as hesitation, yeah as stalling, so basically
-        or so grundsätzlich as a restart), ASR non-speech labels such as (coughing) or
-        (snow crunching), accidental repetitions, false starts, restated duplicates of the
-        same message, and the superseded part of an explicit self-correction — including
-        numeric or time corrections such as 2am, oh sorry, it's 4am → 4am. Never
-        summarize, translate, embellish, answer the transcript, or replace wording with
-        synonyms merely for style.
-
-        Apply explicit spoken punctuation and layout commands. Preserve intentional
-        paragraphs and line breaks. Create bullet points only when the speaker
-        clearly says a bullet/list command or unmistakably dictates a list, with one
-        item per line. Do not turn an ordinary mention of a bullet, line, or period
-        into formatting.
-
-        Writing style: \(style.promptInstruction)
-        This preference never authorizes translation, summarization, omission of facts,
-        or replacing clear wording merely because another phrasing sounds nicer.
-
-        <DICTATION_TRANSCRIPT>
-        \(raw)
-        </DICTATION_TRANSCRIPT>
-        """
+        // JSON escaping keeps quotes, closing tags and literal line-break
+        // markers inside the data payload. Guardrails remain the trust boundary.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        let payload = (try? encoder.encode(raw)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+        return "Edit this transcript, encoded as one JSON string. Return plain transcript text, not JSON:\n" + payload
     }
 }

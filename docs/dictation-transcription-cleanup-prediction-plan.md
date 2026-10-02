@@ -1,3 +1,9 @@
+> Archived scope. Current product decisions are in `PRD.md` and
+> `docs/product-quality-plan.md`; runtime/keyboard evidence is in their current
+> plans. Historical instructions below about excluding Qwen, removing the
+> suggestion bar or removing the Settings model entry are superseded. Preserve
+> this document as evidence; do not execute its old implementation prompt.
+
 # Dictation, Transcription, Cleanup, Grammar, and Prediction Plan
 
 Status: implemented for the non-Qwen scope; physical-device validation remains pending. No release upload was performed.

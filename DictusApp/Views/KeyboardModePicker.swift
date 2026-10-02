@@ -24,6 +24,7 @@ struct ModelSelectionProfilePicker: UIViewRepresentable {
         return control
     }
     func updateUIView(_ control: UISegmentedControl, context: Context) {
+        control.isEnabled = DictationCoordinator.shared.canChangeSpeechRuntime
         control.selectedSegmentIndex = modelManager.selectionMode == .automatic
             ? ModelSelectionProfile.allCases.firstIndex(of: modelManager.selectionProfile) ?? 0 : UISegmentedControl.noSegment
         control.accessibilityHint = modelManager.selectionProfile.explanation
@@ -32,19 +33,83 @@ struct ModelSelectionProfilePicker: UIViewRepresentable {
 
 struct DictationModelQuickPicker: View {
     @ObservedObject var modelManager: ModelManager
+    @EnvironmentObject private var coordinator: DictationCoordinator
+    @Environment(\.dynamicTypeSize) private var textSize
+    @AppStorage(SharedKeys.dictationRealtimeText, store: AppGroup.defaults) private var realtime = false
+    private var selectedModel: String {
+        modelManager.activeModel ?? AppGroup.defaults.string(forKey: modelManager.recognizer.modelPreferenceKey)
+            ?? modelManager.recognizer.defaultModelIdentifier
+    }
+    private var models: [ModelInfo] { availableModels(for: modelManager.recognizer) }
+    private func availableModels(for recognizer: DictationRecognizer) -> [ModelInfo] {
+        ModelInfo.allIncludingDeprecated.filter {
+            recognizer.contains($0)
+                && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                        capabilities: DeviceCapabilities.current())
+                && (ModelInfo.downloadableIdentifiers.contains($0.identifier)
+                    || modelManager.downloadedModels.contains($0.identifier))
+        }.sorted { $0.sizeBytes < $1.sizeBytes }
+    }
     var body: some View {
-        Picker("Dictation model", selection: Binding(
-            get: { modelManager.selectionMode == .automatic ? "automatic" : modelManager.activeModel ?? "automatic" },
-            set: { value in
-                if value == "automatic" { modelManager.setSelectionMode(.automatic) }
-                else { modelManager.selectModel(value) }
-            })) {
-            Text("Automatic").tag("automatic")
-            ForEach(modelManager.downloadedModels, id: \.self) { id in
-                Text(ModelInfo.forIdentifier(id)?.displayName ?? id).tag(id)
+        Group {
+            if textSize.isAccessibilitySize {
+                recognizerPicker.pickerStyle(.menu)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Dictation engine").font(.subheadline)
+                    recognizerPicker.pickerStyle(.segmented)
+                }.padding(.vertical, 4)
             }
+            Picker(modelManager.recognizer == .streaming ? "Streaming model" : "Whisper model",
+                   selection: Binding(get: { selectedModel }, set: modelManager.chooseDictationModel)) {
+                ForEach(models) { model in
+                    Text(textSize.isAccessibilitySize && model.engine == .qwenASR
+                         ? model.displayName.replacingOccurrences(of: "Qwen3-ASR", with: "Qwen")
+                         : model.displayName).tag(model.identifier)
+                }
+            }
+            .accessibilityValue(ModelInfo.forIdentifier(selectedModel)?.displayName ?? "Choose a model")
+            .accessibilityIdentifier("dictation.model")
+            if ModelInfo.forIdentifier(selectedModel)?.engine == .qwenASR {
+                Toggle("Realtime text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
+                Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while sAiity is open; your keyboard uses its own model.")
+                    .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if !modelManager.downloadedModels.contains(selectedModel) {
+                if let progress = modelManager.downloadProgress[selectedModel] {
+                    ProgressView("Downloading model", value: Double(progress))
+                    Button("Cancel download") { modelManager.cancelCatalogDownload(selectedModel) }
+                } else {
+                    Button("Download selected model") {
+                        modelManager.startCatalogDownload(selectedModel, onError: { _ in })
+                    }
+                }
+                if case .error(let message) = modelManager.modelStates[selectedModel] {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            Picker("Keyboard model", selection: Binding(
+                get: { AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic" },
+                set: modelManager.chooseKeyboardModel)) {
+                Text("Automatic").tag("automatic")
+                ForEach(modelManager.downloadedModels.filter { ModelInfo.forIdentifier($0)?.engine != .qwenASR }, id: \.self) { id in
+                    Text(ModelInfo.forIdentifier(id)?.displayName ?? id).tag(id)
+                }
+            }.accessibilityIdentifier("dictation.keyboardModel")
+            Text(modelManager.keyboardModel.flatMap(ModelInfo.forIdentifier).map {
+                "Keyboard dictation uses \($0.displayName), independently of your in-app choice."
+            } ?? "Download a Whisper model to enable dictation from your keyboard.")
+                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        .accessibilityHint("Switch between installed dictation models. Download more from Models.")
+        .disabled(!coordinator.canChangeSpeechRuntime)
+    }
+    private var recognizerPicker: some View {
+        Picker("Dictation engine", selection: Binding(get: { modelManager.recognizer }, set: modelManager.selectRecognizer)) {
+            ForEach(DictationRecognizer.allCases, id: \.self) { choice in
+                Text(choice.displayName).tag(choice)
+                    .disabled(choice == .streaming && availableModels(for: choice).isEmpty)
+            }
+        }.accessibilityIdentifier("dictation.recognizer")
     }
 }
 

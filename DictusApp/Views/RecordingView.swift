@@ -87,25 +87,11 @@ struct RecordingView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            if showResult, let result = transcriptionResult {
-                                ShareLink(item: result) { Image(systemName: "square.and.arrow.up") }
-                                    .accessibilityLabel("Share transcript")
-                            }
                         }
                         if showResult, let result = transcriptionResult {
-                            Text(result).font(.title3).textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Button {
-                                UIPasteboard.general.string = result
-                                showCopiedFeedback = true
-                                HapticFeedback.recordingStopped()
-                                UIAccessibility.post(notification: .announcement, argument: "Copied")
-                            } label: {
-                                Label(showCopiedFeedback ? "Copied" : "Copy transcript",
-                                      systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                            }
-                            .labelStyle(.titleAndIcon)
-                            .buttonStyle(.bordered)
+                            DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
+                                onRestore: { transcriptionResult = $0 },
+                                onFeedback: savedResultFeedback(for: result))
                             if mode == .onboarding {
                                 Button("Continue", action: completeOnboarding)
                                     .buttonStyle(.borderedProminent)
@@ -116,8 +102,13 @@ struct RecordingView: View {
                             Text(userFacingError(error)).foregroundStyle(.secondary)
                             Button("Try again", action: retryRecording).buttonStyle(.borderedProminent)
                         } else {
-                            Text(displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
+                            Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
+                                 displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
                                 .font(.title3).foregroundStyle(.secondary)
+                            if !coordinator.realtimeTranscript.isEmpty {
+                                Text("Live preview · final cleanup appears when you finish.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                             Text("Finish recording when you’re ready.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -314,6 +305,14 @@ struct RecordingView: View {
     }
 
     // MARK: - Status Handling
+
+    private func savedResultFeedback(for result: String) -> ((RecentDictation.Feedback) -> Void)? {
+        guard AppGroup.defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true else { return nil }
+        guard let item = RecentDictations.load(from: AppGroup.defaults).first(where: {
+            $0.text == String(result.trimmingCharacters(in: .whitespacesAndNewlines).prefix(RecentDictations.maxTextCharacters))
+        }) else { return nil }
+        return { RecentDictations.recordFeedback($0, for: item.id, in: AppGroup.defaults) }
+    }
 
     private func handleStatusChange(_ newStatus: DictationStatus) {
         UIAccessibility.post(notification: .announcement, argument: statusAnnouncement(for: newStatus))

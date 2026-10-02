@@ -102,7 +102,7 @@ struct PolishDebugExport: Codable {
         let postprocessMs: Int?
         let rawCharCount: Int
         let polishedCharCount: Int
-        let raw: String
+        let raw: String?
         let polished: String?
         let sttEngine: String?
         let sttModelID: String?

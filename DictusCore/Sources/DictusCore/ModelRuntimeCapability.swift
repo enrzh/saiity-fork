@@ -81,6 +81,9 @@ extension ModelInfo {
                 supportsAutomaticLanguageDetection: languageSupport.coverage == .parakeetEuropean,
                 fallbackIdentifier: "openai_whisper-small"
             )
+        case .qwenASR:
+            return ModelRuntimeCapability(minimumOSMajorVersion: 18,
+                supportsAutomaticLanguageDetection: true, fallbackIdentifier: nil)
         }
     }
 
@@ -147,6 +150,10 @@ extension ModelInfo {
         }.map(\.element)
         candidates = ranked
 
+        if requestedModel?.engine == .qwenASR {
+            return ModelRuntimeResolution(requestedIdentifier: requestedIdentifier,
+                resolvedIdentifier: nil, fallbackReason: requestedReason)
+        }
         for candidate in candidates where candidate != requestedIdentifier {
             guard let model = forIdentifier(candidate),
                   installedIdentifiers.contains(candidate),

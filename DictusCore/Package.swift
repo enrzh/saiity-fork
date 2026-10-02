@@ -18,6 +18,7 @@ let package = Package(
             name: "polish-harness",
             dependencies: ["DictusCore"],
             path: "Sources/polish-harness",
+            exclude: ["README.md"],
             resources: [.copy("fixtures")]
         ),
         .testTarget(

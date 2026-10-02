@@ -10,6 +10,7 @@ enum CleanupPipeline {
         recordingDuration: TimeInterval,
         translationTarget: TranslationLanguage?,
         regions: [SpeechRegionTranscript],
+        settings: PolishCoordinator.Settings? = nil,
         onEngineWillRun: (() -> Void)?
     ) async -> String {
         await PolishCoordinator.shared.polish(
@@ -18,6 +19,7 @@ enum CleanupPipeline {
             recordingDuration: recordingDuration,
             translationTarget: translationTarget,
             regions: regions,
+            settings: settings,
             onEngineWillRun: onEngineWillRun
         )
     }

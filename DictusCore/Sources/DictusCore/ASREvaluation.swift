@@ -11,12 +11,17 @@ public enum ASREvaluation {
         public let languages: [String]
         public let metric: String
         public let reference: String
+        public let expectedFinal: String?
+        public let mustPreserve: [String]?
 
-        public init(id: String, languages: [String], metric: String, reference: String) {
+        public init(id: String, languages: [String], metric: String, reference: String,
+                    expectedFinal: String? = nil, mustPreserve: [String]? = nil) {
             self.id = id
             self.languages = languages
             self.metric = metric
             self.reference = reference
+            self.expectedFinal = expectedFinal
+            self.mustPreserve = mustPreserve
         }
     }
 
@@ -30,6 +35,11 @@ public enum ASREvaluation {
         public var transcripts: [String: String]
         public var loadFailed: Bool?
         public var notes: String?
+        public var finalTranscripts: [String: String]?
+        public var outcomes: [String: Outcome]?
+        public var acceptedWithoutEdits: [String: Bool]?
+        public var stopToProxyMs: [String: Double]?
+        public var cold: [String: Bool]?
 
         public init(
             modelIdentifier: String,
@@ -54,6 +64,21 @@ public enum ASREvaluation {
         }
     }
 
+    public enum Outcome: String, Codable, Sendable { case inserted, failed, cancelled, timedOut, noSpeech, pending }
+
+    public struct ProductSummary: Sendable {
+        public let cases: Int
+        public let inserted: Int
+        public let failures: Int
+        public let cancelled: Int
+        public let protectedFactFailures: [String]
+        public let hallucinatedSilence: [String]
+        public let rated: Int
+        public let acceptedUnchanged: Int
+        public let coldLatencyMs: [Double]
+        public let warmLatencyMs: [Double]
+    }
+
     public struct CaseScore: Equatable, Sendable {
         public let id: String
         public let metric: String
@@ -67,6 +92,7 @@ public enum ASREvaluation {
         case missingEligibleCases
         case invalidAudioHash(String)
         case hashTranscriptMismatch
+        case incompleteProductCase(String)
     }
 
     /// NFC, lowercasing, punctuation-to-space. Accents and numbers stay.
@@ -127,13 +153,14 @@ public enum ASREvaluation {
 
     public static func validate(_ run: CapturedRun, fixtures: [Fixture], model: ModelInfo) throws {
         for field in [run.device, run.osVersion, run.modelRevision, run.runtimeRevision] {
-            if field.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if field.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || field.hasPrefix("FILL_") {
                 throw CaptureError.emptyMetadata
             }
         }
         let eligible = eligibleFixtures(fixtures, for: model)
         let ids = Set(eligible.map(\.id))
         guard !ids.isEmpty else { throw CaptureError.missingEligibleCases }
+        guard run.modelIdentifier == model.identifier else { throw CaptureError.emptyMetadata }
         guard Set(run.transcripts.keys) == ids, Set(run.audioSHA256.keys) == ids else {
             throw CaptureError.hashTranscriptMismatch
         }
@@ -153,5 +180,52 @@ public enum ASREvaluation {
             let errors = editDistance(reference, hypothesis)
             return CaseScore(id: fixture.id, metric: fixture.metric, errors: errors, units: reference.count)
         }
+    }
+
+    /// Human acceptance remains explicit. Empty/missing/failed runs cannot be
+    /// silently counted as good results, and silence hallucination is separate
+    /// from WER because its reference has zero words.
+    public static func productSummary(_ run: CapturedRun, fixtures: [Fixture], model: ModelInfo) throws -> ProductSummary {
+        try validate(run, fixtures: fixtures, model: model)
+        let eligible = eligibleFixtures(fixtures, for: model)
+        let ids = Set(eligible.map(\.id))
+        guard Set(run.outcomes?.keys.map { $0 } ?? []) == ids,
+              Set(run.finalTranscripts?.keys.map { $0 } ?? []).isSubset(of: ids),
+              Set(run.acceptedWithoutEdits?.keys.map { $0 } ?? []).isSubset(of: ids),
+              Set(run.stopToProxyMs?.keys.map { $0 } ?? []).isSubset(of: ids),
+              Set(run.cold?.keys.map { $0 } ?? []).isSubset(of: ids) else {
+            throw CaptureError.incompleteProductCase("unexpected-or-missing-case")
+        }
+        var inserted = 0, failures = 0, cancelled = 0, rated = 0, accepted = 0
+        var factFailures: [String] = [], silence: [String] = [], cold: [Double] = [], warm: [Double] = []
+        for fixture in eligible {
+            guard let outcome = run.outcomes?[fixture.id], outcome != .pending else {
+                throw CaptureError.incompleteProductCase(fixture.id)
+            }
+            let raw = run.transcripts[fixture.id] ?? ""
+            let final = run.finalTranscripts?[fixture.id] ?? ""
+            if fixture.reference.isEmpty && (!raw.isEmpty || !final.isEmpty) { silence.append(fixture.id) }
+            if outcome == .inserted {
+                guard run.loadFailed != true, !final.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      let latency = run.stopToProxyMs?[fixture.id], latency.isFinite, latency >= 0,
+                      let isCold = run.cold?[fixture.id] else { throw CaptureError.incompleteProductCase(fixture.id) }
+                inserted += 1
+                if isCold { cold.append(latency) } else { warm.append(latency) }
+                if let usable = run.acceptedWithoutEdits?[fixture.id] {
+                    rated += 1
+                    if usable { accepted += 1 }
+                }
+                if !(fixture.mustPreserve ?? []).allSatisfy({ final.localizedCaseInsensitiveContains($0) }) {
+                    factFailures.append(fixture.id)
+                }
+            } else {
+                if run.acceptedWithoutEdits?[fixture.id] != nil { throw CaptureError.incompleteProductCase(fixture.id) }
+                if outcome == .cancelled { cancelled += 1 }
+                else if outcome != .noSpeech || !fixture.reference.isEmpty { failures += 1 }
+            }
+        }
+        return ProductSummary(cases: eligible.count, inserted: inserted, failures: failures, cancelled: cancelled,
+            protectedFactFailures: factFailures, hallucinatedSilence: silence, rated: rated,
+            acceptedUnchanged: accepted, coldLatencyMs: cold, warmLatencyMs: warm)
     }
 }

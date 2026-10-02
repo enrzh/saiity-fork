@@ -43,6 +43,16 @@ class TranscriptionService {
     /// ParakeetEngine) based on the user's active model. TranscriptionService
     /// doesn't know or care which engine it is — it just calls transcribe().
     private var activeEngine: SpeechModelProtocol?
+    func cancelCurrentInference() { activeEngine?.cancelCurrentInference() }
+    func releaseLoadedModelAndWait() async {
+        let engine = activeEngine
+        activeEngine = nil
+        whisperKit = nil
+        loadedModelFolder = nil
+        await engine?.releaseLoadedModelAndWait()
+    }
+    @available(iOS 18.0, *)
+    var qwenEngine: QwenSpeechEngine? { activeEngine as? QwenSpeechEngine }
 
     /// The folder path of the currently loaded model, used to detect when
     /// we need to reinitialize WhisperKit for a different model.
@@ -133,7 +143,7 @@ class TranscriptionService {
 
     func transcribeDetailed(audioSamples: [Float],
                             languagePolicy: TranscriptionLanguagePolicy) async throws -> SpeechTranscriptionOutput {
-        let transcriptionStart = Date()
+        let transcriptionStart = DispatchTime.now().uptimeNanoseconds
 
         // nil = Whisper auto-detection. Parakeet ignores the value entirely.
         let language = languagePolicy.sttLanguageCode
@@ -166,7 +176,7 @@ class TranscriptionService {
                     audioSamples: audioSamples,
                     language: language
                 )
-                let durationMs = Int(Date().timeIntervalSince(transcriptionStart) * 1000)
+                let durationMs = DictationRuntimeMetrics.elapsedMilliseconds(since: transcriptionStart)
                 let wordCount = result.text.split(separator: " ").count
                 PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
                 logPerformance(
@@ -177,7 +187,7 @@ class TranscriptionService {
                 )
                 return result
             } catch {
-                PersistentLog.log(.transcriptionFailed(error: error.localizedDescription))
+                PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
                 throw error
             }
         }
@@ -198,7 +208,7 @@ class TranscriptionService {
                 language: language,
                 logComponent: "TranscriptionService"
             )
-            let durationMs = Int(Date().timeIntervalSince(transcriptionStart) * 1000)
+            let durationMs = DictationRuntimeMetrics.elapsedMilliseconds(since: transcriptionStart)
             let wordCount = output.text.split(separator: " ").count
             PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
             logPerformance(
@@ -209,10 +219,10 @@ class TranscriptionService {
             )
             return output
         } catch let error as TranscriptionError {
-            PersistentLog.log(.transcriptionFailed(error: error.localizedDescription ?? "unknown"))
+            PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
             throw error
         } catch {
-            PersistentLog.log(.transcriptionFailed(error: error.localizedDescription))
+            PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
             throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
     }
