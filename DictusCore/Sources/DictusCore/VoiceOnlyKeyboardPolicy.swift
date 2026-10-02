@@ -311,6 +311,10 @@ public enum VoiceOnlyKeyboardPolicy {
     /// either side by growing the hit lane, rather than shrinking the glyph rows.
     public static let bottomBarVisualHeight: Double = Double(letterKeyHeight)
     public static let spacebarHeight: Double = bottomBarVisualHeight + Double(commandVisualInset)
+    /// Circular compact faces fill their horizontal targets; the taller lane
+    /// keeps vertical breathing room and the shared Space/Return alignment.
+    public static let bottomBarControlWidth: Double = bottomBarVisualHeight
+    public static let bottomBarSpacing: Double = 2
     public static let railSpacing: Double = 4
     public static let horizontalPadding: Double = 8
     public static let controlEdgeInset: Double = 12
@@ -639,7 +643,7 @@ public enum VoiceOnlyKeyboardPolicy {
                 height: spacebarHeight
             )
             let frame = CGRect(
-                x: returnFrame.minX - railSpacing - controlSize,
+                x: returnFrame.minX - bottomBarSpacing - controlSize,
                 y: returnFrame.minY,
                 width: controlSize,
                 height: spacebarHeight
@@ -652,7 +656,10 @@ public enum VoiceOnlyKeyboardPolicy {
         /// contract prevents the period key from drifting when the surface
         /// height or accessory lane changes.
         public var letterPeriodFrame: CGRect {
-            chromeEmojiFrame
+            let right = chromeReturnFrame
+            guard !right.isEmpty, leftRailWidth > 0 else { return .zero }
+            return CGRect(x: right.minX - bottomBarSpacing - controlSize,
+                          y: right.minY, width: controlSize, height: right.height)
         }
 
         /// Letter pages reserve the period slot without changing the auxiliary
@@ -665,7 +672,7 @@ public enum VoiceOnlyKeyboardPolicy {
             let frame = CGRect(
                 x: space.minX,
                 y: space.minY,
-                width: max(0, period.minX - railSpacing - space.minX),
+                width: max(0, period.minX - bottomBarSpacing - space.minX),
                 height: space.height
             )
             guard frame.width >= 44, surfaceFrame.contains(frame) else { return space }
@@ -690,7 +697,7 @@ public enum VoiceOnlyKeyboardPolicy {
             let frame = CGRect(
                 x: surfaceFrame.minX + visibleControlGap,
                 y: spaceLaneMinY,
-                width: controlSize,
+                width: bottomBarControlWidth,
                 height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
@@ -700,9 +707,9 @@ public enum VoiceOnlyKeyboardPolicy {
             let numbers = chromeNumbersFrame
             guard !numbers.isEmpty else { return .zero }
             let frame = CGRect(
-                x: numbers.maxX + railSpacing,
+                x: numbers.maxX + bottomBarSpacing,
                 y: numbers.minY,
-                width: controlSize,
+                width: bottomBarControlWidth,
                 height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
@@ -722,9 +729,9 @@ public enum VoiceOnlyKeyboardPolicy {
             let right = chromeReturnFrame
             guard !right.isEmpty, leftRailWidth > 0 else { return .zero }
             let frame = CGRect(
-                x: right.minX - railSpacing - controlSize,
+                x: right.minX - bottomBarSpacing - bottomBarControlWidth,
                 y: spaceLaneMinY,
-                width: controlSize,
+                width: bottomBarControlWidth,
                 height: spacebarHeight
             )
             return surfaceFrame.contains(frame) ? frame : .zero
@@ -736,8 +743,8 @@ public enum VoiceOnlyKeyboardPolicy {
             let left = chromeLettersFrame
             let right = chromeEmojiFrame
             guard !left.isEmpty, !right.isEmpty else { return .zero }
-            let x = left.maxX + railSpacing
-            let width = right.minX - railSpacing - x
+            let x = left.maxX + bottomBarSpacing
+            let width = right.minX - bottomBarSpacing - x
             guard width >= 44 else { return .zero }
             let frame = CGRect(x: x, y: spaceLaneMinY, width: width, height: spacebarHeight)
             return surfaceFrame.contains(frame) ? frame : .zero

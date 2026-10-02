@@ -404,16 +404,20 @@ final class KeyboardBottomBarView: UIView {
     static func returnHitRect(layout: VoiceOnlyKeyboardPolicy.Layout, previous: CGRect) -> CGRect {
         let plate = layout.chromeReturnFrame
         let leftLimit = previous.isEmpty ? layout.surfaceFrame.minX
-            : previous.maxX + VoiceOnlyKeyboardPolicy.railSpacing
+            : previous.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing
         let room = max(0, plate.maxX - leftLimit)
         let width = min(VoiceOnlyKeyboardPolicy.actionHitSize.width, max(plate.width, room))
         return CGRect(x: plate.maxX - width, y: plate.minY, width: width, height: plate.height)
     }
 
     private func updateChrome() {
-        firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123")
+        let circle = CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight,
+                            height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
+        firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123",
+            visualSize: circle, radius: circle.height / 2)
         let second = fieldKeys.leftInsert ?? (mode == .emoji ? "ABC" : nil)
-        secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil)
+        secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil,
+            visualSize: circle, radius: circle.height / 2)
         fieldControl.keyboardFace.configure(text: fieldKeys.rightInsert,
             textPointSize: (fieldKeys.rightInsert?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
         let title = fieldKeys.returnTitle == HostFieldPolicy.LetterFieldKeys.standard.returnTitle
@@ -976,11 +980,11 @@ final class KeyboardDeleteRepeatControl: UIControl {
 
 private extension AuxiliaryBottomBar {
     private var commandHitSize: CGSize {
-        CGSize(width: VoiceOnlyKeyboardPolicy.controlSize, height: VoiceOnlyKeyboardPolicy.spacebarHeight)
+        CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarControlWidth, height: VoiceOnlyKeyboardPolicy.spacebarHeight)
     }
 
     private var commandVisual: CGSize {
-        VoiceOnlyKeyboardPolicy.commandVisualSize(for: commandHitSize)
+        CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
     }
 
     private func roundControl(systemName: String, label: String, action: @escaping () -> Void) -> some View {
@@ -989,6 +993,7 @@ private extension AuxiliaryBottomBar {
                 systemName: systemName,
                 plateWidth: commandVisual.width,
                 plateHeight: commandVisual.height,
+                cornerRadius: commandVisual.height / 2,
                 isPressed: pressed
             )
         }
@@ -1005,6 +1010,7 @@ private extension AuxiliaryBottomBar {
                 text: text,
                 plateWidth: commandVisual.width,
                 plateHeight: commandVisual.height,
+                cornerRadius: commandVisual.height / 2,
                 textPointSize: textPointSize,
                 isPressed: pressed
             )

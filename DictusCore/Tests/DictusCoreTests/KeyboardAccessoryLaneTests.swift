@@ -84,7 +84,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
                        accuracy: 0.001)
         XCTAssertEqual(layout.chromeNumbersFrame.minY, layout.chromeSpaceFrame.minY, accuracy: 0.001)
         XCTAssertEqual(layout.chromeLettersFrame.minX,
-                       layout.chromeNumbersFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+                       layout.chromeNumbersFrame.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing,
                        accuracy: 0.001)
         XCTAssertEqual(layout.chromeWideLettersFrame.minX, layout.chromeNumbersFrame.minX, accuracy: 0.001)
         XCTAssertEqual(layout.chromeWideLettersFrame.maxX, layout.chromeLettersFrame.maxX, accuracy: 0.001)
@@ -93,12 +93,12 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         XCTAssertEqual(layout.chromeWideSpaceFrame.maxX, layout.chromeEmojiFrame.maxX, accuracy: 0.001)
         XCTAssertEqual(layout.chromeWideSpaceFrame.height, layout.chromeSpaceFrame.height, accuracy: 0.001)
         XCTAssertGreaterThan(layout.chromeWideSpaceFrame.width, layout.chromeSpaceFrame.width)
-        XCTAssertEqual(layout.chromeEmojiFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+        XCTAssertEqual(layout.chromeEmojiFrame.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing,
                        layout.chromeReturnFrame.minX,
                        accuracy: 0.001)
         XCTAssertNotEqual(layout.chromeEmojiFrame, layout.chromeLettersFrame)
         XCTAssertEqual(layout.chromeSpaceFrame.minX,
-                       layout.chromeLettersFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+                       layout.chromeLettersFrame.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing,
                        accuracy: 0.001)
         XCTAssertTrue(layout.surfaceFrame.contains(layout.floatingEmojiCategoryFrame))
         XCTAssertEqual(layout.floatingEmojiCategoryFrame.height,

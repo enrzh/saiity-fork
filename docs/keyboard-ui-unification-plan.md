@@ -595,6 +595,29 @@ simulator. Physical host-app feel remains pending on the previously unavailable
 Air. No microphone capture, commit, push or TestFlight upload was performed.
 Logs: `/tmp/saiity-space-cursor-{before,core,native,simulator-build,device-build}.log`.
 
+### Circular bottom controls and smaller gaps — October 2
+
+The compact buttons beside Space now have true 45×45pt circular faces, with
+45×53pt touch targets. Shared bottom-row spacing is 2pt rather than 4pt; removing
+the oval faces' horizontal inset also reduces the visible gap between the left
+buttons from 12pt to 2pt. Space reclaims the available width. Period retains its
+existing 34pt face and 44pt target, and Return keeps its generous target.
+Letters, Symbols, Emoji and the dictation board use the same circle and spacing
+metrics in Solid and Glass. Character heights and the bottom lane remain intact.
+
+Verification: **1,892 Core tests, one existing skip, zero failures**, followed by
+136 focused geometry checks after retaining the compact-layout visibility guard.
+Production UIKit typing, overlapping touches, holds, Period, Space cursor travel,
+category and service-control checks pass. Native component previews of all three
+shared bottom bars were rendered and inspected in both materials. Layer rendering
+establishes Solid appearance and layout; it does not establish system Glass
+compositing or actual phone feel. Debug simulator and signed Release builds and
+strict signatures pass. The updated local development build 226 is installed on
+the isolated QA simulator; these changes were not uploaded to TestFlight.
+
+Artifacts: `/tmp/saiity-round-bottom-after-{letters,symbols,emoji}-{solid,glass}.png`.
+Logs: `/tmp/saiity-round-bottom-{full-core,core,native,simulator-build,device-build}.log`.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

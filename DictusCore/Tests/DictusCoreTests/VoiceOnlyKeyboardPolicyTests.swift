@@ -919,9 +919,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
                            CGSize(width: VoiceOnlyKeyboardPolicy.controlSize,
                                   height: VoiceOnlyKeyboardPolicy.spacebarHeight))
             XCTAssertFalse(layout.letterSpaceFrame.intersects(layout.letterPeriodFrame))
-            XCTAssertEqual(layout.letterSpaceFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+            XCTAssertEqual(layout.letterSpaceFrame.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing,
                            layout.letterPeriodFrame.minX, accuracy: 0.001)
-            XCTAssertEqual(layout.letterPeriodFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
+            XCTAssertEqual(layout.letterPeriodFrame.maxX + VoiceOnlyKeyboardPolicy.bottomBarSpacing,
                            layout.letterReturnFrame.minX, accuracy: 0.001)
             XCTAssertEqual(layout.letterReturnFrame.maxY, layout.letterDismissFrame.maxY, accuracy: 0.001)
             XCTAssertTrue(surface.contains(layout.letterReturnFrame))

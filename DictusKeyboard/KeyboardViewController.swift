@@ -1945,11 +1945,14 @@ class KeyboardViewController: UIInputViewController,
             (languageButton, hasResult ? nil : state.selectedTranslationTarget?.shortCode ?? "AUTO", hasResult ? "arrow.uturn.backward" : nil)
         ] as [(UIButton?, String?, String?)] {
             guard let button, !button.isHidden else { continue }
-            let size = VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
+            let circular = button === keyboardModeButton || button === numberButton || button === emojiButton
+            let size = circular
+                ? CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
+                : VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
             let accessory = button === dismissButton || button === voiceBoardButton
                 || button === pasteButton || button === languageButton
             button.keyboardFace.configure(text: text, symbol: symbol, visualSize: size,
-                radius: accessory ? size.height / 2 : CommandKeyStyle.cornerRadius,
+                radius: accessory || circular ? size.height / 2 : CommandKeyStyle.cornerRadius,
                 textPointSize: button === languageButton ? 11 : CommandKeyStyle.textSize)
         }
         if let spaceButton, !spaceButton.isHidden {
