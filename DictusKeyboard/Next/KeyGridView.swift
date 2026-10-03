@@ -380,7 +380,8 @@ final class KeyGridView: UIView {
     /// disagree about how big a key looks.
     private func visualPlate(for item: PlacedKey) -> CGRect {
         item.key.isCommand
-            ? CommandKeyStyle.visualPlate(for: item.plate, surfaceWidth: bounds.width)
+            ? CommandKeyStyle.visualPlate(for: item.plate, surfaceWidth: bounds.width,
+                                         neighborGap: KeyGridPlacement.keySpacing)
             : item.plate
     }
 
@@ -397,13 +398,15 @@ final class KeyGridView: UIView {
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
-        key.isCommand ? CommandKeyStyle.cornerRadius : KeyGridPlacement.keyCornerRadius
+        key.isCommand ? CommandKeyStyle.cornerRadius
+            : page?.id == "numberPad" ? VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius : KeyGridPlacement.keyCornerRadius
     }
 
     private var usesLiveMaterial: Bool {
         if #available(iOS 26.0, *) {
             return KeyboardInteractionPreferences.liquidGlassEnabled
                 && !UIAccessibility.isReduceTransparencyEnabled
+                && !UIAccessibility.isDarkerSystemColorsEnabled
         }
         return false
     }
@@ -420,7 +423,7 @@ final class KeyGridView: UIView {
             // The shared command treatment, so a command key on this grid and one in
             // the bottom bar or the emoji page are the same button.
             //
-            // `CommandKeyFace` expresses it in SwiftUI as a 0.94 scale and a 0.72
+            // `CommandKeyFace` expresses the shared scale and opacity in SwiftUI.
             // opacity. Core Graphics cannot dim a sibling material view — it belongs
             // to another view — so the same numbers are spent here as a scaled plate
             // and a lightening wash inside it. Fading a dark glass plate over a dark
@@ -459,7 +462,7 @@ final class KeyGridView: UIView {
             }
         } else if !usesLiveMaterial {
             fill(item.plate, radius: radius,
-                 color: plateColor(pressed: pressed, isLetter: item.key.isInvisiblePlate),
+                 color: plateColor(pressed: pressed, isLetter: true),
                  in: context)
         } else if pressed {
             fill(item.plate, radius: radius,
@@ -482,9 +485,7 @@ final class KeyGridView: UIView {
     /// Plate fill. The material preference is visual only and is resolved here, so
     /// it can never influence which key is pressed.
     ///
-    /// Command faces use the system fill the legacy glass resolved to when the
-    /// material preference is off, which is the closest a plain `UIView` drawing
-    /// can get to the real material.
+    /// Solid keys and commands resolve the same semantic roles as native/SwiftUI faces.
     private func plateColor(
         pressed: Bool,
         isLit: Bool = false,
@@ -503,7 +504,8 @@ final class KeyGridView: UIView {
         if usesLiveMaterial {
             return UIColor.secondarySystemFill.withAlphaComponent(0.5)
         }
-        return UIColor.tertiarySystemFill
+        return (isLetter ? KeyboardChromeRole.input : .control)
+            .solidFill(increasedContrast: UIAccessibility.isDarkerSystemColorsEnabled || UIAccessibility.isReduceTransparencyEnabled)
     }
 
     private func drawLabel(for key: KeyGridKey, in plate: CGRect, pressed: Bool) {
@@ -574,8 +576,8 @@ final class KeyGridView: UIView {
             .paragraphStyle: centeredParagraph()
         ])
         let comma = NSAttributedString(string: ",", attributes: [
-            .font: UIFont.systemFont(ofSize: 9, weight: .medium),
-            .foregroundColor: UIColor.secondaryLabel,
+            .font: UIFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: KeyboardChromeRole.secondaryForeground,
             .paragraphStyle: centeredParagraph()
         ])
         let dotSize = dot.size()
@@ -590,7 +592,7 @@ final class KeyGridView: UIView {
     private func fontWeight(_ weight: KeyGlyphWeight) -> UIFont.Weight {
         switch weight {
         case .light: return .light
-        case .regular: return .regular
+        case .regular: return UIAccessibility.isBoldTextEnabled ? .semibold : .regular
         case .medium: return .medium
         case .semibold: return .semibold
         }

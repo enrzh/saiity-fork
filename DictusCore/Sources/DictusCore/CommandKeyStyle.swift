@@ -30,31 +30,8 @@ public enum CommandKeyStyle {
 
     // MARK: - Geometry
 
-    /// Corner radius of a command key's glass plate.
-    ///
-    /// 18, which on a 43pt plate is a generously rounded shape — close to a pill
-    /// without being one. This is the product's radius, and it is what the whole
-    /// family shares: the letter row's shift and delete, the 123/#+= row's two
-    /// controls, the number pad's delete, the bottom bar, and the emoji page's
-    /// delete.
-    ///
-    /// It was briefly 11, on the reading that the platform draws these as rounded
-    /// squares. That reading came from a 56×50pt crop and does not survive checking:
-    /// calibrating the measurement against known radii shows that 11, 15, 18 and
-    /// 21.5 all predict corner insets within about a point of each other at this
-    /// scale, which is well inside the noise. So the platform's exact radius is not
-    /// something that crop can establish, and changing the product's look on a
-    /// measurement that cannot tell 11 from 18 was wrong. It is 18 because that is
-    /// the shape this keyboard is meant to have.
-    public static let cornerRadius: CGFloat = 18
-
-    /// The radius that makes a plate a full pill: half its height.
-    ///
-    /// For the space bar, which is the one key that is a pill rather than a rounded
-    /// command shape — it is wide, so a full pill costs it nothing visually.
-    public static func pillRadius(forHeight height: CGFloat) -> CGFloat {
-        max(0, height / 2)
-    }
+    /// Shared command and Space shape, chosen in native previews. Hit frames stay unchanged.
+    public static let cornerRadius: CGFloat = 12
 
     /// The size a command key's visible plate is drawn at.
     ///
@@ -65,8 +42,10 @@ public enum CommandKeyStyle {
     /// outer inset; interior keys stay centred on their hit area.
     ///
     /// The hit area stays at its resolved size so nothing changes about what can be
-    /// pressed; only the plate the user sees is standardised.
-    public static func visualPlate(for hit: CGRect, surfaceWidth: CGFloat? = nil) -> CGRect {
+    /// pressed; only the plate the user sees is standardised. Renderers reserve a
+    /// neighbour gap; layout callers keep the full envelope for unchanged targets.
+    public static func visualPlate(for hit: CGRect, surfaceWidth: CGFloat? = nil,
+                                   neighborGap: CGFloat = 0) -> CGRect {
         let leading = surfaceWidth != nil && hit.minX <= KeyGridPlacement.edgeInset + 1
         let trailing = surfaceWidth.map { hit.maxX >= $0 - KeyGridPlacement.edgeInset - 1 } ?? false
         let reference = surfaceWidth.map {
@@ -75,13 +54,13 @@ public enum CommandKeyStyle {
                 height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
             ))
         } ?? CGSize(width: visualSize, height: visualSize)
-        // Spend the pinned row's empty gap, accounting for the face's edge
-        // alignment so a wide landscape command never covers its neighbour.
+        // Keep the outer alignment, leaving the requested gap on the inner edge.
         let edgeInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
         let edgeShift = leading ? max(0, edgeInset - hit.minX)
             : trailing ? max(0, hit.maxX - ((surfaceWidth ?? hit.maxX) - edgeInset)) : 0
         let width = max(0, min(reference.width,
-                               hit.width + (surfaceWidth == nil ? 0 : KeyGridPlacement.edgeGap) - edgeShift))
+                               hit.width + (surfaceWidth == nil ? 0 : KeyGridPlacement.edgeGap) - edgeShift)
+                        - max(0, neighborGap))
         let height = max(0, min(reference.height, hit.height))
         let x: CGFloat
         if leading {
@@ -111,7 +90,7 @@ public enum CommandKeyStyle {
     // MARK: - Press treatment
 
     /// Scale the plate is drawn at while held.
-    public static let pressScale: CGFloat = 0.94
+    public static let pressScale: CGFloat = 0.97
     /// Opacity of a held key, for renderers that can set one.
     public static let pressOpacity: CGFloat = 0.72
     /// Press-in and press-out durations.

@@ -355,7 +355,7 @@ final class EmojiPagerView: UIView {
             revision &+= 1
         }
         let height = EmojiSurfaceModel.rowHeight(
-            gridHeight: bounds.height - CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap),
+            gridHeight: bounds.height,
             rowSpacing: 2, gridVerticalInset: 4
         )
         coordinator.configure(

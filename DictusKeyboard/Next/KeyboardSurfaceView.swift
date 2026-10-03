@@ -37,8 +37,7 @@ final class KeyboardSurfaceView: UIView {
         bottomBar.show(next, layout: layout, inputHeight: inputHeight, fieldKeys: fieldKeys)
         let surface = layout.surfaceFrame
         let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,
-                           height: max(0, layout.floatingEmojiCategoryFrame.minY - surface.minY
-                                       - emojiCategory.hitExpansion))
+                           height: max(0, layout.floatingEmojiCategoryFrame.minY - surface.minY))
         emoji.frame = layout.inputFrame(pager, inputViewHeight: inputHeight)
         emojiCategory.frame = layout.inputFrame(layout.floatingEmojiCategoryFrame, inputViewHeight: inputHeight)
         emojiDelete.frame = layout.inputFrame(layout.boardDeleteFrame, inputViewHeight: inputHeight)
@@ -66,7 +65,9 @@ final class KeyboardSurfaceView: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, isUserInteractionEnabled, alpha > 0.01,
               bounds.contains(point) else { return nil }
-        for owner in [emojiCategory, emojiDelete, bottomBar, emoji] as [UIView] {
+        // Delete floats over the full-width pager. Category hit expansion only
+        // claims free space; it must not intercept the newly extended last row.
+        for owner in [emojiDelete, bottomBar, emoji, emojiCategory] as [UIView] {
             guard !owner.isHidden, owner.isUserInteractionEnabled, owner.alpha > 0.01 else { continue }
             if let hit = owner.hitTest(owner.convert(point, from: self), with: event) { return hit }
         }
@@ -163,8 +164,8 @@ final class KeyboardPeriodKeyView: UIView {
         labels.alignment = .center
         labels.spacing = 0
         for (text, size, weight, color) in [
-            (".", CGFloat(19), UIFont.Weight.light, UIColor.label),
-            (",", CGFloat(9), UIFont.Weight.medium, UIColor.secondaryLabel)
+            (".", CGFloat(19), UIFont.Weight.regular, UIColor.label),
+            (",", CGFloat(11), UIFont.Weight.medium, KeyboardChromeRole.secondaryForeground)
         ] {
             let label = UILabel()
             label.text = text
@@ -219,9 +220,7 @@ final class KeyboardPeriodKeyView: UIView {
         case .glass:
             if #available(iOS 26.0, *) { plate.effect = UIGlassEffect(style: .regular) }
             else { plate.effect = UIBlurEffect(style: .systemMaterial) }
-        case .solid: plate.backgroundColor = .tertiarySystemFill
-        case .reduced: plate.backgroundColor = .secondarySystemFill
-        case .contrast: plate.backgroundColor = .systemFill
+        case .solid, .reduced, .contrast: plate.backgroundColor = KeyboardChromeRole.input.solidFill(increasedContrast: next == .contrast)
         }
     }
 

@@ -70,7 +70,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
         XCTAssertTrue(categories.contains("Image(systemName: section.icon)"))
         XCTAssertFalse(categories.contains("representativeEmoji"))
         XCTAssertFalse(categories.contains("Text(emoji)"))
-        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertFalse(categories.contains("keyboardGlass(in: Capsule())"))
         XCTAssertFalse(categories.contains("contentOffset"))
         let control = try source("DictusKeyboard/Views/EmojiCategoryControl.swift")
         XCTAssertTrue(control.contains("final class EmojiCategoryControl: UIControl"),

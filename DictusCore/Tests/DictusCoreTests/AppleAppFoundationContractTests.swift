@@ -631,8 +631,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(picker.contains("private let rowSpacing: CGFloat"))
         XCTAssertTrue(picker.contains("emojiKeySpacing"))
         XCTAssertFalse(picker.contains("Search Emoji"))
-        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"),
-                      "the category strip needs one shared functional glass surface")
+        XCTAssertFalse(categories.contains("keyboardGlass(in: Capsule())"),
+                       "the minimal category strip is unboxed")
         XCTAssertFalse(categories.contains("contentOffset"), "The full category rail remains stationary")
         XCTAssertTrue(categories.contains("EmojiCategoryScrubControl"))
         XCTAssertTrue(categories.contains("EmojiCategoryBarMetrics.railInset"))

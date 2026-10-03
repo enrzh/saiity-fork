@@ -57,7 +57,7 @@ enum KeyGridPageFactory {
                 let variants = KeyboardVariantPreferences.options(for: value, kind: .letter)
                 return KeyGridKey(id: "letter-\(row)-\(column)",
                     action: variants.count > 1 ? .character(base: value, variants: variants) : .insert(value),
-                    label: value, glyphSize: 22, glyphWeight: .light, isInvisiblePlate: true)
+                    label: value, glyphSize: 22, glyphWeight: .regular, isInvisiblePlate: true)
             }
         }
 
@@ -259,7 +259,7 @@ enum KeyGridPageFactory {
                 : .insert(label),
             label: label,
             glyphSize: 22,
-            glyphWeight: .light
+            glyphWeight: .regular
         )
     }
 

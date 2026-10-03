@@ -625,7 +625,7 @@ struct LetterKeyboardSurface: View {
         switch key.type {
         case .input(let value, _):
             Text(value)
-                .font(.system(size: 22, weight: .light))
+                .font(.system(size: 22, weight: .regular))
         case .shift:
             Image(systemName: shiftSymbolName)
                 .font(.system(size: 16, weight: .semibold))

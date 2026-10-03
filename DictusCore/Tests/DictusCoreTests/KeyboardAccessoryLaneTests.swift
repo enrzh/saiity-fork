@@ -119,8 +119,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         XCTAssertGreaterThan(layout.floatingEmojiCategoryFrame.width,
                              VoiceOnlyKeyboardPolicy.floatingEmojiCategoryBarMaxWidth,
                              "The centred track keeps the expanded category rail readable")
-        XCTAssertEqual(layout.accessoryDictationBoardFrame.maxX + VoiceOnlyKeyboardPolicy.railSpacing,
-                       layout.accessoryDismissFrame.minX, accuracy: 0.001)
+        XCTAssertEqual(layout.accessoryDictationBoardFrame, layout.accessoryDismissFrame)
         XCTAssertEqual(layout.accessoryDismissFrame.width, 48, accuracy: 0.001)
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.minX,
                        VoiceOnlyKeyboardPolicy.accessoryEdgeInset

@@ -13,7 +13,7 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
             XCTAssertTrue(visual.contains(".environment(\\.keyboardLiquidGlassEnabled, liquidGlassEnabled)"), path)
         }
         let category = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
-        XCTAssertTrue(category.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertFalse(category.contains("keyboardGlass(in: Capsule())"))
         XCTAssertFalse(category.contains(".glassEffect("), "categories must not remain permanently glass in Solid mode")
         let native = try source("DictusKeyboard/KeyboardKeyInput.swift")
         XCTAssertTrue(native.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
@@ -200,7 +200,7 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
                        "Emoji Delete belongs to the board, not a passthrough root overlay")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertFalse(root.contains("KeyboardNativeOverlay("))
-        XCTAssertTrue(surface.contains("for owner in [emojiCategory, emojiDelete, bottomBar, emoji]"))
+        XCTAssertTrue(surface.contains("for owner in [emojiDelete, bottomBar, emoji, emojiCategory]"))
         XCTAssertFalse(surface.contains("super.hitTest(point, with: event)"))
         XCTAssertTrue(picker.contains("final class EmojiPagerView: UIView"))
         XCTAssertTrue(picker.contains("collection.dataSource = coordinator"))

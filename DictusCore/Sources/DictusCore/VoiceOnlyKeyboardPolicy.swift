@@ -275,12 +275,12 @@ public enum VoiceOnlyKeyboardPolicy {
     /// Letter and symbol key plates use the compact system-keyboard radius.
     public static let keyCornerRadius: CGFloat = 8
     /// ABC, 123, emoji, shift, delete, space, and return.
-    public static let commandKeyCornerRadius: CGFloat = 18
+    public static let commandKeyCornerRadius: CGFloat = CommandKeyStyle.cornerRadius
     /// Pressed emoji cell. Letter keys use their own highlight radius.
     public static let emojiHighlightCornerRadius: CGFloat = 13
     /// Number-pad plates are much wider than letter keys, so the same 8pt
     /// radius reads as a square slab. This keeps them key-shaped.
-    public static let numberPadKeyCornerRadius: CGFloat = 22
+    public static let numberPadKeyCornerRadius: CGFloat = 14
     /// Keeps the whole pad off the glass rim. Per-key insets made the keys short.
     public static let numberPadEdgeInset: CGFloat = 14
     public static let numberPadKeySpacing: CGFloat = 10
@@ -508,10 +508,10 @@ public enum VoiceOnlyKeyboardPolicy {
             )
         }
 
-        /// Return-to-dictation-board control immediately left of keyboard-down.
+        /// Voice navigation occupies the trailing slot; More owns keyboard dismissal.
         public var accessoryDictationBoardFrame: CGRect {
             CGRect(
-                x: max(0, accessoryDismissFrame.minX - railSpacing - accessoryControlSize),
+                x: accessoryDismissFrame.minX,
                 y: 0,
                 width: accessoryControlSize,
                 height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight

@@ -15,7 +15,7 @@ struct KeyVariantPopup: View {
         HStack(spacing: 0) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 let label = Text(option)
-                    .font(.system(size: isEmoji ? 28 : 20, weight: .light))
+                    .font(.system(size: isEmoji ? 28 : 20, weight: .regular))
                     .frame(width: Self.cellWidth(isEmoji: isEmoji), height: Self.cellHeight(isEmoji: isEmoji))
                     .background {
                         if index == selectedIndex {
@@ -38,7 +38,8 @@ struct KeyVariantPopup: View {
         .padding(6)
         .keyboardGlass(
             in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-            interactive: false
+            interactive: false,
+            role: .input
         )
         // Selection changes arrive for every movement sample. Keep the popup
         // visually stable instead of animating/rebuilding during the drag.
@@ -108,11 +109,12 @@ struct KeyPreviewPopup: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 28, weight: .light))
+            .font(.system(size: 28, weight: .regular))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .keyboardGlass(
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                interactive: false
+                interactive: false,
+                role: .input
             )
             .transaction { transaction in
                 transaction.animation = nil
@@ -214,11 +216,12 @@ struct KeyPopoutPreview: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 28, weight: .light))
+            .font(.system(size: 28, weight: .regular))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .keyboardGlass(
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                interactive: false
+                interactive: false,
+                role: .input
             )
             // The host reserves the expanded bounds. Start at the pressed-key
             // size inside that frame, then grow to the frame itself so the

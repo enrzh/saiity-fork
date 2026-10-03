@@ -32,14 +32,15 @@ struct EmojiCategoryBar: View {
                         .symbolVariant(selected ? .fill : .none)
                         .foregroundStyle(selected ? Color.primary : Color.secondary)
                         .frame(width: slot, height: height)
-                        .background {
-                            if selected { Capsule().fill(Color.primary.opacity(0.12)) }
+                        .overlay(alignment: .bottom) {
+                            if selected {
+                                Capsule().fill(Color.primary).frame(width: min(14, slot), height: 1.5)
+                            }
                         }
                 }
             }
             .padding(.horizontal, EmojiCategoryBarMetrics.railInset)
             .frame(width: proxy.size.width, height: height)
-            .background { Color.clear.keyboardGlass(in: Capsule()) }
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
         }
         .allowsHitTesting(false)

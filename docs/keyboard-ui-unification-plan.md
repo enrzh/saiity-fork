@@ -696,6 +696,63 @@ Detailed scope, captures and limitations:
 `docs/design/saiity-experience-direction.md`, native implementation checkpoint.
 Logs: `/tmp/saiity-native-design-{all-core,core,input,simulator-build,device-build,render}.log`.
 
+### Keyboard visual rework — October 3
+
+The accepted keyboard design plan is implemented locally through the existing
+native owners. Solid input plates now separate from command faces; letters/digits
+use Regular type, command/Space corners are 12pt, numeric plates are 14pt and the
+circular bottom controls stay 45pt. Accessory chrome is quieter, the full emoji
+rail has a clearer selection marker and the board separates state from action.
+Compact AUTO and voice labels fit without changing their control frames. Host
+Return titles carry across the shared pages. Popups retain the existing sessions
+and placement logic with the shared type treatment. Accessibility fallback fills
+are opaque, and the punctuation hint is legible at 11pt.
+
+1,891 Core tests pass with one existing skip. Production UIKit input checks,
+final Debug/signed Release builds and strict signatures pass. All key plates,
+targets and native control frames match across 160 before/after layouts, and 64
+large-text renders were reviewed. Tested Solid text contrast is at least 5.597:1
+on the fixture backdrop. The final app is installed on isolated QA. Real phone
+feel and system Glass/host behavior remain separate gates. No room audio or
+model download was started. No commit, push or upload occurred; these changes
+are newer than TestFlight 230. Legacy input and the paused heartbeat remain.
+
+Details and artifacts: `docs/design/saiity-keyboard-direction.md`, implementation
+checkpoint. Logs: `/tmp/saiity-keyboard-design.Qnx1D2/`.
+
+### Minimal keyboard and reported native fallback — October 3
+
+The approved mockup is implemented: a native More menu replaces separate Paste,
+output-language and Dismiss accessories, power stays beside the trailing blue
+voice mark, the optional shared surface is flat and the full emoji category strip
+is unboxed. Secondary actions and safe result recovery remain available in More.
+Typing/bottom geometry and the expanded emoji list/Delete overlay are preserved.
+
+The native “Q” keyboard report is not reproduced. Source and installed extension
+metadata use sAiity / en-US, and PlugInKit registers the keyboard. The isolated
+simulator currently enables only Apple keyboards; no phone crash evidence for
+the report is available. Host system restrictions remain separate. The review
+found unsafe non-optional document-ID reads in result recovery; a nullable ObjC
+shim now guards every caller while requiring a real matching field for deletion.
+The native check exercises actual ObjC nil/attached/detached identity returns.
+
+1,891 Core checks (one existing skip), 76 final contracts, the UIKit harness,
+160 native layouts, 64 large-text renders, final builds and signatures pass.
+Final development app installed on isolated QA. Exact phone fallback and system
+menu interaction remain unverified. Details: `docs/design/saiity-keyboard-direction.md`.
+No commit, push, release change, upload, microphone capture or model download.
+
+### Narrower Caps, layer toggles and Delete — October 3
+
+Grid command faces now reserve 5.5pt beside character keys, in both materials,
+while preserving their heights, outer alignment and existing invisible targets.
+The bottom bar and character positions are unchanged. 114 focused Core tests,
+native input/gap checks at four portrait/landscape widths, Debug and signed
+Release builds and strict signatures pass. The 160-render geometry matrix matches
+the previous implementation. Updated development app installed on isolated QA;
+physical feel remains unverified. Details: `docs/design/saiity-keyboard-direction.md`.
+No commit, push, upload, recording or model download.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

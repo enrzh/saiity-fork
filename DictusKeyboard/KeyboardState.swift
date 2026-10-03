@@ -1436,6 +1436,18 @@ class KeyboardState: ObservableObject {
     private var dictationUndoDocumentID: UUID?
     private var dictationUndoContextAfter: String?
 
+    /// Only preview a result still verified against the field that received it.
+    var currentDictationPreview: String? {
+        guard dictationUndoAvailable, dictationStatus == .idle || dictationStatus == .ready,
+              let text = dictationUndoText, let proxy = controller?.textDocumentProxy,
+              let documentID = HostInputTraits.documentIdentifier(for: proxy), documentID == dictationUndoDocumentID,
+              proxy.selectedText?.isEmpty != false,
+              proxy.documentContextAfterInput == dictationUndoContextAfter,
+              case .ok(_, _, false) = DictationUndo.verify(context: proxy.documentContextBeforeInput, insertedText: text)
+        else { return nil }
+        return String(text.prefix(240))
+    }
+
     /// Whether the toolbar should offer the undo control.
     ///
     /// Set only after the insertion has been verified against the live document, so
@@ -1477,9 +1489,13 @@ class KeyboardState: ObservableObject {
     /// turn, and a check that runs too early reads the field as it was *before* the
     /// insertion and refuses. One hop costs a frame nobody sees.
     private func armDictationUndo(_ transcription: String, originalText: String? = nil) {
+        guard let documentID = HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy) else {
+            invalidateDictationUndo(reason: "document-unavailable")
+            return
+        }
         dictationUndoText = transcription
         dictationOriginalText = originalText
-        dictationUndoDocumentID = controller?.textDocumentProxy.documentIdentifier
+        dictationUndoDocumentID = documentID
         dictationUndoContextAfter = controller?.textDocumentProxy.documentContextAfterInput
         dictationUndoAvailable = false
         dictationUndoTimer?.invalidate()
@@ -1540,6 +1556,12 @@ class KeyboardState: ObservableObject {
     /// about its context earns anyway.
     func revalidateDictationUndo() {
         guard dictationUndoAvailable, let transcription = dictationUndoText else { return }
+        if let proxy = controller?.textDocumentProxy,
+           HostInputTraits.documentIdentifier(for: proxy) != dictationUndoDocumentID || proxy.selectedText?.isEmpty == false
+            || proxy.documentContextAfterInput != dictationUndoContextAfter {
+            // Refresh the passive preview without changing recovery's existing refusal policy.
+            objectWillChange.send()
+        }
         if case .failed(let reason) = DictationUndo.verify(
             context: controller?.textDocumentProxy.documentContextBeforeInput,
             insertedText: transcription
@@ -1575,7 +1597,7 @@ class KeyboardState: ObservableObject {
             return
         }
 
-        guard proxy.documentIdentifier == dictationUndoDocumentID,
+        guard let documentID = HostInputTraits.documentIdentifier(for: proxy), documentID == dictationUndoDocumentID,
               proxy.selectedText?.isEmpty != false,
               proxy.documentContextAfterInput == dictationUndoContextAfter else {
             invalidateDictationUndo(reason: "perform-field-changed")
@@ -1622,7 +1644,7 @@ class KeyboardState: ObservableObject {
             }
         }
         if let proxy = controller?.textDocumentProxy, let inserted = dictationUndoText,
-           proxy.documentIdentifier == dictationUndoDocumentID,
+           let documentID = HostInputTraits.documentIdentifier(for: proxy), documentID == dictationUndoDocumentID,
            case .ok(_, _, false) = DictationUndo.verify(context: proxy.documentContextBeforeInput, insertedText: inserted) {
             actions.append(UIAction(title: "Undo dictation", image: UIImage(systemName: "delete.left")) { [weak self] _ in
                 self?.performDictationUndo()
@@ -1634,7 +1656,7 @@ class KeyboardState: ObservableObject {
     private var canRestoreOriginal: Bool {
         guard dictationUndoAvailable, !isUndoingDictation, dictationStatus == .idle,
               let proxy = controller?.textDocumentProxy,
-              proxy.documentIdentifier == dictationUndoDocumentID,
+              let documentID = HostInputTraits.documentIdentifier(for: proxy), documentID == dictationUndoDocumentID,
               proxy.selectedText?.isEmpty != false,
               proxy.documentContextAfterInput == dictationUndoContextAfter,
               let inserted = dictationUndoText, dictationOriginalText != nil else { return false }
@@ -1651,18 +1673,18 @@ class KeyboardState: ObservableObject {
         // ponytail: one main-turn replacement, capped at 200 graphemes; longer
         // transcripts use Copy original + Undo until chunked restoration is measured.
         let replacement = original + (inserted.hasSuffix(" ") && !original.hasSuffix(" ") ? " " : "")
-        let documentID = proxy.documentIdentifier
+        guard let documentID = HostInputTraits.documentIdentifier(for: proxy) else { return }
         let prefix = String((proxy.documentContextBeforeInput ?? "").dropLast(count))
         invalidateDictationUndo(reason: "restored-original")
         for remaining in stride(from: count, to: 0, by: -1) {
-            guard controller?.textDocumentProxy.documentIdentifier == documentID,
+            guard HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy) == documentID,
                   proxy.documentContextBeforeInput?.hasSuffix(String(inserted.prefix(remaining))) == true else {
                 HapticFeedback.actionRefused()
                 return
             }
             proxy.deleteBackward()
         }
-        guard controller?.textDocumentProxy.documentIdentifier == documentID,
+        guard HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy) == documentID,
               (proxy.documentContextBeforeInput ?? "") == prefix else {
             HapticFeedback.actionRefused()
             return
@@ -1728,7 +1750,8 @@ class KeyboardState: ObservableObject {
         proxy: UITextDocumentProxy
     ) {
         guard isUndoingDictation else { return }
-        guard proxy.documentIdentifier == controller?.textDocumentProxy.documentIdentifier else {
+        guard let documentID = HostInputTraits.documentIdentifier(for: proxy),
+              documentID == HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy) else {
             isUndoingDictation = false
             logProbe("dictationUndoAborted", details: "reason=field-changed")
             return
@@ -2148,7 +2171,28 @@ class KeyboardState: ObservableObject {
 
     /// Label for whichever control currently occupies the board's primary slot.
     var primaryBoardActionLabel: String {
-        showsRecoveryAction ? "Open sAiity to prepare dictation" : "Hold to dictate"
+        if showsRecoveryAction { return "Open sAiity to prepare dictation" }
+        switch dictationStatus {
+        case .requested: return "Cancel dictation preparation"
+        case .recording: return isFinishingRecording ? "Finishing dictation" : "Finish dictation"
+        case .transcribing: return "Cancel transcription"
+        case .processing: return "Cancel cleanup"
+        case .idle, .ready, .failed: return "Hold to dictate"
+        }
+    }
+
+    var dictationBoardStateTitle: String {
+        switch dictationStatus {
+        case .requested: return "Getting ready"
+        case .recording: return isFinishingRecording ? "Finishing" : "Listening"
+        case .transcribing: return "Transcribing"
+        case .processing: return "Cleaning up"
+        case .failed: return "Dictation interrupted"
+        case .idle, .ready:
+            if !keyboardDictationEnabled { return "Dictation is off" }
+            if showsRecoveryAction { return "Prepare dictation" }
+            return currentDictationPreview == nil ? "Ready to dictate" : "Text inserted"
+        }
     }
 
     var recoveryBoardTitle: String {
@@ -2160,10 +2204,8 @@ class KeyboardState: ObservableObject {
     var dictationBoardTitle: String {
         switch dictationStatus {
         case .idle, .ready, .failed: return "Hold to dictate"
-        case .requested: return "Getting ready..."
-        case .recording: return isFinishingRecording ? "Finishing..." : "Listening..."
-        case .transcribing: return "Cancel transcription"
-        case .processing: return "Cancel cleanup"
+        case .requested, .transcribing, .processing: return "Cancel"
+        case .recording: return isFinishingRecording ? "Finishing…" : "Finish"
         }
     }
 

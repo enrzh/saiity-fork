@@ -55,32 +55,12 @@ final class CommandKeyStyleTests: XCTestCase {
     /// The corner radius makes a command key read as a control, not a letter key.
     ///
     /// What has to hold is that it is clearly rounder than a letter plate, that it
-    /// never exceeds half the tallest plate (past that the corners clip), and that it
-    /// is not silently changed to something squarer. The exact value is the product's
-    /// choice, not a measurement: a crop of the platform's own key suggested a
-    /// smaller radius, but calibrating that measurement showed it cannot tell 11 from
-    /// 18, so the shape was not moved on the strength of it.
+    /// never exceeds half the tallest plate. The reviewed radius is a product choice.
     func testCommandRadiusIsRounderThanALetterAndDoesNotClip() {
         let tallestPlate = KeyGridPlacement.maximumRowHeight
         XCTAssertGreaterThan(CommandKeyStyle.cornerRadius, KeyGridPlacement.keyCornerRadius)
         XCTAssertLessThan(CommandKeyStyle.cornerRadius, tallestPlate / 2)
-        XCTAssertEqual(CommandKeyStyle.cornerRadius, 18, accuracy: 0.01)
-    }
-
-    /// The space bar is the one key that is a pill rather than a rounded command
-    /// shape, and it asks for that radius explicitly.
-    ///
-    /// It is wide, so a full pill costs it nothing visually, and it must not drift
-    /// onto the command radius: that is the shape that reads as squared.
-    func testSpaceBarKeepsItsPillRadius() {
-        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: 40), 20, accuracy: 0.01)
-        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: 43), 21.5, accuracy: 0.01)
-        // Wider than the command radius, so the two shapes stay distinguishable.
-        XCTAssertGreaterThan(
-            CommandKeyStyle.pillRadius(forHeight: 40),
-            CommandKeyStyle.cornerRadius
-        )
-        XCTAssertEqual(CommandKeyStyle.pillRadius(forHeight: -5), 0, accuracy: 0.01)
+        XCTAssertEqual(CommandKeyStyle.cornerRadius, 12, accuracy: 0.01)
     }
 
     /// The grid's copy of the radius is the same number, not a second literal.

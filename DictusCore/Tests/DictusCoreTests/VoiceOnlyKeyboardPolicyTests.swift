@@ -1085,9 +1085,9 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
     }
 
     func testCommandAndEmojiRadiiStayNamed() {
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandKeyCornerRadius, 18)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandKeyCornerRadius, CommandKeyStyle.cornerRadius)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.emojiHighlightCornerRadius, 13)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.keyCornerRadius, 8)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius, 22)
+        XCTAssertEqual(VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius, 14)
     }
 }

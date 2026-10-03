@@ -67,7 +67,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
         XCTAssertTrue(try read("DictusKeyboard/KeyboardViewController.swift").contains("surfaceBackdrop.configureInset(layout"))
         XCTAssertFalse(emoji.contains("view.backgroundView = material"))
-        XCTAssertTrue(categories.contains("Color.clear.keyboardGlass(in: Capsule())"))
+        XCTAssertFalse(categories.contains("keyboardGlass(in: Capsule())"))
         XCTAssertFalse(categories.contains("contentOffset"))
         let native = try read("DictusKeyboard/Next/KeyboardSurfaceView.swift")
         XCTAssertFalse(native.contains("emojiInset"), "The inset has one owner for all pages")
@@ -93,10 +93,10 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let plates = try read("DictusKeyboard/KeyboardKeyStyle.swift")
 
         XCTAssertTrue(plates.contains("if reduceTransparency || accessibilityContrast == .increased"))
-        XCTAssertTrue(plates.contains("shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))"))
+        XCTAssertTrue(plates.contains("role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)"))
         XCTAssertTrue(plates.contains("glassEffect(.regular.interactive(), in: shape)"))
         XCTAssertTrue(plates.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
-        XCTAssertTrue(plates.contains("Color(uiColor: .tertiarySystemFill)"))
+        XCTAssertTrue(plates.contains("case .control: return increasedContrast ? .tertiarySystemBackground : .tertiarySystemFill"))
         XCTAssertTrue(root.contains("background(Color.clear)"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("keyboardGlass(in: shape, role: role)"))
         XCTAssertFalse(root.contains("glassEffect("),
@@ -172,7 +172,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Open letter keyboard"))
         XCTAssertTrue(style.contains("glassEffect(.regular.interactive(), in: shape)"))
         XCTAssertTrue(style.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
-        XCTAssertTrue(style.contains("Color(uiColor: .tertiarySystemFill)"))
+        XCTAssertTrue(style.contains("case .control: return increasedContrast ? .tertiarySystemBackground : .tertiarySystemFill"))
         XCTAssertFalse(style.contains("systemGroupedBackground"),
                        "solid key plates use tertiary fill, not a grouped board slab")
         XCTAssertFalse(source.contains("layout.leftUtilityFrames"))

@@ -10,6 +10,9 @@ import UIKit
 import DictusCore
 
 enum HostInputTraits {
+    static func documentIdentifier(for proxy: UITextDocumentProxy?) -> UUID? {
+        DictusNullableDocumentIdentifier(proxy)
+    }
 
     /// Reads the proxy's traits and evaluates the field policy.
     ///

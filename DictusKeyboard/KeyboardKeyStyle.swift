@@ -4,8 +4,21 @@ import DictusCore
 
 /// Shared visual role used by both Solid and Liquid Glass keyboard faces.
 enum KeyboardChromeRole {
+    case input
     case control
     case board
+    case accessory
+
+    static var secondaryForeground: UIColor { .label.withAlphaComponent(0.72) }
+
+    func solidFill(increasedContrast: Bool = false) -> UIColor {
+        switch self {
+        case .input: return .tertiarySystemBackground
+        case .accessory: return .clear
+        case .control: return increasedContrast ? .tertiarySystemBackground : .tertiarySystemFill
+        case .board: return increasedContrast ? .secondarySystemBackground : .tertiarySystemFill
+        }
+    }
 }
 
 private struct KeyboardLiquidGlassKey: EnvironmentKey {
@@ -37,7 +50,9 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
 
     @ViewBuilder
     private func plate<Plate: View>(_ content: Plate) -> some View {
-        if !liquidGlassEnabled {
+        if role == .accessory {
+            content.allowsHitTesting(false)
+        } else if !liquidGlassEnabled {
             if role == .board {
                 content.allowsHitTesting(false)
             } else {
@@ -48,7 +63,7 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
             }
         } else if reduceTransparency || accessibilityContrast == .increased {
             content.background {
-                shape.fill(Color(uiColor: accessibilityContrast == .increased ? .systemFill : .secondarySystemFill))
+                shape.fill(Color(uiColor: role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)))
                     .allowsHitTesting(false)
             }
             .allowsHitTesting(false)
@@ -76,7 +91,7 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     }
 
     private var solidFill: Color {
-        Color(uiColor: .tertiarySystemFill)
+        Color(uiColor: role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased))
     }
 }
 
@@ -117,6 +132,8 @@ struct CommandKeyFace: View {
     private let cornerRadius: CGFloat
     /// Press state published by the UIKit control that actually owns the touch.
     private let isPressed: Bool
+    private let accented: Bool
+    private let role: KeyboardChromeRole
 
     init(
         systemName: String,
@@ -124,7 +141,9 @@ struct CommandKeyFace: View {
         plateHeight: CGFloat,
         cornerRadius: CGFloat = CommandKeyStyle.cornerRadius,
         symbolPointSize: CGFloat = CommandKeyStyle.glyphSize,
-        isPressed: Bool = false
+        isPressed: Bool = false,
+        accented: Bool = false,
+        role: KeyboardChromeRole = .control
     ) {
         self.systemName = systemName
         text = nil
@@ -135,6 +154,8 @@ struct CommandKeyFace: View {
         self.plateHeight = plateHeight
         self.cornerRadius = cornerRadius
         self.isPressed = isPressed
+        self.accented = accented
+        self.role = role
     }
 
     init(
@@ -144,7 +165,9 @@ struct CommandKeyFace: View {
         cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius,
         textPointSize: CGFloat = CommandKeyStyle.textSize,
         textWeight: Font.Weight = .semibold,
-        isPressed: Bool = false
+        isPressed: Bool = false,
+        accented: Bool = false,
+        role: KeyboardChromeRole = .control
     ) {
         systemName = nil
         self.text = text
@@ -155,6 +178,8 @@ struct CommandKeyFace: View {
         self.plateHeight = plateHeight
         self.cornerRadius = cornerRadius
         self.isPressed = isPressed
+        self.accented = accented
+        self.role = role
     }
 
     var body: some View {
@@ -167,14 +192,18 @@ struct CommandKeyFace: View {
                     .font(.system(size: textPointSize, weight: textWeight))
             }
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(accented ? Color.saiityOnAction : Color.primary)
         .frame(
             minWidth: plateWidth,
             maxWidth: plateWidth ?? .infinity,
             minHeight: plateHeight,
             maxHeight: plateHeight
         )
-        .commandKeyPlate(cornerRadius: cornerRadius)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            if accented { shape.fill(Color.saiityAction).allowsHitTesting(false) }
+            else { Color.clear.keyboardGlass(in: shape, interactive: false, role: role) }
+        }
         // The numbers come from the shared command-key treatment, which the UIKit
         // grid reads too. Hardcoding them here is how the two drifted apart.
         .scaleEffect(isPressed && !reduceMotion ? CommandKeyStyle.pressScale : 1)
@@ -198,7 +227,8 @@ private struct LetterKeyPlateModifier: ViewModifier {
                 .fill(Color.clear)
                 .keyboardGlass(
                     in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                    interactive: false
+                    interactive: false,
+                    role: .input
                 )
                 .opacity(KeyboardInteractionPreferences.keyContainersEnabled ? 1 : 0)
                 .allowsHitTesting(false)

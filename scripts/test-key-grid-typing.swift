@@ -16,6 +16,39 @@ import ObjectiveC
 import DictusCore
 @testable import DictusKeyboard
 
+// A real ObjC nil return exercises the SDK's misleading non-optional UUID bridge.
+final class HostIdentityProbe: NSObject {
+    var identifier: NSUUID?
+    @objc var documentIdentifier: NSUUID? { identifier }
+}
+class_addProtocol(HostIdentityProbe.self, NSProtocolFromString("UITextDocumentProxy")!)
+let identityProbe = HostIdentityProbe()
+let identityProxy = identityProbe as! UITextDocumentProxy
+precondition(HostInputTraits.documentIdentifier(for: identityProxy) == nil)
+let expectedIdentity = UUID()
+identityProbe.identifier = expectedIdentity as NSUUID
+precondition(HostInputTraits.documentIdentifier(for: identityProxy) == expectedIdentity)
+identityProbe.identifier = nil
+precondition(HostInputTraits.documentIdentifier(for: identityProxy) == nil)
+precondition(HostInputTraits.documentIdentifier(for: nil) == nil)
+print("PASS: nullable host identity survives absent, attached and detached document contexts")
+
+final class MenuCheckController: KeyboardViewController {
+    var dismissals = 0
+    override func dismissKeyboard() { dismissals += 1 }
+}
+let menuController = MenuCheckController()
+let menu = menuController.keyboardMoreMenuItems().compactMap { $0 as? UIMenu }.last!
+precondition(menu.children.map(\\.title) == ["Paste", "Output language", "Dismiss keyboard"])
+let languageMenu = menu.children[1] as! UIMenu
+precondition(!languageMenu.children.isEmpty)
+let dismissAction = menu.children[2] as! UIAction
+let menuButton = UIButton()
+menuButton.addAction(dismissAction, for: .primaryActionTriggered)
+menuButton.sendActions(for: .primaryActionTriggered)
+precondition(menuController.dismissals == 1)
+print("PASS: native More keeps Paste/output language and dismisses through its existing action")
+
 var capturedImpacts: [Double] = []
 var capturedSelections = 0
 extension UISelectionFeedbackGenerator {
@@ -198,15 +231,27 @@ if !\(baseline) {
         let blank = CGPoint(x: surface.emoji.frame.midX, y: surface.emoji.frame.minY + 1)
         precondition(surface.hitTest(blank, with: nil) === collection,
                      "Blank emoji space must reach its scroll view in both materials")
-        precondition(surface.emoji.frame.maxY <= surface.emojiCategory.frame.minY - surface.emojiCategory.hitExpansion,
-                     "Category hit expansion covers the last emoji row")
+        precondition(abs(surface.emoji.frame.maxY - surface.emojiCategory.frame.minY) < 0.01,
+                     "Emoji list must reach immediately above the category bar")
+        let lastRow = CGPoint(x: surface.emojiCategory.frame.midX, y: surface.emojiCategory.frame.minY - 5)
+        precondition(surface.hitTest(lastRow, with: nil) === collection.hitTest(collection.convert(lastRow, from: surface), with: nil),
+                     "Category hit expansion steals the expanded emoji row")
+        let covered = CGPoint(x: surface.emojiDelete.frame.midX,
+                              y: min(surface.emojiDelete.frame.maxY, surface.emoji.frame.maxY) - 1)
+        precondition(surface.emoji.frame.contains(covered) && surface.emojiDelete.frame.contains(covered))
+        precondition(surface.hitTest(covered, with: nil) === surface.emojiDelete,
+                     "Delete must win over the emoji list behind it")
+        let category = CGPoint(x: surface.emojiCategory.frame.midX, y: surface.emojiCategory.frame.midY)
+        precondition(surface.hitTest(category, with: nil) === surface.emojiCategory,
+                     "Expanded pager covers the visible category rail")
     }
 
     var commandFaces: [KeyGridView.CommandSpec] = []
     grid.onCommandFacesChanged = { commandFaces = $0 }
     for glass in [true, false] {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
-        for size in [CGSize(width: 402, height: 175), CGSize(width: 852, height: 90)] {
+        for size in [CGSize(width: 320, height: 175), CGSize(width: 402, height: 175),
+                     CGSize(width: 667, height: 90), CGSize(width: 852, height: 90)] {
             grid.frame.size = size
             for page in [KeyGridPageFactory.letters(),
                          KeyGridPageFactory.symbols(.symbolsNumbers),
@@ -221,13 +266,25 @@ if !\(baseline) {
                     let expected = min(45, command.plate.height)
                     precondition(face.rect.height == expected && command.target.contains(face.rect),
                                  "Command sizing failed: \\(page.id) \\(size) \\(command.key.id) expected=\\(expected) face=\\(face.rect) target=\\(command.target)")
+                    let envelope = CommandKeyStyle.visualPlate(for: command.plate, surfaceWidth: size.width)
+                    precondition(abs(envelope.width - face.rect.width - KeyGridPlacement.keySpacing) < 0.01,
+                                 "Command face must narrow without changing its reserved geometry")
+                    let row = grid.layout.rows[command.row]
+                    if command.column > 0 {
+                        precondition(face.rect.minX - row[command.column - 1].plate.maxX >= KeyGridPlacement.keySpacing - 0.01,
+                                     "Command touches its left neighbour")
+                    }
+                    if command.column + 1 < row.count {
+                        precondition(row[command.column + 1].plate.minX - face.rect.maxX >= KeyGridPlacement.keySpacing - 0.01,
+                                     "Command touches its right neighbour")
+                    }
                 }
             }
         }
     }
     grid.onCommandFacesChanged = nil
     grid.setPage(KeyGridPageFactory.letters())
-    print("PASS: shared command sizing in portrait and cramped landscape, both materials and all grid pages")
+    print("PASS: shared command heights and neighbour gaps in portrait and cramped landscape, both materials and all grid pages")
 
     for glass in [true, false] {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
@@ -508,6 +565,11 @@ if !\(baseline) {
                          "Service control must sit beside the dictation board control")
             let point = CGPoint(x: toggle.bounds.midX, y: toggle.bounds.midY)
             precondition(toggle.hitTest(point, with: nil) != nil, "Visible power control lost its native hit target")
+            let more = namedControl("keyboard-more", in: controller.view) as! UIButton
+            precondition(more.showsMenuAsPrimaryAction && more.menu != nil && !more.isHidden)
+            precondition(namedControl("paste-clipboard", in: controller.view) == nil
+                         && namedControl("dismiss-keyboard", in: controller.view) == nil,
+                         "Minimal accessory row kept separate secondary controls")
         }
     }
     let savedService = defaults.object(forKey: SharedKeys.serviceEnabled)
@@ -526,6 +588,57 @@ if !\(baseline) {
     precondition(!KeyboardDictationService.isEnabled(in: defaults), "The native action did not disable dictation")
     precondition(service.accessibilityValue == "Off", "The native control kept a stale enabled appearance")
     print("PASS: native service controls on every keyboard page in both materials")
+    let hostKeys = HostFieldPolicy.LetterFieldKeys(leftInsert: "@", rightInsert: ".com", returnTitle: "Send")
+    for mode in [KeyboardAreaMode.letters, .panel, .emoji] {
+        surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: hostKeys)
+        let label = surface.bottomBar.returnControl.keyboardFace.subviews.compactMap { $0 as? UILabel }.first!
+        precondition(label.text == "Send" && surface.bottomBar.returnControl.accessibilityLabel == "Send",
+                     "Host Return must remain consistent across keyboard pages")
+        precondition(surface.bottomBar.returnControl.keyboardFace.tint != nil)
+        if mode != .letters {
+            precondition(surface.bottomBar.fieldControl.isHidden, "A field-specific insert replaced page navigation")
+        }
+    }
+    surface.show(.letters, layout: layout, inputHeight: 269, fieldKeys: .standard)
+    precondition(surface.bottomBar.returnControl.keyboardFace.tint == nil, "Normal Return kept a submission tint")
+    func rgba(_ color: UIColor, _ traits: UITraitCollection) -> [Double] {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return [Double(r), Double(g), Double(b), Double(a)]
+    }
+    func over(_ foreground: [Double], _ background: [Double]) -> [Double] {
+        (0..<3).map { foreground[$0] * foreground[3] + background[$0] * (1 - foreground[3]) } + [1]
+    }
+    func luminance(_ color: [Double]) -> Double {
+        let linear = color.prefix(3).map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+        return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+    }
+    var minimumContrast = Double.infinity
+    for dark in [false, true] {
+        for increased in [false, true] {
+            let traits = UITraitCollection(traitsFrom: [UITraitCollection(userInterfaceStyle: dark ? .dark : .light),
+                                                       UITraitCollection(accessibilityContrast: increased ? .high : .normal)])
+            let host = rgba(.secondarySystemBackground, traits)
+            let board = over(rgba(KeyboardChromeRole.board.solidFill(increasedContrast: increased), traits), host)
+            let input = rgba(KeyboardChromeRole.input.solidFill(increasedContrast: increased), traits)
+            let command = over(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: increased), traits), board)
+            if increased {
+                precondition(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: true), traits)[3] == 1
+                             && rgba(KeyboardChromeRole.board.solidFill(increasedContrast: true), traits)[3] == 1,
+                             "Accessibility fallback must use opaque backgrounds")
+            }
+            for (foreground, background) in [(UIColor.label, input), (.label, command),
+                                             (KeyboardChromeRole.secondaryForeground, input),
+                                             (KeyboardChromeRole.secondaryForeground, board),
+                                             (.saiityOnAction, rgba(.saiityAction, traits))] {
+                let front = luminance(over(rgba(foreground, traits), background)), back = luminance(background)
+                let contrast = (max(front, back) + 0.05) / (min(front, back) + 0.05)
+                precondition(contrast >= 4.5, "Solid keyboard text lost contrast")
+                minimumContrast = min(minimumContrast, contrast)
+            }
+        }
+    }
+    print("PASS: host Return labels and page navigation; Solid contrast, minimum=\\(minimumContrast):1 on fixture backdrop")
     let face = KeyboardNativeControlFace(frame: CGRect(x: 0, y: 0, width: 156, height: 54))
     for symbol in ["mic.fill", "waveform", "ellipsis", "xmark", "power.circle.fill", "power"] {
         face.configure(text: "Dictation", symbol: symbol, visualSize: face.bounds.size, primary: true)

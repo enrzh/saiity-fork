@@ -10,6 +10,24 @@ extension KeyboardRootView {
             let dictateFrame = layout.dictateFrame
             let errorFrame = layout.dictationErrorFrame
             ZStack(alignment: .topLeading) {
+                let titleHeight = max(0, dictateFrame.minY - layout.surfaceFrame.minY - 8)
+                if titleHeight >= 18 {
+                    VStack(spacing: 4) {
+                        Text(boardStateTitle(width: dictateFrame.width))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color(uiColor: KeyboardChromeRole.secondaryForeground))
+                            .multilineTextAlignment(.center)
+                        if titleHeight >= 38, let preview = state.currentDictationPreview {
+                            Text(preview).font(.caption).foregroundStyle(.primary)
+                                .lineLimit(titleHeight >= 58 ? 2 : 1)
+                        }
+                    }
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .frame(width: dictateFrame.width, height: titleHeight)
+                    .position(x: CGFloat(dictateFrame.midX - layout.surfaceFrame.minX), y: titleHeight / 2)
+                    .allowsHitTesting(false)
+                    .accessibilityElement(children: .combine)
+                }
                 if !voiceBoardUsesUIKitHits {
                     primaryBoardControl(frame: dictateFrame)
                         .frame(width: dictateFrame.width, height: dictateFrame.height)
@@ -27,10 +45,10 @@ extension KeyboardRootView {
                 }
                 if !dictationErrorMessage.isEmpty && !errorFrame.isEmpty {
                     Text(dictationErrorMessage)
-                        .font(.caption2)
+                        .font(.caption)
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .foregroundStyle(.red)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
                         .allowsTightening(true)
                         .frame(width: max(CGFloat.zero, errorFrame.width - 8), height: errorFrame.height)
                         .position(x: CGFloat(errorFrame.midX - layout.surfaceFrame.minX),
@@ -215,10 +233,11 @@ extension KeyboardRootView {
         ZStack {
             appleControlSurface(
                 Text("space")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.primary)
                     .frame(width: frame.width, height: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)),
-                in: Capsule()
+                in: RoundedRectangle(cornerRadius: CommandKeyStyle.cornerRadius, style: .continuous),
+                role: .input
             )
             if !voiceBoardUsesUIKitHits {
                 SpaceBarControl(
@@ -238,6 +257,15 @@ extension KeyboardRootView {
     /// control, so nothing here can promise one action and perform another.
     private var dictationTitle: String {
         state.dictationBoardTitle
+    }
+
+    private func boardStateTitle(width: CGFloat) -> String {
+        guard state.dictationStatus == .recording, state.recordingElapsed.isFinite else {
+            return state.dictationBoardStateTitle
+        }
+        let seconds = Int(min(max(state.recordingElapsed, 0), 86_400))
+        return state.dictationBoardStateTitle + (width < 128 ? "\n" : " · ")
+            + String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private var dictationSymbol: String {

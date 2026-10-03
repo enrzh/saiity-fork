@@ -8,7 +8,7 @@ extension KeyboardRootView {
         _ content: Content,
         frame: CGRect
     ) -> some View {
-        let surfaceCornerRadius: CGFloat = 24
+        let surfaceCornerRadius: CGFloat = 0
         let shape = RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous)
         // The content normally remains unclipped so key popups can rise above
         // the top row. Emoji glyphs are the exception: their rectangular grid
@@ -51,7 +51,7 @@ extension KeyboardRootView {
         } else {
             content
                 .background {
-                    shape.fill(Color(uiColor: .tertiarySystemFill))
+                    shape.fill(Color(uiColor: role.solidFill()))
                         .allowsHitTesting(false)
                 }
                 .allowsHitTesting(false)

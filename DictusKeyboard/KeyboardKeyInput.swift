@@ -77,6 +77,8 @@ final class KeyboardNativeControlFace: UIView {
     var tint: UIColor?
     var foreground: UIColor = .label
     var isPrimary = false
+    private var role: KeyboardChromeRole = .control
+    private var isPressed = false
     private enum Material: Equatable { case glass, solid, reduced, contrast }
     private var material: Material?
     private var displayedSymbol: String?
@@ -100,27 +102,30 @@ final class KeyboardNativeControlFace: UIView {
 
     func configureInset(_ layout: VoiceOnlyKeyboardPolicy.Layout, inputHeight: CGFloat) {
         frame = layout.inputFrame(layout.surfaceFrame, inputViewHeight: inputHeight)
-        configure(visualSize: layout.surfaceFrame.size, radius: 24)
+        configure(visualSize: layout.surfaceFrame.size, radius: 0, role: .board)
         isHidden = !KeyboardInteractionPreferences.keyboardInsetEnabled
     }
 
     func configure(text: String? = nil, symbol: String? = nil,
                    visualSize: CGSize? = nil, radius: CGFloat = CommandKeyStyle.cornerRadius,
                    primary: Bool = false, tint: UIColor? = nil, foreground: UIColor = .label,
-                   textPointSize: CGFloat = CommandKeyStyle.textSize) {
+                   textPointSize: CGFloat = CommandKeyStyle.textSize,
+                   textWeight: UIFont.Weight = .semibold, role: KeyboardChromeRole = .control) {
         self.visualSize = visualSize
         self.radius = radius
         self.isPrimary = primary
         self.tint = tint
         self.foreground = foreground
+        self.role = role
         label.text = text
         label.isHidden = text == nil
         label.textColor = foreground
         let textSize: CGFloat = primary ? 14 : textPointSize
-        let font = UIFont.systemFont(ofSize: textSize, weight: .semibold)
-        label.font = primary ? UIFontMetrics(forTextStyle: .subheadline).scaledFont(for: font, maximumPointSize: 17) : font
+        let font = UIFont.systemFont(ofSize: textSize, weight: textWeight)
+        label.font = primary ? UIFontMetrics(forTextStyle: .subheadline).scaledFont(
+            for: font, maximumPointSize: 17, compatibleWith: traitCollection) : font
         label.numberOfLines = primary ? 2 : 1
-        label.minimumScaleFactor = primary ? min(1, 11 / label.font.pointSize) : 0.5
+        label.minimumScaleFactor = min(1, 11 / label.font.pointSize)
         label.lineBreakMode = primary ? .byWordWrapping : .byTruncatingTail
         let symbolSize: CGFloat = primary ? 20 : CommandKeyStyle.glyphSize
         if displayedSymbol != symbol || displayedSymbolSize != symbolSize || image.image == nil {
@@ -157,14 +162,14 @@ final class KeyboardNativeControlFace: UIView {
             pulse.autoreverses = true
             pulse.repeatCount = .infinity
             image.layer.add(pulse, forKey: "listening")
-        } else if displayedSymbol == "ellipsis", image.image?.isSymbolImage == true {
+        } else if isPrimary, displayedSymbol == "ellipsis", image.image?.isSymbolImage == true {
             image.addSymbolEffect(.pulse, options: .repeating)
         }
     }
 
     func refreshAppearance() {
         // A flat service face avoids glass's persistent halo after release.
-        let next: Material = (tint != nil && !isPrimary) || !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
+        let next: Material = role == .accessory || (tint != nil && !isPrimary) || !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
             : UIAccessibility.isDarkerSystemColorsEnabled ? .contrast
             : UIAccessibility.isReduceTransparencyEnabled ? .reduced : .glass
         if material != next {
@@ -178,8 +183,9 @@ final class KeyboardNativeControlFace: UIView {
         plate.backgroundColor = .clear
         plate.contentView.backgroundColor = tint.map {
             next == .glass && !isPrimary ? $0.withAlphaComponent(0.86) : $0
-        } ?? (next == .glass ? .clear : next == .contrast ? .systemFill
-                : next == .reduced ? .secondarySystemFill : .tertiarySystemFill)
+        } ?? (role == .accessory ? (isPressed ? UIColor.label.withAlphaComponent(0.10) : .clear)
+                : next == .glass ? .clear : role.solidFill(increasedContrast:
+                    UIAccessibility.isDarkerSystemColorsEnabled || UIAccessibility.isReduceTransparencyEnabled))
     }
 
     override func layoutSubviews() {
@@ -192,21 +198,34 @@ final class KeyboardNativeControlFace: UIView {
         if isPrimary, !image.isHidden, !label.isHidden {
             // A passive voice mark and readable action label keep the
             // 54pt hold target unchanged, including cancel and app recovery.
-            image.frame = CGRect(x: rect.minX + 16, y: rect.midY - 11, width: 22, height: 22)
-            label.frame = CGRect(x: image.frame.maxX + 8, y: rect.minY + 8,
-                                 width: max(0, rect.maxX - image.frame.maxX - 20), height: rect.height - 16)
+            if rect.width < 128 {
+                image.contentMode = .scaleAspectFit
+                image.frame = CGRect(x: rect.midX - 8, y: rect.minY + 2, width: 16, height: 16)
+                label.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
+                    for: .systemFont(ofSize: 13, weight: .semibold), maximumPointSize: 14, compatibleWith: traitCollection)
+                label.minimumScaleFactor = 11 / label.font.pointSize
+                label.frame = CGRect(x: rect.minX + 4, y: rect.minY + 18,
+                                     width: rect.width - 8, height: rect.height - 20)
+            } else {
+                image.contentMode = .center
+                image.frame = CGRect(x: rect.minX + 16, y: rect.midY - 11, width: 22, height: 22)
+                label.frame = CGRect(x: image.frame.maxX + 8, y: rect.minY + 6,
+                                     width: max(0, rect.maxX - image.frame.maxX - 20), height: rect.height - 12)
+            }
         } else {
             image.frame = CGRect(x: rect.midX - 11, y: rect.midY - 11, width: 22, height: 22)
-            label.frame = rect.insetBy(dx: 4, dy: 0)
+            label.frame = rect.insetBy(dx: role == .accessory ? 0 : 4, dy: 0)
         }
     }
 
     func setPressed(_ pressed: Bool) {
-        guard (alpha < 1) != pressed else { return }
+        guard isPressed != pressed else { return }
+        isPressed = pressed
         let changes = {
-            self.transform = pressed && !UIAccessibility.isReduceMotionEnabled
+            self.transform = pressed && self.role != .accessory && !UIAccessibility.isReduceMotionEnabled
                 ? CGAffineTransform(scaleX: CommandKeyStyle.pressScale, y: CommandKeyStyle.pressScale) : .identity
-            self.alpha = pressed ? CommandKeyStyle.pressOpacity : 1
+            self.alpha = pressed && self.role != .accessory ? CommandKeyStyle.pressOpacity : 1
+            self.refreshAppearance()
         }
         if pressed {
             UIView.performWithoutAnimation(changes)

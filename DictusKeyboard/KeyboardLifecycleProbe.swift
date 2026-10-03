@@ -104,9 +104,9 @@ extension UIInputViewController {
     /// while ObjC is free to return nil. It does return nil before the host input
     /// session is established, and the bridge traps. The compiler cannot help:
     /// optional chaining on it is a *compile error*, so there is no way to guard the
-    /// read in Swift. Recovering this probe needs an ObjC shim re-declaring the
-    /// property `nullable` behind a bridging header — a deliberate decision, not a
-    /// drive-by addition.
+    /// read directly in Swift. HostInputTraits.documentIdentifier(for:) now uses
+    /// a nullable ObjC shim for document-bound recovery. Keep that synchronous
+    /// host query out of these startup probes.
     ///
     /// Every read below is verified to import as an Optional or a plain `Bool`, so
     /// none of them can trap on a nil host connection.

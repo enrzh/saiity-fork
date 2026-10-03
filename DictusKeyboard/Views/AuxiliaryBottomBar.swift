@@ -199,14 +199,15 @@ struct AuxiliaryBottomBar: View {
             // directly above its comma hint and both stay inside the container.
             VStack(spacing: 0) {
                 Text(".")
-                    .font(.system(size: 19, weight: .light))
+                    .font(.system(size: 19, weight: .regular))
                 Text(",")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(uiColor: KeyboardChromeRole.secondaryForeground))
             }
             .fixedSize(horizontal: true, vertical: true)
             .frame(width: plateWidth, height: visual.height)
-            .commandKeyPlate(cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius)
+            .keyboardGlass(in: RoundedRectangle(cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius),
+                           interactive: false, role: .input)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
             ImmediateVariantKey(
@@ -376,7 +377,11 @@ final class KeyboardBottomBarView: UIView {
               inputHeight: CGFloat, fieldKeys: HostFieldPolicy.LetterFieldKeys) {
         if self.mode != mode { cancelInteractions() }
         self.mode = mode
-        self.fieldKeys = mode == .letters ? fieldKeys : .standard
+        self.fieldKeys = fieldKeys
+        if mode != .letters {
+            self.fieldKeys.leftInsert = nil
+            self.fieldKeys.rightInsert = nil
+        }
         isHidden = mode != .letters && mode != .panel && mode != .emoji
         if isHidden { cancelInteractions(); return }
         let bar = CGRect(x: layout.surfaceFrame.minX, y: layout.chromeBottomBarOriginY,
@@ -425,10 +430,11 @@ final class KeyboardBottomBarView: UIView {
             ? nil : fieldKeys.returnTitle
         returnControl.keyboardFace.configure(text: title, symbol: title == nil ? "return" : nil,
             visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: returnControl.bounds.size),
+            tint: title == nil ? nil : .saiityAction, foreground: title == nil ? .label : .saiityOnAction,
             textPointSize: (title?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
         spaceControl.keyboardFace.configure(text: "space",
             visualSize: CGSize(width: spaceControl.bounds.width, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
-            radius: CommandKeyStyle.pillRadius(forHeight: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight))
+            radius: CommandKeyStyle.cornerRadius, textWeight: .regular, role: .input)
     }
 
     func refreshAppearance() {
@@ -544,13 +550,10 @@ struct SpaceBarControl: View {
             CommandKeyFace(
                 text: "space",
                 plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
-                // The space bar is one of the two wide keys, and the platform draws
-                // those as full pills. It is not a command button, so it does not
-                // take the command radius.
-                cornerRadius: CommandKeyStyle.pillRadius(
-                    forHeight: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
-                ),
-                isPressed: drag.isTracking
+                cornerRadius: CommandKeyStyle.cornerRadius,
+                textWeight: .regular,
+                isPressed: drag.isTracking,
+                role: .input
             )
             // No steering arrow. The caret moving is the feedback, and an arrow that
             // leans with the finger reads as a control the user is meant to operate
@@ -1071,7 +1074,8 @@ private extension AuxiliaryBottomBar {
                 text: text,
                 plateWidth: plate.width,
                 plateHeight: plate.height,
-                isPressed: pressed
+                isPressed: pressed,
+                accented: true
             )
         }
     }

@@ -102,7 +102,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(body.contains("layout.dictationServiceToggleFrame"))
         XCTAssertTrue(body.contains("dictation-service-toggle") || controller.contains("\"dictation-service-toggle\""))
         XCTAssertTrue(controller.contains("setKeyboardDictationEnabled"))
-        XCTAssertTrue(controller.contains("tint: .secondarySystemGroupedBackground, foreground: enabled ? .saiityAction : .secondaryLabel"))
+        XCTAssertTrue(controller.contains("foreground: enabled ? .saiityAction : .secondaryLabel, role: .accessory"))
         XCTAssertTrue(body.contains("inputView.bringSubviewToFront(controls)"))
     }
 
@@ -173,7 +173,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("state.dictationStatus.isCancellationStage"))
         XCTAssertFalse((try relocatedKeyboardSource()).contains("state.dictationStatus == .transcribing"))
         XCTAssertFalse((try relocatedKeyboardSource()).contains("state.dictationStatus == .processing"))
-        XCTAssertTrue(try source("DictusKeyboard/KeyboardState.swift").contains("isFinishingRecording ? \"Finishing...\" : \"Listening...\""))
+        XCTAssertTrue(try source("DictusKeyboard/KeyboardState.swift").contains("isFinishingRecording ? \"Finishing…\" : \"Finish\""))
         XCTAssertFalse(root.contains("HoldToSpeakButton("))
         XCTAssertFalse(controller.contains("layout.dictateFrame.insetBy(dx: -8, dy: -8)"))
         XCTAssertFalse(controller.contains("#selector(handleMicTap)"))
@@ -1015,7 +1015,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("identifier: \"letter-mode\""))
         XCTAssertTrue(controller.contains("identifier: \"emoji-picker\""))
         XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
-        XCTAssertEqual(controller.components(separatedBy: "identifier: \"dismiss-keyboard\"").count - 1, 1)
+        XCTAssertEqual(controller.components(separatedBy: "self?.handleDismissTouchDown()").count - 1, 1)
         XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 0)
         XCTAssertTrue(root.contains("@Environment(\\.openURL)"),
                       "foreground handoff must use SwiftUI's public URL action")
@@ -1315,7 +1315,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "an inactive mic must be hidden without resetting the active target")
         XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
         XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
-        XCTAssertTrue(controller.contains("dismissButton?.isHidden = false"))
+        XCTAssertTrue(controller.contains("moreButton?.isHidden = false"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".accessibilityHidden(true)"))
     }
 
@@ -1493,12 +1493,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         let chrome = try source("DictusKeyboard/KeyboardChrome.swift")
 
-        XCTAssertTrue(keyStyle.contains("solidFill") &&
-                      keyStyle.contains(".tertiarySystemFill"),
+        XCTAssertTrue(keyStyle.contains("case .input: return .tertiarySystemBackground"),
                       "regular keys need a semantic elevated surface")
-        XCTAssertTrue(plates.contains(".secondarySystemFill") || plates.contains(".systemFill"),
+        XCTAssertTrue(plates.contains("case .control:") && plates.contains(".tertiarySystemFill"),
                       "modifier plates need a distinct semantic surface")
-        XCTAssertTrue(chrome.contains(".tertiarySystemFill"),
+        XCTAssertTrue(chrome.contains("role.solidFill()"),
                       "the shared chrome fill must stay semantic")
         XCTAssertFalse(keyStyle.contains("activeText: .white"),
                        "pressed-key text must adapt to the current appearance")
