@@ -67,7 +67,10 @@ struct RecordingView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Label("sAiity", systemImage: "waveform").font(.headline)
+                HStack(spacing: 8) {
+                    DictusLogo(height: 22, foregroundOnly: true).accessibilityHidden(true)
+                    Text("sAiity").font(.headline)
+                }
                 Spacer()
                 if mode == .standalone {
                     Button(action: dismissRecording) {
@@ -83,65 +86,64 @@ struct RecordingView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text(showResult ? "Transcript" : "Listening")
+                            Text(showResult ? "Transcript" : statusTitle)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             Spacer()
+                            if displayedStatus == .recording {
+                                Text(formattedTime).font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         if showResult, let result = transcriptionResult {
                             DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
                                 onRestore: { transcriptionResult = $0 },
                                 onFeedback: savedResultFeedback(for: result))
-                            if mode == .onboarding {
-                                Button("Continue", action: completeOnboarding)
-                                    .buttonStyle(.borderedProminent)
-                            }
                         } else if showError, let error = errorMessage {
                             Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
                                 .font(.headline)
                             Text(userFacingError(error)).foregroundStyle(.secondary)
-                            Button("Try again", action: retryRecording).buttonStyle(.borderedProminent)
+                            Button("Try again", action: retryRecording).buttonStyle(.bordered)
                         } else {
                             Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
                                  displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
-                                .font(.title3).foregroundStyle(.secondary)
+                                .font(.title2).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                             if !coordinator.realtimeTranscript.isEmpty {
-                                Text("Live preview · final cleanup appears when you finish.")
+                                Text("Live preview. Your final text appears when you finish.")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                            Text("Finish recording when you’re ready.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(16).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
                 }
-                .padding(20).frame(maxWidth: 680).frame(maxWidth: .infinity)
+                .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
             }
             .scrollBounceBehavior(.basedOnSize)
 
             VStack(spacing: 16) {
-                HStack {
-                    Label(statusTitle, systemImage: displayedStatus == .recording ? "mic.fill" : "mic.slash")
-                    Spacer()
-                    if displayedStatus == .recording { Text(formattedTime).monospacedDigit() }
+                if showResult {
+                    Image(systemName: "checkmark").foregroundStyle(Color.saiityAction)
+                        .frame(height: 28).accessibilityHidden(true)
+                } else {
+                    SaiityVoiceSignal(level: displayedStatus == .recording ? coordinator.bufferEnergy.max() ?? 0 : nil)
+                        .frame(height: 28)
                 }
-                .font(.subheadline).foregroundStyle(.secondary)
-                if displayedStatus == .recording {
-                    ProgressView(value: Double(coordinator.bufferEnergy.max() ?? 0), total: 1)
-                        .tint(.accentColor).accessibilityLabel("Microphone input level")
+                if mode == .onboarding && showResult {
+                    Button("Continue", action: completeOnboarding)
+                        .buttonStyle(SaiityPrimaryActionStyle())
+                } else {
+                    micOrStopButton
                 }
-                micOrStopButton
             }
-            .padding(24).frame(maxWidth: 680)
-            .background(.bar)
+            .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            .background(Color(.systemBackground))
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(Color(.systemBackground).ignoresSafeArea())
         .opacity(isDismissing ? 0 : 1)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showResult)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showCopiedFeedback)
-        .onChange(of: coordinator.status) { newStatus in
+        .onChange(of: coordinator.status) { _, newStatus in
             // `handleStatusChange` is deliberately still driven by the real status: it
             // does not draw a stage, it reveals the result text and the error, and a
             // terminal status preempts the hold anyway (#309).
@@ -208,21 +210,12 @@ struct RecordingView: View {
                 startRecording()
             }
         } label: {
-            HStack(spacing: 12) {
-                if isCancellationStage {
-                    Image(systemName: "xmark")
-                } else {
-                    Image(systemName: displayedStatus == .recording ? "stop.fill" : "mic.fill")
-                }
-                Text(isCancellationStage ? cancellationTitle :
-                     displayedStatus == .recording ? "Finish recording" : "Start dictation")
-                Spacer()
-                if !isCancellationStage { Image(systemName: "arrow.right") }
-            }
-            .font(.headline).padding(.vertical, 12).frame(maxWidth: .infinity)
+            SaiityVoiceActionLabel(
+                LocalizedStringKey(isCancellationStage ? cancellationTitle :
+                    coordinator.status == .recording ? "Finish dictation" : showResult ? "Dictate again" : "Start dictation"),
+                systemImage: isCancellationStage ? "xmark" : coordinator.status == .recording ? "stop.fill" : nil)
         }
-        .buttonStyle(.borderedProminent).controlSize(.large)
-        .tint(displayedStatus == .recording ? .red : .accentColor)
+        .buttonStyle(SaiityPrimaryActionStyle())
         .accessibilityIdentifier(isCancellationStage ? "dictation.cancel" : "dictation.start")
     }
 
@@ -353,13 +346,13 @@ struct RecordingView: View {
 
     private var statusTitle: String {
         if showCopiedFeedback { return "Copied" }
-        if showResult { return "Dictation complete" }
+        if showResult { return "Ready to use" }
         switch displayedStatus {
         case .idle, .ready: return "Ready to record"
         case .requested: return "Starting dictation"
-        case .recording: return "Recording"
-        case .transcribing: return "Transcribing"
-        case .processing: return "Processing"
+        case .recording: return "Listening"
+        case .transcribing: return "Preparing your text"
+        case .processing: return "Applying your writing options"
         case .failed: return "Dictation failed"
         }
     }

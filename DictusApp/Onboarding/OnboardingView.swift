@@ -90,7 +90,7 @@ struct AvailabilityPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            SaiityPageHeader(eyebrow: "CONNECT YOUR KEYBOARD", title: "Your keyboard, ready to go.",
+            SaiityPageHeader(title: "Set up your keyboard",
                              subtitle: "Follow the guide, verify access with the real keyboard, then prepare your voice model.")
             KeyboardSetupCard()
             VStack(alignment: .leading, spacing: 10) {
@@ -106,7 +106,7 @@ struct AvailabilityPage: View {
             Text(polishEnabled ? "Cleanup runs after dictation. Turn it off to pass through the raw transcription." : "Cleanup is off, so dictation passes through as transcribed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Continue to keyboard verification", action: onNext).frame(maxWidth: .infinity).buttonStyle(.borderedProminent).controlSize(.large)
+            Button("Continue to keyboard verification", action: onNext).buttonStyle(SaiityPrimaryActionStyle())
                 .disabled(!canContinue).accessibilityHint(canContinue ? "Next, switch to the sAiity keyboard and complete Full Access verification" : "Add the keyboard and install the voice model before switching to the sAiity keyboard and completing Full Access verification")
         }
         .onAppear {

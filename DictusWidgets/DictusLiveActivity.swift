@@ -46,20 +46,20 @@ private struct DictationActivityStatus {
     var paused: Bool { !state.serviceEnabled || state.detectionMuted }
     var title: String {
         switch state.phase {
-        case .standby: return paused ? "Dictation paused" : "Ready to dictate"
+        case .standby: return !state.serviceEnabled ? "Dictation is off" : state.detectionMuted ? "Dictation paused" : "Ready to listen"
         case .recording: return "Listening"
-        case .transcribing: return "Transcribing"
-        case .processing: return "Refining your words"
-        case .ready: return "Your text is ready"
+        case .transcribing: return "Preparing your text"
+        case .processing: return "Finishing your text"
+        case .ready: return "Ready to use"
         case .failed: return "Dictation needs attention"
         }
     }
     var detail: String {
         switch state.phase {
-        case .standby: return paused ? "Open sAiity to resume" : "Hold the microphone on your keyboard"
+        case .standby: return !state.serviceEnabled ? "Turn on when you’re ready" : state.detectionMuted ? "Open sAiity to resume" : "Hold the microphone on your keyboard"
         case .recording: return "Release the microphone to finish"
         case .transcribing: return "Turning speech into text"
-        case .processing: return "Cleaning up punctuation and grammar"
+        case .processing: return "Following your chosen settings"
         case .ready: return "Return to your text field"
         case .failed: return "Open sAiity to try again"
         }
@@ -76,22 +76,23 @@ private struct DictationActivityStatus {
     }
     var color: Color {
         switch state.phase {
-        case .standby: return paused ? .gray : .cyan
-        case .recording, .failed: return .red
-        case .transcribing: return .blue
-        case .processing: return .purple
-        case .ready: return .green
+        case .standby: return paused ? .secondary : .saiityAction
+        case .failed: return .red
+        case .recording, .transcribing, .processing, .ready: return .saiityAction
         }
     }
 }
 
 struct DictationActivityCard: View {
     let state: DictusLiveActivityAttributes.ContentState
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 DictusLogo(height: 24, foregroundOnly: true)
-                Text("sAiity").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                if !typeSize.isAccessibilitySize {
+                    Text("sAiity").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 8)
                 ActivityAction(state: state)
             }
@@ -104,17 +105,19 @@ struct DictationActivityCard: View {
 private struct DictationActivityDetail: View {
     let state: DictusLiveActivityAttributes.ContentState
     var dark = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     private var status: DictationActivityStatus { .init(state: state) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
                 ActivitySignal(state: state)
                     .frame(width: 32, height: 32)
-                    .background(status.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(status.title).font(.headline).foregroundStyle(dark ? .white : .primary)
-                    Text(status.detail).font(.caption.weight(.medium))
-                        .foregroundStyle(dark ? .white.opacity(0.7) : .secondary)
+                    if !typeSize.isAccessibilitySize && state.phase != .ready {
+                        Text(status.detail).font(.caption.weight(.medium))
+                            .foregroundStyle(dark ? .white.opacity(0.7) : .secondary)
+                    }
                 }
                 Spacer(minLength: 0)
                 if state.phase == .recording, let start = state.recordingStartDate {
@@ -123,26 +126,16 @@ private struct DictationActivityDetail: View {
                         .multilineTextAlignment(.trailing).frame(maxWidth: 72)
                 }
             }
-            if state.phase == .transcribing || state.phase == .processing {
-                HStack(spacing: 8) {
-                    Label("Speech", systemImage: "checkmark.circle.fill")
-                    Image(systemName: "chevron.right").accessibilityHidden(true)
-                    Label("Text", systemImage: state.phase == .processing ? "checkmark.circle.fill" : "text.bubble")
-                    if state.phase == .processing {
-                        Image(systemName: "chevron.right").accessibilityHidden(true)
-                        Label("Refine", systemImage: "wand.and.stars")
-                    }
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(dark ? .white.opacity(0.5) : .secondary)
-            }
             if state.phase == .ready, let preview = state.transcriptionPreview, !preview.isEmpty {
-                Text(preview).font(.subheadline.weight(.medium)).lineLimit(2)
+                Text(preview).font(.subheadline.weight(.medium)).lineLimit(typeSize.isAccessibilitySize ? 1 : 2)
                     .foregroundStyle(dark ? .white.opacity(0.85) : .primary)
                     .privacySensitive()
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityHint(status.detail)
+        // Preserve the status and 44pt actions within ActivityKit's 160pt limit.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }
 
@@ -153,12 +146,9 @@ private struct ActivitySignal: View {
         let status = DictationActivityStatus(state: state)
         Group {
             if state.phase == .recording {
-                HStack(spacing: 2) {
-                    ForEach(0..<5) { index in
-                        let level = state.waveformLevels.indices.contains(index) ? state.waveformLevels[index] : 0
-                        Capsule().frame(width: 3, height: 4 + CGFloat(min(1, max(0, level.isFinite ? level : 0))) * 16)
-                    }
-                }.frame(width: 23, height: 22)
+                SaiityVoiceSignal(level: state.waveformLevels.max() ?? 0, height: compact ? 18 : 24)
+            } else if state.phase == .standby && !status.paused {
+                DictusLogo(height: compact ? 18 : 24, foregroundOnly: true)
             } else {
                 Image(systemName: status.symbol).font(.system(size: compact ? 13 : 16, weight: .semibold))
             }
@@ -195,6 +185,7 @@ private struct ActivityAction: View {
             }
         }
         .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
     private var serviceButton: some View {
         Button(intent: StopStandbyIntent(toggleDetection: true)) {
@@ -205,6 +196,7 @@ private struct ActivityAction: View {
     }
     private func actionLabel(_ symbol: String, title: String) -> some View {
         Label(title, systemImage: symbol).font(.caption.weight(.semibold))
+            .fixedSize(horizontal: true, vertical: true)
             .foregroundStyle(dark ? .white : .primary)
             .padding(.horizontal, 12).frame(minHeight: 44)
             .background(status.color.opacity(dark ? 0.25 : 0.12), in: Capsule())

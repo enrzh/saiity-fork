@@ -67,8 +67,8 @@ struct ModelLoadingOverlay: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 DictusLogo(height: 52)
-                SaiityPageHeader(eyebrow: "ON YOUR DEVICE", title: "Meet your voice engine.",
-                                 subtitle: "One setup. A more personal way to write.")
+                SaiityPageHeader(title: "Preparing your voice model",
+                                 subtitle: "Keep sAiity open until preparation finishes.")
                 modelTitleHeader
                 VStack(alignment: .leading, spacing: 24) {
                     phaseRow("Download", detail: "Save the voice model on this iPhone.", phase: .downloading, index: 0)

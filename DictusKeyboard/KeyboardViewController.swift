@@ -1971,19 +1971,19 @@ class KeyboardViewController: UIInputViewController,
             let size = VoiceOnlyKeyboardPolicy.commandVisualSize(for: serviceToggle.bounds.size)
             serviceToggle.keyboardFace.configure(symbol: enabled ? "power.circle.fill" : "power", visualSize: size,
                 radius: accessory ? size.height / 2 : CommandKeyStyle.cornerRadius,
-                tint: enabled ? .systemGreen : nil, foreground: enabled ? .black : .label)
+                tint: .secondarySystemGroupedBackground, foreground: enabled ? .saiityAction : .secondaryLabel)
         }
         if let micButton, !micButton.isHidden {
             let cancel = state.dictationStatus.isCancellationStage
             micButton.keyboardFace.configure(text: state.dictationBoardTitle, symbol: state.dictationBoardSymbol,
                 visualSize: micButton.bounds.size, radius: micButton.bounds.height / 2,
-                primary: true, tint: cancel ? .systemRed : .white, foreground: cancel ? .white : .black)
+                primary: true, tint: cancel ? .systemRed : .saiityAction, foreground: cancel ? .white : .saiityOnAction)
         }
         if let recoveryButton, !recoveryButton.isHidden {
             recoveryButton.keyboardFace.configure(text: state.recoveryBoardTitle,
                 symbol: state.isOpeningForDictation ? "ellipsis" : "arrow.up.right.square.fill",
                 visualSize: recoveryButton.bounds.size, radius: recoveryButton.bounds.height / 2,
-                primary: true, tint: .white, foreground: .black)
+                primary: true, tint: .saiityAction, foreground: .saiityOnAction)
         }
     }
 

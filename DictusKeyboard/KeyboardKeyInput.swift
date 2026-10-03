@@ -70,7 +70,6 @@ final class KeyboardDeleteRepeatSession {
 /// the control or move its hit frame.
 final class KeyboardNativeControlFace: UIView {
     private let plate = UIVisualEffectView(effect: nil)
-    private let iconWell = UIView()
     private let image = UIImageView()
     private let label = UILabel()
     var visualSize: CGSize?
@@ -94,8 +93,7 @@ final class KeyboardNativeControlFace: UIView {
         label.textAlignment = .center
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.5
-        iconWell.isUserInteractionEnabled = false
-        [plate, iconWell, image, label].forEach { addSubview($0) }
+        [plate, image, label].forEach { addSubview($0) }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -129,15 +127,14 @@ final class KeyboardNativeControlFace: UIView {
             displayedSymbol = symbol
             displayedSymbolSize = symbolSize
             image.image = symbol.flatMap {
-                UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(
+                if $0 == "mic.fill" || $0 == "waveform" { return DictusLogo.templateImage(height: symbolSize) }
+                return UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(
                     pointSize: symbolSize, weight: .semibold)) ?? UIImage(systemName: "mic.fill")
             }
             updateSymbolAnimation()
         }
         image.isHidden = symbol == nil
         image.tintColor = foreground
-        iconWell.isHidden = !primary || symbol == nil
-        iconWell.backgroundColor = foreground.withAlphaComponent(0.08)
         refreshAppearance()
         setNeedsLayout()
     }
@@ -149,16 +146,24 @@ final class KeyboardNativeControlFace: UIView {
 
     private func updateSymbolAnimation() {
         image.removeAllSymbolEffects()
+        image.layer.removeAnimation(forKey: "listening")
         image.alpha = 1
-        if window != nil, (displayedSymbol == "waveform" || displayedSymbol == "ellipsis"),
-           !UIAccessibility.isReduceMotionEnabled {
+        guard window != nil, !UIAccessibility.isReduceMotionEnabled else { return }
+        if displayedSymbol == "waveform" {
+            let pulse = CABasicAnimation(keyPath: "transform.scale.y")
+            pulse.fromValue = 0.75
+            pulse.toValue = 1
+            pulse.duration = 0.65
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            image.layer.add(pulse, forKey: "listening")
+        } else if displayedSymbol == "ellipsis", image.image?.isSymbolImage == true {
             image.addSymbolEffect(.pulse, options: .repeating)
         }
     }
 
     func refreshAppearance() {
-        // An enabled service button is an opaque green plate. Glass around a
-        // tinted utility button leaves a persistent halo after release.
+        // A flat service face avoids glass's persistent halo after release.
         let next: Material = (tint != nil && !isPrimary) || !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
             : UIAccessibility.isDarkerSystemColorsEnabled ? .contrast
             : UIAccessibility.isReduceTransparencyEnabled ? .reduced : .glass
@@ -172,7 +177,7 @@ final class KeyboardNativeControlFace: UIView {
         }
         plate.backgroundColor = .clear
         plate.contentView.backgroundColor = tint.map {
-            next == .glass ? $0.withAlphaComponent(0.86) : $0
+            next == .glass && !isPrimary ? $0.withAlphaComponent(0.86) : $0
         } ?? (next == .glass ? .clear : next == .contrast ? .systemFill
                 : next == .reduced ? .secondarySystemFill : .tertiarySystemFill)
     }
@@ -185,13 +190,11 @@ final class KeyboardNativeControlFace: UIView {
         plate.frame = rect
         plate.layer.cornerRadius = radius
         if isPrimary, !image.isHidden, !label.isHidden {
-            // A leading microphone badge and readable action label keep the
+            // A passive voice mark and readable action label keep the
             // 54pt hold target unchanged, including cancel and app recovery.
-            iconWell.frame = CGRect(x: rect.minX + 10, y: rect.midY - 17, width: 34, height: 34)
-            iconWell.layer.cornerRadius = 17
-            image.frame = iconWell.frame
-            label.frame = CGRect(x: iconWell.frame.maxX + 8, y: rect.minY + 8,
-                                 width: max(0, rect.maxX - iconWell.frame.maxX - 20), height: rect.height - 16)
+            image.frame = CGRect(x: rect.minX + 16, y: rect.midY - 11, width: 22, height: 22)
+            label.frame = CGRect(x: image.frame.maxX + 8, y: rect.minY + 8,
+                                 width: max(0, rect.maxX - image.frame.maxX - 20), height: rect.height - 16)
         } else {
             image.frame = CGRect(x: rect.midX - 11, y: rect.midY - 11, width: 22, height: 22)
             label.frame = rect.insetBy(dx: 4, dy: 0)

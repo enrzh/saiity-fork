@@ -400,6 +400,29 @@ Physical-device integration gates remain separate.
 Preview: `/tmp/saiity-simple-settings-root.png`.
 Logs: `/tmp/saiity-simple-settings-{core,simulator-build,device-build}.log`.
 
+## Native experience redesign — October 3
+
+The approved design is integrated in development build 229: Speak presents
+readiness and recent words, configuration moves behind Voice options, recording
+and results prioritize unframed text with direct Copy/Edit/Original controls, and
+onboarding exposes one next setup action. A small shared presentation component
+reuses the adaptive action blue and existing vector mark across app, native
+keyboard faces and Live Activity. The seven-row Settings structure and existing
+runtime, preference, recovery and service-action owners are retained.
+Native Edit/Save QA also found and fixed a stale Speak history preview. Saved
+edits now appear immediately; the original transcript survives the edit. QA used
+temporary transcript data and restored the prior history afterward.
+
+Core/input checks, final Debug and signed Release builds, strict signatures and
+the isolated simulator install pass. Native light/dark and larger-text captures
+and tested activity height limits are recorded in
+`docs/design/saiity-experience-direction.md`. Presentation fixtures use inert
+dependencies; they do not establish recognition quality, latency, microphone-on
+haptics, physical PiP or system Live Activity/Island behavior. Those gates and the
+previous physical-device integration checks remain open. No automated room audio,
+model download, commit, push, release change or TestFlight upload occurred. The
+continuation heartbeat remains paused.
+
 ## Source of truth
 
 This document and the current PRD define product direction. The

@@ -21,10 +21,9 @@ struct MicPermissionPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            SaiityPageHeader(eyebrow: "YOU’RE IN CONTROL", title: "A voice needs a microphone.",
-                             subtitle: "sAiity uses your microphone for dictation. Your recordings stay on your device.")
+            SaiityPageHeader(title: "Allow microphone access",
+                             subtitle: "sAiity uses the microphone when you start a dictation.")
             VStack(alignment: .leading, spacing: 20) {
-                Label("Permission is yours to give", systemImage: "hand.raised").font(.headline)
                 Text("iOS will ask for microphone access. You can change it at any time in Settings.")
                     .foregroundStyle(.secondary)
                 if permissionGranted == true {
@@ -34,17 +33,16 @@ struct MicPermissionPage: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 28))
+            .frame(maxWidth: .infinity, alignment: .leading)
             if permissionGranted == nil {
                 Button("Continue", action: requestPermission)
-                    .buttonStyle(.borderedProminent).controlSize(.large).disabled(isRequesting)
+                    .buttonStyle(SaiityPrimaryActionStyle()).disabled(isRequesting)
             } else if permissionGranted == true {
                 Button("Continue after authorization", action: onNext)
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(SaiityPrimaryActionStyle())
             } else {
                 Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(SaiityPrimaryActionStyle())
                 Button("Continue without microphone", action: onNext)
                     .buttonStyle(.bordered).controlSize(.large)
             }

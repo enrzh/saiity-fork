@@ -102,7 +102,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(body.contains("layout.dictationServiceToggleFrame"))
         XCTAssertTrue(body.contains("dictation-service-toggle") || controller.contains("\"dictation-service-toggle\""))
         XCTAssertTrue(controller.contains("setKeyboardDictationEnabled"))
-        XCTAssertTrue(controller.contains("tint: enabled ? .systemGreen : nil"))
+        XCTAssertTrue(controller.contains("tint: .secondarySystemGroupedBackground, foreground: enabled ? .saiityAction : .secondaryLabel"))
         XCTAssertTrue(body.contains("inputView.bringSubviewToFront(controls)"))
     }
 
@@ -1481,8 +1481,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "keyboard foreground colors must remain semantic in light and dark mode")
         XCTAssertTrue(plates.contains("@Environment(\\.colorSchemeContrast)"),
                       "the plate must still react to accessibility contrast changes")
-        XCTAssertFalse(colors.contains(".white") && colors.contains("Background"),
-                       "light-mode background must not be hardcoded white")
+        XCTAssertTrue(colors.contains("static var dictusBackground: Color { Color(.systemBackground) }"),
+                      "the surface must use the system palette; action foregrounds can use white")
     }
 
     /// Regular keys and modifier keys must remain visually distinct in dark mode,

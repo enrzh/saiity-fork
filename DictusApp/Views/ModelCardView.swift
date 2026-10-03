@@ -191,6 +191,7 @@ struct ModelCardView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color.saiityOnAction)
                 .controlSize(.small)
                 .accessibilityHint("Downloads this model")
             case .downloading:
@@ -213,6 +214,7 @@ struct ModelCardView: View {
                     }
                     .labelStyle(.titleAndIcon)
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(Color.saiityOnAction)
                     .controlSize(.small)
                     .accessibilityHint("Uses this model for transcription")
                 }
@@ -225,7 +227,7 @@ struct ModelCardView: View {
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.saiityOnAction)
                 .help(message)
             }
         }

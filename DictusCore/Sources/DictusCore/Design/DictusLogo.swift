@@ -1,18 +1,21 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 /// The same Icon Composer artwork in the app, keyboard and Live Activity.
 public struct DictusLogo: View {
     public var height: CGFloat
     public var foregroundOnly: Bool
-    public init(height: CGFloat = 80, foregroundOnly: Bool = false) {
+    public var tint: Color
+    public init(height: CGFloat = 80, foregroundOnly: Bool = false, tint: Color = .saiityAction) {
         self.height = height
         self.foregroundOnly = foregroundOnly
+        self.tint = tint
     }
     public var body: some View {
         Group {
             if foregroundOnly {
-                VoiceRibbons().fill(Color.blue.gradient)
+                VoiceRibbons().fill(tint)
             } else {
                 Image("SaiityBrand", bundle: .module).resizable().scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: height * 0.22))
@@ -20,6 +23,15 @@ public struct DictusLogo: View {
         }
             .frame(width: height, height: height)
             .accessibilityLabel("sAiity")
+    }
+
+    /// UIKit command faces use the same vector, rendered once per glyph size.
+    public static func templateImage(height: CGFloat) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: height, height: height)).image { context in
+            context.cgContext.addPath(VoiceRibbons().path(in: CGRect(x: 0, y: 0, width: height, height: height)).cgPath)
+            context.cgContext.setFillColor(UIColor.black.cgColor)
+            context.cgContext.fillPath()
+        }.withRenderingMode(.alwaysTemplate)
     }
 }
 

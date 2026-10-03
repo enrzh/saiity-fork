@@ -65,6 +65,12 @@ struct DictusApp: App {
         _hasCompletedOnboarding = State(
             initialValue: AppGroup.defaults.bool(forKey: SharedKeys.hasCompletedOnboarding)
         )
+        #if DEBUG
+        // UI QA can inspect the native workspace without changing setup state.
+        if ProcessInfo.processInfo.arguments.contains("--native-design-probe") {
+            _hasCompletedOnboarding = State(initialValue: true)
+        }
+        #endif
         PersistentLog.source = "APP"
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PersistentLog.log(.appLaunched(version: version))
@@ -167,7 +173,8 @@ struct DictusApp: App {
                         return
                     }
                     if ProcessInfo.processInfo.arguments.contains("--cleanup-model-probe") { return }
-                    if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe") {
+                    if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe")
+                        || ProcessInfo.processInfo.arguments.contains("--native-design-probe") {
                         coordinator.resetStatus()
                         return
                     }

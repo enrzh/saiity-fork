@@ -29,7 +29,7 @@ struct GlobeKeyTutorialPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            SaiityPageHeader(eyebrow: "TAKE IT FOR A SPIN", title: "Your first words.",
+            SaiityPageHeader(title: "Try your keyboard",
                              subtitle: "Try the real keyboard below. We’ll confirm when your dictation arrives.")
             Text(dictusKeyboardActive ? "Tap the microphone in the sAiity keyboard. Your words should appear below." : "Tap and hold the globe key, then choose sAiity.")
                 .font(.body).foregroundStyle(.secondary)

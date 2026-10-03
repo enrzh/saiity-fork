@@ -6,22 +6,19 @@ struct WelcomePage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            DictusLogo(height: 48)
-            SaiityPageHeader(eyebrow: "HELLO, SAIITY", title: "Think it.\nSay it.\nSend it.",
-                             subtitle: "A private voice keyboard for everything you want to say.")
+            DictusLogo(height: 40, foregroundOnly: true)
+            SaiityPageHeader(title: "Write with your voice",
+                             subtitle: "Dictate into the apps you use, with voice recognition on your iPhone.")
             VStack(alignment: .leading, spacing: 16) {
-                benefit("Stay in your flow", detail: "Dictate into the apps you already use.", icon: "keyboard")
-                benefit("Keep your languages", detail: "Multilingual models keep your words in their spoken language.", icon: "globe")
-                benefit("Make it yours", detail: "Choose a local voice model. Audio stays on your iPhone.", icon: "iphone")
+                benefit("Your keyboard", detail: "Speak where you would normally type.", icon: "keyboard")
+                benefit("Your languages", detail: "Choose a model that supports the languages you speak.", icon: "globe")
+                benefit("On your iPhone", detail: "Download a voice model once to use it offline.", icon: "iphone")
             }
-            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 28))
             Button(action: onNext) {
-                HStack { Text("Let’s set you up"); Spacer(); Image(systemName: "arrow.right") }
-                    .padding(.vertical, 8)
+                SaiityVoiceActionLabel("Set up sAiity", systemImage: "arrow.right")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(SaiityPrimaryActionStyle())
         }
     }
 

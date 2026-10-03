@@ -670,6 +670,32 @@ uploaded build 228; no commit, push or TestFlight upload occurred.
 Previews: `/tmp/saiity-round-bottom-command-size-{letters,symbols,emoji}-solid.png`.
 Logs: `/tmp/saiity-command-size-{before,core,native,render,simulator-build,device-build}.log`.
 
+### Native experience integration — October 3
+
+The approved experience direction is implemented in local development build 229.
+The dictation-board faces reuse the current frame and touch owners, with the
+existing vector mark, adaptive blue primary/recovery faces and flat service
+treatment. Listening animation respects Reduce Motion. Character/command plates,
+the circular bottom controls, whole-row 2pt gaps, Space cursor mapping, holds,
+repeats and haptic delivery retain their accepted geometry and behavior.
+
+The shared SwiftUI action components also serve Speak, recording/results,
+onboarding and Live Activity presentation. Power still changes availability;
+starting capture and Finish remain separate actions. No new input owner or
+runtime dependency was added and inactive legacy input remains.
+
+Verification: 1,892 Core tests with one existing skip and zero failures, 123 final
+app/keyboard contracts, the production UIKit input harness, simulator Debug and signed
+Release builds, and deep strict signatures pass. Build 229 is installed on the
+isolated QA simulator. Forty native presentation fixtures pass, including tested
+Live Activity heights within 160pt. Actual system rendering, microphone-on haptic
+feel and the existing physical integration gates remain pending. The last Air
+CoreDevice 4016 blocker was not retried. No upload, commit or push occurred.
+
+Detailed scope, captures and limitations:
+`docs/design/saiity-experience-direction.md`, native implementation checkpoint.
+Logs: `/tmp/saiity-native-design-{all-core,core,input,simulator-build,device-build,render}.log`.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

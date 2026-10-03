@@ -34,7 +34,7 @@ struct ModelLanguageDetailView: View {
             List {
                 // Coverage summary
                 Section {
-                    SaiityPageHeader(eyebrow: "WORDS WITHOUT BORDERS", title: "Your languages.",
+                    SaiityPageHeader(title: "Supported languages",
                                      subtitle: "Language coverage depends on the model. Try your own phrases before choosing.")
                     Label {
                         Text(support.coverage.localizedSummary)

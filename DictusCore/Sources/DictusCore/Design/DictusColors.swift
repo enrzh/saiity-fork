@@ -2,6 +2,27 @@
 // DictusCore/Sources/DictusCore/Design/DictusColors.swift
 // Brand color system with hex initializer and light/dark mode support.
 import SwiftUI
+import UIKit
+
+public extension UIColor {
+    /// Brand actions adapt independently of the host app's tint.
+    static var saiityAction: UIColor {
+        UIColor { traits in
+            let dark = traits.userInterfaceStyle == .dark
+            let highContrast = traits.accessibilityContrast == .high
+            return UIColor(red: dark ? (highContrast ? 0.68 : 0.549) : (highContrast ? 0.09 : 0.141),
+                           green: dark ? (highContrast ? 0.77 : 0.678) : (highContrast ? 0.28 : 0.365),
+                           blue: dark ? 1 : (highContrast ? 0.80 : 0.890), alpha: 1)
+        }
+    }
+
+    static var saiityOnAction: UIColor {
+        UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.063, green: 0.102, blue: 0.208, alpha: 1) : .white
+        }
+    }
+}
 
 /// Shared sAiity color tokens. The dictus names remain as source-compatible API.
 ///
@@ -19,6 +40,8 @@ public extension Color {
 
     /// The app tint follows the user's system appearance and accessibility settings.
     static let dictusAccent = Color.accentColor
+    static let saiityAction = Color(uiColor: .saiityAction)
+    static let saiityOnAction = Color(uiColor: .saiityOnAction)
 
     /// Compatibility emphasis token backed by the system tint.
     static let dictusAccentHighlight = Color.accentColor
