@@ -423,7 +423,86 @@ previous physical-device integration checks remain open. No automated room audio
 model download, commit, push, release change or TestFlight upload occurred. The
 continuation heartbeat remains paused.
 
+## Whole-app completion — October 4
+
+Implemented locally in development build 232:
+
+- Spoken languages guide automatic installed-model selection and explicit
+  download recommendations for both app and keyboard. Broad support is the
+  default; Chinese/English excludes English-only and European-only models,
+  Cantonese excludes older Whisper families, and unsupported combinations stay
+  unresolved. Catalog quality notes can suggest a larger model, but do not
+  establish acoustic quality on this phone. Manual/pending choices survive.
+  Runtime and failed/deleted-artifact fallback paths retain coverage constraints.
+  These preferences do not set the ASR language or change typing/translation.
+- Welcome offers Speak here or Use in other apps. App-only setup skips keyboard
+  installation/Full Access, can close its trial without losing setup, and does
+  not restore keyboard standby on launch. Explicit keyboard enable opts into
+  restoration; Setup & help retains keyboard setup. A compatible installed model
+  remains an explicit alternative to downloading a recommendation.
+- Voice options and Dictation settings separate In sAiity from From your
+  keyboard, retaining shared engine/model selectors and independent readiness.
+  Spoken-language selection uses a searchable native list. No download starts
+  from a recommendation alone.
+- Shared failure presentation supplies readable permission, storage, download,
+  model, foreground and audio recovery. Qwen load/memory errors do not claim
+  foreground loss. Recording can open Models & downloads and retry explicitly;
+  the original/result state is retained while the recovery sheet is dismissed.
+  Active dictation remains visible despite a stale preparation error.
+- Keep last recording briefly is off by default. It retains one foreground
+  clip, at most the last 60 seconds, in memory for up to five minutes. Native
+  replay is explicit and unavailable during recording/finalization. Expiry,
+  app loss, preference disable, new admitted dictation, cancellation and reset
+  clear it. Background completion cannot re-retain audio. WAV preparation is
+  cancellable and session/generation guarded, and playback respects standby
+  ownership. Replay does not save or export audio.
+
+The existing 40-case scorer and timing tools now have a concrete pending phone
+run in `docs/qa/phone-quality-run.md` and a generated large-v3 capture sheet.
+Every outcome remains pending; no audio/model download or accuracy, latency,
+thermal or power measurement was performed by generating it.
+
+Verification: 1,902 Core tests pass with one existing skip; the new tests cover
+language coverage/quality constraints, independent manual choices, app-only
+gates, recovery classification, bounded replay, expiry and synthetic PCM/WAV
+encoding/cancellation. Debug and signed Release builds pass. Native fixtures
+use inert dependencies and establish layout only. Phone audio/feel/system
+integration remain separate gates; the unchanged CoreDevice blocker was not
+retried. No commit, push, release change or TestFlight upload was performed.
+The continuation heartbeat remains paused.
+
+Native physical-style taps on the isolated QA simulator verify the new language
+list, Chinese/English selection and its persisted combined value, the replay
+preference switching On/Off, and the app-only path through denied microphone
+access to Prepare your voice. That page has no keyboard installation card;
+its dictation action remains disabled while no model is installed. Normal and
+largest-text screens were inspected. Search is visible; simulator HID text
+injection did not enter a query, so interactive filtering is not claimed.
+Audio playback/recognition and the successful model-backed onboarding trial
+remain physical/file-audio gates. QA restores the original language/replay/setup
+preferences, undecided microphone permission and normal text size. The app
+remains service Off with its pending Qwen choice preserved.
+
 ## Source of truth
+
+The October 4 keyboard correction in `docs/keyboard-ui-unification-plan.md`
+retires the iOS styling option, adjusts the shared bottom row, adds Key flash,
+keeps an inset-independent native emoji canvas and removes the autocorrection
+language dependency from vocabulary learning. Core/native/build checks pass;
+physical remote emoji delivery and exact system-keyboard alignment remain
+unverified. The earlier iOS styling direction is superseded by this request.
+
+The later unlocked-Air check closes a narrower part of that gate: actual
+inset-off Glass emoji taps, category navigation and blank Recents swipes work
+after painting the native shared owner. The latest development Debug 232 is
+installed on Air with the existing preferences/models preserved. Ordinary
+typing and keyboard presentation in the setup field and X's empty composer
+work. The reported Q appearance is still unreproduced; its 16:13 event predates
+the retained log window starting 16:15. Additional view-identity diagnostics
+and a private Debug export now allow the next occurrence to be inspected.
+Mic-on feel, the wider host/material/orientation matrix, speech/model quality,
+PiP and system Live Activity gates remain separate. No audio capture, model
+download or TestFlight upload accompanied this check.
 
 This document and the current PRD define product direction. The
 [keyboard plan](/Users/enricomini/Documents/Github/sAiity-dictus/docs/keyboard-ui-unification-plan.md)

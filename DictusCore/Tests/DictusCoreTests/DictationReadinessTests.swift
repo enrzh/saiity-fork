@@ -55,9 +55,9 @@ final class DictationReadinessTests: XCTestCase {
             modelReady: true,
             modelLoadFailure: "The transcription model could not be loaded. Try again."
         )
-        XCTAssertEqual(readiness.title, "Voice model needs attention")
-        XCTAssertEqual(readiness.subtitle, "The transcription model could not be loaded. Try again.")
-        XCTAssertEqual(readiness.action, .retry)
+        XCTAssertEqual(readiness.title, "Dictation needs attention")
+        XCTAssertEqual(readiness.subtitle, "The voice model couldn’t be prepared. Choose another compatible model or repair its download.")
+        XCTAssertEqual(readiness.action, .models)
     }
 
     func testModelLoadFailureDoesNotHideAnActiveDictation() {

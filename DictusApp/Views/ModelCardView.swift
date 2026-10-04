@@ -222,13 +222,13 @@ struct ModelCardView: View {
                 Button {
                     startDownload()
                 } label: {
-                    Label("Retry", systemImage: "arrow.clockwise.circle")
+                    Label(DictationProblem(message, downloading: true).action == .repairDownload ? "Repair download" : "Retry", systemImage: "arrow.clockwise.circle")
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .foregroundStyle(Color.saiityOnAction)
-                .help(message)
+                .help(DictationProblem(message, downloading: true).message)
             }
         }
     }

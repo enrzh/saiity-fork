@@ -33,7 +33,8 @@ public enum DictationModelPreferences {
                                       installed: Set<String>, osMajor: Int, capabilities: DeviceCapabilities) -> String? {
         if ModelSelectionMode.active(from: defaults) == .automatic {
             return ModelSelectionProfile.active(from: defaults).resolvedIdentifier(installed: installed,
-                osMajor: osMajor, capabilities: capabilities, recognizer: recognizer)
+                osMajor: osMajor, capabilities: capabilities, recognizer: recognizer,
+                requiredLanguages: SpokenLanguagePreferences.load(from: defaults))
         }
         let requested = requestedAppModel(in: defaults, recognizer: recognizer)
         guard installed.contains(requested), let model = ModelInfo.forIdentifier(requested),
@@ -49,7 +50,8 @@ public enum DictationModelPreferences {
             return requested
         }
         return ModelSelectionProfile.balanced.resolvedIdentifier(installed: installed,
-            osMajor: osMajor, capabilities: capabilities, recognizer: .whisper)
+            osMajor: osMajor, capabilities: capabilities, recognizer: .whisper,
+            requiredLanguages: SpokenLanguagePreferences.load(from: defaults))
     }
 
     public static func requestedModel(for request: DictationLanguageRequest, in defaults: UserDefaults) -> String {

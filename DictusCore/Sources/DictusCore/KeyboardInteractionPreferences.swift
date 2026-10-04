@@ -3,13 +3,8 @@ import Foundation
 
 /// Cross-process keyboard interaction preferences shared by the app and extension.
 public enum KeyboardInteractionPreferences {
-    public static var usesIOSStyling: Bool {
-        AppGroup.defaults.bool(forKey: SharedKeys.keyboardIOSStyling)
-    }
-
-    /// iOS styling temporarily hides the bar without overwriting its saved choice.
     public static var topBarEnabled: Bool {
-        !usesIOSStyling && AppGroup.defaults.bool(forKey: SharedKeys.keyboardTopBarEnabled)
+        AppGroup.defaults.bool(forKey: SharedKeys.keyboardTopBarEnabled)
     }
 
     public static func topBarHeight(for mode: KeyboardAreaMode) -> Double {
@@ -17,10 +12,10 @@ public enum KeyboardInteractionPreferences {
             ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight : 0
     }
 
-    /// Keep the same window height across pages and reclaim only the hidden lane.
+    /// The bar's window extension is present only while the top bar is on.
+    /// Dictation pages keep their lane through `topBarHeight(for:)`.
     public static var windowAccessoryHeight: Double {
-        VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight
-            - (topBarEnabled ? 0 : VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        topBarEnabled ? VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight : 0
     }
 
     /// Long-press popups stay enabled for existing installs unless the user opts out.
@@ -31,18 +26,18 @@ public enum KeyboardInteractionPreferences {
     /// Accent and emoji skin-tone rows are independent of press-preview style.
     public static var accentVariantsEnabled: Bool { true }
 
-    /// Off, balloon popup, or zoom-out popout from the pressed key.
+    /// Off, popup, popout, or a one-shot flash of the existing key face.
     public static var keyPopupMode: KeyPopupMode {
         KeyPopupMode.active
     }
 
     /// Liquid glass is on for existing installs unless the user chooses solid chrome.
     public static var liquidGlassEnabled: Bool {
-        !usesIOSStyling && (AppGroup.defaults.object(forKey: SharedKeys.liquidGlassEnabled) as? Bool ?? true)
+        AppGroup.defaults.object(forKey: SharedKeys.liquidGlassEnabled) as? Bool ?? true
     }
 
     public static var keyboardInsetEnabled: Bool {
-        usesIOSStyling || (AppGroup.defaults.object(forKey: SharedKeys.keyboardInsetEnabled) as? Bool ?? true)
+        AppGroup.defaults.object(forKey: SharedKeys.keyboardInsetEnabled) as? Bool ?? true
     }
 
     /// Whether letter keys draw a visible container behind the glyph.
@@ -59,7 +54,7 @@ public enum KeyboardInteractionPreferences {
     /// preference that nothing on screen indicated, which is the "the containers
     /// sometimes disappear" report.
     public static var keyContainersEnabled: Bool {
-        usesIOSStyling || (AppGroup.defaults.object(forKey: SharedKeys.keyContainersEnabled) as? Bool ?? true)
+        AppGroup.defaults.object(forKey: SharedKeys.keyContainersEnabled) as? Bool ?? true
     }
 
     /// Adaptive hit-target prediction nudges the seam between adjacent keys

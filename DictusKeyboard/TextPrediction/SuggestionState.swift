@@ -153,6 +153,9 @@ class SuggestionState: ObservableObject {
         }
 
         let word = extractLastWord(from: context)
+        var corrected = false
+        var canLearn = !autocorrectEnabled || !hostPolicy.autocorrectAllowed
+            || engine.shouldSkipTokenPrediction(for: word)
         if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults) {
             for _ in word { proxy.deleteBackward() }
             proxy.insertText(expansion)
@@ -176,11 +179,11 @@ class SuggestionState: ObservableObject {
                 && prepared?.contextKey == contextKey
             let queueIsFree = adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight
             let correction: String?
-            let checkedWord: Bool
             if let prepared, snapshotMatches {
+                canLearn = true
                 correction = prepared.correction.flatMap { TypingCommit.accepts(typed: word, correction: $0) ? $0 : nil }
-                checkedWord = true
             } else if queueIsFree {
+                canLearn = true
                 let previousWord = extractPreviousWord(from: context, currentWord: word)
                 let sentenceStart = isAtSentenceStart(context: context, word: word)
                 if let result = performSpellCheck(word, previousWord: previousWord, isAtSentenceStart: sentenceStart),
@@ -189,12 +192,11 @@ class SuggestionState: ObservableObject {
                 } else {
                     correction = nil
                 }
-                checkedWord = true
             } else {
                 correction = nil
-                checkedWord = false
             }
             if let correction {
+                corrected = true
                 let prefix = prefixBeforeWord(in: context, word: word)
                 let pending = PendingAutocorrection(
                     originalWord: word,
@@ -207,13 +209,17 @@ class SuggestionState: ObservableObject {
                 proxy.insertText(correction)
                 pendingAutocorrection = pending
                 suppressNextAutocorrectionBoundary = true
-            } else if checkedWord {
-                // Keep dictionary persistence out of Space's touch dispatch,
-                // while retaining its existing main-thread mutation model.
-                DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(word) }
             }
         } else {
             pendingUndo = nil
+        }
+
+        // Learning does not require a supported autocorrection language or an
+        // enabled corrector. Sensitive/token fields keep their existing policy.
+        let learningWord = context.split(whereSeparator: \.isWhitespace).last.map(String.init)?
+            .trimmingCharacters(in: .punctuationCharacters) ?? ""
+        if !corrected, canLearn, hostPolicy.suggestionsAllowed, isSafeUserOverride(learningWord) {
+            DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(learningWord) }
         }
 
         proxy.insertText(" ")
@@ -669,7 +675,7 @@ class SuggestionState: ObservableObject {
     }
 
     private func isSafeUserOverride(_ word: String) -> Bool {
-        guard word.count > 1 else { return false }
+        guard word.count > 1, word.count <= DictationVocabulary.maxTermCharacters else { return false }
         var hasLetter = false
         for scalar in word.unicodeScalars {
             if CharacterSet.letters.contains(scalar) {

@@ -60,6 +60,7 @@ final class DictationCoordinator: ObservableObject {
     var dictationGeneration = 1
     var bufferSeconds: Double = 8
     var bufferEnergy: [Float] = [0.1, 0.3, 0.4]
+    var canChangeSpeechRuntime = true
     func startDictation() {}
     func stopDictation() {}
     func cancelDictation() {}
@@ -70,6 +71,15 @@ final class DictationCoordinator: ObservableObject {
 struct DictationErrorChannel { static var current: String? = "The voice model was unavailable. Your original words are still available." }
 struct ProBannerView: View { var body: some View { EmptyView() } }
 struct VoiceOptionsView: View { let modelManager: ModelManager; var body: some View { EmptyView() } }
+struct RecordingModelRecoveryView: View { var body: some View { EmptyView() } }
+final class RecordingReplay: ObservableObject {
+    static let shared = RecordingReplay()
+    var available = false, playing = false, trimmed = false
+    var message: String?
+    func toggle() {}
+    func stop() {}
+    func refreshAvailability() {}
+}
 struct ModelManagerView: View { let modelManager: ModelManager; var body: some View { EmptyView() } }
 struct DictationHistoryView: View { var body: some View { EmptyView() } }
 struct DictationHistoryEditView: View { let item: RecentDictation; let onSave: (RecentDictation) -> Void; var body: some View { EmptyView() } }

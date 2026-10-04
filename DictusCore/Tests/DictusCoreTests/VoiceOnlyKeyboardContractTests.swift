@@ -1254,7 +1254,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             XCTAssertEqual(layout.leftUtilityFrames.number.minX,
                            layout.leftUtilityFrames.emoji.maxX + VoiceOnlyKeyboardPolicy.railSpacing)
             XCTAssertEqual(layout.leftUtilityFrames.number.minY, layout.leftUtilityFrames.emoji.minY)
-            XCTAssertEqual(layout.dismissFrame.size, CGSize(width: 88, height: 53))
+            XCTAssertEqual(layout.dismissFrame.size, CGSize(width: 88, height: 54))
             XCTAssertEqual(layout.dismissFrame.maxY, layout.surfaceFrame.maxY - VoiceOnlyKeyboardPolicy.chromeBottomInset, accuracy: 0.001)
             XCTAssertTrue(layout.actionRectangles.allSatisfy { $0.width >= 44 && $0.height >= 44 })
         }
@@ -1492,10 +1492,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         let chrome = try source("DictusKeyboard/KeyboardChrome.swift")
 
-        XCTAssertTrue(keyStyle.contains("UIColor.systemGray3.resolvedColor(with: traits)"),
-                      "iOS key faces must adapt to dark appearance")
-        XCTAssertTrue(plates.contains("case .control: return native ? .systemGray4 : increasedContrast ? .secondarySystemBackground : .clear"),
-                      "minimal commands should be unboxed and iOS commands opaque")
+        XCTAssertTrue(keyStyle.contains("UIColor.label.withAlphaComponent(0.035)"),
+                      "minimal key faces must use adaptive semantic color")
+        XCTAssertTrue(plates.contains("case .control: return increasedContrast ? .secondarySystemBackground : .clear"),
+                      "minimal commands keep the opaque accessibility fallback")
         XCTAssertTrue(chrome.contains("role.solidFill()"),
                       "the shared chrome fill must stay semantic")
         XCTAssertFalse(keyStyle.contains("activeText: .white"),

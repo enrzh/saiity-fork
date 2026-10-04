@@ -57,6 +57,11 @@ Do not keep private message content in the shared checklist.
 
 ## Repeatable quality run
 
+The October 4 whole-app follow-up has a concrete pending capture sheet and
+functional matrix in `docs/qa/phone-quality-run.md`. It includes app-only setup,
+language recommendations, explicit model recovery and opt-in replay. No phone
+measurement is claimed by preparing that sheet.
+
 The 40-case manifest is
 `DictusCore/Tests/DictusCoreTests/Fixtures/product-quality.json`. Case text is a
 script/reference, not an existing audio recording. Obtain licensed/consented

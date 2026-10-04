@@ -738,11 +738,11 @@ class ModelManager: ObservableObject {
         downloadedModels.removeAll { $0 == identifier }
         modelStates[identifier] = .notDownloaded
 
-        // If deleted model was active, switch to first remaining
+        // Resolve the remaining artifacts without overwriting an explicit requested choice.
         if activeModel == identifier {
-            activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? downloadedModels.first(where: belongsToRecognizer)
-                : downloadedModels.first(where: belongsToRecognizer)
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+                installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                capabilities: DeviceCapabilities.current())
         }
 
         persistState()
@@ -760,9 +760,10 @@ class ModelManager: ObservableObject {
     }
 
     var preferredModelIdentifier: String {
-        recognizer == .streaming
-            ? (selectionProfile == .precise ? QwenASRModel.large.rawValue : QwenASRModel.small.rawValue)
-            : selectionProfile.preferredIdentifier(for: DeviceCapabilities.current())
+        selectionProfile.resolvedIdentifier(installed: Set(ModelInfo.downloadableIdentifiers),
+            osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: DeviceCapabilities.current(), recognizer: recognizer,
+            requiredLanguages: SpokenLanguagePreferences.load(from: defaults)) ?? ""
     }
 
     func setSelectionProfile(_ profile: ModelSelectionProfile) {
@@ -778,8 +779,7 @@ class ModelManager: ObservableObject {
         let previousModel = activeModel
         selectionMode = mode
         if mode == .automatic {
-            activeModel = automaticActiveModel() ?? activeModel.flatMap { belongsToRecognizer($0) ? $0 : nil }
-                ?? downloadedModels.first(where: belongsToRecognizer)
+            activeModel = automaticActiveModel()
             persistState()
             if activeModel != nil && (activeModel != previousModel || modelLoadState != .ready && modelLoadState != .loading) {
                 DictationCoordinator.shared.preloadActiveModel()
@@ -827,9 +827,9 @@ class ModelManager: ObservableObject {
         // Remove from downloaded list if it was added prematurely
         downloadedModels.removeAll { $0 == identifier }
         if activeModel == identifier {
-            activeModel = selectionMode == .automatic
-                ? automaticActiveModel() ?? downloadedModels.first(where: belongsToRecognizer)
-                : downloadedModels.first(where: belongsToRecognizer)
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+                installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                capabilities: DeviceCapabilities.current())
         }
         persistState()
     }
@@ -857,8 +857,21 @@ class ModelManager: ObservableObject {
             installed: Set(downloadedModels),
             osMajor: osMajor,
             capabilities: DeviceCapabilities.current(),
-            recognizer: recognizer
+            recognizer: recognizer,
+            requiredLanguages: SpokenLanguagePreferences.load(from: defaults)
         )
+    }
+
+    func setSpokenLanguages(_ codes: [String]) {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
+        defaults.set(SpokenLanguagePreferences.normalized(codes), forKey: SharedKeys.spokenLanguages)
+        applyDownloadedModels()
+        DictationCoordinator.shared.refreshKeyboardModel()
+    }
+
+    var initialVoiceModel: String? {
+        if selectionMode == .manual { return DictationModelPreferences.requestedAppModel(in: defaults, recognizer: recognizer) }
+        return preferredModelIdentifier.isEmpty ? nil : preferredModelIdentifier
     }
 
     /// UserDefaults is only a claim that a model was downloaded. Validate the

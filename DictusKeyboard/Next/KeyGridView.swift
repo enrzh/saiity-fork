@@ -279,6 +279,7 @@ final class KeyGridView: UIView {
     }
 
     private func cancelActivePresses() {
+        clearKeyboardKeyFlashes()
         keypadVoice.cancelInteraction()
         keypadLetters.cancelInteraction()
         for press in presses.values {
@@ -371,7 +372,9 @@ final class KeyGridView: UIView {
     }
 
     private func heldPositions() -> Set<PlacedPosition> {
-        Set(presses.values.map { PlacedPosition(row: $0.row, column: $0.column) })
+        Set(presses.values.filter {
+            KeyboardInteractionPreferences.keyPopupMode != .flash || $0.key.isCommand
+        }.map { PlacedPosition(row: $0.row, column: $0.column) })
     }
 
     /// A plate that should be backed by real material.
@@ -687,7 +690,7 @@ final class KeyGridView: UIView {
         guard let previewOwner, let press = presses[previewOwner],
               !press.popupVisible, let text = press.previewText,
               let item = itemAt(row: press.row, column: press.column),
-              KeyboardInteractionPreferences.keyPopupMode != .off else {
+              KeyboardInteractionPreferences.keyPopupMode.showsPreview else {
             previewPopupHost?.view.isHidden = true
             previewPopupIdentity = nil
             previewPopupMode = nil
@@ -761,6 +764,9 @@ final class KeyGridView: UIView {
             let identity = ObjectIdentifier(touch)
             commitPendingCharacter()
             let action = item.key.action
+            if KeyboardInteractionPreferences.keyPopupMode == .flash, !item.key.isCommand {
+                flashKeyboardKey(in: visualPlate(for: item), cornerRadius: cornerRadius(for: item.key))
+            }
 
             switch action {
             case .shift:

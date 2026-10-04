@@ -1188,7 +1188,7 @@ class KeyboardState: ObservableObject {
                        errorMsg != presentedErrorMessage {
                         presentedErrorMessage = errorMsg
                         presentStatusMessage(
-                            errorMsg,
+                            DictationProblem(errorMsg).message,
                             reason: "appError",
                             timeoutReason: "appError-timeout"
                         )

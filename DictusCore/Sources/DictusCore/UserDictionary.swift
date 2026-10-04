@@ -197,9 +197,9 @@ public final class UserDictionary {
     /// for a second occurrence would mean rejecting the same correction twice
     /// before the keyboard stopped making it.
     @discardableResult
-    public func learn(_ word: String) -> Bool {
+    public func learn(_ word: String, allowSingleCharacter: Bool = false) -> Bool {
         let key = word.lowercased()
-        guard !key.isEmpty, key.count > 1 else { return false }
+        guard !key.isEmpty, allowSingleCharacter || key.count > 1 else { return false }
         // A word already in the dictionary is a usage bump, not a learning event,
         // so only a first entry is reported below.
         let isNew = learnedWords[key] == nil

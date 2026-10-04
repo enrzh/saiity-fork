@@ -411,3 +411,31 @@ Compare evidence after each phase; do not expand to new models or broad
 architecture work without a measured need. Implementation was subsequently
 authorized by the user. Recording room audio, commits, pushes and release
 uploads remain outside this implementation.
+
+## October 4 whole-app follow-up
+
+Spoken-language preferences constrain automatic selection, recommendation and
+fallback without changing transcription/translation language policy. Explicit
+manual choices remain user controlled. App-only setup avoids keyboard standby;
+explicit keyboard enable opts into its existing restoration path. App and
+keyboard readiness remain independent and each dictation keeps its pinned model.
+
+The shared user-facing problem contract maps failures to permission, retry or
+model/download recovery while technical details remain in diagnostics. An
+active session outranks stale model errors. Qwen foreground loss is distinguished
+from model preparation or memory failure. Recovery does not start a recording
+or download without a tap.
+
+Replay is opt-in foreground-only memory retention, capped at one 60-second clip
+and five minutes. New admitted sessions, cancellation/reset, app loss and
+preference disable clear it. WAV encoding checks cancellation; generation,
+foreground, idle/finalization, preference and expiry admission are rechecked
+before native playback. The replay owner does not deactivate successor standby
+audio. Its synthetic buffer checks establish encoding/lifetime, not actual
+device audio routing or playback.
+
+Real-phone execution is prepared in `docs/qa/phone-quality-run.md`. The captured
+run remains pending with placeholder revisions and no audio hashes. Accuracy,
+latency, cancellation, memory, thermal and power gates still need consented or
+licensed audio and accessible hardware. No automatic room capture, download or
+release operation accompanies this follow-up.

@@ -72,6 +72,7 @@ class DictationCoordinator: ObservableObject {
     func setKeyboardDictationEnabled(_ enabled: Bool) {
         KeyboardDictationService.setEnabled(enabled, in: defaults)
         if enabled {
+            defaults.set(OnboardingUsage.keyboard.rawValue, forKey: SharedKeys.onboardingUsage)
             enableKeyboardSession()
         } else {
             disableKeyboardSession()
@@ -90,6 +91,7 @@ class DictationCoordinator: ObservableObject {
         guard UIApplication.shared.applicationState == .active else { return }
         guard canChangeSpeechRuntime else { return }
         guard keyboardSessionTask == nil, !audioEngine.isEngineRunning else { return }
+        RecordingReplay.shared.stop()
         isPreparingKeyboardSession = true
         keyboardSessionTask = Task { [weak self] in
             guard let self else { return }
@@ -568,6 +570,7 @@ class DictationCoordinator: ObservableObject {
         // startDictation directly without going through stopDictation first.
         // The old result must be cleared regardless of entry path so
         // RecordingView never shows a stale transcription card.
+        RecordingReplay.shared.clear()
         lastResult = nil
         lastOriginalResult = nil
         issueRecordingDurationMs = nil
@@ -877,6 +880,7 @@ class DictationCoordinator: ObservableObject {
         var runtimeMetrics = DictationRuntimeMetrics(sessionID: capturedLanguageRequest.sessionID ?? "unbound")
         // Capture ends at Stop, not when a scheduled UI task eventually runs.
         let samples = collectCompletedRecording()
+        RecordingReplay.shared.retain(samples, session: session)
         runtimeMetrics.mark("sampleDrain")
         runtimeMetrics.setContext("cleanupEngine", value: cleanupSettings.engine.identifier)
         runtimeMetrics.setContext("style", value: cleanupSettings.style.rawValue)
@@ -1513,6 +1517,7 @@ class DictationCoordinator: ObservableObject {
     /// Cancel the current dictation without transcribing.
     /// Called when the keyboard sends a cancel signal via Darwin notification.
     func cancelDictation() {
+        RecordingReplay.shared.clear()
         initTask?.cancel()
         transcriptionService.cancelCurrentInference()
         realtimeTask?.cancel()
@@ -1635,6 +1640,7 @@ class DictationCoordinator: ObservableObject {
             cancelDictation()
             return
         }
+        RecordingReplay.shared.clear()
         updateStatus(.idle)
         // Keep lastResult so HomeView can display the last transcription card.
     }
@@ -2331,6 +2337,12 @@ private extension DictationCoordinator {
         let capabilities = DeviceCapabilities.current()
         let installed = Set(readDownloadedModels())
         var candidates = [ModelInfo.recommendedIdentifier(for: capabilities)]
+        if let recommended = ModelSelectionProfile.active(from: defaults).resolvedIdentifier(
+            installed: installed.subtracting(excluding), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: capabilities, recognizer: .whisper,
+            requiredLanguages: SpokenLanguagePreferences.load(from: defaults)) {
+            candidates.insert(recommended, at: 0)
+        }
         candidates.append(contentsOf: [
             "openai_whisper-small",
             "openai_whisper-base",
@@ -2345,6 +2357,7 @@ private extension DictationCoordinator {
                   let model = ModelInfo.forIdentifier(identifier),
                   model.engine == .whisperKit,
                   model.languageSupport.coverage == .whisperMultilingual,
+                  SpokenLanguagePreferences.accepts(model, languages: SpokenLanguagePreferences.load(from: defaults)),
                   model.isSupported(on: capabilities),
                   WhisperModelRepository.installedModelFolderURL(for: identifier) != nil else {
                 return false
@@ -2361,7 +2374,8 @@ private extension DictationCoordinator {
             for: requestedIdentifier,
             installedIdentifiers: Set(readDownloadedModels()),
             osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: DeviceCapabilities.current()
+            capabilities: DeviceCapabilities.current(),
+            fallbackLanguages: SpokenLanguagePreferences.load(from: defaults)
         )
         return resolution.resolvedIdentifier ?? requestedIdentifier
     }

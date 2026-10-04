@@ -2,6 +2,29 @@ import SwiftUI
 import UIKit
 import DictusCore
 
+extension UIView {
+    /// One passive pulse on the existing plate; it never becomes a touch owner.
+    func flashKeyboardKey(in frame: CGRect, cornerRadius: CGFloat) {
+        subviews.filter { $0.accessibilityIdentifier == "key-container-flash" && $0.frame == frame }
+            .forEach { $0.removeFromSuperview() }
+        let flash = UIView(frame: frame)
+        flash.accessibilityIdentifier = "key-container-flash"
+        flash.isUserInteractionEnabled = false
+        flash.accessibilityElementsHidden = true
+        flash.backgroundColor = UIColor.label.withAlphaComponent(0.16)
+        flash.layer.cornerRadius = cornerRadius
+        addSubview(flash)
+        UIView.animate(withDuration: 0.16, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            flash.alpha = 0
+        } completion: { _ in flash.removeFromSuperview() }
+    }
+
+    func clearKeyboardKeyFlashes() {
+        subviews.filter { $0.accessibilityIdentifier == "key-container-flash" }
+            .forEach { $0.removeFromSuperview() }
+    }
+}
+
 /// Shared hold lifecycle for the grid, Period, emoji and native key controls.
 /// A cancelled or superseded finger can never fire a queued hold.
 final class KeyboardHoldSession {

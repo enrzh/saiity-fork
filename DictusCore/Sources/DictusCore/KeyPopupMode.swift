@@ -5,12 +5,14 @@ public enum KeyPopupMode: String, CaseIterable, Equatable, Sendable {
     case off
     case popup
     case popout
+    case flash
 
     public var displayName: String {
         switch self {
         case .off: return "Off"
         case .popup: return "Popup"
         case .popout: return "Popout"
+        case .flash: return "Key flash"
         }
     }
 
@@ -19,10 +21,11 @@ public enum KeyPopupMode: String, CaseIterable, Equatable, Sendable {
         case .off: return "square.slash"
         case .popup: return "bubble.middle.bottom"
         case .popout: return "arrow.up.left.and.arrow.down.right"
+        case .flash: return "sparkle"
         }
     }
 
-    public var showsPreview: Bool { self != .off }
+    public var showsPreview: Bool { self == .popup || self == .popout }
 
     public static var active: Self {
         load(from: AppGroup.defaults)

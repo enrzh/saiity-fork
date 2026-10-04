@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        PE000001 /* RecordingReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = PE100001 /* RecordingReplay.swift */; };
         QW000003 /* QwenSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = QW100003; };
         QW000001 /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = QW900001 /* Qwen3ASR */; };
         QW000002 /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = QW900002 /* SpeechVAD */; };
@@ -193,6 +194,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        PE100001 /* RecordingReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingReplay.swift; sourceTree = "<group>"; };
         QW100003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenSpeechEngine.swift; sourceTree = "<group>"; };
         RR100202 /* LocalPolishEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPolishEngine.swift; sourceTree = "<group>"; };
         RR100205 /* Saiity.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = DictusApp/Saiity.icon; sourceTree = SOURCE_ROOT; };
@@ -524,7 +526,8 @@
 		AA400007 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
-                QW100003 /* QwenSpeechEngine.swift */,
+        QW100003 /* QwenSpeechEngine.swift */,
+                PE100001 /* RecordingReplay.swift */,
 				AA1000F1 /* ParakeetEngine.swift */,
 				AA1000F0 /* SpeechModelProtocol.swift */,
 				AA100041 /* TranscriptionService.swift */,
@@ -1036,7 +1039,8 @@
 				AA000051 /* ModelManagerView.swift in Sources */,
 				AA000071 /* TestDictationView.swift in Sources */,
 				AA000090 /* MainTabView.swift in Sources */,
-				AA000091 /* HomeView.swift in Sources */,
+                AA000091 /* HomeView.swift in Sources */,
+                PE000001 /* RecordingReplay.swift in Sources */,
 				AA000092 /* DiagnosticDetailView.swift in Sources */,
 				AA000303 /* LastDictationIssueReportView.swift in Sources */,
 				AA0000A0 /* OnboardingView.swift in Sources */,

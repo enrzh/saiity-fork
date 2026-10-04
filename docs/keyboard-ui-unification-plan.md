@@ -6,6 +6,49 @@ processing and Icon Composer scope accepted on 2026-09-30.
 
 Design rules: [keyboard-ui-design.md](keyboard-ui-design.md).
 
+## October 4 keyboard corrections
+
+The user retired the iOS styling experiment. Its switch and visual overrides
+are removed; an old stored value is ignored. Solid/Liquid Glass, inset, key
+containers and the top-bar preference remain independently configurable.
+Earlier instructions/evidence for selecting iOS styling are superseded.
+
+The shared bottom row now has a 54pt touch lane, keeps 45pt visible key faces,
+and reduces its lower chrome padding from 6pt to 2pt. The actual Space/Return
+centre moves down 3.5pt in the same host; circular controls, Period, category
+placement and board/grid geometry follow the same shared row. This adjusts the
+reported elevation without changing the character-face size. Exact alignment
+against a phone's system keyboard remains a physical comparison.
+
+Inset-off Emoji retains a faint painted native collection canvas, including
+empty Recents and inter-emoji gaps, and removes the inset's rounded clipping.
+The decorative inset never owns input. Native root/window hit checks and blank
+pan admission pass through repeated inset transitions, both materials and
+portrait/landscape. These checks do not establish remote keyboard event delivery
+on the physical phone; the reported device regression still needs confirmation.
+
+Key popups adds Key flash. A passive 160ms wash pulses once over the tapped
+character/emoji face, with no enlarged preview and no repeating held pulse.
+Accent/tone holds remain independent. Page cancellation removes pending grid
+flashes, and UIKit flashes cannot become hit owners. The native fixture checks
+a flash expiring while the key is still held, cancellation and subsequent input.
+
+Vocabulary learning no longer depends on having a supported autocorrection
+language or keeping autocorrection enabled. Uncorrected Unicode tokens can
+reach the existing two-occurrence learning gate, with token/sensitive-field
+restrictions retained. Explicit words support single characters; full dictation
+hints no longer prevent saving the word to typing vocabulary. Dictionary writes
+remain deferred out of Space touch dispatch. Native checks cover Chinese,
+Korean, French and German with autocorrect off and secure-field exclusion.
+
+Verification: 1,904 Core tests pass with one existing skip. Production native
+input checks, simulator Debug, signed Release and strict signature checks pass.
+The updated development app is installed on the isolated QA simulator. Physical
+settings taps confirm removal of iOS styling and selecting/persisting Key flash;
+Popup is restored after QA. Inset-off light/dark, Solid/Glass and landscape
+fixtures were visually inspected. No microphone capture/model download,
+physical-device blocker retry, commit, push or TestFlight upload occurred.
+
 ## Why
 
 `KeyboardGlassSurface` and `appleControlSurface` implement the same liquid
@@ -721,6 +764,70 @@ Details and artifacts: `docs/design/saiity-keyboard-direction.md`, implementatio
 checkpoint. Logs: `/tmp/saiity-keyboard-design.Qnx1D2/`.
 
 ### Minimal keyboard and reported native fallback — October 3
+
+October 4 evidence: the user supplied `IMG_4049.PNG` and confirmed that the
+globe menu still shows sAiity selected when the system-style keyboard with a
+small Q on Space appears. Treat this as failure to present the custom surface,
+not a confirmed switch to another installed keyboard. The selection label
+does not prove that our extension's view rendered, nor does the image prove a
+crash. Both the local development extension and the archived build-232
+extension identify as sAiity / en-US with
+`DictusKeyboard.KeyboardViewController` as principal class.
+
+A read-only check now sees the paired Air on iOS 27.2, but it reports
+`passcodeRequired: true`. App/log/process reads fail with CoreDevice -1 / mobile
+device -402653181 (failed to allocate RSD device); no log or installed-build
+evidence was obtained. Do not retry that unchanged state. The next diagnostic
+requires an unlocked phone: correlate the failing presentation with extension
+startup/layout, crash or jetsam evidence and the actual installed build. No
+runtime change is claimed to fix this Q surface.
+
+After the user unlocked the Air, device access succeeded. The installed app was
+232 and its keyboard process was running. Available crash files contain no
+DictusKeyboard crash; the 19:09 jetsam report kills `healthappd`, while the
+keyboard is listed suspended without a kill reason. This does not rule out an
+earlier failure. The actual retained app log starts at 16:15:15 local time,
+after the image's 16:13 clock, so that event cannot be reconstructed. Later
+entries show several cached controllers being replaced; they do not establish
+the Q surface's cause.
+
+The custom keyboard loaded in the app's blank setup field and X's empty
+composer. Two synthetic characters and an existing Recent emoji were inserted
+and cleared only in the setup field; the X composer stayed empty and was closed.
+The system globe/microphone row also appears below the working custom keyboard,
+so it cannot identify a fallback by itself. Q was not reproduced in these checks.
+
+The prepared development Debug build 232 with all current local changes is now
+installed on the physical Air. This replaces its older installed 232 binary
+without uninstalling or removing its data; it is not a TestFlight update.
+Checks confirm preservation of material/inset/layout, vocabulary, downloaded
+model claims, pending/manual model choices and service Off. No microphone
+capture or model download was started.
+
+Physical testing confirmed that the collection's painted native canvas restores
+blank Recents swipes. A category tap initially still missed the unpainted shared
+owner, so `KeyboardSurfaceView` now keeps the same faint native backing. The
+final phone trace records `winner=EmojiCategoryControl` for category taps and
+`winner=EmojiPagerView`, native pan begin/end and deceleration for blank-space
+swipes with inset Off in Glass. Both actions visibly work. Solid/landscape retain
+native harness coverage; their phone-specific gesture matrix remains pending.
+
+Diagnostics now add root/input view classes, identity agreement and native owner
+count to the existing layout snapshots. The working Air reports
+`rootClass=KeyboardInputView inputClass=KeyboardInputView sameRoot=true nativeOwners=3`.
+A Debug-only `--diagnostic-log-probe` uses the existing export formatter to place
+the retained log in the app's private `tmp/saiity-diagnostic.log`, then returns
+before standby restoration. It works around the normal device service's root
+directory restriction and blocked remote clipboard export without changing
+release behavior. The existing Debug Library mirror supplies ongoing traces.
+
+Final validation: 1,904 Core tests pass with one existing skip, 142 focused checks,
+the production native input harness (including root-view identity), simulator
+Debug, device Debug, signed Release and strict signatures pass. Private evidence
+is under `/tmp/saiity-keyboard-design.Qnx1D2/q-keyboard-*`; the historical exported
+log remains available locally, and no logs were uploaded. Q remains an open
+verification gate: capture the new view-identity and touch traces if it recurs.
+No commit, push or release upload occurred; the heartbeat remains paused.
 
 The approved mockup is implemented: a native More menu replaces separate Paste,
 output-language and Dismiss accessories, power stays beside the trailing blue

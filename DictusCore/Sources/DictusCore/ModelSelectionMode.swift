@@ -30,7 +30,7 @@ public enum ModelSelectionMode: String, CaseIterable, Codable, Sendable {
     public var explanation: String {
         switch self {
         case .automatic:
-            return "Chooses an installed compatible model using this iPhone's memory, temperature, and catalog size and speed estimates."
+            return "Chooses an installed model for your spoken languages using this iPhone's memory, temperature, and catalog estimates."
         case .manual:
             return "Keeps the model you select until you change it."
         }
@@ -71,13 +71,21 @@ public enum ModelSelectionProfile: String, CaseIterable, Sendable {
     }
 
     public func resolvedIdentifier(installed: Set<String>, osMajor: Int, capabilities: DeviceCapabilities,
-                                   recognizer: DictationRecognizer? = nil) -> String? {
-        let compatible = ModelInfo.allIncludingDeprecated.filter {
-            installed.contains($0.identifier) && $0.isRuntimeAvailable(onOSMajor: osMajor, capabilities: capabilities)
-                && (recognizer?.contains($0) ?? ($0.engine != .qwenASR))
+                                   recognizer: DictationRecognizer? = nil, requiredLanguages: [String]? = nil) -> String? {
+        let compatible = ModelInfo.allIncludingDeprecated.filter { model in
+            installed.contains(model.identifier) && model.isRuntimeAvailable(onOSMajor: osMajor, capabilities: capabilities)
+                && (recognizer?.contains(model) ?? (model.engine != .qwenASR))
+                && (requiredLanguages.map { SpokenLanguagePreferences.accepts(model, languages: $0) } ?? true)
         }
         let multilingual = compatible.filter { $0.runtimeCapability.supportsAutomaticLanguageDetection }
-        let candidates = multilingual.isEmpty ? compatible : multilingual
+        let eligible = multilingual.isEmpty ? compatible : multilingual
+        let languageCodes = SpokenLanguagePreferences.normalized(requiredLanguages ?? [])
+        let betterForLanguages = eligible.filter { model in
+            !model.languageSupport.highlights.contains { entry in
+                entry.note == .impreciseUpgradeRecommended && languageCodes.contains(entry.code)
+            }
+        }
+        let candidates = betterForLanguages.isEmpty ? eligible : betterForLanguages
         guard !candidates.isEmpty else { return nil }
         if capabilities.prefersFastRuntimeModel {
             return candidates.max { $0.speedScore < $1.speedScore }?.identifier

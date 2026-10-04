@@ -10,14 +10,14 @@ final class KeyboardAppearancePreferencesTests: XCTestCase {
                 let controls = [layout.chromeNumbersFrame, layout.chromeLettersFrame,
                                 layout.chromeReturnFrame, layout.chromeWideSpaceFrame]
                 XCTAssertTrue(controls.allSatisfy { !$0.isEmpty && layout.surfaceFrame.contains($0) })
-                XCTAssertTrue(controls.allSatisfy { $0.height == 53 })
+                XCTAssertTrue(controls.allSatisfy { $0.height == 54 })
                 XCTAssertFalse(layout.dictateFrame.isEmpty)
                 XCTAssertFalse(layout.dictationServiceToggleFrame.isEmpty)
             }
         }
     }
 
-    func testIOSStyleOverridesAreReversibleAndLeaveStoredChoicesIntact() {
+    func testRetiredIOSStyleCannotOverrideStoredChoices() {
         let defaults = AppGroup.defaults
         let keys = [SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled,
                     SharedKeys.keyboardInsetEnabled, SharedKeys.keyContainersEnabled,
@@ -30,9 +30,8 @@ final class KeyboardAppearancePreferencesTests: XCTestCase {
             }
         }
         keys.forEach { defaults.removeObject(forKey: $0) }
-        XCTAssertFalse(KeyboardInteractionPreferences.usesIOSStyling)
         XCTAssertFalse(KeyboardInteractionPreferences.topBarEnabled)
-        XCTAssertEqual(KeyboardInteractionPreferences.windowAccessoryHeight, 12)
+        XCTAssertEqual(KeyboardInteractionPreferences.windowAccessoryHeight, 0)
         XCTAssertEqual(KeyboardInteractionPreferences.topBarHeight(for: .letters), 0)
         XCTAssertEqual(KeyboardInteractionPreferences.topBarHeight(for: .keys), 32)
 
@@ -41,12 +40,12 @@ final class KeyboardAppearancePreferencesTests: XCTestCase {
         defaults.set(false, forKey: SharedKeys.keyContainersEnabled)
         defaults.set(true, forKey: SharedKeys.liquidGlassEnabled)
         defaults.set(true, forKey: SharedKeys.keyboardIOSStyling)
-        XCTAssertFalse(KeyboardInteractionPreferences.topBarEnabled)
-        XCTAssertTrue(KeyboardInteractionPreferences.keyboardInsetEnabled)
-        XCTAssertTrue(KeyboardInteractionPreferences.keyContainersEnabled)
-        XCTAssertFalse(KeyboardInteractionPreferences.liquidGlassEnabled)
+        XCTAssertTrue(KeyboardInteractionPreferences.topBarEnabled)
+        XCTAssertFalse(KeyboardInteractionPreferences.keyboardInsetEnabled)
+        XCTAssertFalse(KeyboardInteractionPreferences.keyContainersEnabled)
+        XCTAssertTrue(KeyboardInteractionPreferences.liquidGlassEnabled)
         for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad] {
-            XCTAssertEqual(KeyboardInteractionPreferences.topBarHeight(for: mode), 0)
+            XCTAssertEqual(KeyboardInteractionPreferences.topBarHeight(for: mode), 32)
         }
         XCTAssertEqual(KeyboardInteractionPreferences.topBarHeight(for: .recording), 32)
         XCTAssertTrue(defaults.bool(forKey: SharedKeys.keyboardTopBarEnabled))
@@ -60,5 +59,18 @@ final class KeyboardAppearancePreferencesTests: XCTestCase {
         XCTAssertFalse(KeyboardInteractionPreferences.keyboardInsetEnabled)
         XCTAssertFalse(KeyboardInteractionPreferences.keyContainersEnabled)
         XCTAssertTrue(KeyboardInteractionPreferences.liquidGlassEnabled)
+    }
+
+    func testFlashModePreservesChoiceWithoutAnEnlargedPreview() throws {
+        let suite = "key-flash-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        KeyPopupMode.flash.persist(to: defaults)
+        XCTAssertEqual(KeyPopupMode.load(from: defaults), .flash)
+        XCTAssertEqual(KeyPopupMode.flash.displayName, "Key flash")
+        XCTAssertFalse(KeyPopupMode.flash.showsPreview)
+        XCTAssertFalse(defaults.bool(forKey: SharedKeys.keyPopupsEnabled))
+        XCTAssertTrue(KeyPopupMode.popup.showsPreview)
+        XCTAssertTrue(KeyPopupMode.popout.showsPreview)
     }
 }

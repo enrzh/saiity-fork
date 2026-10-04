@@ -162,6 +162,12 @@ struct DictusApp: App {
                 }
                 .task {
                     #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--diagnostic-log-probe") {
+                        let url = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-diagnostic.log")
+                        do { try Data(PersistentLog.exportContent().utf8).write(to: url, options: .atomic) }
+                        catch { print("DIAGNOSTIC_LOG_PROBE failed: \(error.localizedDescription)") }
+                        return
+                    }
                     if ProcessInfo.processInfo.arguments.contains("--live-activity-preview") {
                         coordinator.resetStatus()
                         LiveActivityManager.shared.startStandbyActivity()
@@ -185,7 +191,8 @@ struct DictusApp: App {
                         || AppGroup.defaults.bool(forKey: SharedKeys.serviceEnabled)
                     if AudioLifecyclePolicy.shouldRestoreStandby(serviceEnabled: serviceEnabled,
                         onboardingComplete: hasCompletedOnboarding,
-                        microphoneGranted: AVAudioSession.sharedInstance().recordPermission == .granted) {
+                        microphoneGranted: AVAudioSession.sharedInstance().recordPermission == .granted)
+                        && OnboardingUsage.active(from: AppGroup.defaults).usesKeyboard {
                         coordinator.enableKeyboardSession()
                     }
 
@@ -212,11 +219,14 @@ struct DictusApp: App {
 
                     switch phase {
                     case .active:
+                        RecordingReplay.shared.refreshAvailability()
                         PersistentLog.log(.appDidBecomeActive)
                     case .inactive:
+                        RecordingReplay.shared.clear()
                         coordinator.stopForegroundOnlyRecognitionIfNeeded()
                         PersistentLog.log(.appWillResignActive)
                     case .background:
+                        RecordingReplay.shared.clear()
                         PersistentLog.log(.appDidEnterBackground)
 
                         // A configured-but-idle audio session keeps the microphone

@@ -61,7 +61,7 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
     func testLiveGridUsesPopupSettingWithoutChangingTouchOwnership() throws {
         let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         let previews = try source("DictusKeyboard/Views/KeyVariantPopup.swift")
-        XCTAssertTrue(grid.contains("KeyboardInteractionPreferences.keyPopupMode != .off"))
+        XCTAssertTrue(grid.contains("KeyboardInteractionPreferences.keyPopupMode.showsPreview"))
         XCTAssertTrue(grid.contains("KeyPressPreviewHost(session: .constant(session), identity:"))
         XCTAssertFalse(grid.contains("UIColor.secondarySystemBackground.setFill()"),
                        "the live preview must not paint an opaque UIKit plate")

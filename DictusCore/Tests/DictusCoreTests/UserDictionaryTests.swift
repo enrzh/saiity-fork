@@ -14,6 +14,17 @@ import XCTest
 /// KeyboardModeTests and SupportedLanguageActivationTests.
 final class UserDictionaryTests: XCTestCase {
 
+    func testExplicitVocabularyPersistsAcrossScriptsAndSingleCharacters() {
+        let words = ["München", "canción", "français", "你好", "한국어", "松"]
+        for word in words {
+            XCTAssertTrue(DictationVocabulary.isValid(word))
+            XCTAssertTrue(UserDictionary.shared.learn(word, allowSingleCharacter: true))
+        }
+        UserDictionary.shared.reload()
+        for word in words { XCTAssertTrue(UserDictionary.shared.isLearned(word), word) }
+        XCTAssertEqual(UserDictionary.shared.count, words.count)
+    }
+
     /// WHY reset in setUp as well as tearDown: the singleton reads App Group
     /// UserDefaults, which outlive the test process. A run that crashes or is
     /// interrupted before tearDown leaves entries behind, and the next run's

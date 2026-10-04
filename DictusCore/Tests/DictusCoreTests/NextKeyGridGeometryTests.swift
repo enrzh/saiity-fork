@@ -26,11 +26,11 @@ final class NextKeyGridGeometryTests: XCTestCase {
     func testTallerBottomBarLiftsRowsWithoutChangingCharacterSize() {
         for width in [320.0, 402, 420] {
             let layout = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 269, topAccessoryHeight: 32)
-            XCTAssertEqual(layout.chromeSpaceFrame.height, 53)
+            XCTAssertEqual(layout.chromeSpaceFrame.height, 54)
             for hit in [layout.chromeNumbersFrame, layout.chromeLettersFrame,
                         layout.letterPeriodFrame, layout.chromeReturnFrame] {
-                XCTAssertEqual(hit.height, 53)
-                XCTAssertEqual(VoiceOnlyKeyboardPolicy.commandVisualSize(for: hit.size).height, 45)
+                XCTAssertEqual(hit.height, 54)
+                XCTAssertEqual(VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: hit.size).height, 45)
             }
             let page = lettersPage()
             let grid = CGSize(width: width, height: layout.surfaceFrame.height - KeyGridPlacement.bottomBarLaneHeight)

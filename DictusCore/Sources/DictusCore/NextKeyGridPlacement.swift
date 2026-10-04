@@ -88,10 +88,11 @@ public enum KeyGridPlacement {
         // keys are taller than the letter grid's — it trades the bottom bar for the
         // room, and without asking it was being handed the letter grid's cap and
         // coming out a third short.
-        let rowHeight = max(1, min(
-            (gridHeight - gaps) / rowCount,
-            page.rowHeight ?? maximumRowHeight
-        ))
+        let cap = page.rowHeight ?? maximumRowHeight
+        let fitted = (gridHeight - gaps) / rowCount
+        // Hiding the top bar drops a fraction of a point. Keep the tuned plate
+        // instead of restoring the empty strip above the keys.
+        let rowHeight = max(1, fitted + 0.25 >= cap ? cap : min(fitted, cap))
         let blockHeight = rowHeight * rowCount + gaps
         // Anchored a fixed distance below the top of the grid area, not to its
         // bottom.

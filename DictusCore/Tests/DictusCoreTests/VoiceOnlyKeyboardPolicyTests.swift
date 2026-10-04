@@ -60,7 +60,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
 
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.horizontalPadding, 8)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.verticalPadding, 4)
-        XCTAssertEqual(layout.bottomAuxiliaryControlFrame.height, 53)
+        XCTAssertEqual(layout.bottomAuxiliaryControlFrame.height, 54)
         XCTAssertEqual(layout.auxiliaryContentFrame.minY, layout.surfaceFrame.minY)
         XCTAssertEqual(layout.bottomAuxiliaryControlFrame,
                        CGRect(x: layout.surfaceFrame.minX,
@@ -232,7 +232,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
         XCTAssertEqual(layout.rightRailBottom, 100)
         XCTAssertEqual(layout.dismissTop, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding - VoiceOnlyKeyboardPolicy.chromeBottomInset - VoiceOnlyKeyboardPolicy.spacebarHeight)
         XCTAssertEqual(layout.dismissBottom, VoiceOnlyKeyboardPolicy.surfaceHeight - VoiceOnlyKeyboardPolicy.verticalPadding - VoiceOnlyKeyboardPolicy.chromeBottomInset)
-        XCTAssertEqual(layout.dismissBottom - layout.dismissTop, 53)
+        XCTAssertEqual(layout.dismissBottom - layout.dismissTop, 54)
         XCTAssertGreaterThanOrEqual(layout.dismissTop, layout.rightRailBottom)
     }
 
@@ -908,7 +908,7 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             XCTAssertFalse(layout.letterReturnFrame.isEmpty, "return width=\(width)")
             XCTAssertFalse(layout.letterDismissFrame.isEmpty, "dismiss width=\(width)")
             XCTAssertFalse(layout.letterSpaceFrame.isEmpty, "space width=\(width)")
-            XCTAssertEqual(layout.letterReturnFrame.size, CGSize(width: 88, height: 53))
+            XCTAssertEqual(layout.letterReturnFrame.size, CGSize(width: 88, height: 54))
             XCTAssertEqual(layout.letterDismissFrame.size,
                            CGSize(width: VoiceOnlyKeyboardPolicy.controlSize,
                                   height: VoiceOnlyKeyboardPolicy.spacebarHeight))

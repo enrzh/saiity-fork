@@ -219,7 +219,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(recording.contains("DictationTranscriptResult(result:"))
         XCTAssertTrue(sharedResult.contains("textSelection(.enabled)"))
         XCTAssertTrue(sharedResult.contains("dictation.resultVariant"))
-        XCTAssertTrue(recording.contains("Button(\"Try again\""))
+        XCTAssertTrue(recording.contains("DictationProblem(errorMessage).action"))
+        XCTAssertTrue(recording.contains("case .models, .repairDownload: showRecoveryModels = true"))
         XCTAssertTrue(recording.contains("Button(action: dismissRecording)"))
         XCTAssertTrue(recording.contains("accessibilityLabel(\"Close dictation\")"))
     }
@@ -347,9 +348,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let tutorial = try source("DictusApp/Onboarding/GlobeKeyTutorialPage.swift")
 
         let setup = try source("DictusApp/Onboarding/KeyboardSetupPage.swift")
-        XCTAssertTrue(onboarding.contains("setup.keyboardInstalled && modelReady"))
+        XCTAssertTrue(onboarding.contains("canContinue(keyboardInstalled: setup.keyboardInstalled, modelReady: modelReady)"))
+        XCTAssertTrue(onboarding.contains("if usesKeyboard { KeyboardSetupCard() }"))
         XCTAssertFalse(onboarding.contains("keyboardInstalled && fullAccessVerified && modelReady"))
-        XCTAssertTrue(onboarding.contains("switch to the sAiity keyboard and complete Full Access verification"))
+        XCTAssertTrue(onboarding.contains("then switch to it to verify Full Access"))
         XCTAssertTrue(setup.contains("Open Keyboard Settings"))
         XCTAssertTrue(setup.contains("Permission is confirmed by the actual keyboard."))
         XCTAssertTrue(tutorial.contains("Return to setup"))

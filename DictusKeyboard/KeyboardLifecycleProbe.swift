@@ -84,6 +84,16 @@ extension UIInputViewController {
     /// test. The lines that carry the composed answer log it as `onScreen=`.
     var windowAttachmentProbeDetails: String {
         "hasWindow=\(isViewInWindow) hasInputWindow=\(isInputViewInWindow)"
+            + " \(inputHierarchyProbeDetails)"
+    }
+
+    var inputHierarchyProbeDetails: String {
+        let root = viewIfLoaded
+        let input = inputView
+        let rootClass = root.map { String(describing: type(of: $0)) } ?? "none"
+        let inputClass = input.map { String(describing: type(of: $0)) } ?? "none"
+        let owners = (input as? KeyboardInputView)?.nativeTouchOwners.count ?? 0
+        return "rootClass=\(rootClass) inputClass=\(inputClass) sameRoot=\(root != nil && root === input) nativeOwners=\(owners)"
     }
 
     /// The input traits of the text field this controller is editing.

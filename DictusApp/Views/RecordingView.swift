@@ -12,6 +12,17 @@ import DictusCore
 /// The only difference is what happens when the user finishes:
 /// - onboarding: calls onComplete to advance onboarding
 /// - standalone: user taps mic again for new recording, or X to dismiss
+private struct RecordingModelRecoveryView: View {
+    @StateObject private var manager = ModelManager()
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            ModelManagerView(modelManager: manager)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
 enum RecordingMode {
     case onboarding
     case standalone
@@ -33,6 +44,7 @@ struct RecordingView: View {
     var onComplete: (() -> Void)?
 
     @EnvironmentObject var coordinator: DictationCoordinator
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var transcriptionResult: String?
@@ -43,6 +55,8 @@ struct RecordingView: View {
     @State private var showCopiedFeedback = false
     /// Two-step dismissal: animate out first, then reset coordinator status.
     @State private var isDismissing = false
+    @ObservedObject private var replay = RecordingReplay.shared
+    @State private var showRecoveryModels = false
 
     /// The stage this screen draws, which trails `coordinator.status` by up to
     /// `TranscribingStageHold.minimumDisplayDuration` (#309).
@@ -72,18 +86,21 @@ struct RecordingView: View {
                     Text("sAiity").font(.headline)
                 }
                 Spacer()
-                if mode == .standalone {
                     Button(action: dismissRecording) {
                         Image(systemName: "xmark").frame(width: 44, height: 44)
                     }
                     .buttonStyle(.bordered).buttonBorderShape(.circle)
                     .accessibilityLabel("Close dictation")
-                }
             }
             .padding(.horizontal, 24).padding(.top, 12)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if replay.available && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
+                        Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay recording") { replay.toggle() }
+                            .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("dictation.replay")
+                        if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                    }
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text(showResult ? "Transcript" : statusTitle)
@@ -103,7 +120,10 @@ struct RecordingView: View {
                             Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
                                 .font(.headline)
                             Text(userFacingError(error)).foregroundStyle(.secondary)
-                            Button("Try again", action: retryRecording).buttonStyle(.bordered)
+                            if DictationProblem(error).action != .retry {
+                                Button("Try dictation again", action: retryRecording).buttonStyle(.bordered)
+                                    .disabled(!coordinator.canChangeSpeechRuntime)
+                            }
                         } else {
                             Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
                                  displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
@@ -140,6 +160,9 @@ struct RecordingView: View {
             .background(Color(.systemBackground))
         }
         .background(Color(.systemBackground).ignoresSafeArea())
+        .sheet(isPresented: $showRecoveryModels) {
+            RecordingModelRecoveryView()
+        }
         .opacity(isDismissing ? 0 : 1)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showResult)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showCopiedFeedback)
@@ -165,6 +188,7 @@ struct RecordingView: View {
             advanceDisplayedStatus(to: coordinator.status)
         }
         .onDisappear {
+            replay.stop()
             holdTask?.cancel()
             holdTask = nil
             // Reset, not merely cancel: `.onAppear` re-adopts the stage in flight, and
@@ -201,6 +225,15 @@ struct RecordingView: View {
 
     private var micOrStopButton: some View {
         Button {
+            if showError, let errorMessage {
+                switch DictationProblem(errorMessage).action {
+                case .openSettings:
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    return
+                case .models, .repairDownload: showRecoveryModels = true; return
+                case .retry: break
+                }
+            }
             switch coordinator.status {
             case .recording:
                 stopRecording()
@@ -211,7 +244,7 @@ struct RecordingView: View {
             }
         } label: {
             SaiityVoiceActionLabel(
-                LocalizedStringKey(isCancellationStage ? cancellationTitle :
+                LocalizedStringKey(showError ? recoveryTitle : isCancellationStage ? cancellationTitle :
                     coordinator.status == .recording ? "Finish dictation" : showResult ? "Dictate again" : "Start dictation"),
                 systemImage: isCancellationStage ? "xmark" : coordinator.status == .recording ? "stop.fill" : nil)
         }
@@ -250,6 +283,7 @@ struct RecordingView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             guard coordinator.dictationGeneration == generation else { return }
             coordinator.resetStatus()
+            if mode == .onboarding { dismiss() }
         }
     }
 
@@ -264,9 +298,12 @@ struct RecordingView: View {
     }
 
     private func userFacingError(_ message: String) -> String {
-        message
-            .replacingOccurrences(of: "Dictus", with: "sAiity")
-            .replacingOccurrences(of: "dictus", with: "sAiity")
+        DictationProblem(message).message
+    }
+
+    private var recoveryTitle: String {
+        let problem = DictationProblem(errorMessage ?? "")
+        return problem.action == .repairDownload ? "Models & downloads" : problem.actionTitle
     }
 
     // MARK: - Stage display (#309)

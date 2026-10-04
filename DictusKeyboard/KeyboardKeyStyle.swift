@@ -11,20 +11,17 @@ enum KeyboardChromeRole {
     case popup
 
     static var secondaryForeground: UIColor { .label.withAlphaComponent(0.72) }
-    static var keyCornerRadius: CGFloat { KeyboardInteractionPreferences.usesIOSStyling ? 5 : 8 }
-    static var commandCornerRadius: CGFloat { KeyboardInteractionPreferences.usesIOSStyling ? 5 : 8 }
+    static let keyCornerRadius: CGFloat = 8
+    static let commandCornerRadius: CGFloat = 8
 
     func solidFill(increasedContrast: Bool = false) -> UIColor {
-        let native = KeyboardInteractionPreferences.usesIOSStyling
         switch self {
         case .input:
             if increasedContrast { return .tertiarySystemBackground }
-            return native ? UIColor { traits in
-                traits.userInterfaceStyle == .dark ? UIColor.systemGray3.resolvedColor(with: traits) : .white
-            } : UIColor.label.withAlphaComponent(0.035)
+            return UIColor.label.withAlphaComponent(0.035)
         case .accessory: return .clear
-        case .control: return native ? .systemGray4 : increasedContrast ? .secondarySystemBackground : .clear
-        case .board: return native ? .systemGray5 : .secondarySystemBackground
+        case .control: return increasedContrast ? .secondarySystemBackground : .clear
+        case .board: return .secondarySystemBackground
         case .popup: return .tertiarySystemBackground
         }
     }

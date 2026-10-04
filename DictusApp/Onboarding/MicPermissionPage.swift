@@ -29,7 +29,7 @@ struct MicPermissionPage: View {
                 if permissionGranted == true {
                     Label("Microphone authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
                 } else if permissionGranted == false {
-                    Text("Dictation needs the microphone. You can still set up the keyboard and turn the microphone on later in Settings.")
+                    Text("Dictation needs the microphone. You can finish setup and turn the microphone on later in Settings.")
                         .foregroundStyle(.secondary)
                 }
             }

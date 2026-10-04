@@ -391,7 +391,7 @@ struct ModelManagerView: View {
     }
 
     private func presentError(_ error: String) {
-        downloadError = error
+        downloadError = DictationProblem(error, downloading: true).message
         showErrorAlert = true
     }
 

@@ -3,6 +3,7 @@ import DictusCore
 
 struct WelcomePage: View {
     let onNext: () -> Void
+    var onKeyboardSetup: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -16,9 +17,14 @@ struct WelcomePage: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onNext) {
-                SaiityVoiceActionLabel("Set up sAiity", systemImage: "arrow.right")
+                SaiityVoiceActionLabel("Speak here", systemImage: "arrow.right")
             }
             .buttonStyle(SaiityPrimaryActionStyle())
+            if let onKeyboardSetup {
+                Button("Use in other apps", action: onKeyboardSetup)
+                    .buttonStyle(.bordered).controlSize(.large)
+                    .accessibilityIdentifier("onboarding.keyboardPath")
+            }
         }
     }
 

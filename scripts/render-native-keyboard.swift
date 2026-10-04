@@ -8,7 +8,7 @@ let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 let large = CommandLine.arguments.contains("--large")
 let emojiOnly = CommandLine.arguments.contains("--emoji")
-let nativeStyle = CommandLine.arguments.contains("--ios")
+let inset = !CommandLine.arguments.contains("--no-inset")
 let topBar = CommandLine.arguments.contains("--top-bar")
 let keypadOnly = CommandLine.arguments.contains("--keypad")
 let program = #"""
@@ -45,10 +45,9 @@ final class FixtureController: KeyboardViewController {
             }
         }
         defaults.set(false, forKey: SharedKeys.serviceEnabled)
-        defaults.set(NATIVESTYLE, forKey: SharedKeys.keyboardIOSStyling)
         defaults.set(TOPBAR, forKey: SharedKeys.keyboardTopBarEnabled)
         defaults.set(true, forKey: SharedKeys.keyContainersEnabled)
-        defaults.set(true, forKey: SharedKeys.keyboardInsetEnabled)
+        defaults.set(INSET, forKey: SharedKeys.keyboardInsetEnabled)
         defaults.set(KeyPopupMode.off.rawValue, forKey: SharedKeys.keyPopupMode)
         try FileManager.default.createDirectory(atPath: "OUTPUT", withIntermediateDirectories: true)
         var geometry: [String: [String: String]] = [:]
@@ -58,7 +57,7 @@ final class FixtureController: KeyboardViewController {
                 for width: CGFloat in [320, 402] {
                     for landscape in [false, true] {
                         let size = landscape ? CGSize(width: width == 320 ? 667 : 852,
-                            height: TOPBAR && !NATIVESTYLE ? 190 : 158)
+                            height: TOPBAR ? 190 : 158)
                                              : CGSize(width: width, height: 300)
                         for page in (KEYPAD ? ["numbers", "decimal", "phone"] : ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
                                      "board", "listening", "processing", "failure"]) {
@@ -101,7 +100,7 @@ final class FixtureController: KeyboardViewController {
                             controller.view.layoutIfNeeded()
                             controller.viewDidLayoutSubviews()
                             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-                            if !landscape && (!TOPBAR || NATIVESTYLE),
+                            if !landscape && !TOPBAR,
                                let height = controller.inputView?.constraints.first(where: {
                                    $0.firstAttribute == .height && $0.secondItem == nil
                                })?.constant {
@@ -158,7 +157,7 @@ final class FixtureController: KeyboardViewController {
 }
 """#.replacingOccurrences(of: "OUTPUT", with: output).replacingOccurrences(of: "LARGE", with: String(large))
         .replacingOccurrences(of: "EMOJIONLY", with: String(emojiOnly))
-        .replacingOccurrences(of: "NATIVESTYLE", with: String(nativeStyle))
+        .replacingOccurrences(of: "INSET", with: String(inset))
         .replacingOccurrences(of: "TOPBAR", with: String(topBar))
         .replacingOccurrences(of: "KEYPAD", with: String(keypadOnly))
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-keyboard-fixtures-" + UUID().uuidString)

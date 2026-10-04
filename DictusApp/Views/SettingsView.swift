@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
     @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.default.rawValue
     @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = true
-    @AppStorage(SharedKeys.keyboardIOSStyling, store: AppGroup.defaults) private var usesIOSStyling = false
+    @AppStorage(SharedKeys.recordingReplayEnabled, store: AppGroup.defaults) private var replayEnabled = false
     @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var autocorrectEnabled = true
     @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var adaptiveHitPredictionEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
@@ -101,8 +101,14 @@ struct SettingsView: View {
 
     private var dictationSettings: some View {
         settingsPage("Dictation") {
-            Section("Recognition") {
-                DictationModelQuickPicker(modelManager: modelManager)
+            Section("In sAiity") {
+                DictationModelQuickPicker(scope: .app, modelManager: modelManager)
+            }
+            Section("From your keyboard") {
+                DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
+            }
+            Section {
+                SpokenLanguagesPicker(modelManager: modelManager)
             }
             Section {
                 if cleanupAvailable {
@@ -134,6 +140,11 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
             }
             Section("Advanced") {
+                Toggle("Keep last recording briefly", isOn: $replayEnabled)
+                    .accessibilityIdentifier("dictation.replayPreference")
+                    .onChange(of: replayEnabled) { _, enabled in if !enabled { RecordingReplay.shared.clear() } }
+                Text("Off by default. Keeps up to the last 60 seconds in memory for five minutes, until your next dictation, or until you leave the app. Audio is never saved or shared.")
+                    .font(.footnote).foregroundStyle(.secondary)
                 DisclosureGroup("Models and Live Activity") {
                     CleanupModelPicker(manager: modelManager)
                     DictationPresencePicker()
@@ -179,11 +190,8 @@ struct SettingsView: View {
             }
             Section("Advanced") {
                 DisclosureGroup("Advanced keyboard options") {
-                    Toggle("Key containers", isOn: Binding(
-                        get: { usesIOSStyling || keyContainersEnabled }, set: { keyContainersEnabled = $0 }
-                    ))
-                        .disabled(usesIOSStyling)
-                        .accessibilityHint("Shows faint backgrounds behind letters and symbols. iOS styling keeps key backgrounds on.")
+                    Toggle("Key containers", isOn: $keyContainersEnabled)
+                        .accessibilityHint("Shows faint backgrounds behind letters and symbols.")
                         .onChange(of: keyContainersEnabled) { _, _ in
                             KeyboardInteractionPreferences.notifyChanged()
                         }
@@ -442,7 +450,7 @@ struct VocabularyView: View {
         } message: {
             Text("This removes your learned words and approved dictation hints.")
         }
-        .alert("Could not add dictation hint", isPresented: Binding(get: { vocabularyError != nil },
+        .alert("Vocabulary", isPresented: Binding(get: { vocabularyError != nil },
             set: { if !$0 { vocabularyError = nil } })) {
                 Button("OK") { vocabularyError = nil }
             } message: { Text(vocabularyError ?? "") }
@@ -460,11 +468,14 @@ struct VocabularyView: View {
     private func addWord() {
         let word = newWord.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty else { return }
-        guard DictationVocabulary.approve(word, in: AppGroup.defaults) else {
-            vocabularyError = "Keep up to 32 dictation hints, each under 65 characters and six words. Line breaks are not allowed."
+        guard DictationVocabulary.isValid(word) else {
+            vocabularyError = "Use up to 64 characters and six words, including letters from any language. Line breaks are not allowed."
             return
         }
-        _ = UserDictionary.shared.learn(word)
+        _ = UserDictionary.shared.learn(word, allowSingleCharacter: true)
+        if !DictationVocabulary.approve(word, in: AppGroup.defaults) {
+            vocabularyError = "Word saved. The 32 dictation hints are full; remove a hint to use this word in dictation too."
+        }
         newWord = ""
         reload()
         KeyboardInteractionPreferences.notifyVocabularyChanged()

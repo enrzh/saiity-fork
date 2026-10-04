@@ -7,6 +7,8 @@ public struct DictationReadiness: Equatable, Sendable {
         case requestMicrophone
         case openSettings
         case retry
+        case models
+        case repairDownload
         case start
     }
 
@@ -38,7 +40,16 @@ public struct DictationReadiness: Equatable, Sendable {
         }
         if let modelLoadFailure, !modelLoadFailure.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            !DictationSessionLivenessPolicy.isActive(status) {
-            self.init(title: "Voice model needs attention", subtitle: modelLoadFailure, symbol: "exclamationmark.triangle", action: .retry)
+            let problem = DictationProblem(modelLoadFailure)
+            let recovery: Action
+            switch problem.action {
+            case .openSettings: recovery = .openSettings
+            case .models: recovery = .models
+            case .repairDownload: recovery = .repairDownload
+            case .retry: recovery = .retry
+            }
+            self.init(title: "Dictation needs attention", subtitle: problem.message, symbol: "exclamationmark.triangle",
+                      action: recovery)
             return
         }
         if modelLoadState == .loading && !DictationSessionLivenessPolicy.isActive(status) {

@@ -12,6 +12,7 @@ struct HomeView: View {
 
     @State private var showCopiedFeedback = false
     @State private var showVoiceOptions = false
+    @ObservedObject private var replay = RecordingReplay.shared
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @State private var recentDictationItems: [RecentDictation] = []
     @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
@@ -51,6 +52,11 @@ struct HomeView: View {
                 }
 
                 readinessPanel
+                if replay.available && coordinator.canChangeSpeechRuntime {
+                    Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay last recording") { replay.toggle() }
+                        .buttonStyle(.plain).frame(minHeight: 44)
+                    if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                }
 
                 Button { showVoiceOptions = true } label: {
                     Label("Voice options", systemImage: "slider.horizontal.3")
@@ -105,7 +111,9 @@ struct HomeView: View {
                 .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .onDisappear { replay.stop() }
         .onAppear {
+            replay.refreshAvailability()
             refreshMicrophonePermission()
             reloadRecentDictations()
         }
@@ -153,6 +161,10 @@ struct HomeView: View {
                 actionRow("Allow microphone", systemImage: "mic.badge.plus")
             }
             .buttonStyle(SaiityPrimaryActionStyle())
+        } else if readiness.action == .models || readiness.action == .repairDownload {
+            NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
+                actionRow("Models & downloads", systemImage: "arrow.down.circle")
+            }.buttonStyle(SaiityPrimaryActionStyle())
         } else if !modelLoadFailure.isEmpty && readiness.action == .retry {
             Button { retryModelLoad() } label: {
                 actionRow("Retry model load", systemImage: "arrow.clockwise")
@@ -173,7 +185,7 @@ struct HomeView: View {
                 Spacer(minLength: 0)
             }
             .frame(minHeight: 44)
-        } else if !modelReady {
+        } else if !modelReady && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
             NavigationLink {
                 ModelManagerView(modelManager: modelManager)
             } label: {
@@ -299,10 +311,9 @@ struct HomeView: View {
     }
 
     private func userFacingError(_ message: String) -> String {
-        message
-            .replacingOccurrences(of: "Dictus", with: "sAiity")
-            .replacingOccurrences(of: "dictus", with: "sAiity")
+        DictationProblem(message).message
     }
+
 }
 
 #Preview {
@@ -321,7 +332,17 @@ struct VoiceOptionsView: View {
     var body: some View {
         List {
             Section("In sAiity") {
-                DictationModelQuickPicker(modelManager: modelManager)
+                DictationModelQuickPicker(scope: .app, modelManager: modelManager)
+                Label(modelManager.isModelReady ? "Ready in sAiity" : "Choose or install a voice model", systemImage: modelManager.isModelReady ? "checkmark.circle" : "arrow.down.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("From your keyboard") {
+                DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
+                Label(modelManager.keyboardModel == nil ? "Keyboard model needed" : "Keyboard model installed", systemImage: modelManager.keyboardModel == nil ? "arrow.down.circle" : "checkmark.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section {
+                SpokenLanguagesPicker(modelManager: modelManager)
             }
             Section {
                 ModelSelectionProfilePicker(modelManager: modelManager)

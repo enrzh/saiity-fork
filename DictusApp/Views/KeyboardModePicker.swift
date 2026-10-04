@@ -32,12 +32,17 @@ struct ModelSelectionProfilePicker: UIViewRepresentable {
 }
 
 struct DictationModelQuickPicker: View {
+    enum Scope { case app, keyboard, both }
+    var scope: Scope = .both
     @ObservedObject var modelManager: ModelManager
     @EnvironmentObject private var coordinator: DictationCoordinator
     @Environment(\.dynamicTypeSize) private var textSize
     @AppStorage(SharedKeys.dictationRealtimeText, store: AppGroup.defaults) private var realtime = false
     private var selectedModel: String {
-        modelManager.activeModel ?? AppGroup.defaults.string(forKey: modelManager.recognizer.modelPreferenceKey)
+        if modelManager.selectionMode == .automatic {
+            return modelManager.activeModel ?? modelManager.initialVoiceModel ?? "unavailable"
+        }
+        return modelManager.activeModel ?? AppGroup.defaults.string(forKey: modelManager.recognizer.modelPreferenceKey)
             ?? modelManager.recognizer.defaultModelIdentifier
     }
     private var models: [ModelInfo] { availableModels(for: modelManager.recognizer) }
@@ -52,6 +57,7 @@ struct DictationModelQuickPicker: View {
     }
     var body: some View {
         Group {
+            if scope != .keyboard {
             if textSize.isAccessibilitySize {
                 recognizerPicker.pickerStyle(.menu)
             } else {
@@ -62,6 +68,7 @@ struct DictationModelQuickPicker: View {
             }
             Picker(modelManager.recognizer == .streaming ? "Streaming model" : "Whisper model",
                    selection: Binding(get: { selectedModel }, set: modelManager.chooseDictationModel)) {
+                if selectedModel == "unavailable" { Text("No compatible recommendation").tag("unavailable") }
                 ForEach(models) { model in
                     Text(textSize.isAccessibilitySize && model.engine == .qwenASR
                          ? model.displayName.replacingOccurrences(of: "Qwen3-ASR", with: "Qwen")
@@ -75,7 +82,10 @@ struct DictationModelQuickPicker: View {
                 Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while sAiity is open; your keyboard uses its own model.")
                     .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            if !modelManager.downloadedModels.contains(selectedModel) {
+            if selectedModel == "unavailable" {
+                Text("No compatible model covers your spoken languages on this iPhone. Change the languages, or select a model manually.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            } else if !modelManager.downloadedModels.contains(selectedModel) {
                 if let progress = modelManager.downloadProgress[selectedModel] {
                     ProgressView("Downloading model", value: Double(progress))
                     Button("Cancel download") { modelManager.cancelCatalogDownload(selectedModel) }
@@ -85,9 +95,16 @@ struct DictationModelQuickPicker: View {
                     }
                 }
                 if case .error(let message) = modelManager.modelStates[selectedModel] {
-                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                    Text(DictationProblem(message, downloading: true).message).font(.footnote).foregroundStyle(.secondary)
                 }
             }
+            let languages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+            if !languages.isEmpty, let model = ModelInfo.forIdentifier(selectedModel), !SpokenLanguagePreferences.accepts(model, languages: languages) {
+                Text("This model does not cover your selected spoken languages. Choose a compatible model or change your language preferences.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            }
+            if scope != .app {
             Picker("Keyboard model", selection: Binding(
                 get: { AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic" },
                 set: modelManager.chooseKeyboardModel)) {
@@ -100,6 +117,7 @@ struct DictationModelQuickPicker: View {
                 "Keyboard dictation uses \($0.displayName), independently of your in-app choice."
             } ?? "Download a Whisper model to enable dictation from your keyboard.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
         .disabled(!coordinator.canChangeSpeechRuntime)
     }
@@ -110,6 +128,46 @@ struct DictationModelQuickPicker: View {
                     .disabled(choice == .streaming && availableModels(for: choice).isEmpty)
             }
         }.accessibilityIdentifier("dictation.recognizer")
+    }
+}
+
+struct SpokenLanguagesPicker: View {
+    @ObservedObject var modelManager: ModelManager
+    @State private var languages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+    @State private var query = ""
+
+    var body: some View {
+        NavigationLink {
+            List {
+                Section {
+                    Button("Broad language support") { update([]) }
+                    Text("Choose every language you speak, including mixed-language dictation. This guides model recommendations without forcing recognition into one language.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("Spoken languages") {
+                    ForEach(SpokenLanguagePreferences.availableCodes.filter {
+                        query.isEmpty || ModelLanguageSupport.localizedLanguageName(for: $0).localizedCaseInsensitiveContains(query)
+                    }, id: \.self) { code in
+                        Toggle(ModelLanguageSupport.localizedLanguageName(for: code), isOn: Binding(
+                            get: { languages.contains(code) }, set: { enabled in
+                                update(enabled ? languages + [code] : languages.filter { $0 != code })
+                            }))
+                    }
+                }
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Language")
+            .navigationTitle("Spoken languages")
+        } label: {
+            LabeledContent("Spoken languages", value: SpokenLanguagePreferences.summary(languages))
+        }
+        .disabled(!DictationCoordinator.shared.canChangeSpeechRuntime)
+        .onAppear { languages = SpokenLanguagePreferences.load(from: AppGroup.defaults) }
+        .accessibilityIdentifier("dictation.spokenLanguages")
+    }
+
+    private func update(_ codes: [String]) {
+        modelManager.setSpokenLanguages(codes)
+        languages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
     }
 }
 
@@ -358,8 +416,6 @@ struct TypingLanguagesPanel: View {
 
 /// Native picker for the keyboard surface material.
 struct KeyboardMaterialPicker: View {
-    @AppStorage(SharedKeys.keyboardIOSStyling, store: AppGroup.defaults)
-    private var usesIOSStyling = false
     @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults)
     private var topBarEnabled = false
     @AppStorage(SharedKeys.liquidGlassEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
@@ -368,19 +424,10 @@ struct KeyboardMaterialPicker: View {
     private var insetEnabled = true
 
     var body: some View {
-        Toggle("Use iOS styling", isOn: $usesIOSStyling)
-            .accessibilityIdentifier("keyboard-ios-styling-setting")
-            .accessibilityHint("Uses familiar opaque key faces and hides the top bar. Local dictation remains available.")
-            .onChange(of: usesIOSStyling) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-        Toggle("Show top bar", isOn: Binding(
-            get: { !usesIOSStyling && topBarEnabled }, set: { topBarEnabled = $0 }
-        ))
-            .disabled(usesIOSStyling)
+        Toggle("Show top bar", isOn: $topBarEnabled)
             .accessibilityIdentifier("keyboard-top-bar-setting")
-            .accessibilityHint(usesIOSStyling ? "Hidden while iOS styling is selected. Your preference is retained."
-                : "Shows More, dictation power and the dictation board shortcut above typing pages.")
+            .accessibilityHint("Shows More, dictation power and the dictation board shortcut above typing pages.")
             .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-        if !usesIOSStyling {
             Picker("Keyboard material", selection: $liquidGlassEnabled) {
                 Text("Liquid Glass").tag(true)
                 Text("Solid").tag(false)
@@ -392,7 +439,6 @@ struct KeyboardMaterialPicker: View {
             Toggle("Keyboard inset", isOn: $insetEnabled)
                 .accessibilityHint("Shows the shared background behind every keyboard page and its bottom bar, in either material.")
                 .onChange(of: insetEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-        }
     }
 }
 
@@ -436,7 +482,7 @@ struct KeyPopupPicker: View {
             }
         }
         .onAppear { selection = KeyPopupMode.active }
-        .accessibilityHint("Choose off, popup above the key, or popout from the key.")
+        .accessibilityHint("Choose off, popup, popout, or a brief flash of the tapped key container.")
     }
 
     private var selectionBinding: Binding<KeyPopupMode> {

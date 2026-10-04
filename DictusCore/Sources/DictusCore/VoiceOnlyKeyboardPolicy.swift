@@ -306,10 +306,9 @@ public enum VoiceOnlyKeyboardPolicy {
     /// On/off control at the top left of the dictation board.
     public static let dictationToggleWidth: Double = 58
     public static let dictationToggleHeight: Double = 28
-    /// Bottom-row faces match character plates. Keep the shared 4pt inset on
-    /// either side by growing the hit lane, rather than shrinking the glyph rows.
+    /// Bottom-row faces retain the 45pt character height inside a 54pt row lane.
     public static let bottomBarVisualHeight: Double = Double(letterKeyHeight)
-    public static let spacebarHeight: Double = bottomBarVisualHeight + Double(commandVisualInset)
+    public static let spacebarHeight: Double = 54
     /// Circular compact faces fill their horizontal targets; the taller lane
     /// keeps vertical breathing room and the shared Space/Return alignment.
     public static let bottomBarControlWidth: Double = bottomBarVisualHeight
@@ -322,7 +321,7 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let controlEdgeInset: Double = 12
     public static let visibleControlGap: Double = 8
     /// Padding between the bottom chrome row and the glass surface edge (native keyboard breathing room).
-    public static let chromeBottomInset: Double = 6
+    public static let chromeBottomInset: Double = 2
     /// Native portrait reference geometry shared by letter, number and symbol
     /// pages. Keeping these values in one place prevents an older compact grid
     /// from reappearing through a secondary layout path.

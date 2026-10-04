@@ -174,7 +174,7 @@ struct KeyPressPreviewHost: View {
     @ViewBuilder
     private func previewView(_ preview: KeyPreviewSession) -> some View {
         switch KeyPopupMode.active {
-        case .off:
+        case .off, .flash:
             EmptyView()
         case .popup:
             KeyPreviewPopup(text: preview.text, cornerRadius: preview.cornerRadius)
@@ -193,7 +193,7 @@ struct KeyPressPreviewHost: View {
 
     static func frame(for source: CGRect, in bounds: CGSize, topOverflow: CGFloat = 0) -> CGRect {
         switch KeyPopupMode.active {
-        case .off:
+        case .off, .flash:
             return .zero
         case .popup:
             return KeyPreviewPopup.frame(for: source, in: bounds, topOverflow: topOverflow)

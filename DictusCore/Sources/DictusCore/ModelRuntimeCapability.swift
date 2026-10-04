@@ -97,7 +97,8 @@ extension ModelInfo {
         for requestedIdentifier: String?,
         installedIdentifiers: Set<String>,
         osMajor: Int,
-        capabilities: DeviceCapabilities
+        capabilities: DeviceCapabilities,
+        fallbackLanguages: [String]? = nil
     ) -> ModelRuntimeResolution {
         guard let requestedIdentifier else {
             return ModelRuntimeResolution(
@@ -157,6 +158,7 @@ extension ModelInfo {
         for candidate in candidates where candidate != requestedIdentifier {
             guard let model = forIdentifier(candidate),
                   installedIdentifiers.contains(candidate),
+                  fallbackLanguages.map({ SpokenLanguagePreferences.accepts(model, languages: $0) }) ?? true,
                   model.isRuntimeAvailable(onOSMajor: osMajor, capabilities: capabilities) else {
                 continue
             }

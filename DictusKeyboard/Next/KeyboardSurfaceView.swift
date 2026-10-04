@@ -16,7 +16,9 @@ final class KeyboardSurfaceView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .clear
+        // Remote keyboard hit regions need a painted native owner even when
+        // the optional inset and passive SwiftUI category face are absent.
+        backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.02)
         isHidden = true
         addSubview(emoji)
         addSubview(bottomBar)
@@ -197,7 +199,7 @@ final class KeyboardPeriodKeyView: UIView {
             cancelInteraction()
         }
         let size = CGSize(width: min(bounds.width, VoiceOnlyKeyboardPolicy.periodKeyPlateWidth),
-                          height: VoiceOnlyKeyboardPolicy.commandVisualSize(for: bounds.size).height)
+                          height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
         plate.frame = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                              width: size.width, height: size.height)
         control.frame = bounds
@@ -226,8 +228,11 @@ final class KeyboardPeriodKeyView: UIView {
         PersistentLog.log(.keyboardPeriodKeyProbe(details: "began native=true frame=\(frame)"))
         HapticFeedback.playInputClick()
         onInsert?(".")
+        if KeyboardInteractionPreferences.keyPopupMode == .flash {
+            control.flashKeyboardKey(in: plate.frame, cornerRadius: KeyboardChromeRole.keyCornerRadius)
+        }
         let container = window ?? superview
-        if KeyboardInteractionPreferences.keyPopupMode != .off, let container {
+        if KeyboardInteractionPreferences.keyPopupMode.showsPreview, let container {
             let source = convert(bounds, to: container)
             let session = KeyPreviewSession(text: ".", sourceFrame: source,
                 popupFrame: KeyPressPreviewHost.frame(for: source, in: container.bounds.size))
@@ -291,6 +296,7 @@ final class KeyboardPeriodKeyView: UIView {
     }
 
     func cancelInteraction() {
+        control.clearKeyboardKeyFlashes()
         control.cancelInteraction()
         finish(cancelled: true)
     }

@@ -16,6 +16,15 @@ import ObjectiveC
 import DictusCore
 @testable import DictusKeyboard
 
+final class VocabularyProxy: UITextView, UITextDocumentProxy {
+    let documentIdentifier = UUID()
+    var documentContextBeforeInput: String? { text }
+    var documentContextAfterInput: String? { "" }
+    var selectedText: String? { nil }
+    var documentInputMode: UITextInputMode? { textInputMode }
+    func adjustTextPosition(byCharacterOffset offset: Int) {}
+}
+
 // A real ObjC nil return exercises the SDK's misleading non-optional UUID bridge.
 final class HostIdentityProbe: NSObject {
     var identifier: NSUUID?
@@ -199,9 +208,9 @@ if !\(baseline) {
             precondition(!inset.isHidden && inset.frame == layout.surfaceFrame)
             if [.letters, .panel, .emoji].contains(mode) {
                 let bar = surface.bottomBar
-                precondition(bar.frame.height == 53, "Shared bottom-row hit lane is still compact")
+                precondition(bar.frame.height == 54, "Shared bottom-row hit lane must match the native 54pt row")
                 for control in [bar.firstControl, bar.secondControl, bar.returnControl, bar.spaceControl] as [UIControl] {
-                    precondition(control.frame.height == 53 && bar.bounds.contains(control.frame))
+                    precondition(control.frame.height == 54 && bar.bounds.contains(control.frame))
                     control.keyboardFace.layoutIfNeeded()
                     let plate = control.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
                     precondition(plate.frame.height == 45, "Bottom face must match character height")
@@ -552,6 +561,9 @@ if !\(baseline) {
     }
     let controller = KeyboardViewController()
     controller.loadViewIfNeeded()
+    precondition(controller.view === controller.inputView && controller.inputView is KeyboardInputView,
+                 "UIKit retained its default root instead of sAiity's native input view")
+    controller.loadViewIfNeeded()
     controller.view.frame = CGRect(x: 0, y: 0, width: 402, height: 300)
     controller.inputView?.frame = controller.view.frame
     controller.viewWillAppear(false)
@@ -646,6 +658,10 @@ if !\(baseline) {
                 }
                 precondition(pager.isScrollEnabled && pager.panGestureRecognizer.isEnabled
                              && pager.panGestureRecognizer.view === pager)
+                precondition((pager.backgroundColor?.cgColor.alpha ?? 0) > 0.01,
+                             "Inset-off Emoji must keep its remote touch canvas painted")
+                precondition(inset || pager.layer.cornerRadius == 0,
+                             "Inset-off Emoji clips its blank corner touch canvas")
                 let blankFinger = Finger()
                 blankFinger.point = CGPoint(x: pager.bounds.midX, y: pager.bounds.midY)
                 precondition(pager.gestureRecognizer(pager.panGestureRecognizer, shouldReceive: blankFinger),
@@ -673,6 +689,65 @@ if !\(baseline) {
     controller.view.frame = CGRect(x: 0, y: 0, width: 402, height: 300)
     controller.inputView?.frame = controller.view.frame
     print("PASS: window-level Emoji taps, blank/empty Recents pan routing and inset transitions in both materials and orientations")
+
+    do {
+        let storedPopup = defaults.object(forKey: SharedKeys.keyPopupMode)
+        let savedDictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed", "dictus.userDictionary.prunedTrieDuplicates"]
+        let savedDictionary = savedDictionaryKeys.map { defaults.object(forKey: $0) }
+        let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
+        defer {
+            if let storedPopup { defaults.set(storedPopup, forKey: SharedKeys.keyPopupMode) }
+            else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
+            if let storedAutocorrect { defaults.set(storedAutocorrect, forKey: SharedKeys.autocorrectEnabled) }
+            else { defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
+            for (key, value) in zip(savedDictionaryKeys, savedDictionary) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+            UserDictionary.shared.reload()
+        }
+        defaults.set(KeyPopupMode.flash.rawValue, forKey: SharedKeys.keyPopupMode)
+        KeyboardState.shared.presentArea(.letters)
+        controller.viewDidLayoutSubviews()
+        let liveGrid = (controller.inputView as! KeyboardInputView).nativeTouchOwners.compactMap { $0 as? KeyGridView }.first!
+        let key = liveGrid.layout.placed.first { $0.key.resolvedLabel == "q" }!
+        let finger = Finger()
+        finger.point = CGPoint(x: key.plate.midX, y: key.plate.midY)
+        liveGrid.touchesBegan([finger], with: nil)
+        precondition(liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
+                     "Flash mode did not pulse the pressed key")
+        waitFor({ !liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" } },
+                message: "A held key kept flashing")
+        liveGrid.touchesEnded([finger], with: nil)
+        liveGrid.touchesBegan([finger], with: nil)
+        liveGrid.reset()
+        precondition(!liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
+                     "Cancelled/page-switched key retained a flash")
+        precondition(!KeyPopupMode.flash.showsPreview)
+
+        defaults.set(false, forKey: SharedKeys.autocorrectEnabled)
+        let suggestions = SuggestionState.shared
+        suggestions.clear()
+        defer { suggestions.clear() }
+        let proxy = VocabularyProxy()
+        for word in ["暮雪词汇", "françaiszeta", "Münchenzeta", "한국말이름"] {
+            UserDictionary.shared.forget(word)
+            for _ in 0..<2 {
+                proxy.text = word
+                suggestions.handleSpace(proxy: proxy)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+                precondition(proxy.text == word + " ", "Learning rewrote multilingual typing")
+            }
+            precondition(UserDictionary.shared.isLearned(word), "Language or disabled autocorrect prevented learning")
+        }
+        proxy.isSecureTextEntry = true
+        for _ in 0..<2 {
+            proxy.text = "privatefixtureword"
+            suggestions.handleSpace(proxy: proxy)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+        }
+        precondition(!UserDictionary.shared.isLearned("privatefixtureword"), "Secure text entered vocabulary")
+        print("PASS: one-shot key flash, cancellation, Unicode vocabulary with autocorrect off and secure-field exclusion")
+    }
     for native in [false, true] {
         defaults.set(native, forKey: SharedKeys.keyboardIOSStyling)
         defaults.set(false, forKey: SharedKeys.keyboardTopBarEnabled)
@@ -811,7 +886,7 @@ if !\(baseline) {
     defaults.set(true, forKey: SharedKeys.keyboardTopBarEnabled)
     KeyboardState.shared.presentArea(.keys)
     controller.viewDidLayoutSubviews()
-    print("PASS: minimal/iOS styling, hidden top bar, unchanged 45pt plates, tap/hold/release/cancellation and board return")
+    print("PASS: retired style preference is ignored; hidden top bar, unchanged 45pt plates, tap/hold/release/cancellation and board return")
     let savedService = defaults.object(forKey: SharedKeys.serviceEnabled)
     defer {
         if let savedService { defaults.set(savedService, forKey: SharedKeys.serviceEnabled) }

@@ -117,6 +117,9 @@ public enum SharedKeys {
     public static let hapticIntensity = "dictus.hapticIntensity"
     public static let keyboardHoldSpeed = "dictus.keyboardHoldSpeed"
     public static let modelSelectionProfile = "dictus.modelSelectionProfile"
+    public static let spokenLanguages = "dictus.spokenLanguages"
+    public static let onboardingUsage = "dictus.onboardingUsage"
+    public static let recordingReplayEnabled = "dictus.recordingReplayEnabled"
     public static let dictationRecognizer = "dictus.dictationRecognizer"
     public static let dictationStreamingModel = "dictus.dictationStreamingModel"
     public static let dictationWhisperModel = "dictus.dictationWhisperModel"
@@ -127,11 +130,12 @@ public enum SharedKeys {
     public static let disabledKeyVariants = "dictus.disabledKeyVariants"
     public static let defaultEmojiSkinTone = "dictus.defaultEmojiSkinTone"
     public static let keyboardInsetEnabled = "dictus.keyboardInsetEnabled"
+    /// Retired styling preference. Kept for compatibility; current keyboards ignore it.
     public static let keyboardIOSStyling = "dictus.keyboardIOSStyling"
     public static let keyboardTopBarEnabled = "dictus.keyboardTopBarEnabled"
     /// Whether long-press alternate-character popups are enabled, default true
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
-    /// Off / popup-above-key / popout-from-key. Migrates from `keyPopupsEnabled`.
+    /// Off / popup / popout / one-shot key flash. Migrates from `keyPopupsEnabled`.
     public static let keyPopupMode = "dictus.keyPopupMode"
 
     /// Enable/disable adaptive hit-target prediction (default: on).
