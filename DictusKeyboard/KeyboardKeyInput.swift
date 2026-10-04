@@ -169,7 +169,7 @@ final class KeyboardNativeControlFace: UIView {
 
     func refreshAppearance() {
         // A flat service face avoids glass's persistent halo after release.
-        let next: Material = role == .accessory || (tint != nil && !isPrimary) || !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
+        let next: Material = role != .board || (tint != nil && !isPrimary) || !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
             : UIAccessibility.isDarkerSystemColorsEnabled ? .contrast
             : UIAccessibility.isReduceTransparencyEnabled ? .reduced : .glass
         if material != next {
@@ -194,7 +194,7 @@ final class KeyboardNativeControlFace: UIView {
         let rect = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                           width: size.width, height: size.height)
         plate.frame = rect
-        plate.layer.cornerRadius = radius
+        plate.layer.cornerRadius = role == .board || isPrimary ? radius : KeyboardChromeRole.commandCornerRadius
         if isPrimary, !image.isHidden, !label.isHidden {
             // A passive voice mark and readable action label keep the
             // 54pt hold target unchanged, including cancel and app recovery.
@@ -592,6 +592,8 @@ final class KeyboardKeyTouchControl: UIControl {
     var onMoved: ((CGPoint) -> Void)?
     var onEnded: ((Bool) -> Void)?
     var onHold: (() -> Void)?
+    /// A short release action for keys that also have a hold shortcut.
+    var onTap: (() -> Void)?
     /// Sink for a sibling SwiftUI face. See `KeyboardPressState`.
     var pressState: KeyboardPressState?
 
@@ -605,6 +607,46 @@ final class KeyboardKeyTouchControl: UIControl {
     private var activeMove: ((CGPoint) -> Void)?
     private var activeEnd: ((Bool) -> Void)?
     private var activeHold: (() -> Void)?
+    private var activeTap: (() -> Void)?
+    private var pageSwitchFrame: CGRect?
+
+    override var frame: CGRect {
+        didSet {
+            if pageSwitchFrame != nil, frame != oldValue { cancelInteraction() }
+        }
+    }
+
+    override var bounds: CGRect {
+        didSet {
+            if pageSwitchFrame != nil, bounds != oldValue { cancelInteraction() }
+        }
+    }
+
+    func configurePageSwitch(tap: @escaping () -> Void, hold: @escaping () -> Void,
+                             holdLabel: String) {
+        holdDuration = KeyboardDeletion.holdRecognitionDuration
+        onBegan = { _ in HapticFeedback.playInputClick() }
+        onTap = tap
+        onHold = { [weak self] in
+            guard let self else { return }
+            guard self.pageSwitchFrame == nil || self.pageSwitchFrame == self.convert(self.bounds, to: nil) else {
+                self.cancelInteraction()
+                return
+            }
+            HapticFeedback.variantHighlightChanged()
+            hold()
+        }
+        onMoved = { [weak self] point in
+            guard let self, !self.bounds.contains(point) else { return }
+            self.cancelInteraction()
+        }
+        accessibilityHint = "Touch and hold to " + holdLabel.lowercased() + "."
+        accessibilityCustomActions = [UIAccessibilityCustomAction(name: holdLabel) { [weak self] _ in
+            guard let self, !self.isHidden, self.isEnabled else { return false }
+            self.onHold?()
+            return true
+        }]
+    }
     private var activeHoldDuration: TimeInterval?
     private let holdSession = KeyboardHoldSession()
     private var holdRecognized = false
@@ -635,6 +677,7 @@ final class KeyboardKeyTouchControl: UIControl {
     }
 
     override func accessibilityActivate() -> Bool {
+        if let onTap { HapticFeedback.playInputClick(); onTap(); return true }
         guard let onBegan else { return false }
         onBegan(CGPoint(x: bounds.midX, y: bounds.midY))
         onEnded?(false)
@@ -652,6 +695,8 @@ final class KeyboardKeyTouchControl: UIControl {
             activeMove = onMoved
             activeEnd = onEnded
             activeHold = onHold
+            activeTap = onTap
+            pageSwitchFrame = onTap == nil ? nil : convert(bounds, to: nil)
             activeHoldDuration = holdDuration.flatMap { $0 > 0 ? $0 : nil }
             holdRecognized = false
             isHighlighted = true
@@ -733,15 +778,20 @@ final class KeyboardKeyTouchControl: UIControl {
     private func finish(cancelled: Bool) {
         holdSession.cancel()
         let end = activeEnd
+        let unchangedFrame = pageSwitchFrame == nil || pageSwitchFrame == convert(bounds, to: nil)
+        let tap = !cancelled && !holdRecognized && unchangedFrame ? activeTap : nil
         let shouldEnd = activeHoldDuration == nil || holdRecognized
         activeTouches.removeAll()
         primaryTouchID = nil
         activeMove = nil
         activeEnd = nil
         activeHold = nil
+        activeTap = nil
+        pageSwitchFrame = nil
         activeHoldDuration = nil
         holdRecognized = false
         isHighlighted = false
+        tap?()
         if shouldEnd { end?(cancelled) }
     }
 

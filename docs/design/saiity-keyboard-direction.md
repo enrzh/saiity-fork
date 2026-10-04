@@ -284,6 +284,95 @@ matrices. Logs: `/tmp/saiity-keyboard-design.Qnx1D2/command-width-{core-tests,na
 Physical feel and system Glass compositing remain separate device checks.
 No commit, push, release change, upload, recording or model download occurred.
 
+### Emoji touch ownership with inset disabled — October 4
+
+The reported phone-only failure was not reproduced in the original window-level
+fixture. The active Emoji owner nevertheless had a transparent UIView around its
+collection. That wrapper is removed: `EmojiPagerView` is now the collection view
+itself, so its full rectangle and native pan recognizer share one owner even when
+the optional inset is hidden. Existing blank-space routing, hold arbitration,
+momentum, category navigation and Delete priority remain in the shared collection.
+
+The production native harness passes through the full window/input hierarchy at
+320/402pt portrait and 667/852pt landscape, in both materials, repeatedly toggling
+the inset and refreshing preferences. It checks blank margins, empty Recents,
+pan eligibility, emoji hit recipients and accessibility insertion callbacks.
+The headless fixture does not prove physical touch/swipe delivery. Sixty focused
+Core tests, Debug and signed Release builds and strict signatures pass. Sixteen
+Emoji renders preserve prior control geometry; representative renders were
+reviewed. The development app is installed on isolated QA. Physical confirmation
+of the reported inset-off failure remains open.
+
+Captures: `saiity-emoji-inset-touch/` beside the existing matrices. Logs:
+`/tmp/saiity-keyboard-design.Qnx1D2/emoji-inset-{core-tests,native-input,simulator-build,device-build,render}.log`.
+No recording, model download, commit, push or TestFlight upload occurred.
+
+### Flat minimal style, iOS option and bottom-left holds — October 4
+
+The accepted follow-up makes minimal the default: faint neutral character and
+Space faces, unboxed commands, and no top accessory bar on typing pages. Existing
+45pt portrait character plates, bottom-row touch frames, horizontal gaps, cursor
+tracking and hold/repeat owners remain. Both styles use the same native input
+components. Liquid Glass is limited to the shared background and popup surfaces;
+ordinary key faces stay flat. Popups retain a readable dedicated background,
+including the opaque accessibility fallback. Minimal command/key corners are 8pt;
+the iOS-inspired option uses 5pt corners and opaque adaptive key/control fills.
+The option styles sAiity's keyboard; it does not select Apple's system keyboard.
+
+Settings now offer **Use iOS styling** and **Show top bar**. The bar defaults off.
+iOS styling resolves it off and shows a disabled Off switch while preserving its
+stored choice; returning to minimal restores that choice. Existing material,
+inset and container choices are retained and overridden only while iOS styling
+is selected. The active top lane contains More/power/voice accessories; this
+change does not revive the unused prediction-bar renderer or disable autocorrect.
+Power, More and recovery remain available on the dictation board.
+
+Hiding the lane removes 32pt from the window budget instead of leaving a blank
+strip or shrinking portrait keys. The window budget is shared across pages.
+Compact landscape uses the single bottom-row budget rather than the old two-row
+rail threshold, retaining Space, Return and page switches on 158pt surfaces.
+
+The shared bottom-left 123/ABC control resolves ordinary taps on release. A hold
+opens the dictation board; on that board, holding 123 returns to letters. A hold
+produces one selection confirmation and consumes the release. Cancellation,
+moving outside, page changes and teardown cancel the existing hold session.
+VoiceOver custom actions expose the same destinations, and Keyboard settings
+explain the shortcut. No shortcut automatically enables dictation or records.
+The numeric pad's ABC key uses the same tap/hold control. Decimal/phone-style
+pads also retain a plain voice mark in the unused portion of Delete's wide cell
+when the top bar is hidden. It opens the board without moving digits, replacing
+decimal/phone variants or intercepting Delete's visible face. Resizing a held
+page key cancels navigation; cached controls reload the chosen hold speed.
+
+Verification: the final full Core suite passed 1,893 tests with one existing skip.
+The focused geometry/policy and popup/appearance contracts also pass. The native
+input harness passes both styles, normal taps, holds, release suppression,
+cancellation, 45pt portrait plates, compact landscape recipients, emoji blank
+areas, inset transitions, repeats, cursor behavior and service actions. Opaque
+text contrast measures at least 5.60:1 on the fixture backgrounds in both styles,
+light/dark and increased contrast; that does not establish system Glass contrast.
+Debug and signed Release builds and strict signatures pass. The final development
+app is installed on isolated QA. 160 renders per style and 64 large-text renders
+cover the presentation; typing-page plate/target/control frames match between
+styles. Representative portrait, landscape and large-text layouts were reviewed.
+Simulator Settings taps verified iOS On makes the top bar Off/disabled, then
+returning to minimal restores its saved On choice; QA was reset to minimal/bar
+Off afterward. Style-specific material/inset settings hide while iOS styling is
+active, and disabled container controls display the effective value.
+System-host rendering, phone touch/haptic feel and physical gesture parity remain
+device gates. No room audio, model download, commit, push or upload occurred.
+
+Captures: `saiity-minimal-style/`, `saiity-ios-style/` and
+`saiity-minimal-style-large/` under the existing visualization directory. Logs:
+`/tmp/saiity-keyboard-design.Qnx1D2/minimal-style-{core-tests,final-contracts,native-input,simulator-build,device-build,render,large-render}.log`
+and `ios-style-render.log`.
+Numeric follow-up captures are in `saiity-minimal-keypad/` and
+`saiity-ios-keypad/`, with `minimal-keypad-render.log` and
+`ios-keypad-render.log` beside the other logs.
+There are 48 numeric/decimal/phone renders per style; their plate, target and
+control frames match. Final native tests cover numeric ABC tap/hold/release,
+numeric voice activation and Delete's separate recipient in both styles.
+
 ## Design references
 
 Apple Design's locally saved HIG references informed the platform requirements:

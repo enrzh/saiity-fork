@@ -8,15 +8,24 @@ enum KeyboardChromeRole {
     case control
     case board
     case accessory
+    case popup
 
     static var secondaryForeground: UIColor { .label.withAlphaComponent(0.72) }
+    static var keyCornerRadius: CGFloat { KeyboardInteractionPreferences.usesIOSStyling ? 5 : 8 }
+    static var commandCornerRadius: CGFloat { KeyboardInteractionPreferences.usesIOSStyling ? 5 : 8 }
 
     func solidFill(increasedContrast: Bool = false) -> UIColor {
+        let native = KeyboardInteractionPreferences.usesIOSStyling
         switch self {
-        case .input: return .tertiarySystemBackground
+        case .input:
+            if increasedContrast { return .tertiarySystemBackground }
+            return native ? UIColor { traits in
+                traits.userInterfaceStyle == .dark ? UIColor.systemGray3.resolvedColor(with: traits) : .white
+            } : UIColor.label.withAlphaComponent(0.035)
         case .accessory: return .clear
-        case .control: return increasedContrast ? .tertiarySystemBackground : .tertiarySystemFill
-        case .board: return increasedContrast ? .secondarySystemBackground : .tertiarySystemFill
+        case .control: return native ? .systemGray4 : increasedContrast ? .secondarySystemBackground : .clear
+        case .board: return native ? .systemGray5 : .secondarySystemBackground
+        case .popup: return .tertiarySystemBackground
         }
     }
 }
@@ -52,7 +61,7 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     private func plate<Plate: View>(_ content: Plate) -> some View {
         if role == .accessory {
             content.allowsHitTesting(false)
-        } else if !liquidGlassEnabled {
+        } else if !liquidGlassEnabled || (role != .board && role != .popup) {
             if role == .board {
                 content.allowsHitTesting(false)
             } else {
@@ -200,7 +209,7 @@ struct CommandKeyFace: View {
             maxHeight: plateHeight
         )
         .background {
-            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: KeyboardChromeRole.commandCornerRadius, style: .continuous)
             if accented { shape.fill(Color.saiityAction).allowsHitTesting(false) }
             else { Color.clear.keyboardGlass(in: shape, interactive: false, role: role) }
         }

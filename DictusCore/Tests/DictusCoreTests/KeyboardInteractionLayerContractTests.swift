@@ -4,7 +4,7 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
     func testMaterialChangesAreExplicitInputsToEveryNativeVisualHost() throws {
         let style = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         XCTAssertTrue(style.contains("@Environment(\\.keyboardLiquidGlassEnabled)"))
-        XCTAssertTrue(style.contains("if !liquidGlassEnabled {"))
+        XCTAssertTrue(style.contains("if !liquidGlassEnabled || (role != .board && role != .popup) {"))
         for path in ["DictusKeyboard/Next/KeyboardSurfaceView.swift",
                      "DictusKeyboard/Next/NextKeyboardHost.swift",
                      "DictusKeyboard/Views/KeyVariantPopup.swift"] {
@@ -202,8 +202,8 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
         XCTAssertFalse(root.contains("KeyboardNativeOverlay("))
         XCTAssertTrue(surface.contains("for owner in [emojiDelete, bottomBar, emoji, emojiCategory]"))
         XCTAssertFalse(surface.contains("super.hitTest(point, with: event)"))
-        XCTAssertTrue(picker.contains("final class EmojiPagerView: UIView"))
-        XCTAssertTrue(picker.contains("collection.dataSource = coordinator"))
+        XCTAssertTrue(picker.contains("final class EmojiPagerView: EmojiPagerCollectionView"))
+        XCTAssertTrue(picker.contains("dataSource = coordinator"))
         XCTAssertTrue(picker.contains("KeyboardNativeSurfaceHost(surface: view, requiredMode: .emoji)"))
         XCTAssertTrue(picker.contains("host.surface.cancelVariantSelection()"))
         XCTAssertTrue(picker.contains("scrollViewDidEndDragging("),

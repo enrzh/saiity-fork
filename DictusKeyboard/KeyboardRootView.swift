@@ -29,7 +29,8 @@ struct KeyboardRootView: View {
                 for: proxy.size.width,
                 surfaceHeight: Double(surfaceHeight),
                 controlOrder: KeyboardAccessoryOrder.current,
-                topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+                topAccessoryHeight: KeyboardInteractionPreferences.topBarHeight(for: state.areaMode),
+                compactChrome: !KeyboardInteractionPreferences.topBarEnabled
             )
             let surfaceFrame = layout.surfaceFrame
             ZStack(alignment: .topLeading) {

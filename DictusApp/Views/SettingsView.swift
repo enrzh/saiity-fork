@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
     @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.default.rawValue
     @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = true
+    @AppStorage(SharedKeys.keyboardIOSStyling, store: AppGroup.defaults) private var usesIOSStyling = false
     @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var autocorrectEnabled = true
     @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var adaptiveHitPredictionEnabled = true
     @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
@@ -172,11 +173,17 @@ struct SettingsView: View {
             Section("Press and hold") {
                 NavigationLink("Emoji & key variants") { KeyboardHoldOptionsView() }
                     .accessibilityIdentifier("settings.keyboard.variants")
+                Text("Hold the bottom-left 123 or ABC key to open dictation. On the dictation board, hold 123 to return to letters. A quick tap still switches letters and symbols.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Section("Advanced") {
                 DisclosureGroup("Advanced keyboard options") {
-                    Toggle("Key containers", isOn: $keyContainersEnabled)
-                        .accessibilityHint("Draws plates behind character rows. The bottom bar, including Period, always keeps its plates.")
+                    Toggle("Key containers", isOn: Binding(
+                        get: { usesIOSStyling || keyContainersEnabled }, set: { keyContainersEnabled = $0 }
+                    ))
+                        .disabled(usesIOSStyling)
+                        .accessibilityHint("Shows faint backgrounds behind letters and symbols. iOS styling keeps key backgrounds on.")
                         .onChange(of: keyContainersEnabled) { _, _ in
                             KeyboardInteractionPreferences.notifyChanged()
                         }

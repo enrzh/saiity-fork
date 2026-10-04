@@ -39,7 +39,7 @@ struct KeyVariantPopup: View {
         .keyboardGlass(
             in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
             interactive: false,
-            role: .input
+            role: .popup
         )
         // Selection changes arrive for every movement sample. Keep the popup
         // visually stable instead of animating/rebuilding during the drag.
@@ -114,7 +114,7 @@ struct KeyPreviewPopup: View {
             .keyboardGlass(
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
                 interactive: false,
-                role: .input
+                role: .popup
             )
             .transaction { transaction in
                 transaction.animation = nil
@@ -221,7 +221,7 @@ struct KeyPopoutPreview: View {
             .keyboardGlass(
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
                 interactive: false,
-                role: .input
+                role: .popup
             )
             // The host reserves the expanded bounds. Start at the pressed-key
             // size inside that frame, then grow to the frame itself so the

@@ -932,12 +932,16 @@ public enum VoiceOnlyKeyboardPolicy {
         for availableWidth: Double,
         surfaceHeight: Double = VoiceOnlyKeyboardPolicy.surfaceHeight,
         controlOrder: KeyboardAccessoryOrder = .emojiFirst,
-        topAccessoryHeight: Double = 0
+        topAccessoryHeight: Double = 0,
+        compactChrome: Bool = false
     ) -> Layout {
         let resolvedSurfaceHeight = max(0, surfaceHeight)
         let leftWidth = CGFloat(controlSize * Double(leftRailControlCount) + railSpacing * Double(leftRailControlCount - 1))
         let rightWidth = actionHitSize.width
-        let minimumRailHeight = verticalPadding * 2 + visibleControlGap * 2 + rightRailHeight + spacebarHeight
+        // Compact keyboards use a single bottom row, not the legacy two-row rail.
+        let minimumRailHeight = compactChrome
+            ? verticalPadding * 2 + primaryControlSize + visibleControlGap + spacebarHeight
+            : verticalPadding * 2 + visibleControlGap * 2 + rightRailHeight + spacebarHeight
         let hasRails = availableWidth >= Double(leftWidth + rightWidth) + minimumCenterAreaWidth + horizontalPadding * 2
             && resolvedSurfaceHeight >= minimumRailHeight
         // Keep the same outer inset on both the visual center region and the UIKit

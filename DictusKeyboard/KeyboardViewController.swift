@@ -123,7 +123,7 @@ class KeyboardViewController: UIInputViewController,
     /// instance, so a stale controller can only ever revoke its own.
     private var keyboardModeButton: UIButton?
     private var emojiButton: UIButton?
-    private var numberButton: UIButton?
+    private var numberButton: KeyboardKeyTouchControl?
     private var returnButton: UIButton?
     private var voiceBoardButton: UIButton?
     private var moreButton: UIButton?
@@ -155,6 +155,7 @@ class KeyboardViewController: UIInputViewController,
 
     private var lastLayoutSize: CGSize?
     private var lastLayoutHeight: CGFloat?
+    private var lastWindowAccessoryHeight: CGFloat?
     private var lastLayoutMode: KeyboardAreaMode?
     private var lastLayoutAccessoryOrder: KeyboardAccessoryOrder?
     private var lastTypingLanguage: SupportedLanguage?
@@ -586,6 +587,7 @@ class KeyboardViewController: UIInputViewController,
             .sink { [weak self] _ in
                 guard let self, self.isAttached, self.isOnScreen else { return }
                 KeyboardVariantPreferences.reload()
+                self.lastLayoutSize = nil
                 self.nextKeyboardHost?.refreshKeyLayout()
                 self.refreshVisibleKeyboardLayoutIfNeeded()
                 self.nextKeyboardHost?.refreshAppearance()
@@ -1087,7 +1089,7 @@ class KeyboardViewController: UIInputViewController,
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         let nativeHeight = computeNativeKeyboardHeight()
         let previousMode = lastLayoutMode ?? mode
-        let previousAccessoryHeight = CGFloat(keyboardWindowAccessoryHeight(for: previousMode))
+        let previousAccessoryHeight = lastWindowAccessoryHeight ?? CGFloat(keyboardWindowAccessoryHeight(for: previousMode))
         let observedInputViewHeight = inputView?.bounds.height ?? 0
         let inputViewHeight = max(0, observedInputViewHeight - previousAccessoryHeight)
         let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
@@ -1393,11 +1395,11 @@ class KeyboardViewController: UIInputViewController,
     // MARK: - UIKit action controls
 
     private func suggestionLaneHeight(for mode: KeyboardAreaMode) -> Double {
-        VoiceOnlyKeyboardPolicy.suggestionLaneHeight
+        KeyboardInteractionPreferences.topBarHeight(for: mode)
     }
 
     private func keyboardWindowAccessoryHeight(for mode: KeyboardAreaMode) -> Double {
-        VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight
+        KeyboardInteractionPreferences.windowAccessoryHeight
     }
 
     private var currentSuggestionLaneHeight: Double {
@@ -1470,6 +1472,7 @@ class KeyboardViewController: UIInputViewController,
         surface.bottomBar.onNumbers = { KeyboardState.shared.presentNumbersArea() }
         surface.bottomBar.onLetters = { KeyboardState.shared.presentArea(.letters) }
         surface.bottomBar.onEmoji = { KeyboardState.shared.presentArea(.emoji) }
+        surface.bottomBar.onDictation = { KeyboardState.shared.presentArea(.keys) }
         surface.bottomBar.onInsert = { [weak self] in self?.routeProxyText($0) }
         surface.bottomBar.onReturn = { [weak self] in self?.routeProxyCommand(.returnKey) }
         surface.bottomBar.spaceControl.onTap = { [weak self] in self?.routeProxyCommand(.space) }
@@ -1495,14 +1498,14 @@ class KeyboardViewController: UIInputViewController,
         emojiButton = makeKeyboardActionButton(identifier: "emoji-picker", label: "Open emoji picker") { [weak self] in
             self?.presentArea(.emoji)
         }
-        numberButton = makeKeyboardActionButton(identifier: "number-layer", label: "Open symbols keyboard") { [weak self] in
-            guard let self else { return }
-            if KeyboardState.shared.areaMode == .panel {
-                closeNumberPanel()
-            } else {
-                self.presentNumbersArea()
-            }
-        }
+        let numbers = KeyboardKeyTouchControl()
+        numbers.accessibilityIdentifier = "number-layer"
+        numbers.accessibilityLabel = "Open symbols keyboard"
+        numbers.isAccessibilityElement = true
+        numbers.accessibilityTraits = .button
+        numbers.configurePageSwitch(tap: { [weak self] in self?.presentNumbersArea() },
+            hold: { [weak self] in self?.presentArea(.letters) }, holdLabel: "Open letter keyboard")
+        numberButton = numbers
         returnButton = makeKeyboardActionButton(identifier: "return-key", label: "Insert return") { [weak self] in
             self?.routeProxyCommand(.returnKey)
         }
@@ -1683,18 +1686,25 @@ class KeyboardViewController: UIInputViewController,
             for: Double(width),
             surfaceHeight: Double(max(1, resolvedHeight)),
             controlOrder: KeyboardAccessoryOrder.current,
-            topAccessoryHeight: currentSuggestionLaneHeight
+            topAccessoryHeight: currentSuggestionLaneHeight,
+            compactChrome: !KeyboardInteractionPreferences.topBarEnabled
         )
         func inputFrame(_ frame: CGRect) -> CGRect {
             layout.inputFrame(frame, inputViewHeight: inputView.bounds.height)
         }
         surfaceBackdrop.configureInset(layout, inputHeight: inputView.bounds.height)
+        // Keep subtracting the old lane until the host actually applies the new
+        // window height. Repeated layout passes must not grow a hidden lane back.
+        if abs(inputView.bounds.height - requestedHeight) < 0.5 {
+            lastWindowAccessoryHeight = CGFloat(KeyboardInteractionPreferences.windowAccessoryHeight)
+        }
         keyboardSurfaceView?.frame = inputView.bounds
         keyboardSurfaceView?.show(mode, layout: layout, inputHeight: inputView.bounds.height,
                                   fieldKeys: KeyboardState.shared.hostLetterFieldKeys)
         let isEmoji = mode == .emoji
         let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad
         let voiceBoardMode = mode == .keys || mode == .recording
+        let showsTopBar = voiceBoardMode || KeyboardInteractionPreferences.topBarEnabled
 
         // The new keyboard grid. Mounted here, in the same place the frame is
         // computed, so the rectangle it draws into and the rectangle it resolves
@@ -1765,11 +1775,11 @@ class KeyboardViewController: UIInputViewController,
         numberButton?.isHidden = !uikitOwnsVoiceChrome || !leftRailVisible
         spaceButton?.isHidden = !uikitOwnsVoiceChrome || layout.spaceFrame.isEmpty
         returnButton?.isHidden = !uikitOwnsVoiceChrome || !rightRailVisible
-        voiceBoardButton?.isHidden = !isAuxiliary
-        moreButton?.isHidden = false
+        voiceBoardButton?.isHidden = !isAuxiliary || !showsTopBar
+        moreButton?.isHidden = !showsTopBar
         boardDeleteButton?.isHidden = !uikitOwnsVoiceChrome || !rightRailVisible
         let serviceToggleFrame = isAuxiliary ? layout.accessoryServiceToggleFrame : layout.dictationServiceToggleFrame
-        let serviceToggleVisible = (uikitOwnsVoiceChrome || isAuxiliary) && !serviceToggleFrame.isEmpty
+        let serviceToggleVisible = showsTopBar && (uikitOwnsVoiceChrome || isAuxiliary) && !serviceToggleFrame.isEmpty
         serviceToggle?.isHidden = !serviceToggleVisible
         serviceToggle?.isEnabled = serviceToggleVisible
         serviceToggle?.isUserInteractionEnabled = serviceToggleVisible
@@ -1788,6 +1798,7 @@ class KeyboardViewController: UIInputViewController,
         keyboardModeButton?.frame = inputFrame(layout.chromeLettersFrame)
         emojiButton?.frame = inputFrame(layout.chromeEmojiFrame)
         numberButton?.frame = inputFrame(layout.chromeNumbersFrame)
+        numberButton?.holdDuration = KeyboardDeletion.holdRecognitionDuration
         micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
         micButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         recoveryButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
@@ -1939,7 +1950,7 @@ class KeyboardViewController: UIInputViewController,
              fieldKeys.returnTitle == "return" ? "return" : nil),
             (voiceBoardButton, nil, "mic.fill"),
             (moreButton, nil, "ellipsis")
-        ] as [(UIButton?, String?, String?)] {
+        ] as [(UIControl?, String?, String?)] {
             guard let button, !button.isHidden else { continue }
             let circular = button === keyboardModeButton || button === numberButton || button === emojiButton
             let size = circular
@@ -2078,6 +2089,10 @@ class KeyboardViewController: UIInputViewController,
 
     func nextKeyboardHostDidRequestEmoji(_ host: NextKeyboardHost) {
         KeyboardState.shared.presentArea(.emoji)
+    }
+
+    func nextKeyboardHostDidRequestDictation(_ host: NextKeyboardHost) {
+        KeyboardState.shared.presentArea(.keys)
     }
 
     func nextKeyboardHostDidRequestWordDeletion(_ host: NextKeyboardHost) {

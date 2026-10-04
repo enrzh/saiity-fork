@@ -272,12 +272,11 @@ struct EmojiScrollRequest: Equatable {
     }
 }
 
-/// The controller owns this view directly. No representable or reparented view
-/// participates in its layout, touch delivery, or scroll lifetime.
-final class EmojiPagerView: UIView {
+/// The native touch owner is the scroll view itself, including unpainted space.
+/// No transparent wrapper or optional inset participates in gesture delivery.
+final class EmojiPagerView: EmojiPagerCollectionView {
     var onInsert: ((String) -> Void)?
     var onCategoryChanged: ((Int) -> Void)?
-    private let collection: EmojiPagerCollectionView
     private let coordinator = EmojiScrollCanvas.Coordinator()
     private var pages: [EmojiPage] = []
     private var columns = 0
@@ -285,27 +284,24 @@ final class EmojiPagerView: UIView {
     private var configuredSize = CGSize.zero
     private var presented = false
 
-    override init(frame: CGRect) {
-        collection = EmojiPagerCollectionView(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
-        super.init(frame: frame)
-        backgroundColor = .clear
-        addSubview(collection)
-        collection.dataSource = coordinator
-        collection.delegate = coordinator
-        collection.onEmojiInsert = { [weak self] in self?.insert($0) }
-        collection.onInteractionEnded = { [weak self] in
+    init() {
+        super.init(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
+        dataSource = coordinator
+        delegate = coordinator
+        onEmojiInsert = { [weak self] in self?.insert($0) }
+        onInteractionEnded = { [weak self] in
             guard let self else { return }
-            self.coordinator.reloadWhenIdle(self.collection)
-            self.coordinator.retryPendingScroll(in: self.collection)
+            self.coordinator.reloadWhenIdle(self)
+            self.coordinator.retryPendingScroll(in: self)
         }
-        collection.onLayoutChanged = { [weak self] in
+        onLayoutChanged = { [weak self] in
             guard let self else { return }
             self.coordinator.markNeedsReload()
-            self.coordinator.reloadWhenIdle(self.collection)
+            self.coordinator.reloadWhenIdle(self)
         }
-        collection.onLayoutReady = { [weak self] in
+        onLayoutReady = { [weak self] in
             guard let self else { return }
-            self.coordinator.retryPendingScroll(in: self.collection)
+            self.coordinator.retryPendingScroll(in: self)
         }
     }
 
@@ -313,26 +309,24 @@ final class EmojiPagerView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        collection.frame = bounds
         if presented { configure(force: false) }
     }
 
     func present() {
         presented = true
-        collection.frame = bounds
         configure(force: true)
         let recents = RecentEmojis.load(limit: max(1, columns * 4))
         let landing = EmojiNavigation.landingCategoryID(recents: recents, firstCategoryID: EmojiStore.categories.first?.id)
-        coordinator.scroll(to: EmojiScrollRequest(id: landing, animated: false), in: collection, animated: false)
+        coordinator.scroll(to: EmojiScrollRequest(id: landing, animated: false), in: self, animated: false)
     }
 
     func dismiss() {
         presented = false
-        collection.cancelVariantSelection()
+        cancelVariantSelection()
     }
 
     func refreshPreferences() {
-        collection.cancelVariantSelection()
+        cancelVariantSelection()
         if presented { configure(force: true) }
     }
 
@@ -341,7 +335,7 @@ final class EmojiPagerView: UIView {
         guard presented, sections.indices.contains(index) else { return }
         if index == 0 { configure(force: true) }
         coordinator.scroll(to: EmojiScrollRequest(id: sections[index].id, animated: false),
-                           in: collection, animated: false)
+                           in: self, animated: false)
     }
 
     private func configure(force: Bool) {
@@ -372,7 +366,7 @@ final class EmojiPagerView: UIView {
             onManualScroll: {},
             onTap: { [weak self] in self?.insert($0) }
         )
-        coordinator.reloadIfIdle(collection)
+        coordinator.reloadIfIdle(self)
     }
 
     private func insert(_ emoji: String) {
@@ -813,7 +807,7 @@ private struct EmojiScrollCanvas: UIViewRepresentable {
     }
 }
 
-private final class EmojiPagerCollectionView: UICollectionView, UIGestureRecognizerDelegate {
+class EmojiPagerCollectionView: UICollectionView, UIGestureRecognizerDelegate {
     var onEmojiInsert: ((String) -> Void)?
     var onInteractionEnded: (() -> Void)?
     var onLayoutChanged: (() -> Void)?

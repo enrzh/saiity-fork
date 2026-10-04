@@ -78,6 +78,7 @@ protocol NextKeyboardHostDelegate: AnyObject {
     func nextKeyboardHostDidRequestLetters(_ host: NextKeyboardHost)
     func nextKeyboardHostDidRequestSymbols(_ host: NextKeyboardHost)
     func nextKeyboardHostDidRequestEmoji(_ host: NextKeyboardHost)
+    func nextKeyboardHostDidRequestDictation(_ host: NextKeyboardHost)
     func nextKeyboardHostDidRequestWordDeletion(_ host: NextKeyboardHost)
     func nextKeyboardHost(_ host: NextKeyboardHost, didSelectSymbolPage id: String)
 }
@@ -176,13 +177,7 @@ final class NextKeyboardHost: NSObject {
 
     /// Replaces the material layout without moving any visual plate or hit box.
     private func applyGlass(_ specs: [KeyGridView.GlassSpec]) {
-        if #available(iOS 26.0, *) {
-            glassSpecs = KeyboardInteractionPreferences.liquidGlassEnabled
-                && !UIAccessibility.isReduceTransparencyEnabled
-                ? specs : []
-        } else {
-            glassSpecs = []
-        }
+        glassSpecs = []
         updateFaceHost()
     }
 
@@ -379,6 +374,10 @@ extension NextKeyboardHost: KeyGridViewDelegate {
 
     func keyGridDidEndRepeat(_ view: KeyGridView) {
         stopDeleteRepeat()
+    }
+
+    func keyGridDidRequestDictation(_ view: KeyGridView) {
+        delegate?.nextKeyboardHostDidRequestDictation(self)
     }
 
     // MARK: - Delete repeat

@@ -146,8 +146,6 @@ final class KeyboardPeriodKeyView: UIView {
     private var variants: KeyVariantSession?
     private var popup: UIHostingController<KeyVariantPopup>?
     private var preview: UIHostingController<KeyPressPreviewHost>?
-    private enum Appearance: Equatable { case glass, solid, reduced, contrast }
-    private var appearance: Appearance?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -208,20 +206,11 @@ final class KeyboardPeriodKeyView: UIView {
     }
 
     func refreshAppearance() {
-        let next: Appearance = !KeyboardInteractionPreferences.liquidGlassEnabled ? .solid
-            : UIAccessibility.isDarkerSystemColorsEnabled ? .contrast
-            : UIAccessibility.isReduceTransparencyEnabled ? .reduced : .glass
-        guard appearance != next else { return }
-        appearance = next
         plate.effect = nil
-        plate.backgroundColor = .clear
         plate.alpha = 1
-        switch next {
-        case .glass:
-            if #available(iOS 26.0, *) { plate.effect = UIGlassEffect(style: .regular) }
-            else { plate.effect = UIBlurEffect(style: .systemMaterial) }
-        case .solid, .reduced, .contrast: plate.backgroundColor = KeyboardChromeRole.input.solidFill(increasedContrast: next == .contrast)
-        }
+        plate.backgroundColor = KeyboardChromeRole.input.solidFill(increasedContrast:
+            UIAccessibility.isDarkerSystemColorsEnabled || UIAccessibility.isReduceTransparencyEnabled)
+        plate.layer.cornerRadius = KeyboardChromeRole.keyCornerRadius
     }
 
     override func accessibilityActivate() -> Bool {

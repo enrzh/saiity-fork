@@ -432,7 +432,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "emoji release must call the tap insertion callback")
         XCTAssertTrue(picker.contains("let index = column * 4 + row"),
                       "emoji cells must fill top-to-bottom before moving right")
-        let ownerStart = try XCTUnwrap(picker.range(of: "private final class EmojiPagerCollectionView"))
+        let ownerStart = try XCTUnwrap(picker.range(of: "class EmojiPagerCollectionView:"))
         let ownerEnd = try XCTUnwrap(picker.range(of: "private final class EmojiPageCell"))
         let owner = String(picker[ownerStart.lowerBound..<ownerEnd.lowerBound])
         XCTAssertTrue(owner.contains("private lazy var hold = EmojiGestureCoordinator("),
@@ -787,10 +787,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "normal mode must announce opening symbols")
         XCTAssertTrue(root.contains("onBackToVoice: { state.closeArea() }"),
                       "auxiliary mode must announce returning to voice keyboard")
-        XCTAssertTrue(controller.contains("if KeyboardState.shared.areaMode == .panel")
-            && controller.contains("closeNumberPanel()"),
-                      "symbols 123 action must return to the voice keyboard")
-        XCTAssertTrue(controller.contains("self.presentNumbersArea()"),
+        XCTAssertTrue(controller.contains("surface.bottomBar.onDictation = { KeyboardState.shared.presentArea(.keys) }"),
+                      "holding the bottom layer control must reach dictation")
+        XCTAssertTrue(controller.contains("self?.presentNumbersArea()"),
                       "123 must open the pad on numeric fields and symbols otherwise")
         XCTAssertTrue(root.contains("state.presentNumbersArea()"),
                       "letter and emoji 123 must use the same numbers destination")
@@ -1010,11 +1009,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("private func utilityButton("))
         XCTAssertFalse(root.contains("LazyVGrid"))
         XCTAssertTrue(root.contains("allowsHitTesting(false)"))
-        XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
+        XCTAssertTrue(controller.contains("numbers.accessibilityIdentifier = \"number-layer\""))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
         XCTAssertTrue(controller.contains("identifier: \"letter-mode\""))
         XCTAssertTrue(controller.contains("identifier: \"emoji-picker\""))
-        XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
+        XCTAssertTrue(controller.contains("numbers.accessibilityIdentifier = \"number-layer\""))
         XCTAssertEqual(controller.components(separatedBy: "self?.handleDismissTouchDown()").count - 1, 1)
         XCTAssertEqual(root.components(separatedBy: "usesInteractiveSurface: false").count - 1, 0)
         XCTAssertTrue(root.contains("@Environment(\\.openURL)"),
@@ -1145,8 +1144,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("number-pad-surface"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("Locale.current.decimalSeparator"))
         XCTAssertTrue(root.contains("state.presentNumbersArea()"))
-        XCTAssertTrue(controller.contains("identifier: \"number-layer\""))
-        XCTAssertTrue(controller.contains("self.presentNumbersArea()"))
+        XCTAssertTrue(controller.contains("numbers.accessibilityIdentifier = \"number-layer\""))
+        XCTAssertTrue(controller.contains("self?.presentNumbersArea()"))
         XCTAssertTrue(controller.contains("case .numberPad:"))
         XCTAssertTrue(controller.contains("case .symbols:"))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
@@ -1315,7 +1314,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "an inactive mic must be hidden without resetting the active target")
         XCTAssertTrue(controller.contains("$0.isUserInteractionEnabled = !$0.isHidden"))
         XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
-        XCTAssertTrue(controller.contains("moreButton?.isHidden = false"))
+        XCTAssertTrue(controller.contains("moreButton?.isHidden = !showsTopBar"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".accessibilityHidden(true)"))
     }
 
@@ -1493,10 +1492,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         let chrome = try source("DictusKeyboard/KeyboardChrome.swift")
 
-        XCTAssertTrue(keyStyle.contains("case .input: return .tertiarySystemBackground"),
-                      "regular keys need a semantic elevated surface")
-        XCTAssertTrue(plates.contains("case .control:") && plates.contains(".tertiarySystemFill"),
-                      "modifier plates need a distinct semantic surface")
+        XCTAssertTrue(keyStyle.contains("UIColor.systemGray3.resolvedColor(with: traits)"),
+                      "iOS key faces must adapt to dark appearance")
+        XCTAssertTrue(plates.contains("case .control: return native ? .systemGray4 : increasedContrast ? .secondarySystemBackground : .clear"),
+                      "minimal commands should be unboxed and iOS commands opaque")
         XCTAssertTrue(chrome.contains("role.solidFill()"),
                       "the shared chrome fill must stay semantic")
         XCTAssertFalse(keyStyle.contains("activeText: .white"),

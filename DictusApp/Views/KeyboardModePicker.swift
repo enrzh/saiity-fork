@@ -358,23 +358,41 @@ struct TypingLanguagesPanel: View {
 
 /// Native picker for the keyboard surface material.
 struct KeyboardMaterialPicker: View {
+    @AppStorage(SharedKeys.keyboardIOSStyling, store: AppGroup.defaults)
+    private var usesIOSStyling = false
+    @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults)
+    private var topBarEnabled = false
     @AppStorage(SharedKeys.liquidGlassEnabled, store: UserDefaults(suiteName: AppGroup.identifier))
     private var liquidGlassEnabled = true
     @AppStorage(SharedKeys.keyboardInsetEnabled, store: AppGroup.defaults)
     private var insetEnabled = true
 
     var body: some View {
-        Picker("Keyboard material", selection: $liquidGlassEnabled) {
-            Text("Liquid Glass").tag(true)
-            Text("Solid").tag(false)
+        Toggle("Use iOS styling", isOn: $usesIOSStyling)
+            .accessibilityIdentifier("keyboard-ios-styling-setting")
+            .accessibilityHint("Uses familiar opaque key faces and hides the top bar. Local dictation remains available.")
+            .onChange(of: usesIOSStyling) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+        Toggle("Show top bar", isOn: Binding(
+            get: { !usesIOSStyling && topBarEnabled }, set: { topBarEnabled = $0 }
+        ))
+            .disabled(usesIOSStyling)
+            .accessibilityIdentifier("keyboard-top-bar-setting")
+            .accessibilityHint(usesIOSStyling ? "Hidden while iOS styling is selected. Your preference is retained."
+                : "Shows More, dictation power and the dictation board shortcut above typing pages.")
+            .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+        if !usesIOSStyling {
+            Picker("Keyboard material", selection: $liquidGlassEnabled) {
+                Text("Liquid Glass").tag(true)
+                Text("Solid").tag(false)
+            }
+            .accessibilityHint("Choose Liquid Glass or Solid for the shared keyboard background.")
+            .onChange(of: liquidGlassEnabled) { _, _ in
+                KeyboardInteractionPreferences.notifyChanged()
+            }
+            Toggle("Keyboard inset", isOn: $insetEnabled)
+                .accessibilityHint("Shows the shared background behind every keyboard page and its bottom bar, in either material.")
+                .onChange(of: insetEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
         }
-        .accessibilityHint("Choose solid keys or liquid glass keys.")
-        .onChange(of: liquidGlassEnabled) { _, _ in
-            KeyboardInteractionPreferences.notifyChanged()
-        }
-        Toggle("Keyboard inset", isOn: $insetEnabled)
-            .accessibilityHint("Shows the shared background behind every keyboard page and its bottom bar, in either material.")
-            .onChange(of: insetEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
     }
 }
 

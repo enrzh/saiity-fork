@@ -612,7 +612,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
                        "relayout must not clear an active mic before restoring the same frame")
         XCTAssertTrue(controller.contains("micButton?.isHidden = !dictateVisible"))
         XCTAssertTrue(controller.contains("topAccessoryHeight: currentSuggestionLaneHeight"))
-        XCTAssertTrue(root.contains("topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight"))
+        XCTAssertTrue(root.contains("topAccessoryHeight: KeyboardInteractionPreferences.topBarHeight(for: state.areaMode)"))
         XCTAssertTrue(policy.contains("public static let suggestionLaneHeight: Double = 32"))
     }
 

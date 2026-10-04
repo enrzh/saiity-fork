@@ -36,11 +36,14 @@ protocol KeyGridViewDelegate: AnyObject {
     /// Held keys repeat through here. The view does not own the timer.
     func keyGridDidBeginRepeat(_ view: KeyGridView, key: KeyGridKey)
     func keyGridDidEndRepeat(_ view: KeyGridView)
+    func keyGridDidRequestDictation(_ view: KeyGridView)
 }
 
 final class KeyGridView: UIView {
 
     weak var delegate: KeyGridViewDelegate?
+    private let keypadVoice = KeyboardKeyTouchControl()
+    private let keypadLetters = KeyboardKeyTouchControl()
 
     // MARK: - Page state
 
@@ -161,6 +164,30 @@ final class KeyGridView: UIView {
         isExclusiveTouch = false
         isAccessibilityElement = false
         contentMode = .redraw
+        keypadVoice.isHidden = true
+        keypadVoice.isAccessibilityElement = true
+        keypadVoice.accessibilityTraits = .button
+        keypadVoice.accessibilityLabel = "Open dictation board"
+        keypadVoice.accessibilityIdentifier = "pad-dictation-board"
+        keypadVoice.onBegan = { [weak self] _ in
+            guard let self, !self.keypadVoice.isHidden, self.page?.id == "numberPad" else { return }
+            HapticFeedback.playInputClick()
+            self.delegate?.keyGridDidRequestDictation(self)
+        }
+        addSubview(keypadVoice)
+        keypadLetters.isHidden = true
+        keypadLetters.isAccessibilityElement = true
+        keypadLetters.accessibilityTraits = .button
+        keypadLetters.accessibilityLabel = "Open letter keyboard"
+        keypadLetters.accessibilityIdentifier = "pad-letter-switch"
+        keypadLetters.configurePageSwitch(tap: { [weak self] in
+            guard let self, let key = self.layout.placed.first(where: { $0.key.id == "pad-letters" })?.key else { return }
+            self.delegate?.keyGrid(self, perform: .letters, key: key)
+        }, hold: { [weak self] in
+            guard let self else { return }
+            self.delegate?.keyGridDidRequestDictation(self)
+        }, holdLabel: "Open dictation board")
+        addSubview(keypadLetters)
     }
 
     // MARK: - Content
@@ -204,6 +231,7 @@ final class KeyGridView: UIView {
         updateVariantPopup()
         updatePressPreview()
         logSolvedGeometry()
+        updateKeypadControls()
         onGlassLayoutChanged?(glassSpecs)
         setNeedsDisplay()
     }
@@ -251,6 +279,8 @@ final class KeyGridView: UIView {
     }
 
     private func cancelActivePresses() {
+        keypadVoice.cancelInteraction()
+        keypadLetters.cancelInteraction()
         for press in presses.values {
             press.popupWork?.cancel()
         }
@@ -266,6 +296,7 @@ final class KeyGridView: UIView {
 
     /// Appearance preferences never require a new page or a geometry solve.
     func refreshAppearance() {
+        updateKeypadControls()
         onGlassLayoutChanged?(glassSpecs)
         onCommandFacesChanged?(commandSpecs)
         updateVariantPopup()
@@ -285,6 +316,34 @@ final class KeyGridView: UIView {
     }
 
     // MARK: - Drawing
+
+    /// A quiet route back to voice when a numeric host has no shared bottom bar.
+    /// It uses the blank part of Delete's wide cell, keeping digit plates intact.
+    private func updateKeypadControls() {
+        keypadVoice.isHidden = true
+        keypadLetters.isHidden = true
+        guard page?.id == "numberPad" else { return }
+        if let letters = layout.placed.first(where: { $0.key.id == "pad-letters" }) {
+            let rect = visualPlate(for: letters)
+            keypadLetters.frame = letters.target
+            keypadLetters.holdDuration = KeyboardDeletion.holdRecognitionDuration
+            let face = keypadLetters.keyboardFace
+            face.autoresizingMask = []
+            face.frame = rect.offsetBy(dx: -letters.target.minX, dy: -letters.target.minY)
+            face.configure(text: "ABC", visualSize: rect.size)
+            keypadLetters.isHidden = false
+        }
+        guard !KeyboardInteractionPreferences.topBarEnabled,
+              let delete = layout.placed.first(where: { $0.key.id == "pad-delete" }) else { return }
+        let face = visualPlate(for: delete)
+        let room = face.minX - KeyGridPlacement.keySpacing - delete.target.minX
+        let height = min(44, delete.target.height)
+        guard room >= 44, height >= 28 else { return }
+        keypadVoice.frame = CGRect(x: delete.target.minX + (room - 44) / 2,
+                                  y: delete.target.midY - height / 2, width: 44, height: height)
+        keypadVoice.keyboardFace.configure(symbol: "mic.fill", role: .accessory)
+        keypadVoice.isHidden = false
+    }
 
     override func setNeedsDisplay() {
         super.setNeedsDisplay()
@@ -344,6 +403,7 @@ final class KeyGridView: UIView {
         return layout.rows.flatMap { row in
             row.compactMap { item in
                 guard item.key.isCommand else { return nil }
+                if item.key.id == "pad-letters", !keypadLetters.isHidden { return nil }
                 if case .none = item.key.action { return nil }
                 let systemName = item.key.id == "shift"
                     ? (shiftActive ? "shift.fill" : "shift")
@@ -398,21 +458,17 @@ final class KeyGridView: UIView {
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
-        key.isCommand ? CommandKeyStyle.cornerRadius
-            : page?.id == "numberPad" ? VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius : KeyGridPlacement.keyCornerRadius
+        key.isCommand ? KeyboardChromeRole.commandCornerRadius : KeyboardChromeRole.keyCornerRadius
     }
 
     private var usesLiveMaterial: Bool {
-        if #available(iOS 26.0, *) {
-            return KeyboardInteractionPreferences.liquidGlassEnabled
-                && !UIAccessibility.isReduceTransparencyEnabled
-                && !UIAccessibility.isDarkerSystemColorsEnabled
-        }
+        // Glass belongs to the shared background; key faces stay quiet and flat.
         return false
     }
 
     private func drawPlate(_ item: PlacedKey, pressed: Bool, context: CGContext) {
         if case .none = item.key.action { return }
+        if item.key.id == "pad-letters", !keypadLetters.isHidden { return }
         if item.key.isCommand, onCommandFacesChanged != nil { return }
         guard showsPlate(for: item.key) else {
             drawLabel(for: item.key, in: item.plate, pressed: pressed)

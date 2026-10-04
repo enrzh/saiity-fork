@@ -322,6 +322,7 @@ final class KeyboardBottomBarView: UIView {
     var onNumbers: (() -> Void)?
     var onLetters: (() -> Void)?
     var onEmoji: (() -> Void)?
+    var onDictation: (() -> Void)?
     var onInsert: ((String) -> Void)?
     var onReturn: (() -> Void)?
     private let spaceDrag = SpaceDragState()
@@ -348,11 +349,10 @@ final class KeyboardBottomBarView: UIView {
         spaceControl.accessibilityTraits = .button
         addSubview(spaceControl)
         addSubview(period)
-        firstControl.onBegan = { [weak self] _ in
+        firstControl.configurePageSwitch(tap: { [weak self] in
             guard let self else { return }
-            HapticFeedback.playInputClick()
             if self.mode == .panel { self.onLetters?() } else { self.onNumbers?() }
-        }
+        }, hold: { [weak self] in self?.onDictation?() }, holdLabel: "Open dictation board")
         secondControl.onBegan = { [weak self] _ in
             guard let self else { return }
             HapticFeedback.playInputClick()
@@ -386,7 +386,9 @@ final class KeyboardBottomBarView: UIView {
         if isHidden { cancelInteractions(); return }
         let bar = CGRect(x: layout.surfaceFrame.minX, y: layout.chromeBottomBarOriginY,
                          width: layout.surfaceFrame.width, height: VoiceOnlyKeyboardPolicy.spacebarHeight)
-        frame = layout.inputFrame(bar, inputViewHeight: inputHeight)
+        let nextFrame = layout.inputFrame(bar, inputViewHeight: inputHeight)
+        if frame != nextFrame { cancelInteractions() }
+        frame = nextFrame
         func local(_ rect: CGRect) -> CGRect { rect.offsetBy(dx: -bar.minX, dy: -bar.minY) }
         firstControl.frame = local(layout.chromeNumbersFrame)
         secondControl.frame = local(layout.chromeLettersFrame)
@@ -416,6 +418,7 @@ final class KeyboardBottomBarView: UIView {
     }
 
     private func updateChrome() {
+        firstControl.holdDuration = KeyboardDeletion.holdRecognitionDuration
         let circle = CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight,
                             height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
         firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123",

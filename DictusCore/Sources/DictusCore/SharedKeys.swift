@@ -127,6 +127,8 @@ public enum SharedKeys {
     public static let disabledKeyVariants = "dictus.disabledKeyVariants"
     public static let defaultEmojiSkinTone = "dictus.defaultEmojiSkinTone"
     public static let keyboardInsetEnabled = "dictus.keyboardInsetEnabled"
+    public static let keyboardIOSStyling = "dictus.keyboardIOSStyling"
+    public static let keyboardTopBarEnabled = "dictus.keyboardTopBarEnabled"
     /// Whether long-press alternate-character popups are enabled, default true
     public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
     /// Off / popup-above-key / popout-from-key. Migrates from `keyPopupsEnabled`.

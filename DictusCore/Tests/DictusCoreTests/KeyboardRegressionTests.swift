@@ -231,7 +231,7 @@ final class KeyboardRegressionTests: XCTestCase {
         let start = try XCTUnwrap(picker.range(of: "@objc private func tapped()"))
         let end = try XCTUnwrap(picker.range(of: "// MARK: - Supporting types"))
         let tap = String(picker[start.lowerBound..<end.lowerBound])
-        let ownerStart = try XCTUnwrap(picker.range(of: "private final class EmojiPagerCollectionView"))
+        let ownerStart = try XCTUnwrap(picker.range(of: "class EmojiPagerCollectionView:"))
         let ownerEnd = try XCTUnwrap(picker.range(of: "private final class EmojiPageCell"))
         let owner = String(picker[ownerStart.lowerBound..<ownerEnd.lowerBound])
 
@@ -434,7 +434,7 @@ final class KeyboardRegressionTests: XCTestCase {
         let updateEnd = try XCTUnwrap(picker.range(of: "private func hideTopEdgeEffect",
                                                     range: updateStart.upperBound..<picker.endIndex))
         let update = String(picker[updateStart.lowerBound..<updateEnd.lowerBound])
-        let pagerStart = try XCTUnwrap(picker.range(of: "private final class EmojiPagerCollectionView"))
+        let pagerStart = try XCTUnwrap(picker.range(of: "class EmojiPagerCollectionView:"))
         let pager = String(picker[pagerStart.lowerBound..<picker.endIndex])
 
         XCTAssertFalse(update.contains("uiView.reloadData()"),
@@ -509,7 +509,7 @@ final class KeyboardRegressionTests: XCTestCase {
 
     func testEmojiHoldLetsPagerWinBeforeRecognitionButTracksAfterward() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
-        let ownerStart = try XCTUnwrap(picker.range(of: "private final class EmojiPagerCollectionView"))
+        let ownerStart = try XCTUnwrap(picker.range(of: "class EmojiPagerCollectionView:"))
         let ownerEnd = try XCTUnwrap(picker.range(of: "private final class EmojiPageCell",
                                                     range: ownerStart.upperBound..<picker.endIndex))
         let owner = String(picker[ownerStart.lowerBound..<ownerEnd.lowerBound])

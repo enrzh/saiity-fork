@@ -8,6 +8,9 @@ let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 let large = CommandLine.arguments.contains("--large")
 let emojiOnly = CommandLine.arguments.contains("--emoji")
+let nativeStyle = CommandLine.arguments.contains("--ios")
+let topBar = CommandLine.arguments.contains("--top-bar")
+let keypadOnly = CommandLine.arguments.contains("--keypad")
 let program = #"""
 import UIKit
 import SwiftUI
@@ -32,7 +35,8 @@ final class FixtureController: KeyboardViewController {
         let defaults = AppGroup.defaults
         let keys = [SharedKeys.liquidGlassEnabled, SharedKeys.keyboardInsetEnabled,
                     SharedKeys.keyContainersEnabled, SharedKeys.keyPopupMode,
-                    SharedKeys.serviceEnabled, SharedKeys.dictationStatus]
+                    SharedKeys.serviceEnabled, SharedKeys.dictationStatus,
+                    SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled]
         let previous = Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
         defer {
             for key in keys {
@@ -41,6 +45,8 @@ final class FixtureController: KeyboardViewController {
             }
         }
         defaults.set(false, forKey: SharedKeys.serviceEnabled)
+        defaults.set(NATIVESTYLE, forKey: SharedKeys.keyboardIOSStyling)
+        defaults.set(TOPBAR, forKey: SharedKeys.keyboardTopBarEnabled)
         defaults.set(true, forKey: SharedKeys.keyContainersEnabled)
         defaults.set(true, forKey: SharedKeys.keyboardInsetEnabled)
         defaults.set(KeyPopupMode.off.rawValue, forKey: SharedKeys.keyPopupMode)
@@ -51,10 +57,11 @@ final class FixtureController: KeyboardViewController {
                 defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
                 for width: CGFloat in [320, 402] {
                     for landscape in [false, true] {
-                        let size = landscape ? CGSize(width: width == 320 ? 667 : 852, height: 190)
+                        let size = landscape ? CGSize(width: width == 320 ? 667 : 852,
+                            height: TOPBAR && !NATIVESTYLE ? 190 : 158)
                                              : CGSize(width: width, height: 300)
-                        for page in ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
-                                     "board", "listening", "processing", "failure"] {
+                        for page in (KEYPAD ? ["numbers", "decimal", "phone"] : ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
+                                     "board", "listening", "processing", "failure"]) {
                             if EMOJIONLY && page != "emoji" { continue }
                             if LARGE && !["letters", "emoji", "board", "listening"].contains(page) { continue }
                             let root = UIViewController()
@@ -70,7 +77,7 @@ final class FixtureController: KeyboardViewController {
                             field.numberOfLines = 2
                             root.view.addSubview(field)
                             let controller = FixtureController()
-                            controller.proxy.keyboardType = page == "phone" ? .phonePad : page == "numbers" ? .numberPad : .default
+                            controller.proxy.keyboardType = page == "phone" ? .phonePad : page == "decimal" ? .decimalPad : page == "numbers" ? .numberPad : .default
                             root.addChild(controller)
                             if LARGE {
                                 root.setOverrideTraitCollection(UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge), forChild: controller)
@@ -87,12 +94,24 @@ final class FixtureController: KeyboardViewController {
                             state.statusMessage = page == "failure" ? "Open sAiity to prepare dictation." : nil
                             let mode: KeyboardAreaMode = page == "letters" ? .letters
                                 : page.hasPrefix("symbols") ? .panel : page == "emoji" ? .emoji
-                                : page == "numbers" || page == "phone" ? .numberPad
+                                : page == "numbers" || page == "decimal" || page == "phone" ? .numberPad
                                 : page == "listening" ? .recording : .keys
                             state.presentArea(mode)
                             controller.view.setNeedsLayout()
                             controller.view.layoutIfNeeded()
                             controller.viewDidLayoutSubviews()
+                            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+                            if !landscape && (!TOPBAR || NATIVESTYLE),
+                               let height = controller.inputView?.constraints.first(where: {
+                                   $0.firstAttribute == .height && $0.secondItem == nil
+                               })?.constant {
+                                let resolved = CGSize(width: size.width, height: height)
+                                window.frame.size = CGSize(width: size.width, height: height + 80)
+                                root.view.frame = window.bounds
+                                controller.view.frame = CGRect(x: 0, y: 80, width: resolved.width, height: resolved.height)
+                                controller.inputView?.frame.size = resolved
+                                controller.viewDidLayoutSubviews()
+                            }
                             if page == "symbols2" {
                                 func selectSymbols(_ view: UIView) {
                                     if let grid = view as? KeyGridView { grid.setPage(KeyGridPageFactory.symbols(.symbolsPunctuation)) }
@@ -138,7 +157,10 @@ final class FixtureController: KeyboardViewController {
     }
 }
 """#.replacingOccurrences(of: "OUTPUT", with: output).replacingOccurrences(of: "LARGE", with: String(large))
-    .replacingOccurrences(of: "EMOJIONLY", with: String(emojiOnly))
+        .replacingOccurrences(of: "EMOJIONLY", with: String(emojiOnly))
+        .replacingOccurrences(of: "NATIVESTYLE", with: String(nativeStyle))
+        .replacingOccurrences(of: "TOPBAR", with: String(topBar))
+        .replacingOccurrences(of: "KEYPAD", with: String(keypadOnly))
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-keyboard-fixtures-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 let source = directory.appendingPathComponent("main.swift"), binary = directory.appendingPathComponent("render")

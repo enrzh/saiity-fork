@@ -753,6 +753,49 @@ the previous implementation. Updated development app installed on isolated QA;
 physical feel remains unverified. Details: `docs/design/saiity-keyboard-direction.md`.
 No commit, push, upload, recording or model download.
 
+### Emoji input with inset off — October 4
+
+The active Emoji collection now directly owns the pager rectangle; its transparent
+UIView wrapper is removed. Blank areas and empty Recents remain within the native
+pan owner independently of the optional background. Full-window routing checks
+pass for repeated inset changes, preference refreshes, both materials and four
+portrait/landscape widths, including emoji recipients and insertion callbacks.
+Sixty focused Core checks, Debug/signed Release builds and strict signatures pass;
+sixteen Emoji renders retain previous geometry. Installed on isolated QA. The
+original fixture did not reproduce the phone failure, so physical delivery with
+inset off still needs confirmation. Details: `docs/design/saiity-keyboard-direction.md`.
+No commit, push, upload, audio capture or model download.
+
+### Minimal default, iOS styling and hold navigation — October 4
+
+The accepted minimal direction is implemented on the existing native owners.
+Typing has faint flat key faces, unboxed commands and a top bar that defaults off.
+Settings add Use iOS styling and Show top bar. iOS styling uses opaque adaptive
+faces, hides the bar and preserves the stored minimal/material/inset choices.
+Hiding the lane reclaims 32pt without shrinking portrait character plates; the
+shared compact budget keeps bottom controls available in landscape. The board
+retains More, service power and recovery. Popup surfaces stay readable.
+
+Tap 123/ABC still switches letters/symbols. Hold opens dictation; hold 123 on the
+board returns to letters. The shared native hold session consumes release and
+cancels on movement, page changes and teardown. VoiceOver actions and in-app
+instructions expose the shortcut. Navigation does not start capture or enable
+the service. Autocorrection remains independent of bar visibility.
+Numeric ABC shares the tap/hold owner; decimal/phone pads retain a plain voice
+shortcut inside the spare part of Delete's cell while the bar is hidden. Digit
+geometry, decimal/phone variants and Delete remain available. Resizing cancels
+pending page navigation and cached controls reload the current hold speed.
+
+The final full Core suite passed 1,893 checks with one existing skip; focused
+geometry/policy and appearance/popup checks and the UIKit input harness pass.
+Settings taps verify the iOS override and restoration of the saved bar choice.
+QA is reset to minimal/bar Off. Final Debug/signed
+Release builds and strict signatures pass; installed on isolated QA. There are
+160 native renders per style plus 64 large-text renders. Typing-page geometry is
+identical between styles. Physical feel and system-host rendering remain open.
+Details and evidence: `docs/design/saiity-keyboard-direction.md`.
+No commit, push, release change, upload, recording or model download.
+
 ## Check
 
 Unit tests listed above, then a Debug install on the paired phone. On device,

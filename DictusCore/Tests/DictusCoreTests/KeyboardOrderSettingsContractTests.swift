@@ -35,7 +35,7 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         XCTAssertTrue(source.contains("DictationPresencePicker()"))
         XCTAssertTrue(source.contains("if polishEnabled && cleanupAvailable {"),
                       "writing style must not be offered when cleanup cannot run")
-        XCTAssertTrue(source.contains("including Period, always keeps its plates"))
+        XCTAssertTrue(source.contains("iOS styling keeps key backgrounds on"))
         XCTAssertFalse(source.contains("Toggle(\"Liquid glass\""))
         XCTAssertFalse(source.contains("Toggle(\"Live Activity\""))
         XCTAssertTrue(source.contains("Section(\"Help\")"))
