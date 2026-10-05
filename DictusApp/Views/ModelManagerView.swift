@@ -153,14 +153,13 @@ struct ModelManagerView: View {
     @ViewBuilder
     private var modelList: some View {
         List {
+            DictationSettingsAdvisor(modelManager: modelManager)
             Section {
-                ModelSelectionProfilePicker(modelManager: modelManager)
                 DictationModelQuickPicker(modelManager: modelManager)
-                ModelSelectionModePicker(modelManager: modelManager)
             } header: {
                 Text("Selection")
             } footer: {
-                Text(modelManager.selectionMode.explanation)
+                Text("Choosing a model keeps that choice until you apply recommended settings.")
             }
             recommendedSection
             installedSection

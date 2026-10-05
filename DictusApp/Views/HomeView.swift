@@ -331,6 +331,7 @@ struct VoiceOptionsView: View {
 
     var body: some View {
         List {
+            DictationSettingsAdvisor(modelManager: modelManager)
             Section("In sAiity") {
                 DictationModelQuickPicker(scope: .app, modelManager: modelManager)
                 Label(modelManager.isModelReady ? "Ready in sAiity" : "Choose or install a voice model", systemImage: modelManager.isModelReady ? "checkmark.circle" : "arrow.down.circle")
@@ -343,15 +344,6 @@ struct VoiceOptionsView: View {
             }
             Section {
                 SpokenLanguagesPicker(modelManager: modelManager)
-            }
-            Section {
-                ModelSelectionProfilePicker(modelManager: modelManager)
-            } header: {
-                Text("Model preference")
-            } footer: {
-                Text(modelManager.selectionMode == .manual
-                     ? "Using your selected model. Choose a preset for automatic selection."
-                     : modelManager.selectionProfile.explanation)
             }
             Section {
                 NavigationLink {

@@ -101,6 +101,7 @@ struct SettingsView: View {
 
     private var dictationSettings: some View {
         settingsPage("Dictation") {
+            DictationSettingsAdvisor(modelManager: modelManager)
             Section("In sAiity") {
                 DictationModelQuickPicker(scope: .app, modelManager: modelManager)
             }

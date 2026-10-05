@@ -295,6 +295,9 @@ class KeyboardViewController: UIInputViewController,
     /// zero deinits without a viewDidLoad), so this guards a case that is possible
     /// rather than one that is observed.
     private var didCountIntoLiveCensus = false
+    private var proxyInsertionCount = 0
+    private var proxyInsertionTotalMS: Double = 0
+    private var proxyInsertionMaxMS: Double = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -907,6 +910,11 @@ class KeyboardViewController: UIInputViewController,
             ))
         }
         PersistentLog.log(.keyboardDidDisappear)
+        PersistentLog.log(.diagnosticProbe(
+            component: "KeyboardViewController", instanceID: controllerID,
+            action: "typingInsertions",
+            details: "count=\(proxyInsertionCount) totalMs=\(String(format: "%.1f", proxyInsertionTotalMS)) maxMs=\(String(format: "%.1f", proxyInsertionMaxMS)) controllerLifetime=true"
+        ))
 
         // Tear down the area mode subscription so this (now-detached) controller
         // no longer reacts when KeyboardState publishes. iOS caches
@@ -1964,7 +1972,8 @@ class KeyboardViewController: UIInputViewController,
                 tint: submit ? .saiityAction : nil,
                 foreground: submit ? .saiityOnAction : button === voiceBoardButton ? .saiityAction : .label,
                 textPointSize: CommandKeyStyle.textSize,
-                textWeight: accessory ? .medium : .semibold, role: accessory ? .accessory : .control)
+                textWeight: accessory ? .medium : .semibold, role: accessory ? .accessory : .control,
+                holdSymbol: button === numberButton && !KeyboardInteractionPreferences.topBarEnabled ? "keyboard" : nil)
         }
         if let spaceButton, !spaceButton.isHidden {
             spaceButton.keyboardFace.configure(text: "space",
@@ -2167,12 +2176,17 @@ class KeyboardViewController: UIInputViewController,
         let insertionStart = CFAbsoluteTimeGetCurrent()
         textDocumentProxy.insertText(text)
         let insertionMS = (CFAbsoluteTimeGetCurrent() - insertionStart) * 1_000
-        PersistentLog.log(.diagnosticProbe(
-            component: "KeyboardViewController",
-            instanceID: controllerID,
-            action: "proxyTextInserted",
-            details: "textLength=\(text.count) attached=\(isAttached) onScreen=\(isOnScreen) insertMs=\(String(format: "%.1f", insertionMS))"
-        ))
+        proxyInsertionCount += 1
+        proxyInsertionTotalMS += insertionMS
+        proxyInsertionMaxMS = max(proxyInsertionMaxMS, insertionMS)
+        // Keep stalled-host evidence without formatting/writing a log per key.
+        if insertionMS >= 16 {
+            PersistentLog.log(.diagnosticProbe(
+                component: "KeyboardViewController", instanceID: controllerID,
+                action: "proxyTextInserted_slow",
+                details: "textLength=\(text.count) insertMs=\(String(format: "%.1f", insertionMS))"
+            ))
+        }
         SuggestionState.shared.noteTypedCharacter(text)
         refreshAdaptiveTouchContext()
     }

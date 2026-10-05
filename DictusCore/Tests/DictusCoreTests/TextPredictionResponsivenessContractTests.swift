@@ -73,7 +73,11 @@ final class TextPredictionResponsivenessContractTests: XCTestCase {
                        "touch routing must not depend on dictionary/name recall")
         XCTAssertTrue(state.contains("prepared.correction.flatMap"))
         XCTAssertTrue(state.contains("let correction: String?"), "completed negative checks must also be cached")
-        XCTAssertTrue(state.contains("adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight"))
+        let start = try XCTUnwrap(state.range(of: "func handleSpace(proxy:"))
+        let end = try XCTUnwrap(state.range(of: "func noteTypedCharacter", range: start.upperBound..<state.endIndex))
+        let touchBody = state[start.lowerBound..<end.lowerBound]
+        XCTAssertFalse(touchBody.contains("performSpellCheck("), "Space must not synchronously wait for prediction")
+        XCTAssertFalse(touchBody.contains("suggestionQueue.sync"))
         XCTAssertTrue(state.contains("UserDictionary.shared.reload()"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.spellCheck(word) }"))
         XCTAssertTrue(state.contains("suggestionQueue.sync { engine.isUnknownToDictionary(word) }"))

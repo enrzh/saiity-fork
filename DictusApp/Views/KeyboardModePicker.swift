@@ -4,8 +4,12 @@ import SwiftUI
 import DictusCore
 import DeviceKit
 
-struct ModelSelectionProfilePicker: UIViewRepresentable {
+/// Advice is shared by Voice options, Dictation settings and Models.
+/// Recommendations are applied explicitly; downloads remain a separate action.
+struct DictationSettingsAdvisor: View {
     @ObservedObject var modelManager: ModelManager
+    @EnvironmentObject private var coordinator: DictationCoordinator
+    @State private var showsAdvice = false
     private var phoneName: String {
         switch DeviceCapabilities.current().deviceModelIdentifier {
         case "iPhone19,2": return "iPhone 18 Pro"
@@ -14,20 +18,55 @@ struct ModelSelectionProfilePicker: UIViewRepresentable {
         }
     }
 
-    func makeUIView(context: Context) -> UISegmentedControl {
-        let control = UISegmentedControl(items: ["Balanced", phoneName, "Precise"])
-        control.accessibilityLabel = "Model selection"
-        control.addAction(UIAction { [weak control] _ in
-            guard let index = control?.selectedSegmentIndex, ModelSelectionProfile.allCases.indices.contains(index) else { return }
-            modelManager.setSelectionProfile(ModelSelectionProfile.allCases[index])
-        }, for: .valueChanged)
-        return control
+    private func recommendedModel(_ recognizer: DictationRecognizer, profile: ModelSelectionProfile,
+                                  installed: Set<String>) -> ModelInfo? {
+        profile.resolvedIdentifier(
+            installed: installed,
+            osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            capabilities: DeviceCapabilities.current(), recognizer: recognizer,
+            requiredLanguages: SpokenLanguagePreferences.load(from: AppGroup.defaults))
+            .flatMap(ModelInfo.forIdentifier)
     }
-    func updateUIView(_ control: UISegmentedControl, context: Context) {
-        control.isEnabled = DictationCoordinator.shared.canChangeSpeechRuntime
-        control.selectedSegmentIndex = modelManager.selectionMode == .automatic
-            ? ModelSelectionProfile.allCases.firstIndex(of: modelManager.selectionProfile) ?? 0 : UISegmentedControl.noSegment
-        control.accessibilityHint = modelManager.selectionProfile.explanation
+    private var usesRecommendation: Bool {
+        modelManager.selectionMode == .automatic && modelManager.selectionProfile == .recommended
+            && AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) == nil
+    }
+    var body: some View {
+        Section {
+            DisclosureGroup("View recommendation", isExpanded: $showsAdvice) {
+                recommendation("In sAiity", recognizer: modelManager.recognizer, profile: .recommended)
+                recommendation("From your keyboard", recognizer: .whisper, profile: .balanced)
+            }
+            Button(usesRecommendation ? "Recommended settings applied" : "Use recommended settings") {
+                modelManager.useRecommendedSettings()
+            }
+            .accessibilityIdentifier("dictation.useRecommendedSettings")
+            .disabled(usesRecommendation || !coordinator.canChangeSpeechRuntime)
+        } header: {
+            Text("Recommended settings")
+        } footer: {
+            Text("For \(phoneName) and your spoken languages. Uses installed models and adapts when your phone is warm or low on memory. Downloads are optional.")
+        }
+        .accessibilityIdentifier("dictation.settingsAdvisor")
+    }
+    private func recommendation(_ title: LocalizedStringKey, recognizer: DictationRecognizer,
+                                profile: ModelSelectionProfile) -> some View {
+        let model = recommendedModel(recognizer, profile: profile, installed: Set(ModelInfo.downloadableIdentifiers))
+        let installed = recommendedModel(recognizer, profile: profile, installed: Set(modelManager.downloadedModels))
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(model?.displayName ?? "No compatible recommendation")
+            if let model, !modelManager.downloadedModels.contains(model.identifier) {
+                Text(installed.map { "Automatic will use \($0.displayName) until you download this model in Models." }
+                     ?? "Download a compatible model in Models to get started.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            if model?.engine == .qwenASR {
+                Text("Keep sAiity open for Streaming. The keyboard uses Whisper independently.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -331,33 +370,6 @@ struct KeyboardHoldOptionsView: View {
         .onChange(of: page) { _, _ in selectedKey = nil }
         .onChange(of: emojiCategoryID) { _, _ in selectedKey = nil }
         .onChange(of: padStyle) { _, _ in selectedKey = nil }
-    }
-}
-
-/// Native picker for the model policy. The resolver changes only among models
-/// already installed on the device; it never starts a download by itself.
-struct ModelSelectionModePicker: View {
-    @ObservedObject var modelManager: ModelManager
-    @State private var selection = ModelSelectionMode.active
-
-    var body: some View {
-        Picker("Model selection", selection: selectionBinding) {
-            ForEach(ModelSelectionMode.allCases, id: \.self) { mode in
-                Text(mode.displayName).tag(mode)
-            }
-        }
-        .onAppear { selection = modelManager.selectionMode }
-        .accessibilityHint(modelManager.selectionMode.explanation)
-    }
-
-    private var selectionBinding: Binding<ModelSelectionMode> {
-        Binding(
-            get: { selection },
-            set: {
-                selection = $0
-                modelManager.setSelectionMode($0)
-            }
-        )
     }
 }
 

@@ -331,7 +331,8 @@ final class KeyGridView: UIView {
             let face = keypadLetters.keyboardFace
             face.autoresizingMask = []
             face.frame = rect.offsetBy(dx: -letters.target.minX, dy: -letters.target.minY)
-            face.configure(text: "ABC", visualSize: rect.size)
+            face.configure(text: "ABC", visualSize: rect.size,
+                holdSymbol: KeyboardInteractionPreferences.topBarEnabled ? nil : "mic.fill")
             keypadLetters.isHidden = false
         }
         guard !KeyboardInteractionPreferences.topBarEnabled,

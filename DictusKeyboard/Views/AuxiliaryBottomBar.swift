@@ -422,7 +422,8 @@ final class KeyboardBottomBarView: UIView {
         let circle = CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight,
                             height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
         firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123",
-            visualSize: circle, radius: circle.height / 2)
+            visualSize: circle, radius: circle.height / 2,
+            holdSymbol: KeyboardInteractionPreferences.topBarEnabled ? nil : "mic.fill")
         let second = fieldKeys.leftInsert ?? (mode == .emoji ? "ABC" : nil)
         secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil,
             visualSize: circle, radius: circle.height / 2)

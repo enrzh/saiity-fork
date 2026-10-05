@@ -6,6 +6,64 @@ processing and Icon Composer scope accepted on 2026-09-30.
 
 Design rules: [keyboard-ui-design.md](keyboard-ui-design.md).
 
+## October 5 typing responsiveness, recommendations and hold hints
+
+Space no longer falls back to synchronous prediction-queue spell-checking.
+It commits a correction prepared for the exact current word/context, or inserts
+Space while keeping the typed word. This intentionally trades a late correction
+for uninterrupted input. Background work prepares that correction before
+refining next-key hit probabilities, reuses identical context/policy/language
+requests and checks cancellation before each expensive stage. Successful text
+insertions accumulate numeric totals; only slow host insertions (16ms+) emit
+individual logs. Lifecycle/rejection diagnostics and the dictionary race fix
+remain intact.
+
+The production UIKit harness deliberately occupies the prediction queue for
+100ms, then measures five Space commits. Its baseline median is 104.60ms;
+the final implementation median is 0.40ms. These are simulator measurements
+under an artificial queue delay, not physical touch-to-screen latency or an
+accuracy claim. It also checks a prepared English apostrophe repair, stale
+context exclusion, duplicate-work identity, ordinary input and hold/cursor
+behavior. The existing 45pt faces and 54pt bottom touch row are unchanged.
+
+When the top bar is hidden, the shared ABC/123 face adds an 11pt `hold` hint
+beside its destination: the vector voice mark opens the dictation board, and
+the board's 123 key shows a keyboard symbol for returning to letters. Number-pad
+ABC uses the same face. The hint is passive, stays inside the existing key,
+disappears when the top bar is enabled and leaves the existing VoiceOver hold
+action available. Both materials, orientations and reused faces pass native
+input checks; production keyboard renders were inspected at narrow widths.
+
+The app retires the Balanced/device/Precise segmented preference and redundant
+Automatic/Manual picker. A shared native advisor appears in Voice options,
+Dictation settings and Models. `View recommendation` discloses app/keyboard
+recommendations and missing-download or installed-fallback advice; `Use
+recommended settings` explicitly applies the device profile and automatic
+keyboard model. The advisor uses the existing hardware, spoken-language and
+runtime compatibility resolver. It preserves the selected recognition engine,
+Realtime, spoken languages and writing settings, and does not download models.
+Changes are refused while recording or finalizing; manual model choices remain
+available and existing preferences are preserved until Apply.
+
+Apple Design guidance informed the native disclosure layout and readable,
+passive hint; Ponytail kept both features on existing components and resolvers.
+Advisor render fixtures use the production view with inert dependencies in
+light/dark, Whisper/Streaming, installed/missing states and the largest text size.
+They verify presentation, not live model loading or the complete phone workflow.
+
+Verification: 1,904 Core tests pass with one existing skip; the production UIKit
+input harness passes, including ready corrections, duplicate requests and hint
+reuse. Simulator Debug and signed Release builds pass. The 160 keyboard and
+16 advisor presentation fixtures were rendered, with narrow key hints and
+normal/maximum-text advisor layouts visually inspected. The final development
+build is installed and launched on the dedicated QA simulator.
+
+Artifacts: `/tmp/saiity-typing-advisor.Xt6iLA/`. The Air is currently unavailable;
+the previous crash-fix installation does not include these changes. The dedicated
+QA simulator receives the updated development build; phone typing feel, advisor
+actions and hold-hint use remain physical gates. No recording, model download,
+commit, push, TestFlight upload or heartbeat restart occurred.
+
 ## October 5 recurring Q keyboard crash
 
 The Air now provides four `DictusKeyboard` crash reports for build 233, at

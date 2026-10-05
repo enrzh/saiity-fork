@@ -2,8 +2,9 @@
 // Hosts the production SwiftUI bodies with inert data dependencies. Never captures audio or loads models.
 import Foundation
 
-guard CommandLine.arguments.count == 4 else { fatalError("Pass simulator ID, derived-data path and output directory") }
+guard CommandLine.arguments.count >= 4 else { fatalError("Pass simulator ID, derived-data path and output directory") }
 let simulator = CommandLine.arguments[1], derived = CommandLine.arguments[2], output = CommandLine.arguments[3]
+let advisorOnly = CommandLine.arguments.contains("--advisor")
 let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 func read(_ path: String) throws -> String { try String(contentsOfFile: path, encoding: .utf8) }
@@ -26,6 +27,8 @@ let welcome = section(try read("DictusApp/Onboarding/WelcomePage.swift"), from: 
 let activitySource = try read("DictusWidgets/DictusLiveActivity.swift")
 guard let activityStart = activitySource.range(of: "/// One state vocabulary") else { fatalError("Missing activity presentation") }
 let activity = String(activitySource[activityStart.lowerBound...])
+let advisor = section(try read("DictusApp/Views/KeyboardModePicker.swift"), from: "struct DictationSettingsAdvisor: View", to: "struct DictationModelQuickPicker: View")
+    .replacingOccurrences(of: "@State private var showsAdvice = false", with: "@State private var showsAdvice = fixtureAdvisorExpanded")
 
 let program = #"""
 import SwiftUI
@@ -41,6 +44,7 @@ let fixtureDefaults: UserDefaults = {
     return defaults
 }()
 var fixturePhase = DictationStatus.idle
+var fixtureAdvisorExpanded = false
 var fixtureReadiness = DictationReadiness(serviceEnabled: true, microphonePermission: .authorized,
     modelReady: true, modelLoadState: .ready, status: .idle)
 let fixtureHistory = [RecentDictation(text: fixtureText, createdAt: Date().timeIntervalSince1970 - 480, originalText: fixtureOriginal)]
@@ -48,8 +52,15 @@ let fixtureHistory = [RecentDictation(text: fixtureText, createdAt: Date().timeI
 final class ProStatusManager: ObservableObject {}
 final class ModelManager: ObservableObject {
     var recognizer = DictationRecognizer.whisper
-    var selectionMode = ModelSelectionMode.manual
-    var selectionProfile = ModelSelectionProfile.balanced
+    @Published var selectionMode = ModelSelectionMode.manual
+    @Published var selectionProfile = ModelSelectionProfile.balanced
+    var downloadedModels: [String] = []
+    func useRecommendedSettings() { selectionMode = .automatic; selectionProfile = .recommended }
+}
+struct Device {
+    static let current = Device()
+    var realDevice: Self { self }
+    var description: String { "This iPhone" }
 }
 final class DictationCoordinator: ObservableObject {
     static let shared = DictationCoordinator()
@@ -103,12 +114,23 @@ struct StopStandbyIntent: AppIntent {
         for dark in [false, true] {
             for large in [false, true] {
                 let width: CGFloat = large ? 320 : 402
-                let category: DynamicTypeSize = large ? .accessibility3 : .large
-                for name in ["speak", "listening", "result", "failed", "welcome", "activity-recording", "activity-off", "activity-processing", "activity-ready", "activity-failed"] {
+                let category: DynamicTypeSize = large ? (ADVISOR_ONLY ? .accessibility5 : .accessibility3) : .large
+                let names = ADVISOR_ONLY ? ["advisor", "advisor-details", "advisor-streaming", "advisor-installed"]
+                    : ["speak", "listening", "result", "failed", "welcome", "activity-recording", "activity-off", "activity-processing", "activity-ready", "activity-failed"]
+                for name in names {
                     fixturePhase = name == "result" ? .ready : name == "failed" ? .failed : .recording
                     coordinator.status = fixturePhase
                     let content: AnyView
                     switch name {
+                    case let advisorName where advisorName.hasPrefix("advisor"):
+                        fixtureAdvisorExpanded = advisorName != "advisor"
+                        manager.recognizer = advisorName == "advisor-streaming" ? .streaming : .whisper
+                        manager.downloadedModels = advisorName == "advisor-installed" ? ["openai_whisper-small"] : []
+                        coordinator.status = .idle
+                        content = AnyView(NavigationStack {
+                            List { DictationSettingsAdvisor(modelManager: manager) }
+                                .navigationTitle("Dictation").navigationBarTitleDisplayMode(.inline)
+                        })
                     case "speak":
                         coordinator.status = .idle
                         content = AnyView(TabView {
@@ -158,8 +180,9 @@ struct StopStandbyIntent: AppIntent {
         }
     }
 }
-"""#.replacingOccurrences(of: "// PRODUCTION_VIEWS", with: home + "\n" + result + "\n" + header + "\n" + recording + "\n" + welcome + "\n" + activity)
+"""#.replacingOccurrences(of: "// PRODUCTION_VIEWS", with: home + "\n" + result + "\n" + header + "\n" + recording + "\n" + welcome + "\n" + activity + "\n" + advisor)
     .replacingOccurrences(of: "OUTPUT", with: output)
+    .replacingOccurrences(of: "ADVISOR_ONLY", with: String(advisorOnly))
     .replacingOccurrences(of: "import AVFoundation", with: "import AVFoundation\nimport AppIntents")
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-native-design-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

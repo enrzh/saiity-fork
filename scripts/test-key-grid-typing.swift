@@ -42,6 +42,99 @@ precondition(HostInputTraits.documentIdentifier(for: identityProxy) == nil)
 precondition(HostInputTraits.documentIdentifier(for: nil) == nil)
 print("PASS: nullable host identity survives absent, attached and detached document contexts")
 
+// Deliberately occupy the prediction queue: Space must not wait behind it.
+do {
+    let state = SuggestionState.shared
+    let queue = Mirror(reflecting: state).children.first { $0.label == "suggestionQueue" }!.value as! DispatchQueue
+    let stored = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled)
+    let dictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed"]
+    let savedDictionary = dictionaryKeys.map { AppGroup.defaults.object(forKey: $0) }
+    AppGroup.defaults.set(true, forKey: SharedKeys.autocorrectEnabled)
+    defer {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+        for (key, value) in zip(dictionaryKeys, savedDictionary) {
+            if let value { AppGroup.defaults.set(value, forKey: key) } else { AppGroup.defaults.removeObject(forKey: key) }
+        }
+        UserDictionary.shared.reload()
+        if let stored { AppGroup.defaults.set(stored, forKey: SharedKeys.autocorrectEnabled) }
+        else { AppGroup.defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
+        state.clear()
+    }
+    queue.sync {} // Finish the initial engine setup before the measured fixture.
+    waitFor({ !TextPredictionEngine.shared.dictionaryLoadInFlight },
+            message: "Initial dictionary load did not settle")
+    var samples: [Double] = []
+    for _ in 0..<5 {
+        state.clear(resetLanguage: false)
+        let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
+        queue.async { entered.signal(); release.wait() }
+        precondition(entered.wait(timeout: .now() + 2) == .success)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { release.signal() }
+        let proxy = VocabularyProxy()
+        proxy.autocorrectionType = .yes
+        proxy.text = "helo"
+        let began = CFAbsoluteTimeGetCurrent()
+        state.handleSpace(proxy: proxy)
+        samples.append((CFAbsoluteTimeGetCurrent() - began) * 1000)
+        release.signal()
+        queue.sync {}
+        if !\(baseline) { precondition(proxy.text == "helo ", "Unprepared correction changed the original") }
+    }
+    let median = samples.sorted()[samples.count / 2]
+    print("MEASURE: Space with prediction queue occupied, median=\\(median)ms (5 simulator samples; synthetic 100ms queue delay)")
+    if !\(baseline) { precondition(median < 30, "Space still waits for background prediction") }
+}
+
+if !\(baseline) {
+    let state = SuggestionState.shared, defaults = AppGroup.defaults
+    let storedLanguage = defaults.object(forKey: SharedKeys.language)
+    let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
+    let dictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed"]
+    let savedDictionary = dictionaryKeys.map { defaults.object(forKey: $0) }
+    defer {
+        for (key, value) in [(SharedKeys.language, storedLanguage), (SharedKeys.autocorrectEnabled, storedAutocorrect)] {
+            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        for (key, value) in zip(dictionaryKeys, savedDictionary) {
+            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        UserDictionary.shared.reload()
+        state.clear()
+        state.setLanguage(SupportedLanguage.active.rawValue)
+    }
+    defaults.set("en", forKey: SharedKeys.language)
+    defaults.set(true, forKey: SharedKeys.autocorrectEnabled)
+    state.setLanguage("en")
+    let queue = Mirror(reflecting: state).children.first { $0.label == "suggestionQueue" }!.value as! DispatchQueue
+    queue.sync {}
+    waitFor({ !TextPredictionEngine.shared.dictionaryLoadInFlight }, message: "Language switch did not settle")
+    let native = Mirror(reflecting: TextPredictionEngine.shared).children.first { $0.label == "aospTrieEngine" }!.value as! AOSPTrieEngine
+    var loaded = false
+    native.load(language: "en", bundle: Bundle(path: "\(extensionPath)")!) { loaded = $0 }
+    waitFor({ loaded }, message: "Bundled spelling dictionary did not load")
+    let expected = state.performSpellCheck("dont", previousWord: nil)!.correction
+    state.clear(resetLanguage: false)
+    state.updateAdaptiveTouchPrediction(context: "dont", policy: .allowed)
+    let firstWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
+    state.updateAdaptiveTouchPrediction(context: "dont", policy: .allowed)
+    let duplicateWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
+    precondition(firstWork === duplicateWork, "Duplicate context restarted the current prediction")
+    waitFor({
+        let commit = Mirror(reflecting: state).children.first { $0.label == "spaceCommit" }!.value
+        return !Mirror(reflecting: commit).children.isEmpty
+    }, message: "Background correction did not become available")
+    let proxy = VocabularyProxy()
+    proxy.autocorrectionType = .yes
+    proxy.text = "dont"
+    state.handleSpace(proxy: proxy)
+    precondition(proxy.text == expected + " ", "Ready correction was lost when synchronous fallback was removed")
+    // A changed field must not reuse the preceding field's ready correction.
+    proxy.text = "otherfixtureword"
+    state.handleSpace(proxy: proxy)
+    precondition(proxy.text == "otherfixtureword ", "A stale correction changed another field")
+    print("PASS: language-aware correction commits from its ready cache, duplicate work is reused and changed context stays original")
+}
+
 final class MenuCheckController: KeyboardViewController {
     var dismissals = 0
     override func dismissKeyboard() { dismissals += 1 }
@@ -833,6 +926,12 @@ if !\(baseline) {
                 && namedControl("keyboard-more", in: controller.view) == nil,
                 "Hidden top bar left a visible or active accessory")
             precondition(liveSurface.emoji.frame.minY < 10, "Hidden bar kept its reserved empty strip")
+            let holdHint = liveSurface.bottomBar.firstControl.keyboardFace.subviews.compactMap { $0 as? UILabel }
+                .first { $0.text == "hold" }!
+            precondition(!holdHint.isHidden && holdHint.font.pointSize >= 11,
+                         "Hidden top bar did not expose a readable hold shortcut")
+            precondition(!holdHint.isUserInteractionEnabled || !liveSurface.bottomBar.firstControl.keyboardFace.isUserInteractionEnabled,
+                         "The hold hint must never become an input owner")
             if mode == .letters {
                 let grid = (controller.inputView as! KeyboardInputView).nativeTouchOwners.compactMap { $0 as? KeyGridView }.first!
                 precondition(grid.layout.rows.allSatisfy { $0.allSatisfy { $0.plate.height == 45 } },
@@ -959,6 +1058,12 @@ if !\(baseline) {
     defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
     print("PASS: host Return labels and page navigation; Solid contrast, minimum=\\(minimumContrast):1 on fixture backdrop")
     let face = KeyboardNativeControlFace(frame: CGRect(x: 0, y: 0, width: 156, height: 54))
+    face.configure(text: "123", holdSymbol: "mic.fill")
+    face.layoutIfNeeded()
+    let hint = face.subviews.compactMap { $0 as? UILabel }.first { $0.text == "hold" }!
+    precondition(!hint.isHidden && face.bounds.contains(hint.frame))
+    face.configure(text: "123")
+    precondition(hint.isHidden, "A reused face kept its old hidden-bar hint")
     for symbol in ["mic.fill", "waveform", "ellipsis", "xmark", "power.circle.fill", "power"] {
         face.configure(text: "Dictation", symbol: symbol, visualSize: face.bounds.size, primary: true)
         face.layoutIfNeeded()

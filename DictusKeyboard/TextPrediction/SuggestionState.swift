@@ -125,6 +125,14 @@ class SuggestionState: ObservableObject {
     /// text detection may refine the engine language without changing this
     /// anchor, so ordinary keystrokes do not reload dictionaries.
     private var adaptiveSelectedLanguage: String?
+    private struct AdaptiveContext: Equatable {
+        let text: String
+        let policy: HostFieldPolicy
+        let autocorrect: Bool
+        let language: String
+        let rejected: Set<String>
+    }
+    private var lastAdaptiveContext: AdaptiveContext?
 
     /// Whether autocorrect is enabled (reads from App Group shared preferences).
     var autocorrectEnabled: Bool {
@@ -177,22 +185,13 @@ class SuggestionState: ObservableObject {
             let prepared = spaceCommit
             let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
                 && prepared?.contextKey == contextKey
-            let queueIsFree = adaptiveTouchWork == nil && !engine.dictionaryLoadInFlight
             let correction: String?
             if let prepared, snapshotMatches {
                 canLearn = true
                 correction = prepared.correction.flatMap { TypingCommit.accepts(typed: word, correction: $0) ? $0 : nil }
-            } else if queueIsFree {
-                canLearn = true
-                let previousWord = extractPreviousWord(from: context, currentWord: word)
-                let sentenceStart = isAtSentenceStart(context: context, word: word)
-                if let result = performSpellCheck(word, previousWord: previousWord, isAtSentenceStart: sentenceStart),
-                   TypingCommit.accepts(typed: word, correction: result.correction) {
-                    correction = result.correction
-                } else {
-                    correction = nil
-                }
             } else {
+                // A missed background result preserves the typed word. Never
+                // wait for dictionary loading or a prediction backlog on Space.
                 correction = nil
             }
             if let correction {
@@ -233,6 +232,7 @@ class SuggestionState: ObservableObject {
     /// Drop a stale hit bias immediately; the contextual replacement is computed
     /// off the main thread by updateAdaptiveTouchPrediction.
     func noteTypedCharacter(_ _: String) {
+        lastAdaptiveContext = nil
         adaptiveTouchWork?.cancel()
         _ = adaptiveTouchRequestGate.begin()
         if adaptiveTouchPrediction != nil {
@@ -430,6 +430,11 @@ class SuggestionState: ObservableObject {
         if let policy {
             hostPolicy = policy
         }
+        let selectedLanguage = SupportedLanguage.active.rawValue
+        let snapshot = AdaptiveContext(text: context ?? "", policy: hostPolicy,
+            autocorrect: autocorrectEnabled, language: selectedLanguage, rejected: rejectedWords)
+        guard snapshot != lastAdaptiveContext else { return }
+        lastAdaptiveContext = snapshot
         adaptiveTouchWork?.cancel()
         let requestToken = adaptiveTouchRequestGate.begin()
         spaceCommit = nil
@@ -461,9 +466,9 @@ class SuggestionState: ObservableObject {
         if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
 
         let allowsAutocorrect = hostPolicy.autocorrectAllowed && autocorrectEnabled
-        let selectedLanguage = SupportedLanguage.active.rawValue
+        weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
             if self.adaptiveSelectedLanguage != selectedLanguage {
                 self.adaptiveSelectedLanguage = selectedLanguage
                 self.engine.setSelectedLanguage(selectedLanguage)
@@ -472,6 +477,15 @@ class SuggestionState: ObservableObject {
             // live path previously never called typed-language detection.
             if isBoundary { self.engine.setLanguage(forRecentText: inputContext) }
             let abstains = self.engine.shouldAbstainFromPrediction(for: inputContext)
+            guard !work.isCancelled else { return }
+            // Prepare Space first. Adaptive hit refinement must not hold up
+            // the correction a fast typist is about to commit.
+            let commit = abstains ? nil : self.preparedSpaceCommit(
+                partial: partial, context: inputContext, previousWord: previousWords.last,
+                isAtSentenceStart: atSentenceStart, isBoundary: isBoundary,
+                allowsAutocorrect: allowsAutocorrect, rejected: rejected)
+            self.publishSpaceCommit(commit, token: requestToken)
+            guard !work.isCancelled else { return }
             let probabilities = rejected || abstains
                 ? NextCharacterProbabilities([:])
                 : isBoundary
@@ -483,23 +497,10 @@ class SuggestionState: ObservableObject {
                 guard let self, self.adaptiveTouchRequestGate.isCurrent(requestToken),
                       self.hostPolicy.suggestionsAllowed else { return }
                 self.adaptiveTouchPrediction = probabilities.isEmpty ? nil : probabilities
+                self.adaptiveTouchWork = nil
             }
-            // Space may still autocorrect. Detecting a language here used to
-            // run on every key and is not allowed to choose the next key.
-            guard !abstains else {
-                self.publishSpaceCommit(nil, token: requestToken)
-                return
-            }
-            let commit = self.preparedSpaceCommit(
-                partial: partial,
-                context: inputContext,
-                previousWord: previousWords.last,
-                isAtSentenceStart: atSentenceStart,
-                isBoundary: isBoundary,
-                allowsAutocorrect: allowsAutocorrect
-            )
-            self.publishSpaceCommit(commit, token: requestToken)
         }
+        cancellableWork = work
         adaptiveTouchWork = work
         suggestionQueue.async(execute: work)
     }
@@ -510,12 +511,13 @@ class SuggestionState: ObservableObject {
         previousWord: String?,
         isAtSentenceStart: Bool,
         isBoundary: Bool,
-        allowsAutocorrect: Bool
+        allowsAutocorrect: Bool,
+        rejected: Bool
     ) -> SpaceCommit? {
         guard allowsAutocorrect, !isBoundary, !partial.isEmpty,
               !engine.dictionaryLoadInFlight,
               !engine.shouldSkipTokenPrediction(for: partial),
-              !rejectedWords.contains(partial.lowercased()) else { return nil }
+              !rejected else { return nil }
         let result = engine.spellCheck(
             partial,
             previousWord: previousWord,
@@ -532,12 +534,12 @@ class SuggestionState: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.adaptiveTouchRequestGate.isCurrent(token) else { return }
             self.spaceCommit = commit
-            self.adaptiveTouchWork = nil
         }
     }
 
     /// Drops only the invisible routing cache, leaving the suggestion lane intact.
     func clearAdaptiveTouchPrediction() {
+        lastAdaptiveContext = nil
         adaptiveTouchWork?.cancel()
         adaptiveTouchWork = nil
         _ = adaptiveTouchRequestGate.begin()

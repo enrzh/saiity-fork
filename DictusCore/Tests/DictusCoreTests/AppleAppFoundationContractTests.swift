@@ -509,7 +509,9 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(card.contains(".buttonStyle(.borderedProminent)"))
         XCTAssertTrue(card.contains(".font(.subheadline)"))
         XCTAssertFalse(card.contains("GaugeBarView("), "Catalog estimates must not appear as measured scores")
-        XCTAssertTrue(manager.contains("ModelSelectionModePicker(modelManager: modelManager)"))
+        XCTAssertTrue(manager.contains("DictationSettingsAdvisor(modelManager: modelManager)"))
+        XCTAssertFalse(manager.contains("ModelSelectionProfilePicker"))
+        XCTAssertFalse(manager.contains("ModelSelectionModePicker"))
         XCTAssertFalse(manager.contains(".fullScreenCover("), "Model preparation should leave navigation available")
         XCTAssertFalse(card.contains(".opacity(incompatibilityReason == nil ? 1 : 0.55)"))
     }

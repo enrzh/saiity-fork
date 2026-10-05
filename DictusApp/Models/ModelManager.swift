@@ -773,6 +773,13 @@ class ModelManager: ObservableObject {
         setSelectionMode(.automatic)
     }
 
+    func useRecommendedSettings() {
+        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
+        defaults.removeObject(forKey: SharedKeys.keyboardDictationModel)
+        setSelectionProfile(.recommended)
+        DictationCoordinator.shared.refreshKeyboardModel()
+    }
+
     /// Changes model policy and immediately applies the resulting model.
     func setSelectionMode(_ mode: ModelSelectionMode) {
         guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
