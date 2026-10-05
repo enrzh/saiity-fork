@@ -9,6 +9,7 @@
 #include "dictus_ngram.h"
 
 #include <vector>
+#include <mutex>
 
 // ---------- AOSPTrieResult ----------
 
@@ -24,6 +25,9 @@
     dictus::AccentCostTable _accentCosts;
     BOOL _loaded;
     dictus::NgramEngine* _ngramEngine;
+    // Loading and suggestions use different queues. Keep mmap data and scorer
+    // tables alive until each lookup has copied its results into ObjC values.
+    std::mutex _mutex;
 }
 
 - (instancetype)init {
@@ -47,6 +51,7 @@
 }
 
 - (BOOL)loadDictionaryAtPath:(NSString *)path {
+    std::lock_guard<std::mutex> lock(_mutex);
     _trie.unload();
     _loaded = NO;
 
@@ -58,11 +63,13 @@
 }
 
 - (void)unloadDictionary {
+    std::lock_guard<std::mutex> lock(_mutex);
     _trie.unload();
     _loaded = NO;
 }
 
 - (BOOL)isLoaded {
+    std::lock_guard<std::mutex> lock(_mutex);
     return _loaded;
 }
 
@@ -76,6 +83,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (nullable AOSPTrieResult *)spellCheck:(NSString *)word maxEditDistance:(float)maxDist {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_loaded || [word length] == 0) return nil;
 
     // Convert input word to UTF-16 buffer
@@ -110,6 +118,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (NSArray<NSString *> *)nearbyWords:(NSString *)word maxEditDistance:(float)maxDist maxResults:(NSUInteger)maxResults {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_loaded || [word length] == 0) return @[];
 
     uint16_t inputBuf[256];
@@ -133,6 +142,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (BOOL)wordExists:(NSString *)word {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_loaded || [word length] == 0) return NO;
 
     uint16_t buf[256];
@@ -141,6 +151,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (NSInteger)getFrequency:(NSString *)word {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_loaded || [word length] == 0) return 0;
 
     uint16_t buf[256];
@@ -149,11 +160,13 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (NSUInteger)wordCount {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_loaded) return 0;
     return (NSUInteger)_trie.wordCount();
 }
 
 - (BOOL)setProximityTableWithCharacters:(NSData *)characters distances:(NSData *)distances {
+    std::lock_guard<std::mutex> lock(_mutex);
     NSUInteger count = characters.length / sizeof(uint16_t);
     if (count == 0 || distances.length != count * count * sizeof(float)) return NO;
 
@@ -163,6 +176,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (BOOL)setAccentCostsFrom:(NSData *)from to:(NSData *)to costs:(NSData *)costs {
+    std::lock_guard<std::mutex> lock(_mutex);
     NSUInteger count = from.length / sizeof(uint16_t);
     if (count == 0 || to.length != from.length || costs.length != count * sizeof(float)) return NO;
 
@@ -175,19 +189,22 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 // --- N-gram prediction methods ---
 
 - (BOOL)loadNgramsAtPath:(NSString *)path {
-    _ngramEngine->unload();
+    std::lock_guard<std::mutex> lock(_mutex);
     return _ngramEngine->load([path UTF8String]) ? YES : NO;
 }
 
 - (void)unloadNgrams {
+    std::lock_guard<std::mutex> lock(_mutex);
     _ngramEngine->unload();
 }
 
 - (BOOL)ngramsLoaded {
+    std::lock_guard<std::mutex> lock(_mutex);
     return _ngramEngine->isLoaded() ? YES : NO;
 }
 
 - (NSArray<NSString *> *)predictAfterWord:(NSString *)word maxResults:(NSUInteger)max {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_ngramEngine->isLoaded() || [word length] == 0) return @[];
 
     auto results = _ngramEngine->predictAfterWord([word UTF8String], (size_t)max);
@@ -200,6 +217,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (NSArray<NSString *> *)predictAfterWord1:(NSString *)word1 word2:(NSString *)word2 maxResults:(NSUInteger)max {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_ngramEngine->isLoaded() || [word1 length] == 0 || [word2 length] == 0) return @[];
 
     auto results = _ngramEngine->predictAfterWords(
@@ -214,6 +232,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 }
 
 - (uint16_t)bigramScoreForWord:(NSString *)word afterWord:(NSString *)prevWord {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (!_ngramEngine->isLoaded() || [word length] == 0 || [prevWord length] == 0) return 0;
     return _ngramEngine->bigramScore([prevWord UTF8String], [word UTF8String]);
 }

@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) float score;
 @end
 
+/// Serializes native resource access across dictionary loading and lookups.
 @interface AOSPTrieBridge : NSObject
 
 - (BOOL)loadDictionaryAtPath:(NSString *)path;

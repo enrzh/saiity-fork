@@ -10,7 +10,7 @@ namespace dictus {
 /// Parsed trie node from binary data.
 struct TrieNode {
     uint8_t flags;
-    const uint16_t* chars;  // pointer into mmap'd data
+    const uint8_t* chars;   // packed UTF-16 LE bytes; not necessarily aligned
     int charCount;
     uint16_t frequency;     // 0 if not terminal
     uint32_t childrenOffset;// absolute offset to first child

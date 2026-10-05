@@ -142,7 +142,7 @@ static void searchRecursive(const Trie& trie,
 
     if (nodeCharPos < node.charCount) {
         uint16_t trieChar;
-        std::memcpy(&trieChar, &node.chars[nodeCharPos], 2);
+        std::memcpy(&trieChar, node.chars + nodeCharPos * 2, 2);
 
         // 1. MATCH: input char == trie char
         if (inputPos < inputLen && input[inputPos] == trieChar) {
@@ -187,7 +187,7 @@ static void searchRecursive(const Trie& trie,
         // 5. TRANSPOSITION: swap of adjacent chars in input
         if (inputPos + 1 < inputLen && nodeCharPos + 1 < node.charCount) {
             uint16_t nextTrieChar;
-            std::memcpy(&nextTrieChar, &node.chars[nodeCharPos + 1], 2);
+            std::memcpy(&nextTrieChar, node.chars + (nodeCharPos + 1) * 2, 2);
             if (input[inputPos] == nextTrieChar && input[inputPos + 1] == trieChar) {
                 float tc = 0.7f;
                 if (cost + tc <= maxEditDist) {

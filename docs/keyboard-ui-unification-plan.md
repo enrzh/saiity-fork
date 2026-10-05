@@ -6,6 +6,53 @@ processing and Icon Composer scope accepted on 2026-09-30.
 
 Design rules: [keyboard-ui-design.md](keyboard-ui-design.md).
 
+## October 5 recurring Q keyboard crash
+
+The Air now provides four `DictusKeyboard` crash reports for build 233, at
+01:35:17, 01:36:45, 01:37:40 and 01:38:02 local time. Each records
+`EXC_BAD_ACCESS / SIGSEGV` in `NgramEngine::parseResults` on the suggestions
+queue while the dictionary-load queue is replacing its mmap. The retired
+build-232 report at October 4 16:13:39 has the same fault and matches the
+user's original screenshot time. This supersedes the earlier inconclusive
+crash-file check below. The adjacent jetsam event kills `healthappd`, not the
+keyboard.
+
+One mutex in `AOSPTrieBridge` now serializes all native dictionary, n-gram,
+scorer-table and lookup operations. The lock remains held through copying
+native results into ObjC values, so another queue cannot unmap their backing
+data mid-read. The same guard covers spelling, frequency and nearby-word
+queries; guarding only next-word predictions would leave the equivalent
+trie crash possible. Sanitizer testing also exposed unaligned UTF-16 pointer
+access in the packed trie; node characters now stay byte-addressed and are
+read with the existing `memcpy` calls.
+
+`scripts/test-aosp-trie-concurrency.mm` uses the four bundled language
+dictionaries, overlapping readers, 80 reloads, scoring-table replacement and
+failed-load teardown. The unfixed bridge reproduces a read-after-unmap crash
+under AddressSanitizer. The fixed bridge passes 4,000 lookup batches separately
+under ThreadSanitizer and AddressSanitizer/UndefinedBehaviorSanitizer, with no
+reported races or invalid accesses. Simulator Debug, device Debug and signed
+Release builds pass. The production UIKit input harness and 11 focused Core
+checks pass, including hidden-top-bar behavior. Top bar Off already returns
+zero window accessory height in the current source, removing its entire
+extension rather than retaining the former 12pt strip; dictation pages retain
+their own action lane.
+
+The fixed development Debug build 233 is installed on the physical Air without
+uninstalling its data. Saved keyboard/model/vocabulary/service preferences
+match across installation apart from runtime model-load status and its
+timestamp. Service remains Off, and the app was launched with the safe UI QA
+flags; no microphone capture or model download was started. The phone is in
+an active messaging screen with the system surface and no keyboard-extension
+process, so this run leaves its composer untouched. Physical custom-keyboard
+typing/language-switch verification remains pending after sAiity is selected
+again; installation and sanitizer checks do not prove that phone gate.
+
+Private crash and verification artifacts: `/tmp/saiity-q-crash-*.ips` and
+`/tmp/saiity-prediction-race.MtXI7t/`. No logs were uploaded, and no commit,
+push, TestFlight upload or release change was performed. The heartbeat stays
+paused and the remaining physical gates below are unchanged.
+
 ## October 4 keyboard corrections
 
 The user retired the iOS styling experiment. Its switch and visual overrides
