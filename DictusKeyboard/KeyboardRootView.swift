@@ -17,10 +17,6 @@ struct KeyboardRootView: View {
     let installOpenURL: (@escaping (URL, @escaping (Bool) -> Void) -> Void) -> Void
     @ObservedObject var state = KeyboardState.shared
     @Environment(\.openURL) private var openURL
-    @State private var symbolPage: KeyboardPage = .symbols1
-    @State private var emojiSelectedCategoryID = "recents"
-    @State private var emojiCategoryJump: EmojiScrollRequest?
-    @State private var lastAppliedEmojiCategoryToken: UUID?
 
     var body: some View {
         GeometryReader { proxy in
@@ -119,16 +115,6 @@ struct KeyboardRootView: View {
                 maxHeight: .infinity
             )
             .background(Color.clear)
-            .onChange(of: state.areaMode) { _, mode in
-                if mode == .panel {
-                    symbolPage = .symbols1
-                }
-            }
-            .onChange(of: state.hostPrefersNumberPad) { _, prefers in
-                if prefers {
-                    symbolPage = .symbols1
-                }
-            }
         }
         .environment(\.keyboardLiquidGlassEnabled, KeyboardInteractionPreferences.liquidGlassEnabled)
         .allowsHitTesting(false)
@@ -140,94 +126,17 @@ struct KeyboardRootView: View {
             }
             HapticFeedback.refreshEnabledState()
             HapticFeedback.warmUp()
-            bindEmojiCategoryScrubber()
             state.startClipboardMonitoring()
             state.refreshTypingLanguage()
         }
-        .onChange(of: state.areaMode) { _, _ in
-            bindEmojiCategoryScrubber()
-        }
-        .onChange(of: state.emojiCategoryJumpToken) { _, _ in
-            applyEmojiCategory(at: state.emojiCategoryJumpIndex)
-        }
     }
-
-    private func bindEmojiCategoryScrubber() {
-        state.onSelectEmojiCategory = { index in
-            applyEmojiCategory(at: index)
-        }
-    }
-
-    private func applyEmojiCategory(at index: Int) {
-        let token = state.emojiCategoryJumpToken
-        if lastAppliedEmojiCategoryToken == token { return }
-        lastAppliedEmojiCategoryToken = token
-        let sections = CategoryInfo.emojiBarSections
-        guard sections.indices.contains(index) else { return }
-        let id = sections[index].id
-        if emojiSelectedCategoryID != id {
-            HapticFeedback.variantHighlightChanged()
-        }
-        emojiSelectedCategoryID = id
-        emojiCategoryJump = EmojiScrollRequest(id: id, animated: false)
-    }
-
-    @ViewBuilder
-    private func accessoryBar(width: CGFloat, layout: VoiceOnlyKeyboardPolicy.Layout) -> some View {
-        let categoryFrame = layout.accessoryEmojiCategoryFrame
-        ZStack(alignment: .topLeading) {
-            languageIndicator
-                .position(
-                    x: CGFloat(VoiceOnlyKeyboardPolicy.accessoryEdgeInset + VoiceOnlyKeyboardPolicy.languageVisualWidth / 2),
-                    y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
-                )
-            HStack(spacing: CGFloat(VoiceOnlyKeyboardPolicy.railSpacing)) {
-                if categoryFrame.width >= VoiceOnlyKeyboardPolicy.accessoryControlSize {
-                    pasteButton
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width), height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
-            .position(
-                x: categoryFrame.minX + max(0, categoryFrame.width + layout.accessoryDictationBoardFrame.width) / 2,
-                y: VoiceOnlyKeyboardPolicy.suggestionLaneHeight / 2
-            )
-            if state.areaMode == .letters || state.areaMode == .panel || state.areaMode == .numberPad || state.areaMode == .emoji {
-                dictationBoardButton
-                    .position(
-                        x: layout.accessoryDictationBoardFrame.midX,
-                        y: layout.accessoryDictationBoardFrame.midY
-                    )
-            }
-            dismissAccessoryButton
-                .position(
-                    x: layout.accessoryDismissFrame.midX,
-                    y: layout.accessoryDismissFrame.midY
-                )
-        }
-        .frame(width: width, height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight, alignment: .topLeading)
-    }
-
-    // This literal is validated by URL at construction time. The file URL is an
-    // unreachable fail-closed fallback for an unexpected Foundation parser change.
-    private let preparationURL = URL(
-        string: "saiity://dictate?source=keyboard&intent=prepare"
-    ) ?? URL(fileURLWithPath: "/")
 
     @ViewBuilder
     private func areaSurface(layout: VoiceOnlyKeyboardPolicy.Layout, contentFrame: CGRect) -> some View {
         let surfaceFrame = contentFrame
-        // Pages owned by the rebuilt UIKit grid render only the shared bottom bar
-        // here.
-        //
-        // The grid draws its own keys in a real `UIView` mounted on the input view,
-        // and `NextKeyboardHost.gridFrame` gives it a rect that stops above the bar
-        // lane. So the two describe disjoint regions — nothing is drawn twice and
-        // nothing overlaps, which is what let the SwiftUI layer stay non-interactive
-        // over the rows. That matters: leaving SwiftUI hit-testable on top of the
-        // grid is what swallowed every touch in the first place.
+        // The UIKit grid and bottom bar own letters, symbols, emoji, and the pad.
+        // SwiftUI stays clear there so it cannot swallow their touches.
         if KeyboardViewController.nextKeyboardModes.contains(state.areaMode) || state.areaMode == .emoji {
-            // KeyboardBottomBarView is mounted directly by the controller.
             Color.clear
                 .frame(width: surfaceFrame.width, height: surfaceFrame.height)
                 .allowsHitTesting(false)
@@ -236,171 +145,20 @@ struct KeyboardRootView: View {
         }
     }
 
-    /// Retained legacy SwiftUI renderer until native on-device parity is signed
-    /// off. Live pages use KeyboardBottomBarView, never this second touch path.
-    @ViewBuilder
-    private func sharedBottomBar(
-        layout: VoiceOnlyKeyboardPolicy.Layout,
-        surfaceFrame: CGRect
-    ) -> some View {
-        let lane = CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap)
-            + CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
-            + CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset)
-        let barHeight = CGFloat(VoiceOnlyKeyboardPolicy.spacebarHeight)
-        let isLetterPage = state.areaMode == .letters
-        let isEmojiPage = state.areaMode == .emoji
-        // The number pad has no bar. The system pad is 1-9 then a centred 0 and a
-        // delete, and it runs the full height; mounting a bar under it would both
-        // differ from that and take 54pt the pad's keys need.
-        let isPad = state.areaMode == .numberPad
-        if isPad {
-            Color.clear
-                .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-                .allowsHitTesting(false)
-        } else {
-        VStack(spacing: 0) {
-            // The grid's share. Transparent and untouchable: it only reserves the
-            // space so the bar lands in the lane the host left for it.
-            Color.clear
-                .frame(width: surfaceFrame.width, height: max(0, surfaceFrame.height - lane))
-                .allowsHitTesting(false)
-            Color.clear
-                .frame(height: CGFloat(VoiceOnlyKeyboardPolicy.chromeCommandRowGap))
-                .allowsHitTesting(false)
-            // Flag-for-flag the same call `LetterKeyboardSurface` and
-            // `SymbolKeyboardSurface` make. The letter page is the only one with a
-            // period key and the only one that hides its own layer control; the
-            // symbol page hides 123 because it carries a #+/123 toggle of its own.
-            AuxiliaryBottomBar(
-                layout: layout,
-                numbersTitle: "123",
-                onNumbers: { state.presentNumbersArea() },
-                onLetters: { state.presentArea(.letters) },
-                onEmoji: { state.presentArea(.emoji) },
-                spaceFrame: isLetterPage ? layout.letterSpaceFrame : layout.chromeWideSpaceFrame,
-                returnFrame: layout.chromeReturnFrame,
-                periodFrame: isLetterPage ? layout.letterPeriodFrame : .zero,
-                onPeriod: { routeText($0) },
-                onDelete: { routeProxyCommand(.delete) },
-                onSpace: { routeProxyCommand(.space) },
-                onSpaceCursorBegan: {},
-                onSpaceCursorMoved: routeCursorMovement,
-                onSpaceCursorEnded: routeCursorEnded,
-                onReturn: { routeProxyCommand(.returnKey) },
-                // Flag for flag as `LetterKeyboardSurface` and
-                // `SymbolKeyboardSurface` pass them. The letter page shows 123 and
-                // hides ABC because it *is* ABC; the symbol pages show ABC and hide
-                // 123, because their layer toggle lives in the grid's own last row.
-                // Setting both true renders two layer controls, which is how the
-                // symbol pages came to show 123 where they should show ABC.
-                showsNumbersControl: isLetterPage || isEmojiPage,
-                showsLettersControl: !isLetterPage,
-                showsEmojiControl: !isEmojiPage,
-                showsPeriodKey: false,
-                fieldKeys: isLetterPage ? state.hostLetterFieldKeys : .standard,
-                onSymbolInsert: { routeText($0) }
-            )
-            .frame(width: surfaceFrame.width, height: barHeight)
-            Color.clear
-                .frame(height: CGFloat(VoiceOnlyKeyboardPolicy.chromeBottomInset))
-                .allowsHitTesting(false)
-        }
-        .frame(width: surfaceFrame.width, height: surfaceFrame.height, alignment: .topLeading)
-        }
-    }
-
+    /// Letters, symbols, emoji, and the number pad are drawn by the UIKit grid.
+    /// This view only hosts the dictation board.
     @ViewBuilder
     private func surfaceContent(
         layout: VoiceOnlyKeyboardPolicy.Layout,
         surfaceFrame: CGRect
     ) -> some View {
         switch state.areaMode {
-        case .keys:
+        case .keys, .recording:
             centerSurface(layout: layout)
-        case .letters:
-            LetterKeyboardSurface(
-                surfaceLayout: layout,
-                availableWidth: surfaceFrame.width,
-                availableHeight: surfaceFrame.height,
-                onInsert: routeProxyText,
-                onDelete: { routeProxyCommand(.delete) },
-                onDeleteWord: routeWordDeletion,
-                onReturn: { routeProxyCommand(.returnKey) },
-                onSpace: { routeProxyCommand(.space) },
-                onBackToVoice: { state.closeArea() },
-                onSymbols: { state.presentNumbersArea() },
-                onEmoji: { state.presentArea(.emoji) },
-                showsSymbolsControl: true,
-                fieldKeys: state.hostLetterFieldKeys,
-                onSpaceCursorBegan: {},
-                onSpaceCursorMoved: routeCursorMovement,
-                onSpaceCursorEnded: routeCursorEnded,
-            )
-            .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-            .accessibilityIdentifier("letter-keyboard-surface")
-        case .recording:
-            centerSurface(layout: layout)
-        case .emoji:
-            EmojiKeyboardSurface(
-                onEmojiInsert: { emoji in
-                    routeText(emoji)
-                },
-                onBackToVoice: { state.closeArea() },
-                onLetters: { state.presentArea(.letters) },
-                onSymbols: { state.presentNumbersArea() },
-                onSpace: { routeProxyCommand(.space) },
-                onReturn: { routeProxyCommand(.returnKey) },
-                onSpaceCursorBegan: {},
-                onSpaceCursorMoved: routeCursorMovement,
-                onSpaceCursorEnded: routeCursorEnded,
-                onDelete: { routeProxyCommand(.delete) },
-                onDeleteWord: routeWordDeletion,
-                surfaceLayout: layout,
-                availableWidth: surfaceFrame.width,
-                availableHeight: surfaceFrame.height,
-                selectedCategoryID: $emojiSelectedCategoryID,
-                scrollRequest: $emojiCategoryJump
-            )
-            .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-            .accessibilityIdentifier("emoji-picker-surface")
-        case .panel:
-            SymbolKeyboardSurface(
-                page: symbolPage,
-                surfaceLayout: layout,
-                availableWidth: surfaceFrame.width,
-                availableHeight: surfaceFrame.height,
-                onInsert: { text in routeProxyText(text) },
-                onDelete: { routeProxyCommand(.delete) },
-                onDeleteWord: routeWordDeletion,
-                onReturn: { routeProxyCommand(.returnKey) },
-                onSpace: { routeProxyCommand(.space) },
-                onTogglePage: { nextPage in symbolPage = nextPage },
-                onClose: { state.closeArea() },
-                onBackToVoice: { state.closeArea() },
-                onEmoji: { state.presentArea(.emoji) },
-                onKeyboard: { state.presentArea(.letters) },
-                onSpaceCursorBegan: {},
-                onSpaceCursorMoved: routeCursorMovement,
-                onSpaceCursorEnded: routeCursorEnded,
-            )
-            .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-            .accessibilityIdentifier("number-layer-surface")
-        case .numberPad:
-            NumberKeyboardSurface(
-                style: state.hostNumberPadStyle,
-                availableWidth: surfaceFrame.width,
-                availableHeight: surfaceFrame.height,
-                popupTopOverflow: CGFloat(layout.surfaceFrame.minY),
-                onInsert: { text in routeProxyText(text) },
-                onDelete: { routeProxyCommand(.delete) },
-                onDeleteWord: routeWordDeletion,
-                onKeyboard: { state.presentArea(.letters) },
-                // The shared UIKit touch owner is mounted on the input view, so the
-                // pad must publish its geometry in that space, not its own.
-                surfaceOrigin: surfaceFrame.origin,
-            )
-            .frame(width: surfaceFrame.width, height: surfaceFrame.height)
-            .accessibilityIdentifier("number-pad-surface")
+        case .letters, .panel, .emoji, .numberPad:
+            Color.clear
+                .frame(width: surfaceFrame.width, height: surfaceFrame.height)
+                .allowsHitTesting(false)
         }
     }
 
@@ -412,114 +170,7 @@ struct KeyboardRootView: View {
         routeCommand(command)
     }
 
-    private var accessoryHitSize: CGSize {
-        CGSize(
-            width: VoiceOnlyKeyboardPolicy.accessoryControlSize,
-            height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
-        )
-    }
 
-    private var languageIndicator: some View {
-        let visualHeight = VoiceOnlyKeyboardPolicy.commandVisualSize(for: accessoryHitSize).height
-        return ZStack {
-            appleControlSurface(
-                    Text(languageIndicatorTitle)
-                    .font(.caption2.weight(.semibold))
-                    // The keyboard control has a fixed frame; preserve a complete
-                    // label while allowing text growth through standard sizes.
-                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 6)
-                    .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: visualHeight),
-                in: Capsule()
-            )
-            LanguageMenuButton()
-        }
-        .frame(width: CGFloat(VoiceOnlyKeyboardPolicy.languageVisualWidth), height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
-        .tint(.primary)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Output language")
-        .accessibilityValue(languageIndicatorTitle)
-        .accessibilityHint("Opens the translation menu.")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private var languageIndicatorTitle: String {
-        if let target = state.selectedTranslationTarget {
-            return target.shortCode
-        }
-        return "AUTO"
-    }
-
-    private var dismissAccessoryButton: some View {
-        SuggestionBarIconButton(
-            systemName: "keyboard.chevron.compact.down",
-            label: "Dismiss keyboard",
-            laneSize: accessoryHitSize,
-            action: routeDismiss
-        )
-        .accessibilityIdentifier("dismiss-keyboard")
-    }
-
-    private var pasteButton: some View {
-        SuggestionBarIconButton(
-            systemName: state.isOneTimeCodeField ? "number.square" : "doc.on.clipboard",
-            label: state.isOneTimeCodeField ? "Paste verification code" : "Paste from clipboard",
-            laneSize: accessoryHitSize,
-            action: routePaste
-        )
-        .accessibilityHint("Inserts the current clipboard text.")
-    }
-
-    private var dictationBoardButton: some View {
-        SuggestionBarIconButton(
-            systemName: "mic.fill",
-            label: "Return to dictation board",
-            laneSize: accessoryHitSize,
-            action: { state.closeArea() }
-        )
-        .accessibilityIdentifier("return-to-dictation-board")
-    }
-
-
-}
-
-
-private struct OptionalLongPressModifier<G: Gesture>: ViewModifier {
-    let enabled: Bool
-    let gesture: G
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.highPriorityGesture(gesture)
-        } else {
-            content
-        }
-    }
-}
-
-private struct SymbolGlowButtonStyle: ButtonStyle {
-    let isActive: Bool
-    let reduceMotion: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed || isActive
-        configuration.label
-            .background {
-                if pressed {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color.primary.opacity(0.16), lineWidth: 1)
-                        }
-                        .padding(4)
-                }
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: pressed)
-    }
 }
 
 /// UIKit owns the language menu. SwiftUI Menu rebuilds whenever KeyboardState

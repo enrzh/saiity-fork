@@ -87,19 +87,21 @@ final class KeyboardOwnershipBehaviorTests: XCTestCase {
     /// Every surface must publish contiguous tiles, and must not reintroduce
     /// overlapping targets that need a tie-break to resolve.
     func testEverySurfacePublishesContiguousTiles() throws {
-        for surface in ["LetterKeyboardSurface", "SymbolKeyboardSurface", "NumberKeyboardSurface"] {
-            let source = try String(
-                contentsOf: URL(fileURLWithPath: #filePath)
-                    .deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .deletingLastPathComponent()
-                    .appending(path: "DictusKeyboard/\(surface).swift"),
-                encoding: .utf8)
-            XCTAssertTrue(source.contains("KeyboardKeyHitGeometry.contiguousTiles("),
-                          "\(surface) must publish contiguous tiles to the touch owner")
-            XCTAssertFalse(source.contains("KeyboardKeyHitGeometry.growing("),
-                           "\(surface) must not publish overlapping grown targets")
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let placement = try String(
+            contentsOf: repository.appending(path: "DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift"),
+            encoding: .utf8)
+        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("),
+                      "letter, symbol, and pad pages share one placement that publishes contiguous tiles")
+        XCTAssertFalse(placement.contains("KeyboardKeyHitGeometry.growing("),
+                       "the shared placement must not publish overlapping grown targets")
+        for name in ["LetterKeyboardSurface", "SymbolKeyboardSurface", "NumberKeyboardSurface"] {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: repository.appending(path: "DictusKeyboard/\(name).swift").path))
         }
     }
 
@@ -116,22 +118,20 @@ final class KeyboardOwnershipBehaviorTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let surface = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/LetterKeyboardSurface.swift"),
+        let grid = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Next/KeyGridView.swift"),
+            encoding: .utf8)
+        let controller = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"),
             encoding: .utf8)
         let state = try String(
             contentsOf: repository.appending(path: "DictusKeyboard/TextPrediction/SuggestionState.swift"),
             encoding: .utf8)
 
-        // The grid reads the published contextual probabilities and hands them to
-        // the geometry solver. The prediction is first bound to a local because
-        // the same value keys the memoised geometry, and it is gated on the
-        // Settings toggle, so asserting one exact call-site string here only
-        // asserted a refactor rather than the behaviour.
-        XCTAssertTrue(surface.contains("? suggestionState.adaptiveTouchPrediction : nil"),
+        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"),
                       "the letter grid must use the published contextual probabilities")
-        XCTAssertTrue(surface.contains("probabilities: prediction,"),
-                      "those probabilities must be what the hit geometry is solved from")
+        XCTAssertTrue(controller.contains("SuggestionState.shared.adaptiveTouchPrediction"),
+                      "the controller must hand those probabilities to the live grid")
         XCTAssertTrue(state.contains("self.engine.nextCharacterProbabilities(\n                        for: partial, after: previousWords"),
                       "the estimate must be conditioned on the partial word and the words before it")
     }

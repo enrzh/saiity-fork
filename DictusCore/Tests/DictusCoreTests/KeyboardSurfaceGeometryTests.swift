@@ -105,14 +105,19 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
             encoding: .utf8
         )
-        let symbols = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/SymbolKeyboardSurface.swift"),
+        let factory = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Next/KeyGridPageFactory.swift"),
+            encoding: .utf8
+        )
+        let host = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Next/NextKeyboardHost.swift"),
             encoding: .utf8
         )
 
-        XCTAssertTrue(symbols.contains("KeyboardSymbolsLayout"))
+        XCTAssertTrue(factory.contains("KeyboardLayouts.current()"))
         XCTAssertFalse(root.contains("symbolBottomControlBudget"))
-        XCTAssertFalse(symbols.contains("symbolBottomControlBudget"))
+        XCTAssertFalse(factory.contains("symbolBottomControlBudget"))
+        XCTAssertTrue(host.contains("KeyGridPlacement.bottomBarLaneHeight"))
     }
 
     func testSymbolGridReservesLeadingLanePerRow() {
@@ -243,15 +248,15 @@ final class KeyboardSurfaceGeometryTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"),
             encoding: .utf8
         )
-        let symbols = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/SymbolKeyboardSurface.swift"),
+        let host = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/Next/NextKeyboardHost.swift"),
             encoding: .utf8
         )
 
         XCTAssertFalse(root.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
-        XCTAssertFalse(symbols.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
-        XCTAssertTrue(root.contains("case .emoji:"))
-        XCTAssertTrue(symbols.contains("AuxiliaryBottomBar("))
+        XCTAssertFalse(host.contains("HStack(alignment: .center, spacing: CGFloat(VoiceOnlyKeyboardPolicy.symbolControlGap))"))
+        XCTAssertTrue(root.contains("case .letters, .panel, .emoji, .numberPad:"))
+        XCTAssertTrue(host.contains("let lane = KeyGridPlacement.bottomBarLaneHeight"))
     }
 
     func testActionFramesStayInsideTheSharedSurfaceAtNativeHeights() {

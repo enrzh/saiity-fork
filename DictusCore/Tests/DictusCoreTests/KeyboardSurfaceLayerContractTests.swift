@@ -42,21 +42,24 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
 
     func testSymbolsUseExplicitGridHeightWithoutOverlayWidthCompensation() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
+        let host = try read("DictusKeyboard/Next/NextKeyboardHost.swift")
 
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("let gridSize = CGSize(width: proxy.size.width, height: proxy.size.height)"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains(".frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)"))
+        XCTAssertTrue(host.contains("let height = max(0, surface.height - lane)"))
+        XCTAssertTrue(host.contains("return CGRect(x: surface.minX, y: surface.minY,"))
         XCTAssertFalse(source.contains("leadingReservedWidths"))
         XCTAssertFalse(source.contains("positionedKeys(in: gridSize).filter"))
     }
 
     func testSymbolButtonsCommitTapsAndPageToggleRemainsAvailable() throws {
         let source = try read("DictusKeyboard/KeyboardRootView.swift")
+        let grid = try read("DictusKeyboard/Next/KeyGridView.swift")
+        let host = try read("DictusKeyboard/Next/NextKeyboardHost.swift")
 
-        // Symbol keys are faces only; the shared UIKit owner owns their touches.
-        XCTAssertTrue((try relocatedKeyboardSource()).contains(".keyGridInput("))
+        XCTAssertTrue(grid.contains("override func touchesBegan("))
+        XCTAssertTrue(grid.contains("case .insert(let text):"))
         XCTAssertFalse(source.contains("simultaneousGesture(symbolDragGesture(frames: frames))"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .symbols2ToSymbols1:"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage:"))
+        XCTAssertTrue(host.contains("case .page(let id):"))
+        XCTAssertTrue(host.contains("symbolPage = (symbolPage == .symbolsNumbers) ? .symbolsPunctuation : .symbolsNumbers"))
     }
 
     func testAuxiliaryPagesUseOneTransparentSharedSurfaceAndNativeBottomLane() throws {
@@ -79,7 +82,9 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(native.contains("attachKeyboardVisualController(emojiChrome, from: emojiCategory)"))
         XCTAssertFalse(root.contains("EmojiCategoryBar("))
         XCTAssertTrue(root.contains("KeyboardDeleteButton("))
-        XCTAssertTrue(root.contains("availableWidth: surfaceFrame.width"))
+        XCTAssertTrue(native.contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"),
+                      "emoji content must receive the complete embedded surface width")
+        XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertTrue(emoji.contains("UICollectionView"),
                       "emoji categories must use the native paged collection surface")
         XCTAssertFalse(emoji.contains("TabView("), "nested SwiftUI paging must be removed")
@@ -120,19 +125,30 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     }
 
     func testLegacySuggestionRowIsNotReachableFromTheKeyboardToolbar() throws {
-        let source = try read("DictusKeyboard/Views/ToolbarView.swift")
+        let root = try read("DictusKeyboard/KeyboardRootView.swift")
+        let controller = try read("DictusKeyboard/KeyboardViewController.swift")
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
 
-        XCTAssertFalse(source.contains("SuggestionBarView("))
-        XCTAssertFalse(source.contains("var suggestions:"))
-        XCTAssertFalse(source.contains("suggestions.isEmpty"))
-        XCTAssertFalse(source.contains("onSuggestionTap"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repository.appending(path: "DictusKeyboard/Views/ToolbarView.swift").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repository.appending(path: "DictusKeyboard/Views/SuggestionBarView.swift").path))
+        XCTAssertFalse(root.contains("SuggestionBarView("))
+        XCTAssertFalse(controller.contains("SuggestionBarView("))
+        XCTAssertFalse(root.contains("onSuggestionTap"))
     }
 
     func testStatusMessageKeepsItsDisplayLifecycleCallbacksAfterSuggestionRemoval() throws {
-        let source = try read("DictusKeyboard/Views/ToolbarView.swift")
+        let board = try read("DictusKeyboard/VoiceBoardSurface.swift")
+        let state = try read("DictusKeyboard/KeyboardState.swift")
 
-        XCTAssertTrue(source.contains("KeyboardState.shared.noteStatusMessageDisplayed("))
-        XCTAssertTrue(source.contains("KeyboardState.shared.noteStatusMessageHidden("))
+        XCTAssertTrue(board.contains("if let message = state.statusMessage { return message }"),
+                      "the voice board still shows a status message after the suggestion row is gone")
+        XCTAssertTrue(state.contains("func noteStatusMessageDisplayed(rootView: String, controller: String)"))
+        XCTAssertTrue(state.contains("func noteStatusMessageHidden(rootView: String, controller: String)"))
+        XCTAssertFalse(board.contains("SuggestionBarView("))
     }
 
     func testEmojiCategoryBarUsesNativeSystemImages() throws {
@@ -196,7 +212,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(native.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("EmojiCategoryBar("))
         XCTAssertFalse(picker.contains("let categoryBarHeight: CGFloat = 44"))
-        XCTAssertTrue(root.contains("private func accessoryBar("))
+        XCTAssertFalse(root.contains("private func accessoryBar("))
+        XCTAssertTrue(native.contains("floatingEmojiCategoryFrame"))
     }
 
     func testEmojiCategoriesAreMonochromeOrASCIIWithoutLegacySearch() throws {
@@ -298,9 +315,6 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
             "DictusKeyboard/KeyboardKeyStyle.swift",
             "DictusKeyboard/KeyboardKeyInput.swift",
             "DictusKeyboard/VoiceBoardSurface.swift",
-            "DictusKeyboard/LetterKeyboardSurface.swift",
-            "DictusKeyboard/NumberKeyboardSurface.swift",
-            "DictusKeyboard/SymbolKeyboardSurface.swift",
             "DictusKeyboard/KeyboardState.swift",
             "DictusKeyboard/Views/EmojiPickerView.swift",
             "DictusKeyboard/Views/EmojiGestureCoordinator.swift",

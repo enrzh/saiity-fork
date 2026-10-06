@@ -18,9 +18,6 @@ final class KeyboardRegressionTests: XCTestCase {
             "DictusKeyboard/KeyboardKeyStyle.swift",
             "DictusKeyboard/KeyboardKeyInput.swift",
             "DictusKeyboard/VoiceBoardSurface.swift",
-            "DictusKeyboard/LetterKeyboardSurface.swift",
-            "DictusKeyboard/NumberKeyboardSurface.swift",
-            "DictusKeyboard/SymbolKeyboardSurface.swift",
             "DictusKeyboard/KeyboardState.swift",
             "DictusKeyboard/Views/EmojiPickerView.swift",
             "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
@@ -37,11 +34,11 @@ final class KeyboardRegressionTests: XCTestCase {
     }
 
     func testLetterPageDoesNotCommitSwipeTyping() throws {
-        let root = try source("DictusKeyboard/LetterKeyboardSurface.swift")
         let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
-        XCTAssertFalse(root.contains("swipeWord"))
-        XCTAssertFalse(root.contains("SwipeTypingDecoder"))
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertFalse(grid.contains("swipeWord"))
+        XCTAssertFalse(grid.contains("SwipeTypingDecoder"))
+        XCTAssertFalse(root.contains("LetterKeyboardSurface("))
         // Hold-for-accents stays on the letter page; swipe is not wired there. The
         // gesture now lives in the UIKit grid, so that is where the assertion belongs.
         XCTAssertTrue(grid.contains("override func touchesMoved("),
@@ -60,23 +57,20 @@ final class KeyboardRegressionTests: XCTestCase {
     }
 
     func testLetterSurfaceAddsARealPeriodKeyWithSharedHoldRouting() throws {
-        let root = try source("DictusKeyboard/LetterKeyboardSurface.swift")
         let liveRoot = try source("DictusKeyboard/KeyboardRootView.swift")
-        let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
-
-        XCTAssertTrue(root.contains("periodFrame: surfaceLayout.letterPeriodFrame"))
-        XCTAssertTrue(root.contains("showsPeriodKey: true"))
-        XCTAssertTrue(layouts.contains("KeyDefinition(type: .fullStop"))
-        XCTAssertTrue(bar.contains("ImmediateVariantKey("))
-        XCTAssertTrue(bar.contains("SymbolKeyVariants.options(for: \".\")"))
-        XCTAssertTrue(liveRoot.contains("showsPeriodKey: false"),
-                      "the live page must not install a second period target")
         let native = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
+
+        XCTAssertTrue(native.contains("final class KeyboardPeriodKeyView"))
+        XCTAssertTrue(native.contains("onInsert?(\".\")"))
+        XCTAssertTrue(native.contains("holdWork.begin(after: KeyboardDeletion.holdRecognitionDuration)"))
+        XCTAssertTrue(native.contains("KeyboardVariantPreferences.options(for: \".\", kind: .symbol)"))
         XCTAssertTrue(native.contains("let bottomBar = KeyboardBottomBarView()"))
+        XCTAssertTrue(native.contains("var period: KeyboardPeriodKeyView { bottomBar.period }"))
         XCTAssertTrue(bar.contains("period.isHidden = mode != .letters || self.fieldKeys.rightInsert != nil"))
-        XCTAssertTrue(bar.contains("nativeMode: .letters"))
+        XCTAssertFalse(liveRoot.contains("showsPeriodKey:"),
+                       "the SwiftUI root must not install a second period target")
         XCTAssertFalse(controller.contains("placePeriod("),
                        "the period target must follow its visible component, not an independent frame")
         XCTAssertTrue(bar.contains(".position(x: localX(returnHit), y: localY(returnHit))"))
@@ -85,9 +79,14 @@ final class KeyboardRegressionTests: XCTestCase {
     }
 
     func testEmojiSelectionDoesNotCloseThePicker() throws {
-        let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(root.contains("routeText(emoji)"))
-        XCTAssertFalse(root.contains("routeText(emoji)\n                    state.closeArea()"))
+        let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+        let start = try XCTUnwrap(picker.range(of: "private func insertEmoji(_ emoji: String)"))
+        let end = try XCTUnwrap(picker.range(of: "// MARK: - Scroll canvas", range: start.upperBound..<picker.endIndex))
+        let body = String(picker[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(body.contains("onEmojiInsert(emoji)"))
+        XCTAssertFalse(body.contains("closeArea()"))
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(controller.contains("surface.emoji.onInsert = { [weak self] in self?.routeProxyText($0) }"))
     }
 
     func testBlankEmojiViewportHasAScrollHitShape() throws {
@@ -99,73 +98,59 @@ final class KeyboardRegressionTests: XCTestCase {
     }
 
     func testSymbolPageDoesNotPlaceACompetingDragGestureAboveTapButtons() throws {
-        let root = try source("DictusKeyboard/SymbolKeyboardSurface.swift")
-        let pageStart = try XCTUnwrap(root.range(of: "struct SymbolKeyboardSurface"))
-        let keyStart = try XCTUnwrap(root.range(of: "private struct LiquidSymbolKey"))
-        let page = String(root[pageStart.lowerBound..<keyStart.lowerBound])
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
 
-        XCTAssertFalse(page.contains(".simultaneousGesture(symbolDragGesture(frames: frames))"))
-        XCTAssertFalse(page.contains(".simultaneousGesture(symbolPointerGesture(frames: frames))"),
+        XCTAssertFalse(grid.contains(".simultaneousGesture("),
                        "the grid must not commit a second action after a key-owned hold")
-        // Variant tracking now runs through the shared UIKit owner's callbacks
-        // rather than a control per key, so the page carries handlers instead.
-        XCTAssertTrue(page.contains(".keyGridInput("))
-        XCTAssertTrue(page.contains("refreshedGridHandlers("))
-        // The handlers live in the shared-owner section, which sits before the key
-        // builder rather than inside it.
-        XCTAssertTrue(root.contains("private func handleGridMove("),
+        XCTAssertFalse(grid.contains("symbolDragGesture"))
+        XCTAssertFalse(grid.contains("symbolPointerGesture"))
+        XCTAssertTrue(grid.contains("override func touchesBegan("))
+        XCTAssertTrue(grid.contains("override func touchesMoved("),
                       "variant tracking must update selection while the finger moves")
+        XCTAssertTrue(grid.contains("press.selectedVariant = index"))
     }
 
     func testLetterAndSymbolPlatesKeepNativeGaps() throws {
-        let root = try source("DictusKeyboard/LetterKeyboardSurface.swift")
-        let symbols = try source("DictusKeyboard/SymbolKeyboardSurface.swift")
-        // Solved rows are zipped against the key rows, so the drawn plate and the
-        // hit cell arrive as a matched pair rather than being indexed independently.
-        XCTAssertTrue(root.contains("visualFrame: pair.1"),
-                      "plates must use the original key frames, not the gap-absorbed hit cells")
-        XCTAssertTrue(root.contains("frame: pair.0"),
-                      "the hit cell must come from the solved hit row")
-        XCTAssertFalse(root.contains("visualFrame: rowHits[columnIndex]"),
+        let placement = try source("DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift")
+        let model = try source("DictusCore/Sources/DictusCore/NextKeyGridModel.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+
+        XCTAssertTrue(model.contains("public let plate: CGRect"),
+                      "plates must stay the drawn key frames, not the gap-absorbed hit cells")
+        XCTAssertTrue(model.contains("public let target: CGRect"))
+        XCTAssertTrue(model.contains("item.target.contains(point)"),
+                      "the hit cell must come from the solved target")
+        XCTAssertTrue(placement.contains("plate: item.plate, target: target"),
+                      "retargeting may move the hit cell without redrawing the plate")
+        XCTAssertTrue(grid.contains("drawLabel(for: item.key, in: item.plate, pressed: pressed)"))
+        XCTAssertTrue(grid.contains("layout.key(at: point)"))
+        XCTAssertFalse(placement.contains("visualFrame: rowHits[columnIndex]"),
                        "drawing on hit cells makes every key the same size and removes native gaps")
-        XCTAssertTrue(root.contains("KeyboardKeyHitGeometry.frames("))
-        // The press highlight is now drawn by the surface from the press state the
-        // touch owner reports, sized to the drawn plate rather than the hit cell.
-        XCTAssertTrue(root.contains("if pressedKeyIDs.values.contains(keyID)"),
-                      "press feedback must be driven by the touch owner")
-        XCTAssertTrue(root.contains(".frame(width: visualFrame.width, height: visualFrame.height)"),
-                      "press highlights must match the drawn plate, not the hit cell")
-        XCTAssertTrue(symbols.contains("visualFrame: pair.1"))
-        XCTAssertTrue(symbols.contains("frame: pair.0"))
-        XCTAssertFalse(symbols.contains("visualFrame: rowHits[columnIndex]"))
     }
 
     func testSymbolButtonsUseAStableNativeTapSurface() throws {
-        let root = try source("DictusKeyboard/SymbolKeyboardSurface.swift")
-        let start = try XCTUnwrap(root.range(of: "private func symbolKey"))
-        let end = try XCTUnwrap(root.range(of: "private func insertVariants"))
-        let body = String(root[start.lowerBound..<end.lowerBound])
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
 
-        // Symbol keys are faces only now; the shared UIKit owner resolves the touch
-        // and the surface supplies the press/move/release behaviour.
-        XCTAssertFalse(body.contains("ImmediateVariantKey("),
+        XCTAssertFalse(grid.contains("ImmediateVariantKey("),
                        "symbol keys must not install a control per key")
-        XCTAssertFalse(body.contains("ImmediateKeyButton("),
+        XCTAssertFalse(grid.contains("ImmediateKeyButton("),
                        "symbol keys must not install a control per key")
-        XCTAssertTrue(body.contains(".frame(width: frame.width, height: frame.height)"))
-        XCTAssertTrue(body.contains("pressedKeyIDs.values.contains(keyID)"),
-                      "press feedback comes from the owner, so a rebuilt key keeps its highlight")
-        XCTAssertTrue(root.contains("private func handleGridPress("),
-                      "press behaviour must be reachable from the owner's callback")
-        XCTAssertTrue(root.contains("private func handleGridMove("),
-                      "accent drag must be reachable from the owner's callback")
-        XCTAssertTrue(root.contains("private func handleGridRelease("),
-                      "release behaviour must be reachable from the owner's callback")
+        XCTAssertTrue(grid.contains("final class KeyGridView: UIView"),
+                      "letters, symbols, and the pad share one view")
+        XCTAssertTrue(grid.contains("override func touchesBegan("),
+                      "press behaviour must be reachable from the view that draws the keys")
+        XCTAssertTrue(grid.contains("override func touchesMoved("),
+                      "accent drag must be reachable from the same view")
+        XCTAssertTrue(grid.contains("override func touchesEnded("),
+                      "release behaviour must be reachable from the same view")
     }
 
     func testLanguageIndicatorShowsBareOutputCode() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(root.contains("return target.shortCode"))
+        let request = try source("DictusCore/Sources/DictusCore/DictationLanguageRequest.swift")
+        XCTAssertTrue(root.contains("title: \"AUTO\""))
+        XCTAssertTrue(request.contains("return \"Translate to \\(target.displayName)\""))
+        XCTAssertFalse(root.contains("return target.shortCode"))
         XCTAssertFalse(root.contains("return \"->\\(target.shortCode)\""))
     }
 
@@ -209,9 +194,10 @@ final class KeyboardRegressionTests: XCTestCase {
             "popout previews reserve their transformed size before rendering"
         )
 
-        let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("topOverflow: CGFloat(surfaceLayout.surfaceFrame.minY)"))
-        XCTAssertTrue(root.contains("popupTopOverflow: CGFloat(layout.surfaceFrame.minY)"))
+        let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
+        XCTAssertTrue(bar.contains("let popupTopOverflow = max(0, barOriginY - CGFloat(surface.minY))"),
+                      "a period popup may use the space above the bottom bar")
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyGridView.swift").contains("host.view.isUserInteractionEnabled = false"))
     }
 
     func testKeyPopupSurfaceStacksAboveSuggestionBarControls() throws {
@@ -377,29 +363,26 @@ final class KeyboardRegressionTests: XCTestCase {
 
     func testKeyboardDownDismissesDirectlyOnEveryPage() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        let start = try XCTUnwrap(root.range(of: "private func accessoryBar("))
-        let end = try XCTUnwrap(root.range(of: "private let preparationURL"))
-        let accessory = String(root[start.lowerBound..<end.lowerBound])
-        XCTAssertTrue(root.contains("action: routeDismiss"))
-        XCTAssertTrue(root.contains("state.closeArea()"))
-        XCTAssertTrue(root.contains("Return to dictation board"))
-        XCTAssertTrue(accessory.contains("dismissAccessoryButton"))
-        XCTAssertTrue(accessory.contains("dictationBoardButton"))
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+
+        XCTAssertFalse(root.contains("private func accessoryBar("))
+        XCTAssertFalse(root.contains("SuggestionBarIconButton("))
+        XCTAssertFalse(root.contains("private let preparationURL"))
         XCTAssertTrue(controller.contains("UIAction(title: \"Dismiss keyboard\""))
-        XCTAssertTrue(controller.contains("voiceBoardButton?.isHidden = !isAuxiliary"))
+        XCTAssertTrue(controller.contains("self?.handleDismissTouchDown()"))
+        XCTAssertTrue(controller.contains("private func handleDismissTouchDown()"))
+        XCTAssertTrue(controller.contains("dismissKeyboard()"))
+        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""))
+        XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
+        XCTAssertTrue(controller.contains("voiceBoardButton?.isHidden = !isAuxiliary || !showsTopBar"))
         XCTAssertTrue(controller.contains("emojiCategoryScrubber"))
         XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("floatingEmojiCategoryFrame"))
         XCTAssertTrue(controller.contains("selectEmojiCategory(at:"))
-        XCTAssertTrue(root.contains("bindEmojiCategoryScrubber()"))
-        XCTAssertTrue(root.contains("emojiCategoryJumpToken"))
+        XCTAssertTrue(controller.contains("emojiCategoryJumpToken"))
+        XCTAssertTrue(controller.contains("keyboardSurfaceView?.emoji.selectCategory"))
+        XCTAssertFalse(root.contains("bindEmojiCategoryScrubber()"))
         XCTAssertTrue(controller.contains("isExclusiveTouch = false"))
         XCTAssertTrue(controller.contains("keyboardWindowAccessoryHeight"))
-        XCTAssertTrue(root.contains("accessoryHitSize"))
-        let moved = try relocatedKeyboardSource()
-        XCTAssertTrue(moved.contains("scaledKeyGeometry"))
-        XCTAssertTrue(moved.contains("VoiceOnlyKeyboardPolicy.keySpacing") || moved.contains("geometry.keySpacing"))
-        XCTAssertTrue(moved.contains(".letterKeyPlate()"))
         XCTAssertTrue(root.contains(".allowsHitTesting(false)"))
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")
@@ -570,16 +553,19 @@ final class KeyboardRegressionTests: XCTestCase {
     /// through the prediction seamer, so the key visibly moved and changed size
     /// when the emoji page opened.
     func testDeleteUsesOneSharedFrameOnEveryPage() throws {
-        let letters = try source("DictusKeyboard/LetterKeyboardSurface.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        let surface = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
+        let placement = try source("DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift")
 
-        XCTAssertTrue(letters.contains("hitFrames[lastRow][index] = deleteFrame"),
-                      "the letter backspace hit frame must be pinned to the shared delete frame")
-        XCTAssertTrue(letters.contains("frames[lastRow][index] = deleteFrame"),
-                      "the letter backspace visual frame must be pinned to the shared delete frame")
+        XCTAssertTrue(surface.contains("emojiDelete.frame = layout.inputFrame(layout.boardDeleteFrame, inputViewHeight: inputHeight)"),
+                      "the emoji page delete must use the shared board delete frame")
         XCTAssertTrue(root.contains("hitWidth: layout.boardDeleteFrame.width"),
-                      "the emoji page delete must use the shared board delete frame for its hit rect")
+                      "the dictation-board delete must use the shared board delete frame")
         XCTAssertTrue(root.contains("hitHeight: layout.boardDeleteFrame.height"))
+        XCTAssertTrue(factory.contains("id: \"delete\", action: .deleteRepeating"),
+                      "letter and symbol pages share one delete key on the pinned last row")
+        XCTAssertTrue(placement.contains("pinned to the edges so they occupy the same place on every page"))
     }
 
     /// The board's primary slot used to be one control that changed its mind.
@@ -641,12 +627,14 @@ final class KeyboardRegressionTests: XCTestCase {
     /// a finger down at that moment never received its release. Measured on
     /// device: 13 presses began, 4 ended, 0 cancelled.
     func testLetterKeyIdentityIsStableAcrossSurfaceRebuilds() throws {
-        let letters = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         XCTAssertFalse(
-            letters.contains("keyboardSurfaceID"),
+            factory.contains("keyboardSurfaceID"),
             "per-key identity must not embed a per-instance UUID or the controls are recreated mid-touch"
         )
-        XCTAssertTrue(letters.contains("id: \"letter-\\(rowIndex)-\\(columnIndex)\""),
+        XCTAssertFalse(grid.contains("keyboardSurfaceID"))
+        XCTAssertTrue(factory.contains("id: \"letter-\\(row)-\\(column)\""),
                       "per-key identity must be stable row/column")
     }
 
@@ -655,18 +643,16 @@ final class KeyboardRegressionTests: XCTestCase {
     /// finger lifting then dismissed a preview it did not own — 24 of 40
     /// committed keys on device were typing without owning their popup.
     func testKeyPreviewHasASingleOwnerUnderTwoFingerTyping() throws {
-        let letters = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         let popup = try source("DictusKeyboard/Views/KeyVariantPopup.swift")
 
         XCTAssertTrue(popup.contains("var ownerKeyID: String?"),
                       "the preview session must record which key owns it")
-        XCTAssertTrue(letters.contains("ownerKeyID: String"),
-                      "presentKeyPreview must take the owner")
-        XCTAssertTrue(letters.contains("existing.ownerKeyID != ownerKeyID"),
+        XCTAssertTrue(grid.contains("private var previewOwner: ObjectIdentifier?"))
+        XCTAssertTrue(grid.contains("private var popupOwner: ObjectIdentifier?"))
+        XCTAssertTrue(grid.contains("if ownsPopup { popupOwner = identity }"),
                       "a second key must not steal an owned preview")
-        XCTAssertTrue(letters.contains("dismissKeyPreview(ownerKeyID: String? = nil)"),
-                      "dismissal must be owner-scoped")
-        XCTAssertTrue(letters.contains("owner != ownerKeyID"),
+        XCTAssertTrue(grid.contains("if previewOwner == identity { previewOwner = nil }"),
                       "a non-owner release must leave the preview alone")
     }
 
@@ -676,7 +662,7 @@ final class KeyboardRegressionTests: XCTestCase {
     /// success path, so the one stage that proves a character reached the host
     /// was invisible.
     func testTouchTraceNeverLogsTypedText() throws {
-        let surface = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let surface = try source("DictusKeyboard/Next/KeyGridView.swift")
         let input = try source("DictusKeyboard/KeyboardKeyInput.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let owner = try source("DictusKeyboard/KeyGridTouchOwner.swift")
@@ -686,7 +672,7 @@ final class KeyboardRegressionTests: XCTestCase {
         // since been removed from the per-touch path for performance, which is a
         // second reason it must not return: the privacy problem and the cost
         // problem have the same fix.
-        for (name, text) in [("LetterKeyboardSurface", surface),
+        for (name, text) in [("KeyGridView", surface),
                             ("KeyboardKeyInput", input),
                             ("KeyboardViewController", controller),
                             ("KeyGridTouchOwner", owner)] {
@@ -747,31 +733,18 @@ final class KeyboardRegressionTests: XCTestCase {
     /// Stable key identities made destruction rarer (31% → 93% delivery) but could
     /// not make it impossible, because the lifecycle was still per key.
     func testLetterSurfaceHasExactlyOneTouchOwnerAndNoPerKeyControls() throws {
-        let surface = try source("DictusKeyboard/LetterKeyboardSurface.swift")
-
-        // One owner for the whole grid, and it is the thing that draws the keys.
-        // The surface no longer draws key faces at all, so there is no second
-        // description of the grid that could disagree with the touch targets.
-        XCTAssertFalse(surface.contains(".keyGridInput("),
-                       "the letter surface must not publish a separate hit geometry")
-        XCTAssertFalse(surface.contains("ForEach(frames)"),
-                       "the letter surface must not draw key faces")
-        XCTAssertTrue(surface.contains(".allowsHitTesting(false)"),
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertFalse(root.contains("LetterKeyboardSurface("),
+                       "the SwiftUI letter page must not publish a second hit geometry")
+        XCTAssertTrue(root.contains(".allowsHitTesting(false)"),
                       "the space the grid occupies must not compete for touches")
 
-        // The per-touch bookkeeping this used to assert about the letter grid is now
-        // `KeyGridTouchOwner`'s, and is covered by
-        // `testCaptureViewTracksEachTouchSeparately` below.
-        //
-        // What remains is the no-per-key-control rule, and it belongs on the view
-        // that draws the keys. Note it is deliberately *not* asserted on the surface:
-        // `ImmediateKeyButton` is live there, wrapping the shift key so it can
-        // dispatch on touch-down. That is a control for one command key, not the
-        // per-key control layer the rule is about.
         let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         XCTAssertFalse(grid.contains("UIButton("))
         XCTAssertFalse(grid.contains("ImmediateKeyButton("))
         XCTAssertFalse(grid.contains("ImmediateVariantKey("))
+        XCTAssertFalse(grid.contains("ForEach(frames)"),
+                       "the key grid must not draw a second set of key faces")
         XCTAssertTrue(grid.contains("isMultipleTouchEnabled = true"),
                       "two fingers on two keys must both be live")
         XCTAssertFalse(grid.contains("isExclusiveTouch = true"),
@@ -843,38 +816,25 @@ final class KeyboardRegressionTests: XCTestCase {
     /// Accent keys are the deliberate exception and still commit on release, because
     /// a hold has to be able to commit the popup option instead of the base letter.
     func testLettersInsertOnPressNotOnRelease() throws {
-        let letters = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
 
-        // Insert happens in the press handler, so the character appears with the
-        // finger going down.
-        let pressStart = try XCTUnwrap(letters.range(of: "private func handleCapturedPress("))
-        let pressLimit = try XCTUnwrap(letters.range(
-            of: "private func handleCapturedMove(", range: pressStart.upperBound..<letters.endIndex))
-        let pressBody = String(letters[pressStart.lowerBound..<pressLimit.lowerBound])
-        XCTAssertTrue(pressBody.contains("commit(key)"),
+        let pressStart = try XCTUnwrap(grid.range(of: "override func touchesBegan("))
+        let pressLimit = try XCTUnwrap(grid.range(
+            of: "override func touchesMoved(", range: pressStart.upperBound..<grid.endIndex))
+        let pressBody = String(grid[pressStart.lowerBound..<pressLimit.lowerBound])
+        XCTAssertTrue(pressBody.contains("case .insert(let text):"))
+        XCTAssertTrue(pressBody.contains("delegate?.keyGrid(self, perform: .insert(inserted), key: item.key)"),
                       "letters must insert on touch-down, not wait for the lift")
 
-        let releaseStart = try XCTUnwrap(letters.range(of: "private func handleCapturedRelease("))
-        let releaseLimit = try XCTUnwrap(letters.range(
-            of: "@ViewBuilder", range: releaseStart.upperBound..<letters.endIndex))
-        let releaseBody = String(letters[releaseStart.lowerBound..<releaseLimit.lowerBound])
-        XCTAssertFalse(releaseBody.contains("if !cancelled { commit(key) }"),
+        let releaseStart = try XCTUnwrap(grid.range(of: "private func finish(_ touches: Set<UITouch>, cancelled: Bool)"))
+        let releaseBody = String(grid[releaseStart.lowerBound...])
+        XCTAssertFalse(releaseBody.contains("case .insert"),
                        "a second commit on release would insert every letter twice")
-        XCTAssertTrue(releaseBody.contains("dismissKeyPreview(ownerKeyID: press.id)"),
-                      "the release must also clear the preview it owns")
-        XCTAssertTrue(releaseBody.contains("handleLetterVariantEnded("),
+        XCTAssertTrue(releaseBody.contains("case .character(let base, _):"),
                       "accent keys still commit on release, so a hold can pick an option")
-
-        // The precondition that makes press-insertion safe, asserted where it can
-        // actually regress: per-key controls are what made a press-time rebuild
-        // destroy an in-flight gesture.
-        let keyStart = try XCTUnwrap(letters.range(of: "private func letterKey("))
-        let keyLimit = try XCTUnwrap(letters.range(
-            of: "private func letterKeyLabel(", range: keyStart.upperBound..<letters.endIndex))
-        let keyBody = String(letters[keyStart.lowerBound..<keyLimit.lowerBound])
-        let defaultStart = try XCTUnwrap(keyBody.range(of: "            default:"))
-        let letterCase = String(keyBody[defaultStart.lowerBound...])
-        XCTAssertFalse(letterCase.contains("ImmediateKeyButton("),
+        XCTAssertTrue(releaseBody.contains("if previewOwner == identity { previewOwner = nil }"),
+                      "the release must also clear the preview it owns")
+        XCTAssertFalse(grid.contains("ImmediateKeyButton("),
                        "letters must not install a control, or a press-time render can destroy an in-flight touch")
     }
 
@@ -917,19 +877,14 @@ final class KeyboardRegressionTests: XCTestCase {
     /// the extension on launch, so nothing typed at all and no trace was written.
     /// There were 87 crash reports on the device by the time it was found.
     func testSolvedKeyRowsAreZippedRatherThanIndexed() throws {
-        for (name, path) in [
-            ("letter", "DictusKeyboard/LetterKeyboardSurface.swift"),
-            ("symbol", "DictusKeyboard/SymbolKeyboardSurface.swift"),
-            ("number", "DictusKeyboard/NumberKeyboardSurface.swift")
-        ] {
-            let surface = try source(path)
-            XCTAssertFalse(surface.contains("frame: rowHits[columnIndex]"),
-                           "\(name) indexes a solved row by a key-row column; the counts can differ")
-            XCTAssertFalse(surface.contains("frame: pair.1.1[columnIndex]"),
-                           "\(name) indexes a hit row by a column zipped against a different row")
-            XCTAssertTrue(surface.contains("zip("),
-                          "\(name) must zip solved rows against key rows so they cannot diverge")
-        }
+        let placement = try source("DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift")
+        XCTAssertFalse(placement.contains("frame: rowHits[columnIndex]"),
+                       "a solved row must not be indexed by a key-row column; the counts can differ")
+        XCTAssertFalse(placement.contains("frame: pair.1.1[columnIndex]"))
+        XCTAssertTrue(placement.contains("var frames = [CGRect](repeating: .null, count: row.count)"),
+                      "edge-pinned plates are allocated one per key in that row")
+        XCTAssertTrue(placement.contains("key: row[column]"),
+                      "each plate is paired with the key that produced it")
     }
 
     /// The keyboard must not write a trace on the per-touch path.
@@ -946,7 +901,7 @@ final class KeyboardRegressionTests: XCTestCase {
             "DictusKeyboard/KeyboardViewController.swift",
             "DictusKeyboard/KeyboardKeyInput.swift",
             "DictusKeyboard/KeyGridTouchOwner.swift",
-            "DictusKeyboard/LetterKeyboardSurface.swift"
+            "DictusKeyboard/Next/KeyGridView.swift"
         ] {
             let source = try source(path)
             for stage in hot {

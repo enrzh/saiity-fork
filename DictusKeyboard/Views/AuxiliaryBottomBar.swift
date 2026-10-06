@@ -465,41 +465,6 @@ final class KeyboardBottomBarView: UIView {
 }
 
 
-/// Circular accessory-lane control with even inset from the suggestion bar edge.
-struct SuggestionBarIconButton: View {
-    let systemName: String
-    let label: String
-    let laneSize: CGSize
-    let action: () -> Void
-
-    private var visualDiameter: CGFloat {
-        min(laneSize.width, laneSize.height) - VoiceOnlyKeyboardPolicy.suggestionLaneControlInset * 2
-    }
-
-    var body: some View {
-        ZStack {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: visualDiameter, height: visualDiameter)
-                .keyboardGlass(in: Circle())
-            ImmediateKeyButton(
-                onTouchDown: {
-                    HapticFeedback.playInputClick()
-                    action()
-                },
-                onTouchUp: {},
-                highlightCornerRadius: visualDiameter / 2,
-                highlightSize: CGSize(width: visualDiameter, height: visualDiameter)
-            )
-        }
-        .frame(width: laneSize.width, height: laneSize.height)
-        .contentShape(Circle())
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isButton)
-    }
-}
-
 /// What the space bar is doing under the finger, published so the face can show it.
 ///
 /// The tracking control is UIKit and the face is SwiftUI, and until this existed

@@ -214,7 +214,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testMicrophoneVisualRemainsSwiftUIOnlyAndDoesNotInstallGestureStartStop() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("appleControlSurface("))
+        XCTAssertTrue(try source("DictusKeyboard/VoiceBoardSurface.swift").contains("appleControlSurface("))
+        XCTAssertFalse(root.contains("appleControlSurface("))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonBackground"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonForeground"))
         // The recovery glyph belongs to the recovery control now; dictation is
@@ -327,14 +328,15 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testAuxiliaryKeysHaveOneGestureOwnerAndCancelPendingHolds() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertFalse(root.contains(".simultaneousGesture(symbolPointerGesture"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains(".keyGridInput("),
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        XCTAssertTrue(grid.contains("override func touchesBegan("),
                       "letter variants use the shared native UIKit touch owner")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("private func handleCapturedMove("),
+        XCTAssertTrue(grid.contains("override func touchesMoved("),
                       "variant tracking must update selection while the finger moves")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("guard !cancelled, !variantTouchCancelled else { return }"),
-                      "cancelled or escaped touches must not commit a key")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("activeVariantKeyID"),
-                      "multi-key tracking must only let the active key finish the touch")
+        XCTAssertTrue(grid.contains("if cancelled { continue }"),
+                      "cancelled touches must not commit a key")
+        XCTAssertTrue(grid.contains("presses[identity]"),
+                      "multi-key tracking must only let the active touch finish")
         XCTAssertFalse(root.contains("letterTouchActive"))
         XCTAssertFalse(root.contains(".nativeKeyboardKeySurface()"))
         let buttons = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
@@ -542,11 +544,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(numberBody.contains("blankRow()"))
         XCTAssertFalse(symbolsBody.contains("blankRow()"))
         XCTAssertFalse(controller.contains("contentFrame.size.height = max(contentFrame.height"))
-        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
-        XCTAssertTrue(root.contains("NumberKeyboardSurface("),
-                      "SwiftUI must provide the symbols surface")
+        XCTAssertFalse(root.contains("SymbolKeyboardSurface("))
+        XCTAssertFalse(root.contains("NumberKeyboardSurface("))
+        XCTAssertTrue(root.contains("KeyboardViewController.nextKeyboardModes.contains(state.areaMode)"))
         XCTAssertTrue(root.contains(".frame(width: surfaceFrame.width, height: surfaceFrame.height)"),
-                      "the symbols surface must fill the shared inset surface")
+                      "the clear canvas must fill the shared inset surface")
     }
 
     func testAuxiliaryContentUsesTheCompleteSurfaceWithoutUIKitAccessoryRow() throws {
@@ -655,7 +657,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
 
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
-        XCTAssertTrue(root.contains("onBackToVoice: { state.closeArea() }"))
+        XCTAssertFalse(root.contains("onBackToVoice:"))
+        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""))
+        XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
         XCTAssertFalse(controller.contains("imageName: \"arrow.uturn.backward\""))
     }
 
@@ -667,9 +671,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             "DictusKeyboard/KeyboardKeyStyle.swift",
             "DictusKeyboard/KeyboardKeyInput.swift",
             "DictusKeyboard/VoiceBoardSurface.swift",
-            "DictusKeyboard/LetterKeyboardSurface.swift",
-            "DictusKeyboard/NumberKeyboardSurface.swift",
-            "DictusKeyboard/SymbolKeyboardSurface.swift",
             "DictusKeyboard/KeyboardState.swift",
             "DictusKeyboard/Views/EmojiPickerView.swift",
             "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
@@ -695,10 +696,11 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
 
-        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
-        XCTAssertTrue(root.contains("page: symbolPage"))
-        XCTAssertTrue(root.contains("onTogglePage: { nextPage in symbolPage = nextPage }"))
-        XCTAssertTrue(root.contains("symbolPage = .symbols1"))
+        XCTAssertFalse(root.contains("SymbolKeyboardSurface("))
+        XCTAssertFalse(root.contains("onTogglePage:"))
+        let host = try source("DictusKeyboard/Next/NextKeyboardHost.swift")
+        XCTAssertTrue(host.contains("case .page(let id):"))
+        XCTAssertTrue(host.contains("symbolPage = (symbolPage == .symbolsNumbers) ? .symbolsPunctuation : .symbolsNumbers"))
         XCTAssertTrue(controller.contains("KeyboardHeightProvider.height"))
         XCTAssertFalse(root.contains("layout.auxiliaryContentFrame"))
         XCTAssertTrue(controller.contains("min(requestedHeight, inputView.bounds.height)"), "the accessory lane must fit the actual host height")
@@ -712,16 +714,18 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testLetterKeyboardUsesPerKeyUIKitControlsAndSharedBottomRow() throws {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
-        let letter = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
         let layouts = try source("DictusKeyboard/KeyboardLayouts.swift")
         let policy = try source("DictusCore/Sources/DictusCore/VoiceOnlyKeyboardPolicy.swift")
 
         XCTAssertFalse(controller.contains("GiellaKeyboardView("))
         XCTAssertFalse(controller.contains("GiellaKeyboardViewDelegate"))
-        XCTAssertTrue(letter.contains("KeyboardKeyHitGeometry.frames("))
-        XCTAssertTrue(try source("DictusKeyboard/KeyboardKeyInput.swift").contains("KeyboardKeyTouchControl"))
-        XCTAssertTrue(letter.contains("ImmediateKeyButton"))
-        XCTAssertFalse(letter.contains("LetterInteractionSurface"))
+        XCTAssertTrue(grid.contains("final class KeyGridView: UIView"))
+        XCTAssertTrue(grid.contains("override func touchesBegan("))
+        XCTAssertFalse(grid.contains("ImmediateKeyButton"))
+        XCTAssertFalse(grid.contains("LetterInteractionSurface"))
+        XCTAssertTrue(factory.contains("static func letters() -> KeyGridPage"))
         XCTAssertTrue(controller.contains("case .keyboardMode:"))
         XCTAssertTrue(controller.contains("case .symbols:"))
         XCTAssertTrue(controller.contains("applyCursorStep"))
@@ -747,8 +751,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let emoji = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(root.contains("availableHeight: surfaceFrame.height"),
-                      "emoji picker height must match the inset content/surface frame")
+        let native = try source("DictusKeyboard/Next/KeyboardSurfaceView.swift")
+        XCTAssertTrue(native.contains("emoji.frame = layout.inputFrame(pager, inputViewHeight: inputHeight)"),
+                      "emoji pager height must match the inset content above the category lane")
         XCTAssertTrue(emoji.contains("private let edgeInset: CGFloat = VoiceOnlyKeyboardPolicy.keyGridInset"),
                       "emoji geometry must use the same 8pt breathing room as ABC/123")
         XCTAssertFalse(root.contains("availableHeight: surfaceHeight"),
@@ -761,9 +766,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(layouts.contains("static let symbolsRowCount = 3"))
-        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
-        XCTAssertTrue(root.contains("NumberKeyboardSurface("),
-                      "SwiftUI must own the symbols page content")
+        XCTAssertFalse(root.contains("SymbolKeyboardSurface("))
+        XCTAssertFalse(root.contains("NumberKeyboardSurface("))
+        XCTAssertTrue(controller.contains("static let nextKeyboardModes: Set<KeyboardAreaMode> = [.letters, .panel, .numberPad]"))
         XCTAssertTrue(controller.contains("inputView.bringSubviewToFront(controls)"),
                       "the UIKit mode control must remain above the symbols surface")
     }
@@ -779,14 +784,15 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("onBackToVoice: { state.closeArea() }"),
-                      "the SwiftUI voice-return control must describe its action")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .togglePage: return label == \"#+=\" ? \"More symbols\" : \"Return to numbers keyboard\""),
-                      "the SwiftUI page toggle must describe its action")
+        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""),
+                      "the voice-return control must describe its action")
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
+        XCTAssertTrue(factory.contains("label: page == .symbolsNumbers ? \"#+=\" : \"123\""),
+                      "the symbol page toggle must describe its page")
         XCTAssertTrue(controller.contains("Open symbols keyboard"),
                       "normal mode must announce opening symbols")
-        XCTAssertTrue(root.contains("onBackToVoice: { state.closeArea() }"),
-                      "auxiliary mode must announce returning to voice keyboard")
+        XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"),
+                      "auxiliary mode must announce returning to the voice keyboard")
         XCTAssertTrue(controller.contains("surface.bottomBar.onDictation = { KeyboardState.shared.presentArea(.keys) }"),
                       "holding the bottom layer control must reach dictation")
         XCTAssertTrue(controller.contains("self?.presentNumbersArea()"),
@@ -810,7 +816,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertTrue(controller.contains("let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad"))
         XCTAssertFalse(controller.contains("micButton?.frame = .zero"))
-        XCTAssertTrue(root.contains("onSpaceCursorMoved: routeCursorMovement"))
+        XCTAssertTrue(controller.contains("surface.bottomBar.spaceControl.onCursorMoved = { [weak self] in self?.applyCursorStep($0) }"))
+        XCTAssertTrue(controller.contains("space.onCursorMoved = { [weak self] in self?.applyCursorStep($0) }"))
         XCTAssertTrue(bar.contains("struct SpaceBarControl: View"))
         XCTAssertTrue(bar.contains("onCursorMoved: onSpaceCursorMoved"))
         XCTAssertTrue(bar.contains("SpaceTrackingButton("))
@@ -864,18 +871,19 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
 
-        XCTAssertTrue(root.contains("showsSymbolsControl: true"),
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
+        XCTAssertTrue(bar.contains("firstControl.keyboardFace.configure(text: mode == .panel ? \"ABC\" : \"123\""),
                       "letter mode must expose an explicit 123 control")
-        XCTAssertTrue(root.contains("onSpace: { routeProxyCommand(.space) }"),
+        XCTAssertTrue(controller.contains("surface.bottomBar.spaceControl.onTap = { [weak self] in self?.routeProxyCommand(.space) }"),
                       "letter mode must route its spacebar through the keyboard command")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .spacebar:\n            onSpace()"),
-                      "letter mode's space fallback must share the keyboard command route")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("case .backspace:"),
-                      "letter mode must render the layout's delete key")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("Image(systemName: \"delete.backward\")"),
+        XCTAssertTrue(controller.contains("case .spacebar:"))
+        XCTAssertTrue(controller.contains("case .backspace:"))
+        XCTAssertTrue(factory.contains("systemImage: CommandKeyStyle.deleteSymbolName"),
                       "letter mode's delete key must have a visible glyph")
+        XCTAssertTrue(try source("DictusCore/Sources/DictusCore/CommandKeyStyle.swift").contains("deleteSymbolName = \"delete.backward\""))
         XCTAssertTrue(root.contains("onDelete: { routeProxyCommand(.delete) }"),
-                      "letter mode's delete key must route to the text proxy")
+                      "the dictation board delete key must route to the text proxy")
         XCTAssertTrue(bar.contains("roundControl(text: numbersTitle"),
                       "the shared bottom row must render 123 as a real button")
         XCTAssertTrue(bar.contains("HapticFeedback.keyTapped()"),
@@ -962,11 +970,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     }
 
     func testPredictedLetterWinsOverlappingExpandedHitTargets() throws {
-        let letter = try source("DictusKeyboard/LetterKeyboardSurface.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        let placement = try source("DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift")
         let geometry = try source("DictusCore/Sources/DictusCore/AdaptiveTouchRouting.swift")
         let buttons = try source("DictusKeyboard/KeyboardKeyInput.swift")
 
-        XCTAssertTrue(letter.contains("KeyboardKeyHitGeometry.frames("))
+        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"))
+        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("))
         XCTAssertTrue(geometry.contains("public enum KeyboardKeyHitGeometry"))
         XCTAssertTrue(geometry.contains("maximumPredictionShift: CGFloat = 4"))
         XCTAssertTrue(buttons.contains("bounds.contains(point)"),
@@ -996,16 +1006,21 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(controller.contains("suggestionState"))
         XCTAssertFalse(root.contains("DictusKeyboardBridge"))
         XCTAssertFalse(root.contains("legacyBody"))
-        let letter = try source("DictusKeyboard/LetterKeyboardSurface.swift")
-        XCTAssertTrue(letter.contains("suggestionState.adaptiveTouchPrediction"),
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        let placement = try source("DictusCore/Sources/DictusCore/NextKeyGridPlacement.swift")
+        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"),
                       "local prediction is used only for invisible key-area expansion")
-        XCTAssertTrue(letter.contains("KeyboardKeyHitGeometry.frames("))
+        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("))
+        XCTAssertTrue(controller.contains("SuggestionState.shared.adaptiveTouchPrediction"))
+        XCTAssertFalse(root.contains("LetterKeyboardSurface("))
         XCTAssertFalse(root.contains("fullAreaToolbar"))
         XCTAssertFalse(root.contains("togglePanel"))
         XCTAssertFalse(root.contains("keyboard-controls"))
-        XCTAssertTrue(root.contains("keyboard.chevron.compact.down"))
+        XCTAssertTrue(controller.contains("keyboard.chevron.compact.down"))
+        XCTAssertFalse(root.contains("keyboard.chevron.compact.down"))
         XCTAssertFalse(root.contains("usesInteractiveSurface: false"))
-        XCTAssertTrue(root.contains("onEmoji: { state.presentArea(.emoji) }"))
+        XCTAssertTrue(controller.contains("surface.bottomBar.onEmoji = { KeyboardState.shared.presentArea(.emoji) }"))
+        XCTAssertTrue(root.contains("state.presentArea(.emoji)"))
         XCTAssertFalse(root.contains("private func utilityButton("))
         XCTAssertFalse(root.contains("LazyVGrid"))
         XCTAssertTrue(root.contains("allowsHitTesting(false)"))
@@ -1043,7 +1058,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("Button(\"ABC\")"))
         XCTAssertFalse(root.contains("identifier: \"delete-backward\""))
         XCTAssertFalse(root.contains("identifier: \"return-key\""))
-        XCTAssertTrue(root.contains(".accessibilityIdentifier(\"dismiss-keyboard\")"))
+        XCTAssertTrue(controller.contains("UIAction(title: \"Dismiss keyboard\""))
+        XCTAssertFalse(root.contains(".accessibilityIdentifier(\"dismiss-keyboard\")"))
         XCTAssertTrue(controller.contains("makeKeyboardActionButton"))
         XCTAssertFalse(controller.contains("handleInputModeList(from: sender, with: event)"))
         XCTAssertFalse(controller.contains("nextInputModeButton"))
@@ -1051,22 +1067,22 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("voiceBoardChrome(text: \"123\""))
         XCTAssertTrue(root.contains("systemName: \"face.smiling\",\n                            label: \"Emoji\",\n                            visualWidth:"),
                       "the dictation-board Emoji face must use the same command visual size as ABC/123")
-        XCTAssertTrue(root.contains("case .letters:"))
+        XCTAssertTrue(root.contains("case .letters, .panel, .emoji, .numberPad:"))
         XCTAssertTrue(controller.contains("keyboardModeButton"))
         XCTAssertFalse(root.contains("dictateButton(frame: layout.letterMicFrame)"),
                        "letter mode must not render the dictation button")
         XCTAssertFalse(controller.contains("micButton?.frame = layout.letterMicFrame"),
                        "letter mode must not install the dictation hit target")
-        XCTAssertTrue(root.contains("showsSymbolsControl: true"))
+        XCTAssertFalse(root.contains("showsSymbolsControl:"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
-        XCTAssertTrue(root.contains("languageIndicatorTitle"))
-        XCTAssertTrue(root.contains("return \"AUTO\""))
+        XCTAssertTrue(root.contains("title: \"AUTO\""))
         XCTAssertTrue(root.contains("state.selectTranscription()"))
         XCTAssertFalse(root.contains("state.selectAutomaticTypingLanguage()"))
         XCTAssertFalse(root.contains("state.selectKeyboardLayout(layout)"))
         XCTAssertTrue(root.contains("title: \"AUTO\""))
         XCTAssertTrue(root.contains("\"Keep spoken language\""))
-        XCTAssertTrue(root.contains("LanguageMenuButton()"))
+        XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"))
+        XCTAssertFalse(root.contains("LanguageMenuButton()"))
         XCTAssertFalse(root.contains("suggestionState.suggestions"),
                        "prediction must not reintroduce a visible suggestion list")
         XCTAssertFalse(root.contains("TypingSuggestionLane()"))
@@ -1086,12 +1102,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "unsafe tokens must not be learned from autocorrection edits")
         XCTAssertTrue(suggestionState.contains("after == pending.afterContext"),
                       "caret moves away from the correction must invalidate learning")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("KeyboardShiftState.doubleTapWindow"))
+        XCTAssertTrue(controller.contains("KeyboardShiftState.doubleTapWindow"))
         XCTAssertTrue(controller.contains("SuggestionState.shared.handleSpace(proxy:"))
         XCTAssertFalse(controller.contains("refreshTypingSuggestions()"))
         XCTAssertTrue(root.contains("UIDeferredMenuElement"))
-        XCTAssertTrue(root.contains("pasteButton"))
-        XCTAssertTrue(root.contains("doc.on.clipboard"))
+        XCTAssertTrue(controller.contains("title: state.isOneTimeCodeField ? \"Insert one-time code\" : \"Paste\""))
+        XCTAssertTrue(controller.contains("doc.on.clipboard"))
+        XCTAssertFalse(root.contains("pasteButton"))
         XCTAssertFalse(root.contains("if state.areaMode != .emoji"),
                        "the shared clipboard control must remain visible on the emoji page")
         XCTAssertTrue(root.contains("startClipboardMonitoring()"))
@@ -1119,7 +1136,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(state.contains("HostInputTraits.prefersNumberPad(for:"))
         XCTAssertTrue(state.contains("presentPreferredOpeningArea()"))
         XCTAssertTrue(state.contains("hostPrefersNumberPad"))
-        XCTAssertTrue(root.contains("state.hostPrefersNumberPad"))
+        XCTAssertFalse(root.contains("state.hostPrefersNumberPad"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".accessibilityHidden(true)"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("Text(title)"),
                       "the shared capsule builder renders whichever control's title")
@@ -1128,21 +1145,23 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(controller.contains("hostingController?.view.isHidden = true"))
         XCTAssertTrue(controller.contains("setVoiceActionControlsHidden(mode == .panel || mode == .letters || mode == .numberPad)"))
         XCTAssertTrue(root.contains("layout.chromeLettersFrame"))
-        XCTAssertTrue(root.contains("private var languageIndicator"))
+        XCTAssertFalse(root.contains("private var languageIndicator"))
+        XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"))
         XCTAssertTrue(controller.contains("dismissKeyboard()"))
         XCTAssertTrue(controller.contains("routeDismiss: { [weak self] in self?.dismissKeyboard() }"),
                       "the controller must own dismissal through the SwiftUI callback")
-        XCTAssertTrue(root.contains("SuggestionBarIconButton("))
-        XCTAssertTrue(root.contains("action: routeDismiss"))
+        XCTAssertFalse(root.contains("SuggestionBarIconButton("))
+        XCTAssertFalse(root.contains("action: routeDismiss"))
+        XCTAssertTrue(controller.contains("UIAction(title: \"Dismiss keyboard\""))
         XCTAssertTrue(root.contains("VoiceOnlyKeyboardPolicy.layout("))
-        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
-        XCTAssertTrue(root.contains("NumberKeyboardSurface("))
-        XCTAssertTrue(root.contains("case .numberPad:"))
+        XCTAssertFalse(root.contains("SymbolKeyboardSurface("))
+        XCTAssertFalse(root.contains("NumberKeyboardSurface("))
+        XCTAssertTrue(root.contains("case .letters, .panel, .emoji, .numberPad:"))
         XCTAssertTrue(state.contains("hostNumberPadStyle"))
         XCTAssertTrue(state.contains("presentArea(.numberPad, registerUserDismissal: false)"))
         XCTAssertTrue(state.contains("func presentNumbersArea()"))
-        XCTAssertTrue(root.contains("number-pad-surface"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("Locale.current.decimalSeparator"))
+        XCTAssertFalse(root.contains("number-pad-surface"))
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyGridPageFactory.swift").contains("Locale.current.decimalSeparator"))
         XCTAssertTrue(root.contains("state.presentNumbersArea()"))
         XCTAssertTrue(controller.contains("numbers.accessibilityIdentifier = \"number-layer\""))
         XCTAssertTrue(controller.contains("self?.presentNumbersArea()"))
@@ -1170,8 +1189,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("systemName: \"return\""))
         XCTAssertTrue(root.contains("width: VoiceOnlyKeyboardPolicy.actionHitSize.width"))
         XCTAssertTrue(root.contains("height: VoiceOnlyKeyboardPolicy.actionHitSize.height"))
-        XCTAssertTrue(root.contains("SuggestionBarIconButton("))
-        XCTAssertTrue(root.contains("keyboard.chevron.compact.down"))
+        XCTAssertFalse(root.contains("SuggestionBarIconButton("))
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(controller.contains("keyboard.chevron.compact.down"))
     }
 
     func testKeyboardHasNoGlobeGenerationOrRenderingPath() throws {
@@ -1207,8 +1227,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testTranslationMenuUsesSemanticTint() throws {
         let rootView = try source("DictusKeyboard/KeyboardRootView.swift")
-        XCTAssertTrue(rootView.contains(".tint(.primary)"),
-                      "the SwiftUI translation menu must use the system label color")
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertFalse(rootView.contains(".tint(.primary)"),
+                       "the translation menu is UIKit and must not pin a SwiftUI tint")
+        XCTAssertTrue(rootView.contains("struct LanguageMenuButton: UIViewRepresentable"))
+        XCTAssertTrue(controller.contains("configuration?.baseForegroundColor = .label"),
+                      "auxiliary controls must use the system label color")
+        XCTAssertTrue(controller.contains("button.tintColor = .label"))
     }
 
     func testKeyboardRootUsesEmbeddedGlassSurfaceAndStableMicPlacement() throws {
@@ -1231,8 +1256,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("private func boardCapsuleVisual("))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("private func recoveryControlVisual(frame: CGRect)"))
         XCTAssertTrue(root.contains("surfaceFrame.midX"))
-        XCTAssertTrue(root.contains("availableWidth: surfaceFrame.width"),
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"),
                       "emoji content must receive the complete embedded surface width")
+        XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertFalse(root.contains("auxiliaryContentFrame"))
     }
 
@@ -1299,7 +1325,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         XCTAssertEqual(layout.centerAreaWidth, 162)
-        XCTAssertTrue(root.contains("availableWidth: surfaceFrame.width"))
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"))
+        XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertFalse(root.contains("layout.auxiliaryContentFrame"))
     }
 
@@ -1355,10 +1382,13 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let root = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"), encoding: .utf8)
+        let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         XCTAssertFalse(root.contains("if isBoard && layout.showsLanguageIndicator"),
-                       "AUTO must remain in the shared lane on every page")
-        XCTAssertTrue(root.contains("languageIndicator"))
+                       "AUTO must remain available on every page")
+        XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"),
+                      "the more menu owns output language on every page")
+        XCTAssertTrue(root.contains("title: \"AUTO\""))
     }
 
     func testKeyboardRuntimeLanguageDefaultsUseTheResolvedProductLanguage() throws {
@@ -1393,31 +1423,24 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testNumberPadDigitsHaveNoGlassKeycaps() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
-        let padSource = try source("DictusKeyboard/NumberKeyboardSurface.swift")
-        let padStart = try XCTUnwrap(padSource.range(of: "struct NumberKeyboardSurface"))
-        let padEnd = try XCTUnwrap(padSource.range(of: "private struct PositionedNumberPadKey"))
-        let pad = String(padSource[padStart.lowerBound..<padEnd.lowerBound])
-        let insertStart = try XCTUnwrap(pad.range(of: "case .insert(let value, let holdLetters):"))
-        let insertBody = String(pad[insertStart.lowerBound...])
+        let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
+        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
+        let start = try XCTUnwrap(factory.range(of: "static func numberPad(style: HostFieldPolicy.NumberPadStyle)"))
+        let end = try XCTUnwrap(factory.range(of: "private static func digitKey", range: start.upperBound..<factory.endIndex))
+        let pad = String(factory[start.lowerBound..<end.lowerBound])
 
-        XCTAssertTrue(insertBody.contains("letterKeyPlate"),
-                       "number-pad digits match letter keys with optional inset key plates")
-        XCTAssertTrue(insertBody.contains("VoiceOnlyKeyboardPolicy.numberPadKeyCornerRadius"),
-                      "number-pad plates use the rounder pad radius")
-        XCTAssertTrue(insertBody.contains(".font(.system(size: 22, weight: .light))"))
-        XCTAssertTrue(insertBody.contains("Text(\"ABC\")"),
-                      "the decimal/phone separator must show an ABC hold hint")
-        XCTAssertTrue(insertBody.contains(".foregroundStyle(.secondary)"))
-        XCTAssertTrue(padSource.contains("KeyboardDeletion.holdRecognitionDuration"),
-                      "the decimal/phone separator must open ABC on hold")
-        XCTAssertTrue(padSource.contains("private func handleGridRelease("),
-                      "the hold hint and the separator must share one direct touch owner")
-        XCTAssertTrue(pad.contains("case .letters:"))
-        XCTAssertTrue(pad.contains("CommandKeyFace("),
-                      "ABC on the pad keeps a command plate independent of letter containers")
+        XCTAssertTrue(factory.contains("glyphSize: 22"))
+        XCTAssertTrue(pad.contains("action: .letters, label: \"ABC\""),
+                      "the digits pad keeps an ABC key instead of a glass keycap")
+        XCTAssertFalse(pad.contains("keyboardGlass("))
+        XCTAssertFalse(pad.contains("letterKeyPlate"))
+        XCTAssertTrue(grid.contains("final class KeyGridView: UIView"),
+                      "pad digits are drawn by the same grid as letters")
+        XCTAssertTrue(factory.contains("Locale.current.decimalSeparator"))
         XCTAssertTrue(root.contains("state.presentNumbersArea()"))
         XCTAssertFalse(root.contains("accessoryLettersButton"),
                        "ABC must not sit in the suggestion bar on the number pad")
+        XCTAssertFalse(root.contains("NumberKeyboardSurface("))
     }
 
     func testNormalAndSymbolsModesShareTheSameNativeSurfaceHeight() throws {
@@ -1439,9 +1462,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "the symbols presentation must be covered by the height contract")
         XCTAssertFalse(root.contains("layout.auxiliaryContentFrame"),
                        "symbols mode must use the complete shared surface")
-        XCTAssertTrue(root.contains("SymbolKeyboardSurface("))
-        XCTAssertTrue(root.contains("NumberKeyboardSurface("),
-                      "symbols mode must be rendered by SwiftUI")
+        XCTAssertFalse(root.contains("SymbolKeyboardSurface("))
+        XCTAssertFalse(root.contains("NumberKeyboardSurface("))
+        XCTAssertTrue(controller.contains("static let nextKeyboardModes: Set<KeyboardAreaMode> = [.letters, .panel, .numberPad]"))
         XCTAssertTrue(root.contains("let surfaceHeight = max(proxy.size.height, 1)"),
                       "voice and symbols surfaces must consume the runtime native surface height")
     }
@@ -1458,8 +1481,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         )
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(root.contains("onClose: { state.closeArea() }"),
-                      "leaving the symbols surface must return through SwiftUI")
+        XCTAssertFalse(root.contains("onClose:"))
+        XCTAssertTrue(controller.contains("surface.bottomBar.onLetters = { KeyboardState.shared.presentArea(.letters) }"),
+                      "ABC on the symbol page returns to letters")
         XCTAssertTrue(controller.contains("layoutVoiceActionControls()"),
                       "leaving the symbols surface must immediately restore the native action hit areas")
     }

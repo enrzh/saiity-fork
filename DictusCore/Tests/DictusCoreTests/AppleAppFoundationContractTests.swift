@@ -598,8 +598,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("ImmediateKeyButton("))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("highlightSize: frame.size"))
         XCTAssertFalse(root.contains("Link(destination: preparationURL)"))
-        XCTAssertTrue(root.contains("SuggestionBarIconButton("))
-        XCTAssertTrue(root.contains("action: routeDismiss"))
+        XCTAssertFalse(root.contains("SuggestionBarIconButton("))
+        XCTAssertFalse(root.contains("private func accessoryBar("))
+        XCTAssertTrue(keyboard.contains("UIAction(title: \"Dismiss keyboard\""))
+        XCTAssertTrue(keyboard.contains("identifier: \"open-saiity-button\""))
         let app = try source("DictusApp/DictusApp.swift")
         XCTAssertTrue(app.contains("AudioLifecyclePolicy.shouldRestoreStandby(serviceEnabled: serviceEnabled"))
         XCTAssertTrue(app.contains("onboardingComplete: hasCompletedOnboarding"))
@@ -721,9 +723,6 @@ final class AppleAppFoundationContractTests: XCTestCase {
             "DictusKeyboard/KeyboardKeyStyle.swift",
             "DictusKeyboard/KeyboardKeyInput.swift",
             "DictusKeyboard/VoiceBoardSurface.swift",
-            "DictusKeyboard/LetterKeyboardSurface.swift",
-            "DictusKeyboard/NumberKeyboardSurface.swift",
-            "DictusKeyboard/SymbolKeyboardSurface.swift",
             "DictusKeyboard/KeyboardState.swift",
             "DictusKeyboard/Views/EmojiPickerView.swift",
             "DictusKeyboard/Views/EmojiGestureCoordinator.swift",
