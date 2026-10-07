@@ -1133,6 +1133,7 @@ class KeyboardViewController: UIInputViewController,
         dictationResultCancellable = KeyboardState.shared.$dictationUndoAvailable
             .removeDuplicates()
             .combineLatest(KeyboardState.shared.$keyboardDictationEnabled.removeDuplicates())
+            .combineLatest(KeyboardState.shared.$isFinishingRecording.removeDuplicates())
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in self?.layoutVoiceActionControls() }
             }
@@ -1309,7 +1310,12 @@ class KeyboardViewController: UIInputViewController,
         //
         // The memo is shared with `viewDidLayoutSubviews` so the two paths cannot
         // disagree about what the current layout is.
-        guard lastLayoutMode != mode || lastLayoutHeight != liveHeight else { return }
+        guard lastLayoutMode != mode || lastLayoutHeight != liveHeight else {
+            // The frame can stay fixed while Hold, Finish, Cancel or recovery
+            // changes. Refresh native faces/owners without changing constraints.
+            layoutVoiceActionControls(surfaceHeight: liveHeight)
+            return
+        }
         lastLayoutMode = mode
         lastLayoutHeight = liveHeight
 
@@ -1856,7 +1862,7 @@ class KeyboardViewController: UIInputViewController,
         // Preserve the state the user actually saw. A readiness refresh can
         // complete in the same run-loop turn and otherwise turn a recovery tap
         // into a short, unrecognized hold.
-        let wasShowingRecovery = state.appNeedsAppAction
+        let wasShowingRecovery = state.showsRecoveryAction
         state.refreshFromDefaults()
         PersistentLog.log(.diagnosticProbe(
             component: "KeyboardHitTrace",
@@ -1874,23 +1880,22 @@ class KeyboardViewController: UIInputViewController,
         micButton?.isHighlighted = true
         state.accessoryDictationActive = state.areaMode == .letters || state.areaMode == .emoji || state.areaMode == .panel || state.areaMode == .numberPad
         micHoldRecognized = false
-        if wasShowingRecovery || state.appNeedsAppAction || state.failedRequiresApp {
-            // Recovery is a tap action. Waiting for the speaking hold threshold
-            // made the visible "Open sAiity" control feel unresponsive.
-            openDictusForRecovery()
-            return
-        }
-        if state.dictationStatus == .requested
-            || state.dictationStatus == .transcribing
-            || state.dictationStatus == .processing {
+        if state.dictationStatus.isCancellationStage {
             // A second touch is an explicit cancel while the current round is
             // starting, transcribing, or being cleaned up. Do this on touchDown
             // so cancellation does not wait for the hold recognizer.
             state.cancelActiveDictation()
-            micTouchActive = false
+            // Keep ownership until release. Otherwise touch-up's recovery
+            // fallback could open the app immediately after cancelling.
             micButton?.isHighlighted = false
             state.accessoryDictationActive = false
             layoutVoiceActionControls()
+            return
+        }
+        if wasShowingRecovery || state.showsRecoveryAction {
+            // Recovery is a tap action. Waiting for the speaking hold threshold
+            // made the visible "Open sAiity" control feel unresponsive.
+            openDictusForRecovery()
             return
         }
         // Ready-state dictation starts with the finger. The old hold timer made
@@ -1960,15 +1965,15 @@ class KeyboardViewController: UIInputViewController,
             (moreButton, nil, "ellipsis")
         ] as [(UIControl?, String?, String?)] {
             guard let button, !button.isHidden else { continue }
-            let circular = button === keyboardModeButton || button === numberButton || button === emojiButton
-            let size = circular
+            let compactCommand = button === keyboardModeButton || button === numberButton || button === emojiButton
+            let size = compactCommand
                 ? CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
                 : button === returnButton ? VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: button.bounds.size)
                 : VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
             let accessory = button === voiceBoardButton || button === moreButton
             let submit = button === returnButton && fieldKeys.returnTitle != "return"
             button.keyboardFace.configure(text: text, symbol: symbol, visualSize: size,
-                radius: accessory || circular ? size.height / 2 : CommandKeyStyle.cornerRadius,
+                radius: accessory ? size.height / 2 : CommandKeyStyle.cornerRadius,
                 tint: submit ? .saiityAction : nil,
                 foreground: submit ? .saiityOnAction : button === voiceBoardButton ? .saiityAction : .label,
                 textPointSize: CommandKeyStyle.textSize,
@@ -1976,7 +1981,7 @@ class KeyboardViewController: UIInputViewController,
                 holdSymbol: button === numberButton && !KeyboardInteractionPreferences.topBarEnabled ? "keyboard" : nil)
         }
         if let spaceButton, !spaceButton.isHidden {
-            spaceButton.keyboardFace.configure(text: "space",
+            spaceButton.keyboardFace.configure(
                 visualSize: CGSize(width: spaceButton.bounds.width, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
                 radius: CommandKeyStyle.cornerRadius, textWeight: .regular, role: .input)
         }
@@ -1993,16 +1998,19 @@ class KeyboardViewController: UIInputViewController,
                 foreground: enabled ? .saiityAction : .secondaryLabel, role: .accessory)
         }
         if let micButton, !micButton.isHidden {
-            let cancel = state.dictationStatus.isCancellationStage
+            let style = KeyboardDictationFaceStyle(status: state.dictationStatus, finishing: state.isFinishingRecording)
             micButton.keyboardFace.configure(text: state.dictationBoardTitle, symbol: state.dictationBoardSymbol,
                 visualSize: micButton.bounds.size, radius: micButton.bounds.height / 2,
-                primary: true, tint: cancel ? .systemRed : .saiityAction, foreground: cancel ? .white : .saiityOnAction)
+                primary: true, tint: style.fill, foreground: style.foreground,
+                symbolForeground: style.symbolForeground)
         }
         if let recoveryButton, !recoveryButton.isHidden {
+            let style = KeyboardDictationFaceStyle(status: .idle)
             recoveryButton.keyboardFace.configure(text: state.recoveryBoardTitle,
                 symbol: state.isOpeningForDictation ? "ellipsis" : "arrow.up.right.square.fill",
                 visualSize: recoveryButton.bounds.size, radius: recoveryButton.bounds.height / 2,
-                primary: true, tint: .saiityAction, foreground: .saiityOnAction)
+                primary: true, tint: style.fill, foreground: style.foreground,
+                symbolForeground: style.symbolForeground)
         }
     }
 

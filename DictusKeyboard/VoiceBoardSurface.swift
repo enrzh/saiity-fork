@@ -146,6 +146,7 @@ extension KeyboardRootView {
             symbol: dictationSymbol,
             background: dictationButtonBackground,
             foreground: dictationButtonForeground,
+            symbolForeground: Color(uiColor: dictationFaceStyle.symbolForeground),
             liveWave: state.dictationStatus == .recording && !state.isFinishingRecording
         )
         .accessibilityIdentifier("dictate-button")
@@ -153,16 +154,16 @@ extension KeyboardRootView {
         .accessibilityValue(dictationTitle)
     }
 
-    private var dictationButtonIsCancellation: Bool {
-        state.dictationStatus.isCancellationStage
+    private var dictationFaceStyle: KeyboardDictationFaceStyle {
+        KeyboardDictationFaceStyle(status: state.dictationStatus, finishing: state.isFinishingRecording)
     }
 
     private var dictationButtonBackground: Color {
-        dictationButtonIsCancellation ? .dictusRecording : .white
+        Color(uiColor: dictationFaceStyle.fill)
     }
 
     private var dictationButtonForeground: Color {
-        dictationButtonIsCancellation ? .white : .black
+        Color(uiColor: dictationFaceStyle.foreground)
     }
 
     /// Shared capsule chrome for the board's primary slot, so the recovery and
@@ -173,15 +174,17 @@ extension KeyboardRootView {
         symbol: String,
         background: Color,
         foreground: Color,
+        symbolForeground: Color,
         liveWave: Bool = false
     ) -> some View {
         ZStack(alignment: .center) {
             VStack(spacing: 1) {
                 if liveWave {
-                    ListeningWaveIcon(color: foreground)
+                    ListeningWaveIcon(color: symbolForeground)
                 } else {
                     Image(systemName: symbol)
                         .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(symbolForeground)
                 }
                 Text(title)
                     .font(.caption2.weight(.semibold))
@@ -194,16 +197,7 @@ extension KeyboardRootView {
         }
         .frame(width: frame.width, height: frame.height)
         .background {
-            ZStack {
-                if KeyboardInteractionPreferences.liquidGlassEnabled {
-                    appleControlSurface(Color.clear, in: Capsule(), role: .control)
-                    Capsule().fill(background.opacity(dictationButtonIsCancellation ? 0.94 : 0.86))
-                } else {
-                    Capsule().fill(background)
-                        .allowsHitTesting(false)
-                }
-            }
-            .allowsHitTesting(false)
+            Capsule().fill(background).allowsHitTesting(false)
         }
         .clipShape(Capsule())
         .contentShape(Capsule())
@@ -215,8 +209,9 @@ extension KeyboardRootView {
             frame: frame,
             title: recoveryTitle,
             symbol: state.isOpeningForDictation ? "ellipsis" : "arrow.up.right.square.fill",
-            background: .white,
-            foreground: .black
+            background: Color(uiColor: KeyboardDictationFaceStyle(status: .idle).fill),
+            foreground: .primary,
+            symbolForeground: Color.saiityAction
         )
         .accessibilityIdentifier("open-saiity-button")
         .accessibilityLabel(state.primaryBoardActionLabel)
@@ -232,9 +227,7 @@ extension KeyboardRootView {
     private func spaceBar(frame: CGRect) -> some View {
         ZStack {
             appleControlSurface(
-                Text("space")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.primary)
+                Color.clear
                     .frame(width: frame.width, height: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)),
                 in: RoundedRectangle(cornerRadius: CommandKeyStyle.cornerRadius, style: .continuous),
                 role: .input

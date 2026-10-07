@@ -2162,10 +2162,10 @@ class KeyboardState: ObservableObject {
     /// the app on press — the control advertised one verb and performed
     /// another. Label and action now read this one flag, so they cannot drift.
     ///
-    /// A live session always wins: `ownsKeyboardArea` is true while requested or
-    /// recording, and the recovery control must never displace cancel.
+    /// A live session always wins, including transcription and cleanup after
+    /// the user is free to switch pages. Recovery must never displace Cancel.
     var showsRecoveryAction: Bool {
-        guard !dictationStatus.ownsKeyboardArea else { return false }
+        guard !DictationSessionLivenessPolicy.isActive(dictationStatus) else { return false }
         return appNeedsAppAction || failedRequiresApp
     }
 

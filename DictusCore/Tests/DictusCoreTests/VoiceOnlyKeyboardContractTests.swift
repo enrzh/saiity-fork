@@ -274,7 +274,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testDictationErrorsRenderOutsideTheMicButton() throws {
         let root = try source("DictusKeyboard/VoiceBoardSurface.swift")
         let dictateButton = try XCTUnwrap(root.range(of: "private func dictateButton(frame:"))
-        let dictateEnd = try XCTUnwrap(root.range(of: "private var dictationButtonIsCancellation"))
+        let dictateEnd = try XCTUnwrap(root.range(of: "private var dictationFaceStyle"))
         let buttonBody = String(root[dictateButton.lowerBound..<dictateEnd.lowerBound])
 
         XCTAssertTrue(root.contains("private var dictationErrorMessage"))
@@ -596,7 +596,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonBackground"),
                       "the voice page keeps the shared dictation button state styling")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonIsCancellation"),
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("KeyboardDictationFaceStyle"),
                       "the voice page exposes a distinct cancellation state")
         XCTAssertFalse(root.contains("state.startRecording()"))
         XCTAssertFalse(root.contains("state.requestStop()"))
@@ -1248,7 +1248,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(plates.contains("glassEffect(.regular"))
         XCTAssertTrue(plates.contains(".regularMaterial"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonBackground"))
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonIsCancellation"))
+        XCTAssertTrue((try relocatedKeyboardSource()).contains("KeyboardDictationFaceStyle"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonForeground"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictateFrame"))
         // The recovery and dictation controls share one capsule builder so they
@@ -1516,10 +1516,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         let chrome = try source("DictusKeyboard/KeyboardChrome.swift")
 
-        XCTAssertTrue(keyStyle.contains("UIColor.label.withAlphaComponent(0.035)"),
-                      "minimal key faces must use adaptive semantic color")
-        XCTAssertTrue(plates.contains("case .control: return increasedContrast ? .secondarySystemBackground : .clear"),
-                      "minimal commands keep the opaque accessibility fallback")
+        XCTAssertTrue(keyStyle.contains("case .input, .control: return .tertiarySystemBackground"),
+                      "keys and commands must use opaque semantic plates")
+        XCTAssertFalse(plates.contains("UIColor.label.withAlphaComponent(0.035)"),
+                       "key shapes must remain visible at rest")
         XCTAssertTrue(chrome.contains("role.solidFill()"),
                       "the shared chrome fill must stay semantic")
         XCTAssertFalse(keyStyle.contains("activeText: .white"),

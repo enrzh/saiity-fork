@@ -158,7 +158,7 @@ final class KeyboardPeriodKeyView: UIView {
         accessibilityTraits = [.button]
         isAccessibilityElement = true
         plate.isUserInteractionEnabled = false
-        plate.layer.cornerRadius = VoiceOnlyKeyboardPolicy.keyCornerRadius
+        plate.layer.cornerRadius = CommandKeyStyle.cornerRadius
         plate.clipsToBounds = true
         labels.axis = .vertical
         labels.alignment = .center
@@ -204,7 +204,7 @@ final class KeyboardPeriodKeyView: UIView {
                              width: size.width, height: size.height)
         control.frame = bounds
         control.highlightSize = size
-        control.highlightCornerRadius = VoiceOnlyKeyboardPolicy.keyCornerRadius
+        control.highlightCornerRadius = CommandKeyStyle.cornerRadius
     }
 
     func refreshAppearance() {
@@ -212,7 +212,7 @@ final class KeyboardPeriodKeyView: UIView {
         plate.alpha = 1
         plate.backgroundColor = KeyboardChromeRole.input.solidFill(increasedContrast:
             UIAccessibility.isDarkerSystemColorsEnabled || UIAccessibility.isReduceTransparencyEnabled)
-        plate.layer.cornerRadius = KeyboardChromeRole.keyCornerRadius
+        plate.layer.cornerRadius = CommandKeyStyle.cornerRadius
     }
 
     override func accessibilityActivate() -> Bool {
@@ -229,7 +229,7 @@ final class KeyboardPeriodKeyView: UIView {
         HapticFeedback.playInputClick()
         onInsert?(".")
         if KeyboardInteractionPreferences.keyPopupMode == .flash {
-            control.flashKeyboardKey(in: plate.frame, cornerRadius: KeyboardChromeRole.keyCornerRadius)
+            control.flashKeyboardKey(in: plate.frame, cornerRadius: CommandKeyStyle.cornerRadius)
         }
         let container = window ?? superview
         if KeyboardInteractionPreferences.keyPopupMode.showsPreview, let container {

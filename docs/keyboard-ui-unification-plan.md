@@ -6,6 +6,67 @@ processing and Icon Composer scope accepted on 2026-09-30.
 
 Design rules: [keyboard-ui-design.md](keyboard-ui-design.md).
 
+## October 7 wordless hold shortcut
+
+The hidden-top-bar shortcut now uses only a centered 13pt destination glyph
+beneath ABC/123: the sAiity vector mark for dictation, or a keyboard symbol for
+returning to letters. The visible `hold` text is removed. The shared passive
+face retains the same key frame, tap/hold behavior and VoiceOver hint/custom
+action. This supersedes the text cue described in the October 5 checkpoint.
+The simulator build and production input harness pass, including icon reuse,
+hidden-top-bar holds and cancellation. The updated app is installed on the
+isolated QA simulator; phone verification remains pending.
+
+## October 7 semantic plates and calmer dictation control
+
+The accepted follow-up gives resting input and command keys opaque
+`tertiarySystemBackground` plates, replacing the input's 3.5% label-color
+wash and the command's transparent resting face. UIKit/Core Graphics and
+passive SwiftUI faces use the same semantic role. Key containers still
+respect their existing preference; glass remains limited to the background
+and transient popup surfaces.
+
+ABC/123 and Emoji now use the shared 12pt command corner, including the
+dictation board's page controls and the bottom-row Period. Character corners
+remain 8pt. Space is visually blank on all pages and keeps its accessible
+name, insertion and cursor-hold behavior. Frames, heights, gaps, hold hints
+and native touch owners are unchanged.
+
+`KeyboardDictationFaceStyle` gives the native primary control and SwiftUI
+fallback one palette: neutral plate with a blue brand glyph at rest, blue
+capsule while listening, and red for Cancel in requested/transcribing/
+processing states. Finishing after audio stops returns to the neutral face;
+the recovery action also uses that face. Cancel keeps priority over model/audio
+recovery throughout an active round, and its release cannot trigger the recovery
+fallback. Native faces refresh when the state changes without a geometry change;
+the height constraints still remain untouched on that path. This fixes the
+rendered Cancel being missing/stale during transcription and cleanup. The
+candidate strip stays off.
+
+Ponytail kept the changes on existing roles/faces, and Apple Design guidance
+informed semantic backgrounds and the limited use of accent fills. The native
+input fixture exercises opaque plates, light/dark foreground contrast, 12pt
+bottom faces, blank accessible Space, and all dictation colors without invoking
+audio or loading models. The renderer now includes a ready-board fixture and
+cleans up controller timers before the next fixture so stale persisted idle
+does not replace a synthetic listening/cancel face during capture.
+
+Validation: 175 focused Core checks and the production UIKit input harness pass.
+The harness verifies that the real controller keeps its red Cancel control
+through transcription/cleanup while recovery is needed, in addition to typing,
+cursor holds and emoji touch ownership. Light/dark fixture text contrast remains
+at least 5.59:1 against the tested semantic surfaces. The final 176 light/dark,
+Solid/Glass, portrait/landscape fixtures include neutral, listening and Cancel
+primary faces; representative narrow and standard-width renders were inspected.
+Simulator Debug and signed
+device Debug builds pass strict signature verification. The updated development
+app is installed on the isolated QA simulator; the phone is not updated.
+
+Validation artifacts: `/tmp/saiity-opaque-keyboard.8GoCw8/`. The Air is currently
+unavailable; phone appearance, typing/haptics and real dictation transitions
+remain verification gates. No microphone recording, model download, commit,
+push, TestFlight upload or release change occurred; the heartbeat stays paused.
+
 ## October 5 typing responsiveness, recommendations and hold hints
 
 Space no longer falls back to synchronous prediction-queue spell-checking.

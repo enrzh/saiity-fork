@@ -583,7 +583,7 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(state.contains("var showsRecoveryAction: Bool"))
         XCTAssertTrue(state.contains("return appNeedsAppAction || failedRequiresApp"),
                       "the gate must include the failed-session case the label used to miss")
-        XCTAssertTrue(state.contains("guard !dictationStatus.ownsKeyboardArea else { return false }"),
+        XCTAssertTrue(state.contains("guard !DictationSessionLivenessPolicy.isActive(dictationStatus) else { return false }"),
                       "a live session must keep the dictate control")
 
         // Exactly one control is mounted in the slot.
@@ -699,7 +699,11 @@ final class KeyboardRegressionTests: XCTestCase {
         let body = String(controller[start.lowerBound..<end.lowerBound])
 
         let guardRange = try XCTUnwrap(body.range(
-            of: "guard lastLayoutMode != mode || lastLayoutHeight != liveHeight else { return }"))
+            of: "guard lastLayoutMode != mode || lastLayoutHeight != liveHeight else {"))
+        let returnRange = try XCTUnwrap(body.range(of: "return", range: guardRange.upperBound..<body.endIndex))
+        XCTAssertTrue(body[guardRange.upperBound..<returnRange.lowerBound].contains(
+            "layoutVoiceActionControls(surfaceHeight: liveHeight)"),
+            "Unchanged geometry must still refresh dictation state and native owners")
         let guardEnd = try XCTUnwrap(body.range(
             of: "heightConstraint?.constant = liveHeight", range: guardRange.upperBound..<body.endIndex))
         // Every constraint write must sit behind the guard.

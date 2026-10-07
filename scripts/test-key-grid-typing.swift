@@ -926,10 +926,12 @@ if !\(baseline) {
                 && namedControl("keyboard-more", in: controller.view) == nil,
                 "Hidden top bar left a visible or active accessory")
             precondition(liveSurface.emoji.frame.minY < 10, "Hidden bar kept its reserved empty strip")
-            let holdHint = liveSurface.bottomBar.firstControl.keyboardFace.subviews.compactMap { $0 as? UILabel }
-                .first { $0.text == "hold" }!
-            precondition(!holdHint.isHidden && holdHint.font.pointSize >= 11,
-                         "Hidden top bar did not expose a readable hold shortcut")
+            let holdHint = liveSurface.bottomBar.firstControl.keyboardFace.subviews.compactMap { $0 as? UIImageView }
+                .first { $0.accessibilityIdentifier == "key-hold-shortcut-hint" }!
+            precondition(!holdHint.isHidden && holdHint.image != nil,
+                         "Hidden top bar did not expose its icon-only hold shortcut")
+            precondition(!liveSurface.bottomBar.firstControl.keyboardFace.subviews.compactMap { $0 as? UILabel }
+                .contains { $0.text == "hold" }, "Hold shortcut must not contain visible wording")
             precondition(!holdHint.isUserInteractionEnabled || !liveSurface.bottomBar.firstControl.keyboardFace.isUserInteractionEnabled,
                          "The hold hint must never become an input owner")
             if mode == .letters {
@@ -1038,6 +1040,9 @@ if !\(baseline) {
             let board = over(rgba(KeyboardChromeRole.board.solidFill(increasedContrast: increased), traits), host)
             let input = over(rgba(KeyboardChromeRole.input.solidFill(increasedContrast: increased), traits), board)
             let command = over(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: increased), traits), board)
+            precondition(rgba(KeyboardChromeRole.input.solidFill(increasedContrast: increased), traits)[3] == 1,
+                         "Typing keys must use opaque plates")
+            precondition(input != board, "Resting input plates disappeared into the board")
             if increased {
                 precondition(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: true), traits)[3] == 1
                              && rgba(KeyboardChromeRole.board.solidFill(increasedContrast: true), traits)[3] == 1,
@@ -1046,6 +1051,7 @@ if !\(baseline) {
             for (foreground, background) in [(UIColor.label, input), (.label, command),
                                              (KeyboardChromeRole.secondaryForeground, input),
                                              (KeyboardChromeRole.secondaryForeground, board),
+                                             (.saiityAction, command),
                                              (.saiityOnAction, rgba(.saiityAction, traits))] {
                 let front = luminance(over(rgba(foreground, traits), background)), back = luminance(background)
                 let contrast = (max(front, back) + 0.05) / (min(front, back) + 0.05)
@@ -1057,10 +1063,69 @@ if !\(baseline) {
     }
     defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
     print("PASS: host Return labels and page navigation; Solid contrast, minimum=\\(minimumContrast):1 on fixture backdrop")
+
+    for glass in [false, true] {
+        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+        for mode in [KeyboardAreaMode.letters, .panel, .emoji] {
+            surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: .standard)
+            for key in [surface.bottomBar.firstControl, surface.bottomBar.secondControl,
+                        surface.bottomBar.returnControl] {
+                let face = key.keyboardFace
+                face.layoutIfNeeded()
+                let plate = face.subviews.compactMap { $0 as? UIVisualEffectView }.first!
+                precondition(plate.effect == nil && plate.layer.cornerRadius == CommandKeyStyle.cornerRadius,
+                             "A bottom-row key retained circular or glass chrome")
+            }
+            let space = surface.bottomBar.spaceControl
+            precondition(space.accessibilityLabel == "Space", "Blank Space lost its accessible name")
+            precondition(space.keyboardFace.subviews.compactMap { $0 as? UILabel }.allSatisfy { $0.isHidden },
+                         "Space must be visually blank")
+        }
+    }
+    for dark in [false, true] {
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        for status in DictationStatus.allCases {
+            for finishing in [false, true] {
+                let style = KeyboardDictationFaceStyle(status: status, finishing: finishing)
+                let expected = status.isCancellationStage ? UIColor.systemRed
+                    : status == .recording && !finishing ? .saiityAction : KeyboardChromeRole.control.solidFill()
+                precondition(rgba(style.fill, traits) == rgba(expected, traits), "Dictation color disagrees with its state")
+                let mic = KeyboardNativeControlFace(frame: CGRect(x: 0, y: 0, width: 156, height: 54))
+                mic.configure(text: "Dictation", symbol: "mic.fill", visualSize: mic.bounds.size,
+                    radius: 27, primary: true, tint: style.fill, foreground: style.foreground,
+                    symbolForeground: style.symbolForeground)
+                mic.layoutIfNeeded()
+                let glyph = mic.subviews.compactMap { $0 as? UIImageView }.first!
+                let plate = mic.subviews.compactMap { $0 as? UIVisualEffectView }.first!
+                precondition(plate.effect == nil && !mic.isUserInteractionEnabled,
+                             "The primary face must stay opaque and passive")
+                precondition(rgba(glyph.tintColor, traits) == rgba(style.symbolForeground, traits))
+                if !status.isCancellationStage && (status != .recording || finishing) {
+                    precondition(rgba(style.symbolForeground, traits) == rgba(.saiityAction, traits),
+                                 "Resting microphone lost its brand-colored glyph")
+                }
+            }
+        }
+    }
+    print("PASS: opaque key plates, uniform 12pt bottom corners, blank accessible Space and neutral/listening/cancel dictation states")
+    // Transcription/cleanup may release audio while their Cancel action remains.
+    for status in [DictationStatus.transcribing, .processing] {
+        KeyboardState.shared.dictationStatus = status
+        precondition(!KeyboardState.shared.showsRecoveryAction,
+                     "Model/audio recovery replaced Cancel during an active round")
+        controller.viewDidLayoutSubviews()
+        let mic = namedControl("dictate-button", in: controller.view) as! UIControl
+        precondition(!mic.isHidden && mic.keyboardFace.tint == .systemRed,
+                     "The actual primary control did not present the red Cancel face")
+        precondition(mic.accessibilityLabel == KeyboardState.shared.primaryBoardActionLabel)
+    }
+    KeyboardState.shared.dictationStatus = .idle
+    controller.viewDidLayoutSubviews()
+    print("PASS: real controller keeps Cancel visible while transcription/cleanup release audio")
     let face = KeyboardNativeControlFace(frame: CGRect(x: 0, y: 0, width: 156, height: 54))
     face.configure(text: "123", holdSymbol: "mic.fill")
     face.layoutIfNeeded()
-    let hint = face.subviews.compactMap { $0 as? UILabel }.first { $0.text == "hold" }!
+    let hint = face.subviews.compactMap { $0 as? UIImageView }.first { $0.accessibilityIdentifier == "key-hold-shortcut-hint" }!
     precondition(!hint.isHidden && face.bounds.contains(hint.frame))
     face.configure(text: "123")
     precondition(hint.isHidden, "A reused face kept its old hidden-bar hint")

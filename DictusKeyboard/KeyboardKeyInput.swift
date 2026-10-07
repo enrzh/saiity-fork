@@ -95,7 +95,6 @@ final class KeyboardNativeControlFace: UIView {
     private let plate = UIVisualEffectView(effect: nil)
     private let image = UIImageView()
     private let label = UILabel()
-    private let holdLabel = UILabel()
     private let holdImage = UIImageView()
     var visualSize: CGSize?
     var radius: CGFloat = CommandKeyStyle.cornerRadius
@@ -121,14 +120,11 @@ final class KeyboardNativeControlFace: UIView {
         label.textAlignment = .center
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.5
-        holdLabel.text = "hold"
-        holdLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        holdLabel.textColor = KeyboardChromeRole.secondaryForeground
-        holdLabel.isHidden = true
         holdImage.contentMode = .scaleAspectFit
+        holdImage.accessibilityIdentifier = "key-hold-shortcut-hint"
         holdImage.tintColor = KeyboardChromeRole.secondaryForeground
         holdImage.isHidden = true
-        [plate, image, label, holdLabel, holdImage].forEach { addSubview($0) }
+        [plate, image, label, holdImage].forEach { addSubview($0) }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -142,6 +138,7 @@ final class KeyboardNativeControlFace: UIView {
     func configure(text: String? = nil, symbol: String? = nil,
                    visualSize: CGSize? = nil, radius: CGFloat = CommandKeyStyle.cornerRadius,
                    primary: Bool = false, tint: UIColor? = nil, foreground: UIColor = .label,
+                   symbolForeground: UIColor? = nil,
                    textPointSize: CGFloat = CommandKeyStyle.textSize,
                    textWeight: UIFont.Weight = .semibold, role: KeyboardChromeRole = .control,
                    holdSymbol: String? = nil) {
@@ -154,13 +151,12 @@ final class KeyboardNativeControlFace: UIView {
         label.text = text
         label.isHidden = text == nil
         label.textColor = foreground
-        holdLabel.isHidden = holdSymbol == nil
         holdImage.isHidden = holdSymbol == nil
         if displayedHoldSymbol != holdSymbol {
             displayedHoldSymbol = holdSymbol
             holdImage.image = holdSymbol.flatMap {
-                $0 == "mic.fill" ? DictusLogo.templateImage(height: 11)
-                    : UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .medium))
+                $0 == "mic.fill" ? DictusLogo.templateImage(height: 13)
+                    : UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .medium))
             }
         }
         let textSize: CGFloat = primary ? 14 : textPointSize
@@ -182,7 +178,7 @@ final class KeyboardNativeControlFace: UIView {
             updateSymbolAnimation()
         }
         image.isHidden = symbol == nil
-        image.tintColor = foreground
+        image.tintColor = symbolForeground ?? foreground
         refreshAppearance()
         setNeedsLayout()
     }
@@ -258,13 +254,10 @@ final class KeyboardNativeControlFace: UIView {
         } else {
             image.frame = CGRect(x: rect.midX - 11, y: rect.midY - 11, width: 22, height: 22)
             label.frame = rect.insetBy(dx: role == .accessory ? 0 : 4, dy: 0)
-            if !holdLabel.isHidden {
+            if !holdImage.isHidden {
                 label.frame = CGRect(x: rect.minX + 4, y: rect.midY - 16,
                                      width: rect.width - 8, height: 20)
-                let textWidth = holdLabel.intrinsicContentSize.width
-                let origin = rect.midX - (textWidth + 14) / 2
-                holdLabel.frame = CGRect(x: origin, y: rect.midY + 5, width: textWidth, height: 13)
-                holdImage.frame = CGRect(x: origin + textWidth + 3, y: rect.midY + 6, width: 11, height: 11)
+                holdImage.frame = CGRect(x: rect.midX - 6.5, y: rect.midY + 5, width: 13, height: 13)
             }
         }
     }

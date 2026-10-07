@@ -16,13 +16,33 @@ enum KeyboardChromeRole {
 
     func solidFill(increasedContrast: Bool = false) -> UIColor {
         switch self {
-        case .input:
-            if increasedContrast { return .tertiarySystemBackground }
-            return UIColor.label.withAlphaComponent(0.035)
+        case .input, .control: return .tertiarySystemBackground
         case .accessory: return .clear
-        case .control: return increasedContrast ? .secondarySystemBackground : .clear
         case .board: return .secondarySystemBackground
         case .popup: return .tertiarySystemBackground
+        }
+    }
+}
+
+/// The native primary control and its SwiftUI fallback share one state palette.
+struct KeyboardDictationFaceStyle {
+    let fill: UIColor
+    let foreground: UIColor
+    let symbolForeground: UIColor
+
+    init(status: DictationStatus, finishing: Bool = false) {
+        if status.isCancellationStage {
+            fill = .systemRed
+            foreground = .white
+            symbolForeground = .white
+        } else if status == .recording && !finishing {
+            fill = .saiityAction
+            foreground = .saiityOnAction
+            symbolForeground = .saiityOnAction
+        } else {
+            fill = KeyboardChromeRole.control.solidFill()
+            foreground = .label
+            symbolForeground = .saiityAction
         }
     }
 }

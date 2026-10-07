@@ -11,6 +11,7 @@ let emojiOnly = CommandLine.arguments.contains("--emoji")
 let inset = !CommandLine.arguments.contains("--no-inset")
 let topBar = CommandLine.arguments.contains("--top-bar")
 let keypadOnly = CommandLine.arguments.contains("--keypad")
+let shortcutsOnly = CommandLine.arguments.contains("--shortcuts")
 let program = #"""
 import UIKit
 import SwiftUI
@@ -36,6 +37,8 @@ final class FixtureController: KeyboardViewController {
         let keys = [SharedKeys.liquidGlassEnabled, SharedKeys.keyboardInsetEnabled,
                     SharedKeys.keyContainersEnabled, SharedKeys.keyPopupMode,
                     SharedKeys.serviceEnabled, SharedKeys.dictationStatus,
+                    SharedKeys.modelReady, SharedKeys.modelLoadState, SharedKeys.keyboardAudioReady,
+                    SharedKeys.appProcessHeartbeat,
                     SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled]
         let previous = Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
         defer {
@@ -59,10 +62,17 @@ final class FixtureController: KeyboardViewController {
                         let size = landscape ? CGSize(width: width == 320 ? 667 : 852,
                             height: TOPBAR ? 190 : 158)
                                              : CGSize(width: width, height: 300)
-                        for page in (KEYPAD ? ["numbers", "decimal", "phone"] : ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
-                                     "board", "listening", "processing", "failure"]) {
+                        for page in (SHORTCUTS ? ["letters", "symbols", "board", "ready-board"] : KEYPAD ? ["numbers", "decimal", "phone"] : ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
+                                     "board", "ready-board", "listening", "processing", "failure"]) {
                             if EMOJIONLY && page != "emoji" { continue }
-                            if LARGE && !["letters", "emoji", "board", "listening"].contains(page) { continue }
+                            if LARGE && !["letters", "emoji", "board", "ready-board", "listening"].contains(page) { continue }
+                            // Inert readiness claims only: this renderer never
+                            // invokes the app coordinator, audio or model loading.
+                            defaults.set(page == "ready-board", forKey: SharedKeys.serviceEnabled)
+                            defaults.set(page == "ready-board", forKey: SharedKeys.keyboardAudioReady)
+                            defaults.set(page == "ready-board", forKey: SharedKeys.modelReady)
+                            defaults.set(ModelLoadState.idle.rawValue, forKey: SharedKeys.modelLoadState)
+                            defaults.set(Date().timeIntervalSince1970, forKey: SharedKeys.appProcessHeartbeat)
                             let root = UIViewController()
                             let window = UIWindow(frame: CGRect(origin: .zero, size: CGSize(width: size.width, height: size.height + 80)))
                             window.overrideUserInterfaceStyle = dark ? .dark : .light
@@ -88,8 +98,9 @@ final class FixtureController: KeyboardViewController {
                             controller.viewWillAppear(false)
                             let state = KeyboardState.shared
                             state.refreshHostInputTraits(from: controller.proxy)
-                            state.dictationStatus = page == "listening" ? .recording
+                            let renderedStatus: DictationStatus = page == "listening" ? .recording
                                 : page == "processing" ? .processing : page == "failure" ? .failed : .idle
+                            state.dictationStatus = renderedStatus
                             state.statusMessage = page == "failure" ? "Open sAiity to prepare dictation." : nil
                             let mode: KeyboardAreaMode = page == "letters" ? .letters
                                 : page.hasPrefix("symbols") ? .panel : page == "emoji" ? .emoji
@@ -119,6 +130,12 @@ final class FixtureController: KeyboardViewController {
                                 selectSymbols(controller.view)
                             }
                             RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+                            // Cached controller timers can restore persisted idle
+                            // during settling. Reapply the inert visual state
+                            // immediately before capturing the native face.
+                            state.dictationStatus = renderedStatus
+                            controller.viewDidLayoutSubviews()
+                            controller.view.layoutIfNeeded()
                             let name = "\(page)-\(Int(width))-\(landscape ? "landscape" : "portrait")-\(glass ? "glass" : "solid")-\(dark ? "dark" : "light")"
                             let pixels = UIGraphicsImageRenderer(size: window.bounds.size).image { context in
                                 root.view.layer.render(in: context.cgContext)
@@ -141,6 +158,7 @@ final class FixtureController: KeyboardViewController {
                             inspect(controller.view)
                             geometry[name] = frames
                             controller.viewWillDisappear(false)
+                            controller.viewDidDisappear(false)
                             controller.willMove(toParent: nil)
                             controller.view.removeFromSuperview()
                             controller.removeFromParent()
@@ -160,6 +178,7 @@ final class FixtureController: KeyboardViewController {
         .replacingOccurrences(of: "INSET", with: String(inset))
         .replacingOccurrences(of: "TOPBAR", with: String(topBar))
         .replacingOccurrences(of: "KEYPAD", with: String(keypadOnly))
+        .replacingOccurrences(of: "SHORTCUTS", with: String(shortcutsOnly))
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-keyboard-fixtures-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 let source = directory.appendingPathComponent("main.swift"), binary = directory.appendingPathComponent("render")

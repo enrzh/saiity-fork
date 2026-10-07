@@ -1,8 +1,9 @@
 # Keyboard UI
 
 Visual rules for the sAiity keyboard. Geometry and material tokens live in
-`VoiceOnlyKeyboardPolicy`. SwiftUI draws the plates. UIKit owns the hits on the
-dictation board, the letter keys, and the emoji pager.
+`VoiceOnlyKeyboardPolicy` and `CommandKeyStyle`. UIKit draws the character
+plates; native faces and passive SwiftUI faces share `KeyboardChromeRole`.
+UIKit owns the hits on the dictation board, key grid and emoji pager.
 
 This is the current system, plus the shape later code should converge on.
 Do not treat the numbers below as a redesign. The number-pad inset, key
@@ -31,17 +32,20 @@ rectangle. The suggestion lane has no extra glass behind it.
 One modifier decides the fill. `KeyboardInteractionPreferences.liquidGlassEnabled`
 switches the look. It must not switch which view owns the touch.
 
-| Preference | Control plate | Board |
+| Preference | Input and command plates | Board |
 | --- | --- | --- |
-| Liquid glass, iOS 26 | `.glassEffect(.regular.interactive())` | `.glassEffect(.regular)` |
-| Liquid glass, older iOS | `.regularMaterial` | `.regularMaterial` |
-| Solid | `tertiarySystemFill` | no extra fill |
-| Reduce Transparency | `secondarySystemFill` | `secondarySystemFill` |
-| Increase Contrast | `systemFill` | `systemFill` |
+| Liquid glass, iOS 26 | Opaque `tertiarySystemBackground` | `.glassEffect(.regular)` |
+| Liquid glass, older iOS | Opaque `tertiarySystemBackground` | `.regularMaterial` |
+| Solid | Opaque `tertiarySystemBackground` | `secondarySystemBackground` |
+| Reduce Transparency | Opaque `tertiarySystemBackground` | `secondarySystemBackground` |
+| Increase Contrast | Opaque semantic key backgrounds | `secondarySystemBackground` |
 
-Colors are system colors. The only green is `UISwitch.onTintColor = .systemGreen`
-on the keyboard-dictation switch, matching Settings. Do not tint keys, the mic,
-or the board to show that switch.
+Key containers remain optional for typing keys. Glass stays off key faces;
+board and variant-popup materials never own touches. Colors resolve with the
+current appearance. The dictation mic rests on the same neutral plate with a
+blue brand glyph; its capsule fills blue only while listening and red for
+Cancel. Recovery uses the neutral plate too. The power control remains a
+separate action and never changes the key palette.
 
 ## Radii
 
@@ -51,13 +55,13 @@ when a token exists.
 | Token | Value | Used for |
 | --- | --- | --- |
 | `keyCornerRadius` | 8 | Letter and symbol plates when Key containers is on |
-| `commandKeyCornerRadius` | 18 | ABC, 123, emoji, shift, delete, space, return, utility chrome |
-| `numberPadKeyCornerRadius` | 22 | Digit, ABC, and delete plates on the number pad |
+| `commandKeyCornerRadius` | 12 | ABC, 123, emoji, shift, delete, period, Space, Return |
+| `numberPadKeyCornerRadius` | 14 | Number-pad digit plates |
 | `emojiHighlightCornerRadius` | 13 | Pressed emoji cell |
 
-Capsules stay capsules: the dictation mic, the language chip, and the space
-bar on the voice page. The dictation on/off control is a system `UISwitch`,
-not a drawn capsule.
+The primary dictation action stays a capsule. Bottom-row keys use the shared
+12pt corner rather than circles. Space has no visible label; its accessible
+name remains Space, and its existing hold-to-move-cursor gesture remains.
 
 ## Hit and face
 

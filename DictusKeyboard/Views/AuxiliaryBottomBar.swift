@@ -206,7 +206,7 @@ struct AuxiliaryBottomBar: View {
             }
             .fixedSize(horizontal: true, vertical: true)
             .frame(width: plateWidth, height: visual.height)
-            .keyboardGlass(in: RoundedRectangle(cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius),
+            .keyboardGlass(in: RoundedRectangle(cornerRadius: CommandKeyStyle.cornerRadius),
                            interactive: false, role: .input)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
@@ -249,7 +249,7 @@ struct AuxiliaryBottomBar: View {
                 in: bounds,
                 topOverflow: topOverflow
             ),
-            cornerRadius: VoiceOnlyKeyboardPolicy.keyCornerRadius
+            cornerRadius: CommandKeyStyle.cornerRadius
         )
 
         let token = UUID()
@@ -419,14 +419,14 @@ final class KeyboardBottomBarView: UIView {
 
     private func updateChrome() {
         firstControl.holdDuration = KeyboardDeletion.holdRecognitionDuration
-        let circle = CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight,
+        let commandSize = CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight,
                             height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
         firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123",
-            visualSize: circle, radius: circle.height / 2,
+            visualSize: commandSize, radius: CommandKeyStyle.cornerRadius,
             holdSymbol: KeyboardInteractionPreferences.topBarEnabled ? nil : "mic.fill")
         let second = fieldKeys.leftInsert ?? (mode == .emoji ? "ABC" : nil)
         secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil,
-            visualSize: circle, radius: circle.height / 2)
+            visualSize: commandSize, radius: CommandKeyStyle.cornerRadius)
         fieldControl.keyboardFace.configure(text: fieldKeys.rightInsert,
             visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: fieldControl.bounds.size),
             textPointSize: (fieldKeys.rightInsert?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
@@ -436,7 +436,7 @@ final class KeyboardBottomBarView: UIView {
             visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: returnControl.bounds.size),
             tint: title == nil ? nil : .saiityAction, foreground: title == nil ? .label : .saiityOnAction,
             textPointSize: (title?.count ?? 0) > 3 ? 12 : CommandKeyStyle.textSize)
-        spaceControl.keyboardFace.configure(text: "space",
+        spaceControl.keyboardFace.configure(
             visualSize: CGSize(width: spaceControl.bounds.width, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
             radius: CommandKeyStyle.cornerRadius, textWeight: .regular, role: .input)
     }
@@ -467,11 +467,7 @@ final class KeyboardBottomBarView: UIView {
 
 /// What the space bar is doing under the finger, published so the face can show it.
 ///
-/// The tracking control is UIKit and the face is SwiftUI, and until this existed
-/// nothing crossed between them: the caret moved and the key looked untouched. On
-/// the system keyboard a held space bar stops saying "space" and shows a horizontal
-/// arrow that leans with the drag — the only cue that the finger is steering the
-/// caret rather than pressing a key.
+/// Tracks held Space without adding a label or steering arrow to its face.
 final class SpaceDragState: ObservableObject {
     /// True from the moment cursor tracking starts until the finger lifts.
     @Published private(set) var isTracking = false
@@ -517,7 +513,7 @@ struct SpaceBarControl: View {
     var body: some View {
         ZStack {
             CommandKeyFace(
-                text: "space",
+                text: "",
                 plateHeight: CGFloat(VoiceOnlyKeyboardPolicy.bottomBarVisualHeight),
                 cornerRadius: CommandKeyStyle.cornerRadius,
                 textWeight: .regular,
@@ -967,7 +963,7 @@ private extension AuxiliaryBottomBar {
                 systemName: systemName,
                 plateWidth: commandVisual.width,
                 plateHeight: commandVisual.height,
-                cornerRadius: commandVisual.height / 2,
+                cornerRadius: CommandKeyStyle.cornerRadius,
                 isPressed: pressed
             )
         }
@@ -984,7 +980,7 @@ private extension AuxiliaryBottomBar {
                 text: text,
                 plateWidth: commandVisual.width,
                 plateHeight: commandVisual.height,
-                cornerRadius: commandVisual.height / 2,
+                cornerRadius: CommandKeyStyle.cornerRadius,
                 textPointSize: textPointSize,
                 isPressed: pressed
             )
