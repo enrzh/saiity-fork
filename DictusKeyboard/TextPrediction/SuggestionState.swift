@@ -111,6 +111,8 @@ class SuggestionState: ObservableObject {
         // Nil is a completed "no correction needed" result, not a cache miss.
         let correction: String?
         let contextKey: String
+        let selectedLanguage: String
+        let spokenLanguages: [String]
     }
 
     private var pendingAutocorrection: PendingAutocorrection?
@@ -121,15 +123,13 @@ class SuggestionState: ObservableObject {
     private var adaptiveTouchWork: DispatchWorkItem?
     private var adaptiveTouchRequestGate = SuggestionRequestGate()
     private var lastAutocorrectEnabled = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled) as? Bool ?? true
-    /// Selected keyboard language last applied on `suggestionQueue`. Recent
-    /// text detection may refine the engine language without changing this
-    /// anchor, so ordinary keystrokes do not reload dictionaries.
-    private var adaptiveSelectedLanguage: String?
+    private var lastSpokenLanguages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
     private struct AdaptiveContext: Equatable {
         let text: String
         let policy: HostFieldPolicy
         let autocorrect: Bool
         let language: String
+        let spokenLanguages: [String]
         let rejected: Set<String>
     }
     private var lastAdaptiveContext: AdaptiveContext?
@@ -185,6 +185,8 @@ class SuggestionState: ObservableObject {
             let prepared = spaceCommit
             let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
                 && prepared?.contextKey == contextKey
+                && prepared?.selectedLanguage == SupportedLanguage.active.rawValue
+                && prepared?.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults)
             let correction: String?
             if let prepared, snapshotMatches {
                 canLearn = true
@@ -432,7 +434,8 @@ class SuggestionState: ObservableObject {
         }
         let selectedLanguage = SupportedLanguage.active.rawValue
         let snapshot = AdaptiveContext(text: context ?? "", policy: hostPolicy,
-            autocorrect: autocorrectEnabled, language: selectedLanguage, rejected: rejectedWords)
+            autocorrect: autocorrectEnabled, language: selectedLanguage,
+            spokenLanguages: SpokenLanguagePreferences.load(from: AppGroup.defaults), rejected: rejectedWords)
         guard snapshot != lastAdaptiveContext else { return }
         lastAdaptiveContext = snapshot
         adaptiveTouchWork?.cancel()
@@ -469,10 +472,10 @@ class SuggestionState: ObservableObject {
         weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
             guard let self, let work = cancellableWork, !work.isCancelled else { return }
-            if self.adaptiveSelectedLanguage != selectedLanguage {
-                self.adaptiveSelectedLanguage = selectedLanguage
-                self.engine.setSelectedLanguage(selectedLanguage)
-            }
+            guard snapshot.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults) else { return }
+            // The keyboard language can stay fixed while spoken-language
+            // membership changes in the app. Exact acceptance follows both.
+            self.engine.setSelectedLanguage(selectedLanguage)
             // A completed word is the cheap, stable language boundary. This
             // live path previously never called typed-language detection.
             if isBoundary { self.engine.setLanguage(forRecentText: inputContext) }
@@ -483,7 +486,8 @@ class SuggestionState: ObservableObject {
             let commit = abstains ? nil : self.preparedSpaceCommit(
                 partial: partial, context: inputContext, previousWord: previousWords.last,
                 isAtSentenceStart: atSentenceStart, isBoundary: isBoundary,
-                allowsAutocorrect: allowsAutocorrect, rejected: rejected)
+                allowsAutocorrect: allowsAutocorrect, rejected: rejected,
+                selectedLanguage: selectedLanguage, spokenLanguages: snapshot.spokenLanguages)
             self.publishSpaceCommit(commit, token: requestToken)
             guard !work.isCancelled else { return }
             let probabilities = rejected || abstains
@@ -512,7 +516,9 @@ class SuggestionState: ObservableObject {
         isAtSentenceStart: Bool,
         isBoundary: Bool,
         allowsAutocorrect: Bool,
-        rejected: Bool
+        rejected: Bool,
+        selectedLanguage: String,
+        spokenLanguages: [String]
     ) -> SpaceCommit? {
         guard allowsAutocorrect, !isBoundary, !partial.isEmpty,
               !engine.dictionaryLoadInFlight,
@@ -526,7 +532,9 @@ class SuggestionState: ObservableObject {
         return SpaceCommit(
             word: partial,
             correction: result.flatMap { TypingCommit.accepts(typed: partial, correction: $0.correction) ? $0.correction : nil },
-            contextKey: String(context.suffix(240))
+            contextKey: String(context.suffix(240)),
+            selectedLanguage: selectedLanguage,
+            spokenLanguages: spokenLanguages
         )
     }
 
@@ -586,6 +594,15 @@ class SuggestionState: ObservableObject {
     /// the keyboard extension is cached.
     func refreshPreferences() {
         let enabled = autocorrectEnabled
+        let spoken = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+        if spoken != lastSpokenLanguages {
+            lastSpokenLanguages = spoken
+            spaceCommit = nil
+            clearAdaptiveTouchPrediction()
+            suggestionQueue.async { [weak self] in
+                self?.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+            }
+        }
         guard enabled != lastAutocorrectEnabled else { return }
         lastAutocorrectEnabled = enabled
         spaceCommit = nil
@@ -740,7 +757,6 @@ class SuggestionState: ObservableObject {
     func setLanguage(_ lang: String) {
         suggestionQueue.async { [weak self] in
             guard let self else { return }
-            self.adaptiveSelectedLanguage = lang
             self.engine.setSelectedLanguage(lang)
         }
     }

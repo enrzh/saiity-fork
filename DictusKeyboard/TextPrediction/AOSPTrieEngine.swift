@@ -2,6 +2,7 @@
 // Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
 import Foundation
 import DictusCore
+import os
 
 /// Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
 ///
@@ -19,6 +20,7 @@ final class AOSPTrieEngine {
         label: "de.aiity.saiity.aosptrie-load",
         qos: .userInitiated
     )
+    private let loadGeneration = OSAllocatedUnfairLock(initialState: UInt(0))
 
     /// True while a background load is in progress.
     private(set) var isLoading: Bool = false
@@ -60,22 +62,26 @@ final class AOSPTrieEngine {
     ///   can run work that needs to ask the dictionary questions — there is no
     ///   other moment at which `wordExists` starts telling the truth.
     func load(language: String, bundle: Bundle = .main, completion: ((Bool) -> Void)? = nil) {
+        let generation = loadGeneration.withLock { value in value &+= 1; return value }
         isLoading = true
         currentLanguage = language
         // Cleared here, with the teardown it describes: from this line until the
         // completion below, nothing is mounted.
         mountedLanguage = nil
         bridge.unloadDictionary()
+        bridge.unloadNgrams()
         wordCount = 0
 
         loadQueue.async { [weak self] in
             guard let self = self else { return }
+            guard self.loadGeneration.withLock({ $0 == generation }) else { return }
 
             guard let path = bundle.path(
                 forResource: "\(language)_spellcheck", ofType: "dict"
             ) else {
                 print("[AOSPTrieEngine] Failed to find \(language)_spellcheck.dict")
                 DispatchQueue.main.async {
+                    guard self.loadGeneration.withLock({ $0 == generation }) else { return }
                     self.isLoading = false
                     completion?(false)
                 }
@@ -94,6 +100,9 @@ final class AOSPTrieEngine {
             }
 
             DispatchQueue.main.async {
+                // A previous language's completion must not mark a replacement
+                // ready while the latest dictionary is still loading.
+                guard self.loadGeneration.withLock({ $0 == generation }) else { return }
                 if success {
                     self.wordCount = Int(self.bridge.wordCount())
                     self.mountedLanguage = language

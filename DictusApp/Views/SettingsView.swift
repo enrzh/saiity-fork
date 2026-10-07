@@ -170,7 +170,7 @@ struct SettingsView: View {
             } header: {
                 Text("Typing")
             } footer: {
-                Text("Typing follows the language of the sentence. Autocorrection and adaptive touch support English, German, French and Spanish. Other scripts, names, codes and web addresses stay unchanged.")
+                Text("Words in your keyboard and spoken languages stay unchanged. Mixed sentences use your selected keyboard language for corrections. Autocorrection and adaptive touch support English, German, French and Spanish. Other scripts, names, codes and web addresses stay unchanged.")
             }
             Section("Appearance & feedback") {
                 KeyboardMaterialPicker()

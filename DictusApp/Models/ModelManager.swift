@@ -872,6 +872,7 @@ class ModelManager: ObservableObject {
     func setSpokenLanguages(_ codes: [String]) {
         guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         defaults.set(SpokenLanguagePreferences.normalized(codes), forKey: SharedKeys.spokenLanguages)
+        KeyboardInteractionPreferences.notifyChanged()
         applyDownloadedModels()
         DictationCoordinator.shared.refreshKeyboardModel()
     }

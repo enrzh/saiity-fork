@@ -88,11 +88,15 @@ do {
 if !\(baseline) {
     let state = SuggestionState.shared, defaults = AppGroup.defaults
     let storedLanguage = defaults.object(forKey: SharedKeys.language)
+    let storedSelection = defaults.object(forKey: SharedKeys.keyboardLanguageSelection)
+    let storedSpoken = defaults.object(forKey: SharedKeys.spokenLanguages)
     let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
     let dictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed"]
     let savedDictionary = dictionaryKeys.map { defaults.object(forKey: $0) }
     defer {
-        for (key, value) in [(SharedKeys.language, storedLanguage), (SharedKeys.autocorrectEnabled, storedAutocorrect)] {
+        for (key, value) in [(SharedKeys.language, storedLanguage), (SharedKeys.keyboardLanguageSelection, storedSelection),
+                             (SharedKeys.spokenLanguages, storedSpoken),
+                             (SharedKeys.autocorrectEnabled, storedAutocorrect)] {
             if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
         }
         for (key, value) in zip(dictionaryKeys, savedDictionary) {
@@ -102,21 +106,23 @@ if !\(baseline) {
         state.clear()
         state.setLanguage(SupportedLanguage.active.rawValue)
     }
-    defaults.set("en", forKey: SharedKeys.language)
+    defaults.set("fr", forKey: SharedKeys.language)
+    KeyboardLanguageSelection.explicit(.french).persist(to: defaults)
     defaults.set(true, forKey: SharedKeys.autocorrectEnabled)
-    state.setLanguage("en")
+    state.setLanguage("fr")
     let queue = Mirror(reflecting: state).children.first { $0.label == "suggestionQueue" }!.value as! DispatchQueue
     queue.sync {}
     waitFor({ !TextPredictionEngine.shared.dictionaryLoadInFlight }, message: "Language switch did not settle")
     let native = Mirror(reflecting: TextPredictionEngine.shared).children.first { $0.label == "aospTrieEngine" }!.value as! AOSPTrieEngine
     var loaded = false
-    native.load(language: "en", bundle: Bundle(path: "\(extensionPath)")!) { loaded = $0 }
+    native.load(language: "fr", bundle: Bundle(path: "\(extensionPath)")!) { loaded = $0 }
     waitFor({ loaded }, message: "Bundled spelling dictionary did not load")
-    let expected = state.performSpellCheck("dont", previousWord: nil)!.correction
+    UserDictionary.shared.forget("bonjor")
+    let expected = state.performSpellCheck("bonjor", previousWord: nil)!.correction
     state.clear(resetLanguage: false)
-    state.updateAdaptiveTouchPrediction(context: "dont", policy: .allowed)
+    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
     let firstWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
-    state.updateAdaptiveTouchPrediction(context: "dont", policy: .allowed)
+    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
     let duplicateWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
     precondition(firstWork === duplicateWork, "Duplicate context restarted the current prediction")
     waitFor({
@@ -125,9 +131,20 @@ if !\(baseline) {
     }, message: "Background correction did not become available")
     let proxy = VocabularyProxy()
     proxy.autocorrectionType = .yes
-    proxy.text = "dont"
+    proxy.text = "bonjor"
     state.handleSpace(proxy: proxy)
     precondition(proxy.text == expected + " ", "Ready correction was lost when synchronous fallback was removed")
+    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
+    waitFor({
+        let commit = Mirror(reflecting: state).children.first { $0.label == "spaceCommit" }!.value
+        return !Mirror(reflecting: commit).children.isEmpty
+    }, message: "Correction did not settle before changing spoken languages")
+    let spokenBefore = SpokenLanguagePreferences.load(from: defaults)
+    defaults.set(spokenBefore == ["en"] ? [] : ["en"], forKey: SharedKeys.spokenLanguages)
+    proxy.text = "bonjor"
+    state.handleSpace(proxy: proxy)
+    precondition(proxy.text == "bonjor ", "Space committed an old language-configuration result")
+    state.refreshPreferences()
     // A changed field must not reuse the preceding field's ready correction.
     proxy.text = "otherfixtureword"
     state.handleSpace(proxy: proxy)

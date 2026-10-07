@@ -23,11 +23,17 @@ class TextPredictionEngine {
     /// survive their owning KeyboardViewController.deinit (KeyboardRootView struct held
     /// alive by KeyboardState.shared.objectWillChange subscription). Sharing the heavy
     /// resources means the leak no longer multiplies memory per app-switch cycle.
-    static let shared = TextPredictionEngine()
+    static let shared = TextPredictionEngine(bundle: Bundle(for: AOSPTrieBridge.self))
 
     private let textChecker = UITextChecker()
     private var frequencyDict = FrequencyDictionary()
     private let aospTrieEngine = AOSPTrieEngine()
+    private let dictionaryBundle: Bundle
+    /// Exact acceptance only; extra n-grams and frequency tables are not loaded.
+    /// Accessed on the existing prediction queue, including mapping and removal.
+    private var acceptedWordTries: [String: AOSPTrieBridge] = [:]
+    private(set) var enabledDictionaryLanguages: [String] = []
+    private var acceptedWordsReady = false
     private var language: String = SupportedLanguage.active.rawValue
     private var selectedLanguage: String = SupportedLanguage.active.rawValue
     private var lastLanguageProbeText: String?
@@ -44,8 +50,58 @@ class TextPredictionEngine {
     /// earlier session. See `reportPruneAlreadyDone()`.
     private var hasReportedPruneAlreadyDone = false
 
-    private init() {
+    init(bundle: Bundle = .main) {
+        dictionaryBundle = bundle
+        refreshAcceptedWordDictionaries()
         loadDictionaries(for: language)
+    }
+
+    /// Only explicitly selected languages with a bundled dictionary are mapped.
+    /// Empty spoken preferences do not implicitly enable the entire catalog.
+    private func refreshAcceptedWordDictionaries() {
+        let enabled = SpokenLanguagePreferences.normalized(
+            [selectedLanguage] + SpokenLanguagePreferences.load(from: AppGroup.defaults))
+            .filter { dictionaryBundle.path(forResource: "\($0)_spellcheck", ofType: "dict") != nil }
+        guard enabled != enabledDictionaryLanguages else { return }
+        enabledDictionaryLanguages = enabled
+        acceptedWordTries = acceptedWordTries.filter { enabled.contains($0.key) }
+        for code in enabled where acceptedWordTries[code] == nil {
+            guard let path = dictionaryBundle.path(forResource: "\(code)_spellcheck", ofType: "dict") else { continue }
+            let trie = AOSPTrieBridge()
+            if trie.loadDictionary(atPath: path) { acceptedWordTries[code] = trie }
+        }
+        // A failed map must not allow correction while an enabled language's
+        // valid words are unknown. Input remains available without correction.
+        acceptedWordsReady = enabled.allSatisfy { acceptedWordTries[$0] != nil }
+    }
+
+    private func isAcceptedWord(_ word: String) -> Bool {
+        let exact = word.lowercased().precomposedStringWithCanonicalMapping
+        return acceptedWordTries.values.contains { $0.wordExists(exact) }
+    }
+
+    private func shouldPreserveSpelling(_ word: String) -> Bool {
+        // Explicit vocabulary takes precedence; exact foreign words then block
+        // every correction path, including language overrides and n-gram boosts.
+        UserDictionary.shared.isLearned(word.lowercased()) || !acceptedWordsReady
+            || aospTrieEngine.isLoading || isAcceptedWord(word)
+    }
+
+    /// A sentence needs different dictionaries when no one enabled dictionary
+    /// contains all its recognized words. Shared words and unknown typos are
+    /// neutral; this chooses no language for an individual token.
+    private func hasMixedDictionaryWords(_ text: String) -> Bool {
+        var common = Set(enabledDictionaryLanguages)
+        guard common.count > 1 else { return false }
+        for token in text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }) {
+            let word = String(token).trimmingCharacters(in: .punctuationCharacters)
+                .lowercased().precomposedStringWithCanonicalMapping
+            let matches = Set(acceptedWordTries.compactMap { code, trie in trie.wordExists(word) ? code : nil })
+            guard !matches.isEmpty else { continue }
+            common.formIntersection(matches)
+            if common.isEmpty { return true }
+        }
+        return false
     }
 
     /// Updates the active language for completions and spell-checking.
@@ -70,7 +126,8 @@ class TextPredictionEngine {
             lastLanguageProbeText = nil
             lastDetectedLanguage = nil
         }
-        setLanguage(lang)
+        refreshAcceptedWordDictionaries()
+        if selectionChanged || !enabledDictionaryLanguages.contains(language) { setLanguage(lang) }
     }
 
     /// Clears sticky typed-language detection so an emptied field falls back
@@ -84,11 +141,18 @@ class TextPredictionEngine {
     /// Uses the most recent text when it is confidently identifiable. The
     /// active keyboard language remains the fallback for short or mixed input.
     func setLanguage(forRecentText text: String) {
+        refreshAcceptedWordDictionaries()
         let recentText = String(text.suffix(240))
         // Empty / fully-deleted input must drop sticky detection so the next
         // document does not inherit the previous field's language prior.
         if recentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             resetTypedLanguageDetection()
+            return
+        }
+        if PredictionLanguageSafety.shouldAbstain(for: recentText) || hasMixedDictionaryWords(recentText) {
+            lastLanguageProbeText = recentText
+            lastDetectedLanguage = nil
+            setLanguage(selectedLanguage)
             return
         }
         // While the user is still extending the same word, keep the last
@@ -103,20 +167,9 @@ class TextPredictionEngine {
         }
 
         let detected = recentLanguageCode(for: recentText)
-        // Hysteresis: once typing has a confident language, stick to it until
-        // another supported language clearly wins. Avoids DE/EN flip-flops mid-word.
-        let resolved: String?
-        if let detected {
-            resolved = detected
-        } else if let sticky = lastDetectedLanguage,
-                  recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count >= 2 {
-            resolved = sticky
-        } else {
-            resolved = nil
-        }
         lastLanguageProbeText = recentText
-        if let resolved { lastDetectedLanguage = resolved }
-        setLanguage(resolved ?? selectedLanguage)
+        lastDetectedLanguage = detected
+        setLanguage(detected ?? selectedLanguage)
     }
 
     /// CJK text has no useful Latin spell-check path. Returning no correction
@@ -149,6 +202,8 @@ class TextPredictionEngine {
               recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count >= 4 else {
             return false
         }
+        if PredictionLanguageSafety.shouldAbstain(for: recentText) { return true }
+        if enabledDictionaryLanguages.count > 1 && acceptedWordTries[selectedLanguage] != nil { return false }
         return recentLanguageCode(for: recentText) == nil
     }
 
@@ -159,21 +214,19 @@ class TextPredictionEngine {
     }
 
     private func recentLanguageCode(for recentText: String) -> String? {
-        // Typed keyboard input is shorter than dictation snippets. Detect once
-        // we have a couple of words / ~12 glyphs so DE/EN/FR/ES priors can
-        // adapt mid-sentence without waiting for a full paragraph.
+        // A short clause must not replace the selected correction language.
         let wordCount = recentText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-        guard recentText.count >= 12,
-              wordCount >= 2,
-              !PredictionLanguageSafety.shouldAbstain(for: recentText) else {
+        guard recentText.count >= 24,
+              wordCount >= 4,
+              !PredictionLanguageSafety.shouldAbstain(for: recentText),
+              !hasMixedDictionaryWords(recentText) else {
             return nil
         }
         let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = SpokenLanguagePreferences.normalized(
+            [selectedLanguage] + SpokenLanguagePreferences.load(from: AppGroup.defaults))
+            .map(NLLanguage.init(rawValue:))
         recognizer.processString(recentText)
-        // Bias toward languages the keyboard actually ships dictionaries for.
-        recognizer.languageConstraints = SupportedLanguage.allCases.compactMap {
-            NLLanguage(rawValue: $0.rawValue)
-        }
         let hypotheses = recognizer.languageHypotheses(withMaximum: 3)
             .sorted { $0.value > $1.value }
         guard let top = hypotheses.first else {
@@ -185,6 +238,7 @@ class TextPredictionEngine {
         guard top.value >= confidenceFloor,
               top.value - secondProbability >= leadFloor,
               let language = Self.supportedLanguageCode(for: top.key.rawValue),
+              enabledDictionaryLanguages.contains(language),
               UITextChecker.availableLanguages.contains(where: { $0.hasPrefix(language) }) else {
             return nil
         }
@@ -220,8 +274,8 @@ class TextPredictionEngine {
         if !available.contains(where: { $0.hasPrefix(lang) }) {
             print("[TextPredictionEngine] Warning: '\(lang)' not in available languages: \(available)")
         }
-        frequencyDict.load(language: lang)
-        aospTrieEngine.load(language: lang) { [weak self] _ in
+        frequencyDict.load(language: lang, bundle: dictionaryBundle)
+        aospTrieEngine.load(language: lang, bundle: dictionaryBundle) { [weak self] _ in
             // The user dictionary's one-shot prune (#287). This is the first
             // moment in a cold session at which anything can ask the dictionary a
             // question, so it has to be one of the triggers — but it is not a
@@ -308,7 +362,7 @@ class TextPredictionEngine {
     /// slow InputConnection, because a word it cannot vet is a word it should
     /// not keep. If we cannot ask, we do not learn.
     func isUnknownToDictionary(_ word: String) -> Bool {
-        aospTrieEngine.isReady && !aospTrieEngine.knowsWord(word)
+        acceptedWordsReady && aospTrieEngine.isReady && !isAcceptedWord(word) && !aospTrieEngine.knowsWord(word)
     }
 
     /// Returns up to 3 word completions for a partial word, ranked by frequency.
@@ -393,10 +447,10 @@ class TextPredictionEngine {
         if TypingFact.shouldLeaveUntouched(word) || TypingFact.isOpenPrefix(word) {
             return nil
         }
+        guard !shouldPreserveSpelling(word) else { return nil }
 
-        // Language-specific overrides bypass everything — e.g., "ca" is never valid French.
-        // Must check before UserDictionary, otherwise typing "ca" twice
-        // would "learn" it and block the ça correction permanently.
+        // Active-language overrides may repair a spelling only after explicit
+        // vocabulary and exact words from every enabled dictionary are protected.
         if let result = aospTrieEngine.languageOverride(for: word) {
             #if DEBUG
             AutocorrectDebugLog.autocorrectDecision(
@@ -728,6 +782,9 @@ class TextPredictionEngine {
         previousWord: String?,
         isAtSentenceStart: Bool = true
     ) -> (correction: String, alternatives: [String])? {
+        // Protect exact enabled-language words before overrides and contextual
+        // re-ranking, which otherwise bypass the ordinary spell-check guard.
+        guard !shouldPreserveSpelling(word) else { return nil }
         // Language overrides are authoritative — return before the bigram
         // rerank can replace them. Concrete failure this prevents (#222):
         // "je lai" → override "l'ai", but the corpus tokenizes "j'ai" as ONE

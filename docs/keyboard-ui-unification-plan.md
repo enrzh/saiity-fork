@@ -6,6 +6,61 @@ processing and Icon Composer scope accepted on 2026-09-30.
 
 Design rules: [keyboard-ui-design.md](keyboard-ui-design.md).
 
+## October 7 multilingual typing protection
+
+Exact spelling acceptance now maps only the selected keyboard language plus
+explicit spoken-language choices with bundled spellcheck data (EN/FR/DE/ES).
+Empty/Broad spoken-language preferences do not mount every dictionary. Each
+extra bridge loads only its mmap spellcheck trie; frequency ranking and
+n-gram/fuzzy candidates remain on the active correction engine. Retained
+language maps are reused, and removed choices release their bridges/maps.
+
+Both spelling entry points protect explicit vocabulary and exact enabled-trie
+matches before overrides, accents, splitting, fuzzy correction or contextual
+reranking. Membership is case-insensitive but preserves accents; decomposed
+Unicode is normalized for lookup, while inserted text stays unchanged. The
+bridge rejects overlong exact queries rather than validating a truncated prefix.
+If an enabled dictionary fails to map, corrections abstain. Space remains
+non-blocking and uses only a result for its current context and language choices.
+
+Mixed-text protection uses dictionary membership across the bounded 240-character
+context: if no single enabled dictionary covers all recognized words, the
+selected keyboard language supplies corrections. Shared words and unknown typos
+are neutral, without assigning a language to each token. Uncertain detection
+now returns to the selection rather than keeping the previous winner; clauses
+shorter than four words/24 characters cannot swap the active dictionary.
+NLLanguageRecognizer is constrained to configured languages. Existing unsupported
+script, host-field and protected-fact guardrails remain.
+
+The same shipped dictionaries contain some borrowed/rare spellings. Exact
+protection intentionally keeps those too: `tres` repairs to `très` with only
+French enabled, but stays `tres` when English (whose shipped trie includes it)
+or Spanish is enabled. Dictionary membership, not an accent-repair override,
+decides whether an enabled-language word may be changed.
+
+Spoken-language settings notify the cached keyboard and invalidate its prepared
+correction. The cache identity includes keyboard/spoken choices. Primary loads
+carry a synchronized generation so a superseded completion cannot mark a newer
+language ready; abandoned queued loads are skipped and old n-grams are cleared.
+The existing native read/load mutex remains in place.
+
+`scripts/test-multilingual-autocorrect.swift` executes the production engine
+against bundled dictionaries, including EN/FR words inside opposite-language
+contexts, contextual boosts, French typos/accents, mixed-language fallback,
+case/Unicode, scoped additions/removal, mapping reuse and rapid replacements.
+Validation: 1,905 Core cases pass with one existing skip. Native multilingual
+checks and the production keyboard-input harness pass, including rejecting a
+prepared correction after spoken-language choices change. The native bridge
+stress check passes 4,000 lookup batches across 80 reloads under AddressSanitizer
+and UndefinedBehaviorSanitizer. Simulator Debug and signed device Debug builds
+pass strict signature verification. The final development app is installed on
+the isolated QA simulator; the unavailable Air is not updated.
+
+These checks never capture audio or download models. Evidence artifacts:
+`/tmp/saiity-multilingual-typing.f4hW93/`. Phone typing quality, actual memory
+headroom and latency remain physical gates; the Air is unavailable. No commit,
+push, TestFlight upload or release change is part of this local follow-up.
+
 ## October 7 wordless hold shortcut
 
 The hidden-top-bar shortcut now uses only a centered 13pt destination glyph

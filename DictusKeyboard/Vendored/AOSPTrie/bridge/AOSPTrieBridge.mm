@@ -143,7 +143,7 @@ static int convertString(NSString *str, uint16_t *buffer, int bufferSize) {
 
 - (BOOL)wordExists:(NSString *)word {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (!_loaded || [word length] == 0) return NO;
+    if (!_loaded || [word length] == 0 || [word length] > 256) return NO;
 
     uint16_t buf[256];
     int len = convertString(word, buf, 256);
