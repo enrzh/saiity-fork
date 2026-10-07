@@ -1519,7 +1519,7 @@ class KeyboardViewController: UIInputViewController,
         }
         voiceBoardButton = makeKeyboardActionButton(
             identifier: "return-to-dictation-board",
-            label: "Return to dictation board"
+            label: "Back to dictation"
         ) { [weak self] in
             KeyboardState.shared.closeArea()
             _ = self

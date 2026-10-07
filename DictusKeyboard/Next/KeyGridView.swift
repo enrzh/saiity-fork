@@ -462,7 +462,7 @@ final class KeyGridView: UIView {
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
-        key.isCommand ? KeyboardChromeRole.commandCornerRadius : KeyboardChromeRole.keyCornerRadius
+        key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyboardChromeRole.keyCornerRadius
     }
 
     private var usesLiveMaterial: Bool {

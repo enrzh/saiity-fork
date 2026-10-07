@@ -12,7 +12,7 @@ enum KeyboardChromeRole {
 
     static var secondaryForeground: UIColor { .label.withAlphaComponent(0.72) }
     static let keyCornerRadius: CGFloat = 8
-    static let commandCornerRadius: CGFloat = 8
+    static let commandCornerRadius: CGFloat = CommandKeyStyle.cornerRadius
 
     func solidFill(increasedContrast: Bool = false) -> UIColor {
         switch self {
@@ -206,7 +206,7 @@ struct CommandKeyFace: View {
             maxHeight: plateHeight
         )
         .background {
-            let shape = RoundedRectangle(cornerRadius: KeyboardChromeRole.commandCornerRadius, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             if accented { shape.fill(Color.saiityAction).allowsHitTesting(false) }
             else { Color.clear.keyboardGlass(in: shape, interactive: false, role: role) }
         }

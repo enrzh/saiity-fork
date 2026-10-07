@@ -658,7 +658,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertFalse(root.contains("alternateAccessoryRow"))
         XCTAssertFalse(root.contains("onBackToVoice:"))
-        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""))
+        XCTAssertTrue(controller.contains("label: \"Back to dictation\""))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
         XCTAssertFalse(controller.contains("imageName: \"arrow.uturn.backward\""))
     }
@@ -784,7 +784,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
-        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""),
+        XCTAssertTrue(controller.contains("label: \"Back to dictation\""),
                       "the voice-return control must describe its action")
         let factory = try source("DictusKeyboard/Next/KeyGridPageFactory.swift")
         XCTAssertTrue(factory.contains("label: page == .symbolsNumbers ? \"#+=\" : \"123\""),

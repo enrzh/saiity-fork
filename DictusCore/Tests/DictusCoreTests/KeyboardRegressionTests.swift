@@ -372,7 +372,7 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(controller.contains("self?.handleDismissTouchDown()"))
         XCTAssertTrue(controller.contains("private func handleDismissTouchDown()"))
         XCTAssertTrue(controller.contains("dismissKeyboard()"))
-        XCTAssertTrue(controller.contains("label: \"Return to dictation board\""))
+        XCTAssertTrue(controller.contains("label: \"Back to dictation\""))
         XCTAssertTrue(controller.contains("KeyboardState.shared.closeArea()"))
         XCTAssertTrue(controller.contains("voiceBoardButton?.isHidden = !isAuxiliary || !showsTopBar"))
         XCTAssertTrue(controller.contains("emojiCategoryScrubber"))

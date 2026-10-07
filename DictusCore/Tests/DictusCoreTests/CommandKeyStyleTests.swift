@@ -72,6 +72,15 @@ final class CommandKeyStyleTests: XCTestCase {
         XCTAssertEqual(KeyGridPlacement.commandCornerRadius, CommandKeyStyle.cornerRadius)
     }
 
+    func testGridDrawsCommandKeysWithTheSharedCommandRadius() throws {
+        let grid = try String(contentsOfFile: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "DictusKeyboard/Next/KeyGridView.swift").path, encoding: .utf8)
+        XCTAssertTrue(grid.contains("key.isCommand ? KeyGridPlacement.commandCornerRadius : KeyboardChromeRole.keyCornerRadius"))
+        XCTAssertFalse(grid.contains("key.isCommand ? KeyboardChromeRole.commandCornerRadius"))
+    }
+
     /// The wash has to read as a press on glass, which is brighter than the keyboard
     /// behind it, so it lightens rather than darkens.
     func testWashIsLighteningAndSubtle() {
