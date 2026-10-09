@@ -81,6 +81,20 @@ final class DictationDeliveryTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: SharedKeys.lastTranscription))
     }
 
+    func testChangedOrMissingDocumentKeepsResultForItsOriginalField() {
+        let document = UUID()
+        let request = DictationLanguageRequest(mode: .autoDetect, translationTarget: nil)
+            .bound(sessionID: "field-session", generation: 1, clientIdentifier: document.uuidString)
+        DictationDelivery.publish("Keep my text", for: request, to: defaults, originalText: "my original text")
+        XCTAssertNil(DictationDelivery.consumeResult(for: request, from: defaults, documentIdentifier: UUID()))
+        XCTAssertNil(DictationDelivery.consumeResult(for: request, from: defaults, documentIdentifier: nil))
+        XCTAssertNotNil(defaults.data(forKey: SharedKeys.dictationDelivery))
+        let result = DictationDelivery.consumeResult(for: request, from: defaults, documentIdentifier: document)
+        XCTAssertEqual(result?.text, "Keep my text")
+        XCTAssertEqual(result?.originalText, "my original text")
+        XCTAssertNil(DictationDelivery.consumeResult(for: request, from: defaults, documentIdentifier: document))
+    }
+
     func testQuickReleaseDuringStartupCancelsRatherThanTranscribesEmptyAudio() {
         XCTAssertEqual(DictationStopAction.resolve(status: .requested, isRecording: false), .cancel)
         XCTAssertEqual(DictationStopAction.resolve(status: .idle, isRecording: false), .ignore)

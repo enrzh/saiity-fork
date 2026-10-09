@@ -288,16 +288,23 @@ final class PolishPostpassTests: XCTestCase {
         XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .repair))
     }
 
-    func testCleanupFloorAutoPathRemovesFillersResolvesTimeCorrectionAndDropsRestatement() {
+    func testCleanupFloorAutoPathPreservesDistinctEventsAtTheSameTime() {
         let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
         XCTAssertEqual(
             PolishPostpass.cleanupFloor(raw, language: nil),
-            "Hey Jack I got an appointment at 4am. Can you come by please?"
+            "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?"
         )
         XCTAssertEqual(
             PolishPostpass.cleanupFloor(raw, language: .english),
-            "Hey Jack I got an appointment at 4am. Can you come by please?"
+            "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?"
         )
+    }
+
+    func testGrammarFloorPreservesDistinctEventsWithoutCleanup() {
+        let input = "I have a call at 2pm. I have a meeting at 2pm."
+        XCTAssertEqual(TranscriptionPipeline.assemble(
+            cleaned: input, grammarLanguage: nil, insertAsIs: true
+        ).body, input)
     }
 
     func testCleanupFloorKeepsLikeWhenItIsAVerbOrComparison() {

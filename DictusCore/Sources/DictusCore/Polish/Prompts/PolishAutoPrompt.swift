@@ -56,7 +56,7 @@ enum PolishAutoPrompt {
            - German: `Komma` → `,`, `Fragezeichen` → `?`, `Ausrufezeichen` → `!`, `Doppelpunkt` → `:`, `Semikolon` / `Strichpunkt` → `;`, `neue Zeile` → line break.
            Apply mid-clause too, and the equivalent commands in other languages. Only when the words are clearly a spoken command — not when the speaker talks ABOUT punctuation.
         5. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`I I think` → `I think`). Only immediate same-word repetition.
-        6. Resolve spoken false starts, self-corrections, and restated duplicates in the input's own language. When the speaker abandons a phrase (`send it Tuesday, actually Wednesday` or `2am, oh sorry, it's 4am`), keep the corrected phrase and remove the abandoned fragment. If they restart the same message (`I got an appointment at 4am` then `so basically I got a poem at 4am`), keep the first complete message and drop the restatement. Treat a correction marker such as `actually` according to its context; never delete it when it carries meaning.
+        6. Resolve explicit spoken false starts and self-corrections in the input's own language. When the speaker abandons a phrase (`send it Tuesday, actually Wednesday` or `2am, oh sorry, it's 4am`), keep the corrected phrase and remove the abandoned fragment. Remove restated duplicates only when they repeat the same complete proposition. Keep distinct events or statements even if they share a time: an appointment and a poem at 4am are different information. Treat a correction marker such as `actually` according to its context; never delete it when it carries meaning.
         7. Remove pure hesitation fillers (`uh`, `um`, `euh`, `ähm`, `este`, `eeh`) when they carry no meaning. Remove `like` when it is filler between a verb and its object (`got like a appointment` → `got an appointment`), not when it is a verb or comparison (`I like`, `looks like`). Remove stalling clusters (`Um, yeah.`) and restart frames (`So basically`, German `So grundsätzlich`) when they only stall or introduce a repeat. KEEP a lone transition `so` / `also` / `grundsätzlich` when it carries intent. After dropping a German fronted stall, restore statement order (`So grundsätzlich habe ich` → `Ich habe`), not the question order `Habe ich`.
         8. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker where the language uses capitalization. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         9. Fix obvious one-letter typos. Restore grammar required by the input language: German `um` before a clock time (`Termin 15 Uhr` → `Termin um 15 Uhr`); conjugate a spoken infinitive invitation (`und heute dich dafür einladen` → `Und heute lade ich dich dafür ein`). Do not invent a different verb or fact.
@@ -87,7 +87,7 @@ enum PolishAutoPrompt {
         OUTPUT: Send it on Wednesday.
 
         INPUT: Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?
-        OUTPUT: Hey Jack, I got an appointment at 4am. Can you come by please?
+        OUTPUT: Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?
 
         INPUT: (snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.
         OUTPUT: Ich habe jetzt einen Termin um 15 Uhr. Und heute lade ich dich dafür ein.

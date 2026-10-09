@@ -93,7 +93,12 @@ class ModelManager: ObservableObject {
             defer { catalogDownloads[identifier] = nil }
             do { try await downloadModel(identifier) }
             catch is CancellationError { }
-            catch { onError(error.localizedDescription) }
+            catch {
+                let error = error as NSError
+                if !Task.isCancelled && !(error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled) {
+                    onError(error.localizedDescription)
+                }
+            }
         }
     }
 

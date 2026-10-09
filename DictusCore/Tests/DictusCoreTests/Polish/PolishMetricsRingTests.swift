@@ -46,9 +46,38 @@ final class PolishMetricsRingTests: XCTestCase {
         let lines = try String(contentsOf: file).split(separator: "\n")
         XCTAssertFalse(try XCTUnwrap(lines.last).contains("secret"))
 
-        await ring.clear()
+        try await ring.clear()
         let cleared = await ring.allEntries()
         XCTAssertEqual(cleared.count, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    func testClearDoesNotRestoreAnOlderQueuedEventAfterRestart() async throws {
+        let suite = "polish-clear-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: directory) }
+        let metrics = PolishMetrics(engine: "fixture", mode: .auto, targetLanguage: nil,
+            detectedLanguage: "en", rawCharCount: 6, polishedCharCount: 6, latencyMs: 1, outcome: .success)
+        let entry = PolishDebugEntry(raw: "secret", polished: "Secret", metrics: metrics)
+        let ring = PolishMetricsRing(defaults: defaults, directory: directory)
+        await ring.append(entry)
+        try await ring.clear()
+        await ring.append(entry)
+        let restarted = PolishMetricsRing(defaults: defaults, directory: directory)
+        let entries = await restarted.allEntries()
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testClearSurfacesDiskFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("polish-clear-failure-" + UUID().uuidString)
+        try Data([1]).write(to: directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ring = PolishMetricsRing(directory: directory)
+        do {
+            try await ring.clear()
+            XCTFail("Clear hid an unusable storage directory")
+        } catch { }
     }
 }

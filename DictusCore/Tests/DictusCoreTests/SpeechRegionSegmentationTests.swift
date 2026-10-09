@@ -235,6 +235,21 @@ final class SpeechRegionSegmentationTests: XCTestCase {
         XCTAssertEqual(SpeechTranscriptMerger.merge(["hello.", "world"]), "hello. world")
     }
 
+    func testMergePreservesNumbersAndAddresses() {
+        let input = "Pay 12.50 or 12,50 at 10:30 to person@example.com via https://example.org/a?x=1&y=2."
+        XCTAssertEqual(SpeechTranscriptMerger.merge([input]), input)
+    }
+
+    func testOverlapPreservesNumbersAndAddresses() {
+        let regions = [
+            SpeechRegionTranscript(region: SpeechRegion(startSample: 0, endSample: 10),
+                                   text: "Pay 12.50 at 10:30", overlapsPreviousRegion: false),
+            SpeechRegionTranscript(region: SpeechRegion(startSample: 5, endSample: 15),
+                                   text: "at 10:30 to person@example.com", overlapsPreviousRegion: true)
+        ]
+        XCTAssertEqual(SpeechTranscriptMerger.merge(regions), "Pay 12.50 at 10:30 to person@example.com")
+    }
+
     func testRegionMetadataSurvivesSequentialRunner() async throws {
         let region = SpeechRegion(startSample: 0, endSample: sampleRate)
         let results = try await SpeechRegionTranscriptionRunner.run(

@@ -17,6 +17,7 @@ struct OnboardingView: View {
     @State private var didLoadStage = false
     @AppStorage(SharedKeys.onboardingUsage, store: AppGroup.defaults) private var usage = OnboardingUsage.keyboard.rawValue
     @State private var showAppTry = false
+    @StateObject private var modelManager = ModelManager()
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,13 @@ struct OnboardingView: View {
             }
             .navigationTitle("Set up sAiity")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if stage != .welcome {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Back") { advance(to: OnboardingStage(rawValue: stage.rawValue - 1) ?? .welcome) }
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) { stageProgress.padding(.horizontal, 24).padding(.vertical, 12).background(.bar) }
             .interactiveDismissDisabled()
             .fullScreenCover(isPresented: $showAppTry) {
@@ -55,7 +63,7 @@ struct OnboardingView: View {
             advance(to: .permissions)
         }, onKeyboardSetup: { usage = OnboardingUsage.keyboard.rawValue; advance(to: .permissions) })
         case .permissions: MicPermissionPage(onNext: { advance(to: .availability) })
-        case .availability: AvailabilityPage(onNext: { advance(to: .tryIt) })
+        case .availability: AvailabilityPage(modelManager: modelManager, onNext: { advance(to: .tryIt) })
         case .tryIt:
             if usage == OnboardingUsage.appOnly.rawValue {
                 VStack(alignment: .leading, spacing: 20) {
@@ -80,6 +88,12 @@ struct OnboardingView: View {
             Text("Step \(stage.rawValue + 1) of 4").font(.caption).foregroundStyle(.secondary)
                 .accessibilityLabel("Onboarding progress")
                 .accessibilityValue(Text("Step \(stage.rawValue + 1) of 4"))
+            Button("Set up later") {
+                DictationCoordinator.shared.setKeyboardDictationEnabled(false)
+                finishOnboarding()
+            }
+            .frame(minHeight: 44)
+            .accessibilityHint("Finish setup later in Settings. Dictation stays off.")
         }
     }
 
@@ -91,14 +105,15 @@ struct OnboardingView: View {
 }
 
 struct AvailabilityPage: View {
+    @ObservedObject var modelManager: ModelManager
     let onNext: () -> Void
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var modelManager = ModelManager()
     @ObservedObject private var setup = KeyboardSetupModel.shared
     @AppStorage(SharedKeys.polishEnabled, store: AppGroup.defaults) private var polishEnabled = true
-    @State private var isDownloading = false
     @State private var errorMessage: String?
-    @State private var preparingModelID: String?
+    private var isDownloading: Bool {
+        recommendedModel.map { modelManager.downloadProgress[$0] != nil || modelManager.modelStates[$0] == .prewarming } ?? false
+    }
     private var recommendedModel: String? {
         if !usesKeyboard { return modelManager.initialVoiceModel }
         if let requested = AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) { return requested }
@@ -130,9 +145,12 @@ struct AvailabilityPage: View {
                 if let recommendedModel {
                 checklistRow(modelReady ? "Voice model ready" : "Install voice model", detail: ModelInfo.forIdentifier(recommendedModel).map { "\($0.displayName) · \($0.sizeBytes / 1_000_000) MB · \(modelStatus)" } ?? modelStatus, done: modelReady, action: startDownload)
                     .disabled(isDownloading || modelReady)
-                if isDownloading, let progress = modelManager.downloadProgress[recommendedModel] {
-                    ProgressView(value: Double(progress)).tint(.accentColor).accessibilityLabel("Downloading voice model").accessibilityValue("\(Int(progress * 100)) percent")
+                if isDownloading {
+                    if let progress = modelManager.downloadProgress[recommendedModel] {
+                        ProgressView(value: Double(progress)).tint(.accentColor).accessibilityLabel("Downloading voice model").accessibilityValue("\(Int(progress * 100)) percent")
+                    } else { ProgressView("Preparing voice model") }
                     if let bytes = modelManager.downloadByteInfo[recommendedModel] { Text("\(bytes.downloadedMB) MB of \(bytes.totalMB) MB").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                    Button("Cancel download") { modelManager.cancelCatalogDownload(recommendedModel) }
                 }
                 } else {
                     Text("No compatible model covers these languages on this iPhone. Change your spoken languages to see a recommendation.")
@@ -169,9 +187,6 @@ struct AvailabilityPage: View {
             setup.refresh()
             refreshModel()
         }
-        .fullScreenCover(item: Binding<PreparingItem?>(get: { preparingModelID.map(PreparingItem.init) }, set: { preparingModelID = $0?.id })) { item in
-            ModelLoadingOverlay(modelManager: modelManager, modelIdentifier: item.id, context: .onboarding, isPresented: Binding(get: { preparingModelID != nil }, set: { if !$0 { preparingModelID = nil } }))
-        }
     }
 
     private var modelStatus: String { if modelReady { return "Ready" }; if let recommendedModel, modelManager.modelStates[recommendedModel] == .prewarming { return "Preparing" }; if isDownloading { return "Downloading" }; return "Required for offline dictation" }
@@ -195,22 +210,9 @@ struct AvailabilityPage: View {
     private func refreshModel() { modelManager.loadState() }
     private func startDownload() {
         guard !isDownloading, let recommendedModel else { return }
-        isDownloading = true
         errorMessage = nil
-        preparingModelID = recommendedModel
-        Task {
-            do {
-                try await modelManager.downloadModel(recommendedModel)
-                isDownloading = false
-            } catch {
-                isDownloading = false
-                preparingModelID = nil
-                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                errorMessage = detail.isEmpty
-                    ? "Could not install the voice model. Try again."
-                    : detail
-            }
+        modelManager.startCatalogDownload(recommendedModel) { detail in
+            errorMessage = detail.isEmpty ? "Could not install the voice model. Try again." : detail
         }
     }
-    private struct PreparingItem: Identifiable { let id: String }
 }

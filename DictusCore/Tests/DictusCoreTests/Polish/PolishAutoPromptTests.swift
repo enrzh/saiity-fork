@@ -51,7 +51,7 @@ final class PolishAutoPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("我晚上再确认"))
         XCTAssertTrue(prompt.contains("restat"))
         XCTAssertTrue(prompt.contains("Hey Jack I got like a appointment at 2am"))
-        XCTAssertTrue(prompt.contains("Hey Jack, I got an appointment at 4am. Can you come by please?"))
+        XCTAssertTrue(prompt.contains("Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?"))
     }
 
     func testAutoPromptEmbedsGlossary() {

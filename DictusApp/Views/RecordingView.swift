@@ -180,10 +180,9 @@ struct RecordingView: View {
             // start that dies puts `.failed` in place while `SwipeBackOverlayView` owns
             // the window; MainTabView inserts this view only once the overlay is gone, by
             // which time the status has stopped changing and `onChange` will never fire.
-            // Only `.failed` is adopted on appear: `.ready` would replay the result card
-            // and, in onboarding, its auto-advance.
-            if coordinator.status == .failed {
-                handleStatusChange(.failed)
+            // Reopening Speak restores its result; setup does not adopt an old dictation.
+            if coordinator.status == .failed || (coordinator.status == .ready && mode == .standalone) {
+                handleStatusChange(coordinator.status)
             }
             advanceDisplayedStatus(to: coordinator.status)
         }

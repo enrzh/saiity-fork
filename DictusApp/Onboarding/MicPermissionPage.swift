@@ -35,10 +35,10 @@ struct MicPermissionPage: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if permissionGranted == nil {
-                Button("Continue", action: requestPermission)
+                Button("Allow microphone", action: requestPermission)
                     .buttonStyle(SaiityPrimaryActionStyle()).disabled(isRequesting)
             } else if permissionGranted == true {
-                Button("Continue after authorization", action: onNext)
+                Button("Continue", action: onNext)
                     .buttonStyle(SaiityPrimaryActionStyle())
             } else {
                 Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
@@ -47,14 +47,10 @@ struct MicPermissionPage: View {
                     .buttonStyle(.bordered).controlSize(.large)
             }
         }
+        .onAppear(perform: refreshPermission)
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
-            switch AVAudioSession.sharedInstance().recordPermission {
-            case .granted: permissionGranted = true
-            case .denied: permissionGranted = false
-            case .undetermined: permissionGranted = nil
-            @unknown default: permissionGranted = false
-            }
+            refreshPermission()
             UIAccessibility.post(notification: .announcement, argument: permissionGranted == true ? "Microphone authorized" : "Microphone permission still required")
         }
     }
@@ -69,7 +65,7 @@ struct MicPermissionPage: View {
         switch session.recordPermission {
         case .granted:
             permissionGranted = true
-            autoAdvance()
+            isRequesting = false
         case .denied:
             permissionGranted = false
             isRequesting = false
@@ -85,9 +81,6 @@ struct MicPermissionPage: View {
                 DispatchQueue.main.async {
                     permissionGranted = allowed
                     isRequesting = false
-                    if allowed {
-                        autoAdvance()
-                    }
                 }
             }
         @unknown default:
@@ -96,10 +89,12 @@ struct MicPermissionPage: View {
         }
     }
 
-    private func autoAdvance() {
-        // Auto-advance after brief delay to show the checkmark
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            onNext()
+    private func refreshPermission() {
+        switch AVAudioSession.sharedInstance().recordPermission {
+        case .granted: permissionGranted = true
+        case .denied: permissionGranted = false
+        case .undetermined: permissionGranted = nil
+        @unknown default: permissionGranted = false
         }
     }
 

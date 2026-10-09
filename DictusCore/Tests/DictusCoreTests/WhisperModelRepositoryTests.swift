@@ -42,6 +42,12 @@ final class WhisperModelRepositoryTests: XCTestCase {
                     at: folder.appendingPathComponent(bundle, isDirectory: true),
                     withIntermediateDirectories: true
                 )
+                try Data("compiled".utf8).write(to: folder.appendingPathComponent(bundle + "/coremldata.bin"))
+                try Data("program".utf8).write(to: folder.appendingPathComponent(bundle + "/model.mil"))
+                if bundle != "MelSpectrogram.mlmodelc" {
+                    try FileManager.default.createDirectory(at: folder.appendingPathComponent(bundle + "/weights"), withIntermediateDirectories: true)
+                    try Data("weights".utf8).write(to: folder.appendingPathComponent(bundle + "/weights/weight.bin"))
+                }
             }
         }
         return folder
@@ -115,6 +121,42 @@ final class WhisperModelRepositoryTests: XCTestCase {
                 documentsDirectory: documents
             )
         )
+    }
+
+    func testEmptyOrTruncatedCompiledBundleIsNotInstalled() throws {
+        let folder = try makeModelFolder("openai_whisper-small", withCompiledModels: true)
+        let marker = folder.appendingPathComponent("AudioEncoder.mlmodelc/coremldata.bin")
+        try FileManager.default.removeItem(at: marker)
+        XCTAssertFalse(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+        try Data().write(to: marker)
+        XCTAssertFalse(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+    }
+
+    func testLegacyBundleMissingWeightsOrWithInvalidConfigIsNotInstalled() throws {
+        let folder = try makeModelFolder("openai_whisper-small", withCompiledModels: true)
+        let weights = folder.appendingPathComponent("AudioEncoder.mlmodelc/weights/weight.bin")
+        try FileManager.default.removeItem(at: weights)
+        XCTAssertFalse(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+        try Data("weights".utf8).write(to: weights)
+        try Data("not json".utf8).write(to: folder.appendingPathComponent("config.json"))
+        XCTAssertFalse(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+    }
+
+    func testVariantReceiptsKeepIndependentOfflineReadiness() throws {
+        for identifier in ["openai_whisper-small", "openai_whisper-medium"] {
+            let folder = try makeModelFolder(identifier, withCompiledModels: true)
+            let paths = ["config.json", "MelSpectrogram.mlmodelc/coremldata.bin",
+                         "AudioEncoder.mlmodelc/coremldata.bin", "TextDecoder.mlmodelc/coremldata.bin"]
+            let files = paths.map { ["path": identifier + "/" + $0, "size": $0 == "config.json" ? 2 : 8] as [String: Any] }
+            let data = try JSONSerialization.data(withJSONObject: ["version": 1, "files": files])
+            try data.write(to: folder.appendingPathComponent(".dictus-download-receipt.json"))
+        }
+        XCTAssertTrue(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+        XCTAssertTrue(WhisperModelRepository.isModelInstalled("openai_whisper-medium", documentsDirectory: documents))
+        let small = try XCTUnwrap(WhisperModelRepository.modelFolderURL(for: "openai_whisper-small", documentsDirectory: documents))
+        try Data("cut".utf8).write(to: small.appendingPathComponent("AudioEncoder.mlmodelc/coremldata.bin"))
+        XCTAssertFalse(WhisperModelRepository.isModelInstalled("openai_whisper-small", documentsDirectory: documents))
+        XCTAssertTrue(WhisperModelRepository.isModelInstalled("openai_whisper-medium", documentsDirectory: documents))
     }
 
     func testDeletingTheModelFolderMakesItReportAsMissing() throws {

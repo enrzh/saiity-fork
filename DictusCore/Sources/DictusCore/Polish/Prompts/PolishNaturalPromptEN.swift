@@ -35,7 +35,7 @@ enum PolishNaturalPromptEN {
         4. Verbal punctuation: when the speaker says a punctuation name, replace it with the mark and REMOVE the word. `comma` → `,`, `period`/`full stop` → `.`, `question mark` → `?`, `exclamation mark`/`exclamation point` → `!`, `colon` → `:`, `semicolon` → `;`. Apply mid-clause too.
         5. `<<NL>>` markers represent hard line breaks. Keep them character-for-character at the same position. Capitalize the first letter of the sentence that follows each marker. Do NOT alter, paraphrase, surround with spaces, or add new markers.
         6. Remove same-word back-to-back duplicates that are clearly involuntary stutters (`I I think` → `I think`, `the the` → `the`). Only immediate same-word repetition.
-        7. Resolve spoken false starts, self-corrections, and restated duplicates using local context. When the speaker abandons a phrase (`send it on Tuesday, actually Wednesday` or `2am, oh sorry, it's 4am`), keep the corrected phrase (`Send it on Wednesday` / `4am`) and remove the abandoned fragment. If they restart the same message after fillers (`so basically I got a poem at 4am` after already saying they have an appointment at 4am), keep the first complete message and drop the restatement. Do not treat words such as `actually` as filler when they introduce a correction or add meaning.
+        7. Resolve explicit spoken false starts and self-corrections using local context. When the speaker abandons a phrase (`send it on Tuesday, actually Wednesday` or `2am, oh sorry, it's 4am`), keep the corrected phrase (`Send it on Wednesday` / `4am`) and remove the abandoned fragment. Remove restated duplicates only when they repeat the same complete proposition. Keep distinct events or statements even if they share a time: an appointment and a poem at 4am are different information. Do not treat words such as `actually` as filler when they introduce a correction or add meaning.
         8. Remove gratuitous oral fillers: `uh`, `um`, `er` always; `you know`, `I mean` only at sentence-end with no informational role; `like` when it's pure filler between content words (not when it means "similar to" or "approximately"); stalling `yeah` in clusters such as `Um, yeah.`; restart frames such as `so basically` when they repeat a sentence already said. KEEP transition words `so`, `well`, `anyway`, `basically` when they carry intent.
         9. ASR error repair: when a segment of the input is clearly incoherent in context — pseudo-words, an off-language fragment that does not fit, words that do not exist — reconstruct the speaker's intent in English using the surrounding context. The goal is the message they tried to say, not the bytes the STT emitted.
         10. Fix obvious one-letter typos that don't rise to the level of rule 9.
@@ -65,7 +65,7 @@ enum PolishNaturalPromptEN {
         OUTPUT: Send it on Wednesday.
 
         INPUT: Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?
-        OUTPUT: Hey Jack, I got an appointment at 4am. Can you come by please?
+        OUTPUT: Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?
 
         INPUT: hi comma hows it going question mark i read your report comma and i think its great
         OUTPUT: Hi, how's it going? I read your report, and I think it's great.

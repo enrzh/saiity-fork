@@ -160,7 +160,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
                       "a recent row opens the transcript it names")
         let settings = try source("DictusApp/Views/SettingsView.swift")
         XCTAssertTrue(settings.contains("Corrects the last word when you press Space."))
-        XCTAssertTrue(settings.contains("follows the language of the sentence"))
+        XCTAssertTrue(settings.contains("selected keyboard language"), "Mixed-language correction must explain its fallback language")
         XCTAssertTrue(settings.contains("KeyboardInteractionPreferences.notifyChanged()"))
         let overlay = try source("DictusApp/Views/SwipeBackOverlayView.swift")
         XCTAssertTrue(overlay.contains("Ready to dictate"))
@@ -277,7 +277,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(onboarding.contains("polishEnabled"))
         XCTAssertTrue(onboarding.contains("downloadProgress"))
         XCTAssertTrue(onboarding.contains("downloadByteInfo"))
-        XCTAssertTrue(onboarding.contains("ModelLoadingOverlay"))
+        XCTAssertTrue(onboarding.contains("cancelCatalogDownload"), "Inline preparation must retain a cancel action")
     }
 
     func testCleanupDefaultsToEnabledForNewUsers() throws {
@@ -339,7 +339,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         ] {
             let prompt = try source(path)
             XCTAssertTrue(prompt.contains("Hey Jack I got like a appointment at 2am"), "Missing restart example in \(path)")
-            XCTAssertTrue(prompt.contains("Hey Jack, I got an appointment at 4am. Can you come by please?"), "Missing cleaned restart example in \(path)")
+            XCTAssertTrue(prompt.contains("Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?"), "Distinct statements must survive the cleanup example in \(path)")
         }
     }
 

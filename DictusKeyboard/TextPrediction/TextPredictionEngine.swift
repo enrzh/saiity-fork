@@ -34,6 +34,7 @@ class TextPredictionEngine {
     private var acceptedWordTries: [String: AOSPTrieBridge] = [:]
     private(set) var enabledDictionaryLanguages: [String] = []
     private var acceptedWordsReady = false
+    private var didInitializeDictionaries = false
     private var language: String = SupportedLanguage.active.rawValue
     private var selectedLanguage: String = SupportedLanguage.active.rawValue
     private var lastLanguageProbeText: String?
@@ -52,8 +53,6 @@ class TextPredictionEngine {
 
     init(bundle: Bundle = .main) {
         dictionaryBundle = bundle
-        refreshAcceptedWordDictionaries()
-        loadDictionaries(for: language)
     }
 
     /// Only explicitly selected languages with a bundled dictionary are mapped.
@@ -127,7 +126,11 @@ class TextPredictionEngine {
             lastDetectedLanguage = nil
         }
         refreshAcceptedWordDictionaries()
-        if selectionChanged || !enabledDictionaryLanguages.contains(language) { setLanguage(lang) }
+        if !didInitializeDictionaries {
+            didInitializeDictionaries = true
+            language = lang
+            loadDictionaries(for: lang)
+        } else if selectionChanged || !enabledDictionaryLanguages.contains(language) { setLanguage(lang) }
     }
 
     /// Clears sticky typed-language detection so an emptied field falls back
@@ -176,7 +179,7 @@ class TextPredictionEngine {
     /// is safer and cheaper than applying an English/German dictionary to it.
     /// True while the trie for the active language is still being mapped in.
     /// Space must not wait on that load.
-    var dictionaryLoadInFlight: Bool { aospTrieEngine.isLoading }
+    var dictionaryLoadInFlight: Bool { !didInitializeDictionaries || aospTrieEngine.isLoading }
 
     func shouldSkipTokenPrediction(for word: String) -> Bool {
         if TypingFact.shouldLeaveUntouched(word) || TypingFact.isOpenPrefix(word) {
@@ -362,7 +365,8 @@ class TextPredictionEngine {
     /// slow InputConnection, because a word it cannot vet is a word it should
     /// not keep. If we cannot ask, we do not learn.
     func isUnknownToDictionary(_ word: String) -> Bool {
-        acceptedWordsReady && aospTrieEngine.isReady && !isAcceptedWord(word) && !aospTrieEngine.knowsWord(word)
+        acceptedWordsReady && !dictionaryLoadInFlight && aospTrieEngine.isReady
+            && !isAcceptedWord(word) && !aospTrieEngine.knowsWord(word)
     }
 
     /// Returns up to 3 word completions for a partial word, ranked by frequency.

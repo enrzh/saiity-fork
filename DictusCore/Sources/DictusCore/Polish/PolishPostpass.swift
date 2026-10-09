@@ -408,7 +408,9 @@ public enum PolishPostpass {
             let current = matches[index]
             let previousTime = ns.substring(with: previous.range(at: 2)).lowercased()
             let currentTime = ns.substring(with: current.range(at: 2)).lowercased()
-            guard previousTime == currentTime else { continue }
+            let previousEvent = ns.substring(with: previous.range(at: 1)).lowercased()
+            let currentEvent = ns.substring(with: current.range(at: 1)).lowercased()
+            guard previousTime == currentTime, previousEvent == currentEvent else { continue }
             let gapLocation = previous.range.upperBound
             let gapLength = current.range.location - gapLocation
             guard gapLength >= 0 else { continue }

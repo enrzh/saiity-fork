@@ -3,10 +3,7 @@ import SwiftUI
 import UIKit
 import DictusCore
 
-/// Hidden screen surfacing recent polish invocations. Reached by long-pressing
-/// the Version row in Settings for 3 seconds. Round-1 debugging tool — no
-/// analytics, no shipping in product UX. Events persist in the App Group
-/// container for 7 days so cold-start tests survive an app kill.
+/// Optional local diagnostics, reached from Settings → Troubleshooting.
 struct PolishDebugView: View {
 
     @State private var entries: [PolishDebugEntry] = []
@@ -60,7 +57,8 @@ struct PolishDebugView: View {
                     }
                 }
             }
-            // #357 spike, throwaway. Delete with the spike.
+            #if DEBUG
+            // Internal probe stays out of distribution diagnostics.
             Section {
                 Toggle("Arm keyboard Apple FM probe", isOn: $probeArmed)
                     .onChange(of: probeArmed) { _, armed in
@@ -78,6 +76,7 @@ struct PolishDebugView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            #endif
         }
         .navigationTitle("Polish debug")
         .toolbar {
@@ -94,7 +93,6 @@ struct PolishDebugView: View {
                     } label: {
                         Label("Clear", systemImage: "trash")
                     }
-                    .disabled(storedCount == 0)
                 } label: {
                     if isExporting {
                         ProgressView()
@@ -117,7 +115,7 @@ struct PolishDebugView: View {
                 PolishExportShareSheet(items: [exportURL])
             }
         }
-        .alert("Export failed",
+        .alert("Diagnostics action failed",
                isPresented: Binding(
                 get: { exportError != nil },
                 set: { if !$0 { exportError = nil } }
@@ -127,7 +125,8 @@ struct PolishDebugView: View {
         .confirmationDialog("Clear polish diagnostics", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("Clear polish diagnostics", role: .destructive) {
                 Task {
-                    await PolishCoordinator.shared.clearMetricsRing()
+                    do { try await PolishCoordinator.shared.clearMetricsRing() }
+                    catch { exportError = error.localizedDescription }
                     await refresh()
                 }
             }

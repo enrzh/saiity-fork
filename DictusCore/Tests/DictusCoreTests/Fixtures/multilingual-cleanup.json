@@ -66,11 +66,11 @@
     "raw": "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?",
     "languages": ["en"],
     "expectPolishable": true,
-    "floor": "Hey Jack I got an appointment at 4am. Can you come by please?",
-    "mustContain": ["appointment at 4am", "Can you come by please"],
-    "mustNotContain": ["2am", "poem", "like a appointment"],
+    "floor": "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?",
+    "mustContain": ["appointment at 4am", "poem at 4am", "Can you come by please"],
+    "mustNotContain": ["2am", "like a appointment"],
     "acceptable": [
-      "Hey Jack, I got an appointment at 4am. Can you come by please?"
+      "Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?"
     ]
   },
   {

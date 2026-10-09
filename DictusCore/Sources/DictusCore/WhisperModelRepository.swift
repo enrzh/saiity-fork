@@ -31,9 +31,7 @@ public enum WhisperModelRepository {
     /// Repository location relative to the Documents directory.
     public static let relativeRepositoryPath = "huggingface/models/argmaxinc/whisperkit-coreml"
 
-    /// Compiled Core ML bundle extension. A variant folder without at least one of
-    /// these is a partial or wiped download, never something WhisperKit can load.
-    private static let compiledModelExtension = "mlmodelc"
+    public static let downloadReceiptFileName = ".dictus-download-receipt.json"
 
     /// Documents directory of the current process, or `nil` when unavailable.
     public static var defaultDocumentsDirectory: URL? {
@@ -76,13 +74,62 @@ public enum WhisperModelRepository {
               isDirectory.boolValue else {
             return nil
         }
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: folder.path) else {
+        let bundles = ["MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc"]
+        let configuration = folder.appendingPathComponent("config.json")
+        guard nonemptyFile(configuration),
+              let size = try? configuration.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 4_000_000,
+              let data = try? Data(contentsOf: configuration),
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any],
+              bundles.allSatisfy({ bundle in
+                  let url = folder.appendingPathComponent(bundle, isDirectory: true)
+                  let needsWeights = bundle != "MelSpectrogram.mlmodelc"
+                  let hasProgram = nonemptyFile(url.appendingPathComponent("model.mil"))
+                      && (!needsWeights || nonemptyFile(url.appendingPathComponent("weights/weight.bin")))
+                  let hasNetwork = nonemptyFile(url.appendingPathComponent("model.espresso.net"))
+                      && (!needsWeights || nonemptyFile(url.appendingPathComponent("model.espresso.weights")))
+                  return ParakeetModelRepository.isCompiledModelBundle(url, fileManager: fileManager)
+                      && nonemptyFile(url.appendingPathComponent(ParakeetModelRepository.compiledModelMarkerFile))
+                      && (hasProgram || hasNetwork)
+              }) else {
             return nil
         }
-        let hasCompiledModel = entries.contains { entry in
-            (entry as NSString).pathExtension == compiledModelExtension
+        let receipt = folder.appendingPathComponent(downloadReceiptFileName)
+        if fileManager.fileExists(atPath: receipt.path),
+           !receiptFilesAreComplete(at: receipt, relativeTo: folder.deletingLastPathComponent(),
+                                    requiredPrefix: identifier + "/", fileManager: fileManager) {
+            return nil
         }
-        return hasCompiledModel ? folder : nil
+        return folder
+    }
+
+    /// Shared with the downloader so readiness checks the same recorded file sizes offline.
+    public static func receiptFilesAreComplete(at receipt: URL, relativeTo directory: URL,
+                                              requiredPrefix: String? = nil,
+                                              fileManager: FileManager = .default) -> Bool {
+        guard let size = try? receipt.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 4_000_000,
+              let data = try? Data(contentsOf: receipt),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["version"] as? Int == 1,
+              let files = object["files"] as? [[String: Any]], !files.isEmpty else { return false }
+        var paths = Set<String>()
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        return files.allSatisfy { file in
+            guard let path = file["path"] as? String, let expectedSize = file["size"] as? Int,
+                  !path.hasPrefix("/"), !path.isEmpty,
+                  !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }),
+                  requiredPrefix.map({ path.hasPrefix($0) }) ?? true,
+                  paths.insert(path).inserted else { return false }
+            let url = directory.appendingPathComponent(path)
+            guard url.resolvingSymlinksInPath().standardizedFileURL.path.hasPrefix(root),
+                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true, let actualSize = values.fileSize else { return false }
+            return expectedSize >= 0 ? actualSize == expectedSize : actualSize > 0
+        }
+    }
+
+    private static func nonemptyFile(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]) else { return false }
+        return values.isRegularFile == true && (values.fileSize ?? 0) > 0
     }
 
     /// Whether the variant is present on disk and loadable without any network access.

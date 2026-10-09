@@ -56,7 +56,7 @@ import DictusCore
             state.invalidateDictationUndo(reason: "fixture-reset")
             host.proxy.text = "Prefix "
             let request = DictationLanguageRequest(mode: .autoDetect, translationTarget: nil)
-                .bound(sessionID: UUID().uuidString, generation: 1, clientIdentifier: "fixture")
+                .bound(sessionID: UUID().uuidString, generation: 1, clientIdentifier: host.proxy.documentIdentifier.uuidString)
             request.persist(to: defaults)
             DictationDeliveryStore.publishReady(text: text, request: request, to: defaults, originalText: original)
             state.registerControllerAppearance(controllerID: "fixture")
@@ -87,9 +87,28 @@ import DictusCore
         state.restoreOriginalDictation()
         precondition(host.proxy.text == "Prefix Hello. ", "Selection allowed stale replacement")
         host.proxy.selectedText = nil
+        state.invalidateDictationUndo(reason: "pending-fixture")
+        let originalPrefix = host.proxy.text
+        let request = DictationLanguageRequest(mode: .autoDetect, translationTarget: nil)
+            .bound(sessionID: UUID().uuidString, generation: 1, clientIdentifier: host.proxy.documentIdentifier.uuidString)
+        request.persist(to: defaults)
+        DictationDeliveryStore.publishReady(text: "Pending. ", request: request, to: defaults, originalText: "pending")
+        let other = Host(), otherWindow = UIWindow(frame: window.frame)
+        otherWindow.rootViewController = other
+        otherWindow.isHidden = false
+        state.controller = other
+        state.registerControllerAppearance(controllerID: "other-field")
+        precondition(other.proxy.text == "Prefix ", "Result was inserted into another field")
+        precondition(host.proxy.text == originalPrefix, "The old controller received a result during handoff")
+        precondition(defaults.data(forKey: SharedKeys.dictationDelivery) != nil, "Unusable target consumed recovery text")
+        state.controller = host
+        state.registerControllerAppearance(controllerID: "original-field")
+        state.registerControllerAppearance(controllerID: "original-field")
+        precondition(host.proxy.text == originalPrefix + "Pending. ", "Pending delivery was lost or duplicated")
+        otherWindow.isHidden = true
         state.invalidateDictationUndo(reason: "fixture-end")
         window.isHidden = true
-        print("PASS: live delivery, recovery menu, original replacement and changed-field/typing/selection refusal")
+        print("PASS: live delivery, recovery, field handoff/pending delivery and at-most-once repeated notifications")
     }
 }
 """#

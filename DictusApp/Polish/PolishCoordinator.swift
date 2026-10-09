@@ -217,8 +217,8 @@ public final class PolishCoordinator {
     }
 
     /// Empties the debug ring. Triggered from the debug screen's Clear button.
-    public func clearMetricsRing() async {
-        await metricsRing.clear()
+    public func clearMetricsRing() async throws {
+        try await metricsRing.clear()
     }
 
     /// Polish raw STT output. When the toggle is on, the accepted engine output

@@ -331,6 +331,9 @@ struct VoiceOptionsView: View {
 
     var body: some View {
         List {
+            Section {
+                SpokenLanguagesPicker(modelManager: modelManager)
+            }
             DictationSettingsAdvisor(modelManager: modelManager)
             Section("In sAiity") {
                 DictationModelQuickPicker(scope: .app, modelManager: modelManager)
@@ -338,12 +341,11 @@ struct VoiceOptionsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("From your keyboard") {
-                DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
+                DisclosureGroup("Choose a keyboard model") {
+                    DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
+                }
                 Label(modelManager.keyboardModel == nil ? "Keyboard model needed" : "Keyboard model installed", systemImage: modelManager.keyboardModel == nil ? "arrow.down.circle" : "checkmark.circle")
                     .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                SpokenLanguagesPicker(modelManager: modelManager)
             }
             Section {
                 NavigationLink {

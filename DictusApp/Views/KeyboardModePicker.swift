@@ -45,7 +45,7 @@ struct DictationSettingsAdvisor: View {
         } header: {
             Text("Recommended settings")
         } footer: {
-            Text("For \(phoneName) and your spoken languages. Uses installed models and adapts when your phone is warm or low on memory. Downloads are optional.")
+            Text("For \(phoneName) and your spoken languages. Apply changes voice model routing only; writing options and languages stay as you chose them. Uses installed models and adapts when your phone is warm or low on memory. Downloads are optional.")
         }
         .accessibilityIdentifier("dictation.settingsAdvisor")
     }
@@ -105,6 +105,7 @@ struct DictationModelQuickPicker: View {
                     recognizerPicker.pickerStyle(.segmented)
                 }.padding(.vertical, 4)
             }
+            DisclosureGroup("Choose a voice model") {
             Picker(modelManager.recognizer == .streaming ? "Streaming model" : "Whisper model",
                    selection: Binding(get: { selectedModel }, set: modelManager.chooseDictationModel)) {
                 if selectedModel == "unavailable" { Text("No compatible recommendation").tag("unavailable") }
@@ -116,6 +117,7 @@ struct DictationModelQuickPicker: View {
             }
             .accessibilityValue(ModelInfo.forIdentifier(selectedModel)?.displayName ?? "Choose a model")
             .accessibilityIdentifier("dictation.model")
+            }
             if ModelInfo.forIdentifier(selectedModel)?.engine == .qwenASR {
                 Toggle("Realtime text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
                 Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while sAiity is open; your keyboard uses its own model.")
@@ -237,6 +239,11 @@ struct CleanupModelPicker: View {
         }
         if let error = local.error { Text(error).font(.footnote).foregroundStyle(.red) }
         if case .local(let model) = manager.cleanupBackend { Text(model.explanation).font(.footnote).foregroundStyle(.secondary) }
+        if case .ollama(let id) = manager.cleanupBackend,
+           let model = manager.customModels.first(where: { $0.id == id }) {
+            Text("Cleanup sends your dictated text to \(URL(string: model.repositoryURL)?.host ?? "your configured server"). Speech recognition stays on this iPhone. Choose a server you trust.")
+                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

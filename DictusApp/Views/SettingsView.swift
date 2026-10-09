@@ -101,15 +101,8 @@ struct SettingsView: View {
 
     private var dictationSettings: some View {
         settingsPage("Dictation") {
-            DictationSettingsAdvisor(modelManager: modelManager)
-            Section("In sAiity") {
-                DictationModelQuickPicker(scope: .app, modelManager: modelManager)
-            }
-            Section("From your keyboard") {
-                DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
-            }
             Section {
-                SpokenLanguagesPicker(modelManager: modelManager)
+                NavigationLink("Voice options") { VoiceOptionsView(modelManager: modelManager) }
             }
             Section {
                 if cleanupAvailable {
@@ -192,7 +185,7 @@ struct SettingsView: View {
             Section("Advanced") {
                 DisclosureGroup("Advanced keyboard options") {
                     Toggle("Key containers", isOn: $keyContainersEnabled)
-                        .accessibilityHint("Shows faint backgrounds behind letters and symbols.")
+                        .accessibilityHint("Shows opaque plates behind letters and symbols.")
                         .onChange(of: keyContainersEnabled) { _, _ in
                             KeyboardInteractionPreferences.notifyChanged()
                         }
@@ -247,7 +240,7 @@ struct SettingsView: View {
                     Label("Troubleshooting", systemImage: "wrench.and.screwdriver")
                 }
 
-                if let supportURL = URL(string: "https://github.com/enrzh") {
+                if let supportURL = URL(string: "https://github.com/enrzh/saiity-fork/issues") {
                     Link(destination: supportURL) {
                         Label("Get support", systemImage: "questionmark.circle")
                     }
@@ -270,6 +263,8 @@ struct SettingsView: View {
                 }
 
                 LabeledContent("Version", value: appVersionText)
+                Text("Recognition runs on your iPhone. Installing models uses the network. Optional server cleanup sends text to the server you choose; history and diagnostics have separate local controls.")
+                    .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -327,6 +322,7 @@ struct SettingsView: View {
             Section("Diagnostics") {
                 NavigationLink("Report last dictation") { LastDictationIssueReportView() }
                 NavigationLink("Debug Logs") { DebugLogView() }
+                NavigationLink("Cleanup diagnostics") { PolishDebugView() }
                 NavigationLink("Diagnostics") { DiagnosticDetailView(result: diagnosticResult) }
             }
         }

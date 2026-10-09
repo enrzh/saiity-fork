@@ -962,6 +962,8 @@ class DictationCoordinator: ObservableObject {
                         try await transcriptionService.transcribeDetailed(audioSamples: samples, languagePolicy: languagePolicy)
                     }
                 }
+                try Task.checkCancellation()
+                guard mayReport(session, "recognition complete") else { return }
                 issueTranscribeMs = DictationRuntimeMetrics.elapsedMilliseconds(since: transcribeStarted)
                 runtimeMetrics.mark("asrAndMerge")
                 for (index, region) in transcriptionOutput.regions.enumerated() {
@@ -970,6 +972,10 @@ class DictationCoordinator: ObservableObject {
                     }
                 }
                 let rawText = transcriptionOutput.text
+                guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    handleError("No speech detected")
+                    return
+                }
                 // Translate before cleanup so the language-agnostic Auto cleanup
                 // operates on the selected output language.
                 let translatedRawText = await processAuthoritativeFinalTranscript(
@@ -978,6 +984,8 @@ class DictationCoordinator: ObservableObject {
                     regions: transcriptionOutput.regions,
                     generation: session
                 )
+                try Task.checkCancellation()
+                guard mayReport(session, "translation complete") else { return }
                 runtimeMetrics.mark("translation")
 
                 // Polish layer (#141) — passes raw through only when the toggle is
@@ -1009,6 +1017,8 @@ class DictationCoordinator: ObservableObject {
                         LiveActivityManager.shared.transitionToProcessing()
                     }
                 )
+                try Task.checkCancellation()
+                guard mayReport(session, "cleanup complete") else { return }
                 issuePolishMs = DictationRuntimeMetrics.elapsedMilliseconds(since: polishStarted)
                 runtimeMetrics.mark("cleanup")
                 issueRawText = translatedRawText
@@ -1026,6 +1036,11 @@ class DictationCoordinator: ObservableObject {
                 )
                 let text = assembled.body
                 let formattedText = assembled.formatted
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    guard mayReport(session, "empty final result") else { return }
+                    handleError("No speech detected")
+                    return
+                }
 
                 let decision = DictationFinalizationDecision.make(
                     transcript: text,
@@ -1078,6 +1093,7 @@ class DictationCoordinator: ObservableObject {
 
                 cleanupRecordingKeys()
             } catch {
+                guard mayReport(session, "transcription failure") else { return }
                 if #available(iOS 14.0, *) {
                     DictusLogger.app.error("Transcription failed: \(error.localizedDescription, privacy: .public)")
                 }
@@ -1088,7 +1104,6 @@ class DictationCoordinator: ObservableObject {
                 // own reasons after the session ended. Either way the failure
                 // belongs to a dictation that is over: writing `.failed` re-presents
                 // the recording screen the user just dismissed (#267).
-                guard mayReport(session, "transcription failure") else { return }
                 handleError(error.localizedDescription)
             }
         }

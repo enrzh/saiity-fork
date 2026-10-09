@@ -57,7 +57,7 @@ final class PolishFactPreservationTests: XCTestCase {
             raw: "I got an appointment at 2am, oh sorry, it's 4am",
             polished: "I got an appointment at 4am.",
             mode: .auto))
-        XCTAssertTrue(PolishGuardrail.preservesFacts(
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
             raw: "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?",
             polished: "Hey Jack I got an appointment at 4am. Can you come by please?",
             mode: .auto))
@@ -86,6 +86,14 @@ final class PolishFactPreservationTests: XCTestCase {
         let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
         let polished = "Hey Jack I got an appointment at 4am. Can you come by please?"
         XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .auto))
+    }
+
+    func testSameTimeInDistinctClausesIsNotATokenStutter() {
+        XCTAssertFalse(PolishGuardrail.preservesFacts(
+            raw: "I have a call at 2pm. I have a meeting at 2pm.",
+            polished: "I have a call at 2pm.", mode: .auto))
+        XCTAssertTrue(PolishGuardrail.preservesFacts(
+            raw: "Pay 12 12 euros.", polished: "Pay 12 euros.", mode: .auto))
     }
 
     func testListsAndSelfCorrectionsKeepNumbersAndMarkers() {

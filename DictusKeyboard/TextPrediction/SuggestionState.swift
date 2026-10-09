@@ -90,7 +90,11 @@ class SuggestionState: ObservableObject {
     /// Shared engine — heavy resources (frequency dict, trie) are process-wide singletons
     /// to avoid the per-controller leak documented in #134.
     private let engine = TextPredictionEngine.shared
-    private init() {}
+    private init() {
+        suggestionQueue.async { [weak self] in
+            self?.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+        }
+    }
 
     /// Serial background queue for suggestion computation.
     /// WHY serial: Ensures suggestion computations don't race each other.
@@ -110,6 +114,7 @@ class SuggestionState: ObservableObject {
         let word: String
         // Nil is a completed "no correction needed" result, not a cache miss.
         let correction: String?
+        let isUnknownWord: Bool
         let contextKey: String
         let selectedLanguage: String
         let spokenLanguages: [String]
@@ -162,10 +167,15 @@ class SuggestionState: ObservableObject {
 
         let word = extractLastWord(from: context)
         var corrected = false
-        var canLearn = !autocorrectEnabled || !hostPolicy.autocorrectAllowed
-            || engine.shouldSkipTokenPrediction(for: word)
-        if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults) {
-            for _ in word { proxy.deleteBackward() }
+        let prepared = spaceCommit
+        let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
+            && prepared?.contextKey == String(context.suffix(240))
+            && prepared?.selectedLanguage == SupportedLanguage.active.rawValue
+            && prepared?.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults)
+        let canLearn = snapshotMatches ? prepared?.isUnknownWord : nil
+        if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults),
+           case .ok(let deleteCount) = AutocorrectReplacement.check(context: proxy.documentContextBeforeInput, word: word) {
+            for _ in 0..<deleteCount { proxy.deleteBackward() }
             proxy.insertText(expansion)
             proxy.insertText(" ")
             rejectedWords.removeAll()
@@ -181,22 +191,16 @@ class SuggestionState: ObservableObject {
            !word.unicodeScalars.contains(where: { CharacterSet.decimalDigits.contains($0) }),
            !engine.shouldSkipTokenPrediction(for: word),
            !rejectedWords.contains(word.lowercased()) {
-            let contextKey = String(context.suffix(240))
-            let prepared = spaceCommit
-            let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
-                && prepared?.contextKey == contextKey
-                && prepared?.selectedLanguage == SupportedLanguage.active.rawValue
-                && prepared?.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults)
             let correction: String?
             if let prepared, snapshotMatches {
-                canLearn = true
                 correction = prepared.correction.flatMap { TypingCommit.accepts(typed: word, correction: $0) ? $0 : nil }
             } else {
                 // A missed background result preserves the typed word. Never
                 // wait for dictionary loading or a prediction backlog on Space.
                 correction = nil
             }
-            if let correction {
+            if let correction,
+               case .ok(let deleteCount) = AutocorrectReplacement.check(context: proxy.documentContextBeforeInput, word: word) {
                 corrected = true
                 let prefix = prefixBeforeWord(in: context, word: word)
                 let pending = PendingAutocorrection(
@@ -206,7 +210,7 @@ class SuggestionState: ObservableObject {
                     expectedContext: prefix + correction + " ",
                     afterContext: proxy.documentContextAfterInput ?? ""
                 )
-                for _ in word { proxy.deleteBackward() }
+                for _ in 0..<deleteCount { proxy.deleteBackward() }
                 proxy.insertText(correction)
                 pendingAutocorrection = pending
                 suppressNextAutocorrectionBoundary = true
@@ -219,8 +223,11 @@ class SuggestionState: ObservableObject {
         // enabled corrector. Sensitive/token fields keep their existing policy.
         let learningWord = context.split(whereSeparator: \.isWhitespace).last.map(String.init)?
             .trimmingCharacters(in: .punctuationCharacters) ?? ""
-        if !corrected, canLearn, hostPolicy.suggestionsAllowed, isSafeUserOverride(learningWord) {
-            DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(learningWord) }
+        if !corrected, canLearn != false, hostPolicy.suggestionsAllowed, isSafeUserOverride(learningWord) {
+            suggestionQueue.async { [weak self] in
+                guard let self, canLearn ?? self.engine.isUnknownToDictionary(learningWord) else { return }
+                DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(learningWord) }
+            }
         }
 
         proxy.insertText(" ")
@@ -520,18 +527,17 @@ class SuggestionState: ObservableObject {
         selectedLanguage: String,
         spokenLanguages: [String]
     ) -> SpaceCommit? {
-        guard allowsAutocorrect, !isBoundary, !partial.isEmpty,
-              !engine.dictionaryLoadInFlight,
-              !engine.shouldSkipTokenPrediction(for: partial),
-              !rejected else { return nil }
-        let result = engine.spellCheck(
+        guard !isBoundary, !partial.isEmpty, !engine.dictionaryLoadInFlight else { return nil }
+        let permitsCorrection = allowsAutocorrect && !engine.shouldSkipTokenPrediction(for: partial) && !rejected
+        let result = permitsCorrection ? engine.spellCheck(
             partial,
             previousWord: previousWord,
             isAtSentenceStart: isAtSentenceStart
-        )
+        ) : nil
         return SpaceCommit(
             word: partial,
             correction: result.flatMap { TypingCommit.accepts(typed: partial, correction: $0.correction) ? $0.correction : nil },
+            isUnknownWord: engine.isUnknownToDictionary(partial),
             contextKey: String(context.suffix(240)),
             selectedLanguage: selectedLanguage,
             spokenLanguages: spokenLanguages

@@ -145,14 +145,24 @@ public enum TypingFact {
         correctionMarkerUTF16: Int?
     ) -> Bool {
         let rawTokens = rawFacts.map(\.token)
-        if keepsFacts(polishedTokens, from: rawTokens) { return true }
+        if rawTokens == polishedTokens || collapsingAdjacentFacts(rawFacts) == polishedTokens { return true }
         guard isSubsequence(polishedTokens, of: rawTokens) else { return false }
         guard let marker = correctionMarkerUTF16 else { return false }
-        let kept = collapsingConsecutiveDuplicates(
-            rawFacts.filter { $0.utf16Offset >= marker }.map(\.token)
-        )
+        let kept = collapsingAdjacentFacts(rawFacts.filter { $0.utf16Offset >= marker })
         guard !kept.isEmpty else { return false }
         return isSubsequence(kept, of: polishedTokens)
+    }
+
+    private static func collapsingAdjacentFacts(_ facts: [SpokenFact]) -> [String] {
+        var tokens: [String] = []
+        var previous: SpokenFact?
+        for fact in facts {
+            if previous?.token != fact.token || fact.utf16Offset > (previous?.utf16Offset ?? 0) + fact.token.utf16.count + 1 {
+                tokens.append(fact.token)
+            }
+            previous = fact
+        }
+        return tokens
     }
 
     private static let ignoredAcronyms: Set<String> = ["AM", "PM"]

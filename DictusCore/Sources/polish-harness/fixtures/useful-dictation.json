@@ -20,7 +20,7 @@
       { "contains": "4am" },
       { "contains": "Jack" },
       { "notContains": "2am" },
-      { "notContains": "poem" },
+      { "contains": "poem" },
       { "lengthRatioMax": 1.4 }
     ]
   },

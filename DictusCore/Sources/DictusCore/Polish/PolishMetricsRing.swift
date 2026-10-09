@@ -71,6 +71,7 @@ public actor PolishMetricsRing {
 
     private var memoryCache: [PolishDebugEntry] = []
     private var bootstrapped = false
+    private var clearedAt: Date?
     private let defaults: UserDefaults
     private let directory: URL?
 
@@ -83,6 +84,7 @@ public actor PolishMetricsRing {
 
     public func append(_ entry: PolishDebugEntry) async {
         await bootstrapIfNeeded()
+        guard clearedAt.map({ entry.timestamp > $0 }) ?? true else { return }
         let entry = entry.applyingConsent(DiagnosticTranscriptPolicy.allowsText(in: defaults))
         memoryCache.append(entry)
         if memoryCache.count > Self.memoryCacheLimit {
@@ -112,12 +114,18 @@ public actor PolishMetricsRing {
         return readAllFromDisk(applyingRetention: true).count + readLegacyEntries().count
     }
 
-    public func clear() async {
-        memoryCache.removeAll()
-        clearDisk()
-        if let url = directory?.appendingPathComponent("polish_events.jsonl") {
-            try? FileManager.default.removeItem(at: url)
+    public func clear() async throws {
+        if let directory, FileManager.default.fileExists(atPath: directory.path) {
+            _ = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            for name in [Self.fileName, "polish_events.jsonl"] {
+                let url = directory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            }
         }
+        memoryCache.removeAll()
+        clearedAt = Date()
     }
 
     // MARK: - Bootstrap
@@ -201,8 +209,4 @@ public actor PolishMetricsRing {
         try? rewritten.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func clearDisk() {
-        guard let url = fileURL else { return }
-        try? "".write(to: url, atomically: true, encoding: .utf8)
-    }
 }

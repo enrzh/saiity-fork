@@ -1363,10 +1363,17 @@ class KeyboardState: ObservableObject {
     private func consumeTranscription(for request: DictationLanguageRequest) -> Bool {
         guard isKeyboardVisible, let controller,
               controller.isViewLoaded, controller.view.window != nil,
-              request.hasSameIdentity(as: DictationLanguageRequest.load(from: defaults)),
-              var result = DictationDelivery.consumeResult(for: request, from: defaults) else { return false }
+              request.hasSameIdentity(as: DictationLanguageRequest.load(from: defaults)) else { return false }
+        let proxy = controller.textDocumentProxy
+        guard var result = DictationDelivery.consumeResult(for: request, from: defaults,
+            documentIdentifier: HostInputTraits.documentIdentifier(for: proxy)) else {
+            if defaults.data(forKey: SharedKeys.dictationDelivery) != nil {
+                assignStatusMessage("Text ready. Return to the original field or copy it from Speak.", reason: "delivery-target-unavailable")
+            }
+            return false
+        }
         result.timings?.mark("deliveryConsumed")
-        insertTranscription(result.text, timings: result.timings, originalText: result.originalText)
+        insertTranscription(result.text, into: proxy, timings: result.timings, originalText: result.originalText)
         return true
     }
 
@@ -1383,10 +1390,9 @@ class KeyboardState: ObservableObject {
     /// The App Group key is deliberately NOT read here: the caller clears it before
     /// calling, which is what stops a redelivered Darwin notification from inserting
     /// the same text twice.
-    private func insertTranscription(_ transcription: String, timings: DictationRuntimeMetrics? = nil,
+    private func insertTranscription(_ transcription: String, into proxy: UITextDocumentProxy, timings: DictationRuntimeMetrics? = nil,
                                      originalText: String? = nil) {
         cancelDictationReleaseTail()
-        guard let proxy = controller?.textDocumentProxy else { return }
         proxy.insertText(transcription)
         var timings = timings
         timings?.mark("proxyInserted")
@@ -2056,7 +2062,8 @@ class KeyboardState: ObservableObject {
             translationTarget: existingRequest.translationTarget,
             sessionID: requestSessionID,
             generation: requestGeneration,
-            clientIdentifier: UUID().uuidString,
+            clientIdentifier: HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy)?.uuidString
+                ?? "keyboard-unidentified-\(UUID().uuidString)",
             resolvedSourceLanguage: resolvedSourceLanguage
         )
         request.persist(to: defaults)

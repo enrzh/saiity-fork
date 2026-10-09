@@ -550,11 +550,11 @@ class KeyboardViewController: UIInputViewController,
                 details: "mode=\(KeyboardState.shared.areaMode.rawValue) previous=\(KeyboardState.shared.activeControllerID ?? "none")"
             ))
         }
-        KeyboardState.shared.registerControllerAppearance(controllerID: controllerID)
         // Point KeyboardState's weak controller ref at the currently-visible controller
         // so call sites in KeyboardRootView and KeyboardState can access textDocumentProxy.
         // Previously set from KeyboardRootView.onAppear, which held a strong ref → #134.
         KeyboardState.shared.controller = self
+        KeyboardState.shared.registerControllerAppearance(controllerID: controllerID)
         KeyboardState.shared.isOpeningForDictation = false
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy, applyArea: false)
         KeyboardState.shared.startClipboardMonitoring()

@@ -88,7 +88,9 @@ struct AddCustomModelView: View {
     private var footerText: String {
         role == .asr
             ? "Custom speech recognition models are saved as configurations. Only compatible, verified WhisperKit exports can run in the current speech engine."
-            : "Ollama cleanup models use the configured local or hosted endpoint."
+            : source == .ollama
+                ? "When this model is selected, cleanup sends your dictated text to the configured server. Save checks its availability. Choose an endpoint you trust."
+                : "Local cleanup models download once and process text on this iPhone."
     }
 
     private func save() {

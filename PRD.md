@@ -1,20 +1,21 @@
-# Current product specification — October 1, 2026
+# Current product specification — October 9, 2026
 
 sAiity is an everyday iOS keyboard with private dictation, multilingual typing
 and conservative, reversible text cleanup. The current accepted scope is
-[the product quality plan](/Users/enricomini/Documents/Github/sAiity-dictus/docs/product-quality-plan.md).
+[the product quality and candidate plan](docs/superpowers/plans/2026-10-09-product-quality-and-testflight.md).
 
-- Speak puts readiness and recording first. Balanced/device-recommended/Precise
-  presets and direct model selection remain available. Models is reachable from
-  Speak and Settings.
-- WhisperKit and Parakeet provide speech recognition within their documented
+- Speak puts readiness and recording first. Spoken languages and explicit recommended
+  settings lead Voice options; engine and independent app/keyboard choices remain
+  available with model details disclosed on request. Models owns installation and storage.
+- WhisperKit, Parakeet and Qwen3-ASR provide speech recognition within their documented
   language/device limits. Apple Foundation Models, Gemma 3 1B and Qwen 2.5
   0.5B/1.5B provide processing. Local MLX requires foreground. Configured server
   processing is optional; no service/account is mandatory for core dictation.
 - Mixed spoken languages remain in place by default. Translation is explicit.
   Cleanup preserves facts, names, negation and unfinished thoughts, with safe
   fallback. A selected model is not a guarantee of availability or measured quality.
-- Typing includes suggestions, reversible autocorrection, shared key/hold/haptic
+- Typing uses one opaque native grid, a blank Space bar, invisible hit prediction,
+  reversible autocorrection and shared key/hold/haptic
   controls, original/result recovery, explicit personal vocabulary and field-specific
   layouts. The current full emoji category rail remains above Space.
 - History is bounded and optional, including original/result pairs. Feedback is

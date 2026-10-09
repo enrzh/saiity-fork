@@ -320,7 +320,7 @@ final class PolishPipelineTests: XCTestCase {
 
     func testAutoTransformAcceptsSpokenCleanupThatDropsSupersededTime() async {
         let raw = "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?"
-        let polished = "Hey Jack I got an appointment at 4am. Can you come by please?"
+        let polished = "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?"
         let result = await PolishPipeline.transform(
             preprocessed: raw,
             engine: OutputEngine(output: polished),
@@ -337,7 +337,7 @@ final class PolishPipelineTests: XCTestCase {
             engineOutput: nil, outcome: .engineFailed, engineMs: 100, postprocessMs: 0
         )
         let out = PolishPipeline.resolvedOutput(result, preprocessed: raw, target: .english, mode: .auto)
-        XCTAssertEqual(out, "Hey Jack I got an appointment at 4am. Can you come by please?")
+        XCTAssertEqual(out, "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?")
     }
 
     func testResolvedOutputAutoSuccessReturnsEngineOutput() {

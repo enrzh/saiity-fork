@@ -591,6 +591,14 @@ public enum SpeechTranscriptMerger {
         previous: Character,
         next: Character?
     ) -> Bool {
+        // Keep numeric and address punctuation inside its original token.
+        if character == ",", previous.isNumber, next?.isNumber == true { return true }
+        let addressPunctuation = ".:@/_%&=?#"
+        if addressPunctuation.contains(character), let next,
+           previous.isLetter || previous.isNumber || addressPunctuation.contains(previous),
+           next.isLetter || next.isNumber || addressPunctuation.contains(next) {
+            return true
+        }
         guard "'\u{2019}\u{2027}-\u{2010}\u{2011}".contains(character),
               previous.isLetter,
               next?.isLetter == true else {

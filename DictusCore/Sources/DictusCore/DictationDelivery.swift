@@ -34,6 +34,12 @@ public enum DictationDelivery {
         return result
     }
 
+    public static func consumeResult(for request: DictationLanguageRequest, from defaults: UserDefaults,
+                                     documentIdentifier: UUID?) -> Result? {
+        guard let documentIdentifier, request.clientIdentifier == documentIdentifier.uuidString else { return nil }
+        return consumeResult(for: request, from: defaults)
+    }
+
     public static func clear(in defaults: UserDefaults) {
         defaults.removeObject(forKey: SharedKeys.dictationDelivery)
         defaults.removeObject(forKey: SharedKeys.lastTranscription)

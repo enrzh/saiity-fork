@@ -109,7 +109,7 @@ final class PolishSpanPipelineTests: XCTestCase {
         let engine = CountingPolishEngine { text, _, _ in text }
         let result = await PolishSpanPipeline.polish(raw: raw, engine: engine)
         XCTAssertFalse(result.text.contains("2am"))
-        XCTAssertFalse(result.text.contains("poem"))
+        XCTAssertTrue(result.text.contains("poem"), "A different statement at the same time must survive")
         XCTAssertTrue(result.text.contains("4am"))
         XCTAssertTrue(result.text.contains("Can you come by please"))
         XCTAssertGreaterThanOrEqual(engine.calls, 1)
