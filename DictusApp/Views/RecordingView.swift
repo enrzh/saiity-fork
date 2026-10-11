@@ -115,7 +115,8 @@ struct RecordingView: View {
                         if showResult, let result = transcriptionResult {
                             DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
                                 onRestore: { transcriptionResult = $0 },
-                                onFeedback: savedResultFeedback(for: result))
+                                onFeedback: savedResultFeedback(for: result),
+                                translationFallback: coordinator.lastTranslationFallbackReason != nil)
                         } else if showError, let error = errorMessage {
                             Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
                                 .font(.headline)

@@ -43,6 +43,7 @@ class DictationCoordinator: ObservableObject {
     /// Transient ASR output, before explicit translation or cleanup. History-off
     /// keeps this only for the current result/recovery flow, not diagnostics.
     @Published private(set) var lastOriginalResult: String?
+    @Published private(set) var lastTranslationFallbackReason: TranslationFallbackReason?
 
     /// Forwarded from UnifiedAudioEngine for waveform visualization in RecordingView.
     @Published var bufferEnergy: [Float] = []
@@ -573,6 +574,7 @@ class DictationCoordinator: ObservableObject {
         RecordingReplay.shared.clear()
         lastResult = nil
         lastOriginalResult = nil
+        lastTranslationFallbackReason = nil
         issueRecordingDurationMs = nil
         issueTranscribeMs = nil
         issuePolishMs = nil
@@ -978,7 +980,7 @@ class DictationCoordinator: ObservableObject {
                 }
                 // Translate before cleanup so the language-agnostic Auto cleanup
                 // operates on the selected output language.
-                let translatedRawText = await processAuthoritativeFinalTranscript(
+                let translation = await processAuthoritativeFinalTranscript(
                     rawText,
                     request: capturedLanguageRequest,
                     regions: transcriptionOutput.regions,
@@ -986,6 +988,11 @@ class DictationCoordinator: ObservableObject {
                 )
                 try Task.checkCancellation()
                 guard mayReport(session, "translation complete") else { return }
+                let translatedRawText = translation.resolvedText
+                let effectiveTarget = translation.fallbackReason == nil ? capturedLanguageRequest.translationTarget : nil
+                lastTranslationFallbackReason = translation.fallbackReason
+                runtimeMetrics.setContext("translationOutcome", value: capturedLanguageRequest.translationTarget == nil
+                    ? "notRequested" : translation.fallbackReason.map { "originalKept:\($0.rawValue)" } ?? "accepted")
                 runtimeMetrics.mark("translation")
 
                 // Polish layer (#141) — passes raw through only when the toggle is
@@ -997,12 +1004,12 @@ class DictationCoordinator: ObservableObject {
                 // label and a new animation for a single frame. `onEngineWillRun`
                 // fires only once an engine worth waiting for is about to run.
                 let polishStarted = DispatchTime.now().uptimeNanoseconds
-                let cleaned = await CleanupPipeline.clean(
+                let cleaned = translation.fallbackReason != nil ? translatedRawText : await CleanupPipeline.clean(
                     raw: translatedRawText,
                     languagePolicy: languagePolicy,
                     recordingDuration: audioDuration,
-                    translationTarget: capturedLanguageRequest.translationTarget,
-                    regions: capturedLanguageRequest.translationTarget == nil
+                    translationTarget: effectiveTarget,
+                    regions: effectiveTarget == nil
                         ? transcriptionOutput.regions
                         : [],
                     settings: cleanupSettings,
@@ -1029,10 +1036,11 @@ class DictationCoordinator: ObservableObject {
                 let assembled = TranscriptionPipeline.assemble(
                     cleaned: cleaned,
                     grammarLanguage: languagePolicy.grammarFloorLanguage(
-                        translationTarget: capturedLanguageRequest.translationTarget
+                        translationTarget: effectiveTarget
                     ),
-                    insertAsIs: languagePolicy.insertsTranscriptionAsIs
-                        && capturedLanguageRequest.translationTarget == nil
+                    insertAsIs: translation.fallbackReason != nil || (languagePolicy.insertsTranscriptionAsIs
+                        && effectiveTarget == nil),
+                    preserveOriginal: translation.fallbackReason != nil
                 )
                 let text = assembled.body
                 let formattedText = assembled.formatted
@@ -1044,9 +1052,7 @@ class DictationCoordinator: ObservableObject {
 
                 let decision = DictationFinalizationDecision.make(
                     transcript: text,
-                    outcome: translatedRawText == text
-                        ? .fallback(formattedText, reason: .unavailable)
-                        : .translated(formattedText),
+                    outcome: translation.replacingText(formattedText),
                     request: capturedLanguageRequest,
                     currentRequest: currentLanguageRequest
                 )
@@ -1114,55 +1120,42 @@ class DictationCoordinator: ObservableObject {
         request: DictationLanguageRequest,
         regions: [SpeechRegionTranscript] = [],
         generation: Int? = nil
-    ) async -> String {
-        guard let target = request.translationTarget, !transcript.isEmpty else { return transcript }
+    ) async -> TranslationOutcome {
+        guard let target = request.translationTarget, !transcript.isEmpty else { return .original(transcript) }
         guard sessions.mayReport(
             from: generation ?? sessions.current,
             request: request, currentRequest: currentLanguageRequest
         ) else {
-            return transcript
+            return .fallback(transcript, reason: .cancelled)
         }
 
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
-            if regions.count > 1 {
-                var translatedRegions: [String] = []
-                translatedRegions.reserveCapacity(regions.count)
-                for region in regions {
-                    guard !Task.isCancelled,
-                          sessions.mayReport(
-                              from: generation ?? sessions.current,
-                              request: request,
-                              currentRequest: currentLanguageRequest
-                          ) else {
-                        return transcript
-                    }
-                    let regionText = region.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !regionText.isEmpty else { continue }
-                    let outcome = await translationOutcome(
-                        regionText,
-                        target: target,
-                        sourceHint: region.validatedLanguage ?? region.detectedLanguage,
-                        request: request,
-                        generation: generation ?? sessions.current
-                    )
-                    translatedRegions.append(outcome.resolvedText)
+            let hint = regions.count == 1 ? regions.first?.validatedLanguage : nil
+            let spans = PolishSpanDetector.translationSpans(in: transcript, sourceHint: hint)
+            var outcomes: [TranslationOutcome] = []
+            for span in spans {
+                guard !Task.isCancelled, sessions.mayReport(from: generation ?? sessions.current,
+                    request: request, currentRequest: currentLanguageRequest) else {
+                    return .fallback(transcript, reason: .cancelled)
                 }
-                let merged = SpeechTranscriptMerger.merge(translatedRegions)
-                return merged.isEmpty ? transcript : merged
+                let text = span.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { outcomes.append(.original(span.text)); continue }
+                let outcome = await translationOutcome(text, target: target, sourceHint: span.languageCode,
+                    request: request, generation: generation ?? sessions.current)
+                guard outcome.fallbackReason == nil else { return .fallback(transcript, reason: outcome.fallbackReason ?? .rejectedOutput) }
+                let leading = String(span.text.prefix(while: \.isWhitespace))
+                let trailing = String(span.text.reversed().prefix(while: \.isWhitespace).reversed())
+                outcomes.append(outcome.replacingText(leading + outcome.resolvedText + trailing))
             }
-
-            let outcome = await translationOutcome(
-                transcript,
-                target: target,
-                sourceHint: regions.first?.validatedLanguage ?? regions.first?.detectedLanguage,
-                request: request,
-                generation: generation ?? sessions.current
-            )
-            return outcome.resolvedText
+            guard !Task.isCancelled, sessions.mayReport(from: generation ?? sessions.current,
+                request: request, currentRequest: currentLanguageRequest) else {
+                return .fallback(transcript, reason: .cancelled)
+            }
+            return TranslationOutcome.combined(original: transcript, clauses: spans.map(\.text), outcomes: outcomes, target: target)
         }
 #endif
-        return TranslationOutcome.fallback(transcript, reason: .unavailable).resolvedText
+        return .fallback(transcript, reason: .unavailable)
     }
 
 #if canImport(Translation)
@@ -1182,11 +1175,14 @@ class DictationCoordinator: ObservableObject {
                 keyboardLanguage: SupportedLanguage.active,
                 outputMode: TranscriptionOutputMode.active
             )
+            if capability.sourceLanguage == nil {
+                guard refreshGeneration == self.translationReadinessGeneration else { return }
+                TranslationTargetReadiness(source: "auto", installedTargets: [],
+                    supportedTargets: Set(TranslationLanguage.allCases.map(\.rawValue))).persist(to: self.defaults)
+                return
+            }
             let sourceCodes: [String] = capability.sourceLanguage.map { [$0.rawValue] }
-                ?? Array(Set(
-                    TranslationLanguage.allCases.map(\.translationIdentifier)
-                        + SupportedLanguage.allCases.map(\.rawValue)
-                )).sorted()
+                ?? []
             let availability = LanguageAvailability()
             var installedTargets = Set<String>()
             var supportedTargets = Set<String>()
@@ -1237,9 +1233,15 @@ class DictationCoordinator: ObservableObject {
             return .fallback(transcript, reason: .cancelled)
         }
 
-        let source = sourceHint ?? translationSource(for: request) ?? detectedLanguage(from: transcript)
-        if languageCodesEquivalent(source, target.translationIdentifier) {
-            return .translated(transcript)
+        let source = SpeechLanguageEvidence.sourceLanguage(in: transcript, hint: sourceHint ?? translationSource(for: request))
+        if target.alreadyContains(transcript, sourceHint: source) {
+            return TranslationOutcome.resolved(original: transcript, translated: transcript,
+                clientIdentifierMatches: true, target: target, source: source)
+        }
+        if target == .chineseSimplified, SpeechLanguageEvidence.baseCode(source) == "zh",
+           let simplified = transcript.applyingTransform(StringTransform(rawValue: "Hant-Hans"), reverse: false) {
+            return TranslationOutcome.resolved(original: transcript, translated: simplified,
+                clientIdentifierMatches: true, target: target, source: source)
         }
         let targetLocale = target.localeLanguage
         let availability = LanguageAvailability()
@@ -1290,15 +1292,9 @@ class DictationCoordinator: ObservableObject {
         )
     }
 
-    private func detectedLanguage(from transcript: String) -> String? {
-        NLLanguageRecognizer.dominantLanguage(for: transcript)?.rawValue
-    }
-
     private func languageCodesEquivalent(_ lhs: String?, _ rhs: String) -> Bool {
         guard let lhs else { return false }
-        let leftBase = lhs.split(separator: "-").first.map(String.init)?.lowercased()
-        let rightBase = rhs.split(separator: "-").first.map(String.init)?.lowercased()
-        return lhs.caseInsensitiveCompare(rhs) == .orderedSame || leftBase == rightBase
+        return lhs.caseInsensitiveCompare(rhs) == .orderedSame
     }
 
     @available(iOS 26.0, *)
@@ -1309,14 +1305,16 @@ class DictationCoordinator: ObservableObject {
         request: DictationLanguageRequest,
         generation: Int
     ) async -> TranslationOutcome {
-        await withTaskGroup(of: TranslationOutcome.self) { group in
+        let id = UUID()
+        return await withTaskGroup(of: TranslationOutcome.self) { group in
             group.addTask { @MainActor in
                 await self.translateWithHost(
                     transcript,
                     source: source,
                     target: target,
                     request: request,
-                    generation: generation
+                    generation: generation,
+                    id: id
                 )
             }
             group.addTask {
@@ -1326,7 +1324,9 @@ class DictationCoordinator: ObservableObject {
             let first = await group.next() ?? .fallback(transcript, reason: .unavailable)
             group.cancelAll()
             if case .fallbackOriginal(_, .unavailable) = first {
-                await MainActor.run { self.cancelPendingTranslation() }
+                await MainActor.run {
+                    self.cancelPendingTranslation(id: id)
+                }
             }
             return first
         }
@@ -1370,10 +1370,13 @@ class DictationCoordinator: ObservableObject {
                 )
             ])
             let response = responses.first
+            guard !Task.isCancelled, sessions.mayReport(from: generation, request: request,
+                currentRequest: currentLanguageRequest) else { return .fallback(transcript, reason: .cancelled) }
             return TranslationOutcome.resolved(
                 original: transcript,
                 translated: response?.targetText,
-                clientIdentifierMatches: response?.clientIdentifier == clientIdentifier
+                clientIdentifierMatches: response?.clientIdentifier == clientIdentifier,
+                target: target, source: source
             )
         } catch {
             return .fallback(transcript, reason: .unavailable)
@@ -1386,14 +1389,15 @@ class DictationCoordinator: ObservableObject {
         source: String?,
         target: TranslationLanguage,
         request: DictationLanguageRequest,
-        generation: Int
+        generation: Int,
+        id: UUID
     ) async -> TranslationOutcome {
-        guard !Task.isCancelled else {
+        guard !Task.isCancelled, sessions.mayReport(from: generation, request: request,
+            currentRequest: currentLanguageRequest) else {
             return .fallback(transcript, reason: .cancelled)
         }
 
         let clientIdentifier = request.clientIdentifier ?? UUID().uuidString
-        let id = UUID()
         return await withTaskCancellationHandler(operation: {
             await withCheckedContinuation { (continuation: CheckedContinuation<TranslationOutcome, Never>) in
                 cancelPendingTranslation()
@@ -1418,7 +1422,7 @@ class DictationCoordinator: ObservableObject {
             }
         }, onCancel: { [weak self] in
             Task { @MainActor in
-                self?.cancelPendingTranslation()
+                self?.cancelPendingTranslation(id: id)
             }
         })
     }
@@ -1496,7 +1500,8 @@ class DictationCoordinator: ObservableObject {
                 outcome: TranslationOutcome.resolved(
                     original: pending.originalText,
                     translated: response?.targetText,
-                    clientIdentifierMatches: matches
+                    clientIdentifierMatches: matches,
+                    target: pending.target, source: pending.source
                 )
             )
         } catch {
@@ -1517,7 +1522,8 @@ class DictationCoordinator: ObservableObject {
     }
 
     @available(iOS 26.0, *)
-    private func cancelPendingTranslation() {
+    private func cancelPendingTranslation(id: UUID? = nil) {
+        if let id, pendingTranslation?.id != id { return }
         guard let pending = pendingTranslation else { return }
         (activeTranslationSession as? TranslationSession)?.cancel()
         activeTranslationSession = nil

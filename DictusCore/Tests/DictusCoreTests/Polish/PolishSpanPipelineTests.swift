@@ -2,6 +2,39 @@ import XCTest
 @testable import DictusCore
 
 final class PolishSpanPipelineTests: XCTestCase {
+    func testCoherentJapaneseAndKoreanKeepIdentifiersAndUnicode() {
+        for text in ["APIとbuild_240の設定を確認します。", "ﾐｰﾃｨﾝｸﾞの予定を確認します。", "오늘 漢字 자료를 확인하고 회의 일정을 정합니다."] {
+            let spans = PolishSpanDetector.spans(in: text)
+            XCTAssertFalse(PolishSpanDetector.looksMixedScript(text), text)
+            XCTAssertEqual(spans.count, 1, text)
+            XCTAssertTrue(spans.first?.polishable == true, text)
+            XCTAssertEqual(spans.map(\.text).joined(), text)
+        }
+    }
+
+    func testOneAudioRegionKeepsGenuineClauseSwitches() {
+        for text in ["我们今天需要检查这张发票，明日の予定を確認します。", "Please send the invoice before our meeting tomorrow, 明日の予定を確認します。"] {
+            let spans = PolishSpanDetector.translationSpans(in: text)
+            XCTAssertEqual(spans.map(\.text).joined(), text)
+            XCTAssertGreaterThan(Set(spans.compactMap(\.languageCode).map { $0.split(separator: "-").first.map(String.init)! }).count, 1, text)
+        }
+        let exact = "  明日の予定を確認します。\t\n\nPlease send the invoice — Cafe\u{301}.  "
+        XCTAssertEqual(Array(PolishSpanDetector.spans(in: exact).map(\.text).joined().utf8), Array(exact.utf8))
+        XCTAssertEqual(PolishSpanDetector.translationSpans(in: "APIを更新").map(\.text), ["APIを更新"])
+    }
+
+    func testStaleValidatedRegionCannotSendMixedSpeechToOneCleanupCall() async {
+        let raw = "Please send the invoice 明日の予定を確認します"
+        let engine = CountingPolishEngine { text, _, _ in
+            XCTAssertNotEqual(text, raw, "one audio region is not one language")
+            return text
+        }
+        let region = SpeechRegionTranscript(region: SpeechRegion(startSample: 0, endSample: 16000), text: raw,
+            detectedLanguage: "en", validatedLanguage: "en")
+        let result = await PolishSpanPipeline.polish(regions: [region], engine: engine)
+        XCTAssertEqual(result.text, raw)
+    }
+
     func testShortCapitalizedSentenceStillReceivesGrammarCorrection() async {
         let engine = CountingPolishEngine { text, _, _ in
             text.replacingOccurrences(of: "He go to work.", with: "He goes to work.")
@@ -127,7 +160,7 @@ final class PolishSpanPipelineTests: XCTestCase {
         XCTAssertEqual(result.outcome, .success)
     }
 
-    func testRegionAwarePipelineUsesValidatedLanguageAndPreservesMixedRegion() async {
+    func testRegionAwarePipelineRevalidatesMixedRegions() async {
         let engine = CountingPolishEngine { text, _, _ in
             text + "!"
         }
@@ -149,10 +182,10 @@ final class PolishSpanPipelineTests: XCTestCase {
 
         let result = await PolishSpanPipeline.polish(regions: regions, engine: engine)
 
-        XCTAssertEqual(engine.calls, 1)
+        XCTAssertEqual(engine.calls, 0)
         XCTAssertTrue(result.text.contains("Mach bitte einen Termin for next Tuesday"))
         XCTAssertTrue(result.text.contains("你好，can you send me die Rechnung bitte?"))
-        XCTAssertEqual(result.polishedSpanCount, 1)
+        XCTAssertEqual(result.polishedSpanCount, 0)
     }
 
     func testSpanAwareFlagDefaultsOn() {

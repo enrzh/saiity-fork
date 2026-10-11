@@ -1,6 +1,11 @@
 import XCTest
 
 final class AudioLifecycleContractTests: XCTestCase {
+    func testLateTranslationCancellationIsBoundToItsPendingIdentity() throws {
+        let coordinator = try source("DictusApp/DictationCoordinator.swift")
+        XCTAssertTrue(coordinator.contains("cancelPendingTranslation(id: id)"))
+        XCTAssertTrue(coordinator.contains("if let id, pendingTranslation?.id != id { return }"))
+    }
     private var repository: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

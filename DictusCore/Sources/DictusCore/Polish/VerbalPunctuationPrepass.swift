@@ -14,8 +14,8 @@ import Foundation
 /// entirely for this concern. Apple FM still handles the rest of Light:
 /// capitalisation, typographic spacing, accents, glossary spelling.
 ///
-    /// The supported Dictus languages all have rules here. Bare period words
-    /// remain excluded where they are also common nouns.
+/// Rules exist for French, English, German and Spanish; other languages pass
+/// through. Bare period words remain excluded where they are also common nouns.
 ///
 /// Known false positives: literal references to punctuation ("ma virgule est
 /// cassée") become substitutions. Accepted — the dictation use case is
@@ -60,7 +60,7 @@ public enum VerbalPunctuationPrepass {
         case .spanish: return spanishRules
         case .german: return germanRules
         case .italian, .portuguese, .dutch, .polish, .swedish, .danish, .finnish, .czech:
-            return englishRules
+            return []
         }
     }
 

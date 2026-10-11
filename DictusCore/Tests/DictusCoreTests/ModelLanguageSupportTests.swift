@@ -4,6 +4,12 @@ import XCTest
 @testable import DictusCore
 
 final class ModelLanguageSupportTests: XCTestCase {
+    func testClassicWhisperDoesNotClaimTheLargeV3CantoneseToken() {
+        for identifier in ["openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small", "openai_whisper-medium", "openai_whisper-large-v2_949MB"] {
+            XCTAssertFalse(ModelInfo.forIdentifier(identifier)!.languageSupport.languageCodes.contains("yue"), identifier)
+        }
+        XCTAssertTrue(ModelInfo.forIdentifier("openai_whisper-large-v3_947MB")!.languageSupport.languageCodes.contains("yue"))
+    }
 
     private let testedCodes = ["fr", "en", "es", "de"]
 
@@ -180,12 +186,13 @@ final class ModelLanguageSupportTests: XCTestCase {
         // code-for-code (not just by count).
         for model in ModelInfo.allIncludingDeprecated where model.engine == .whisperKit && !englishOnlyWhisperIDs.contains(model.identifier) {
             let groups = model.languageSupport.tierGroups
-            XCTAssertEqual(groups.map(\.tier), [.good, .fair, .limited],
+            XCTAssertEqual(groups.map(\.tier), [.good, .fair, .limited, .unmeasured],
                            "\(model.identifier) tiers out of order")
             let allCodes = groups.flatMap(\.codes)
             XCTAssertEqual(Set(allCodes).count, allCodes.count,
                            "\(model.identifier) has duplicate codes across tiers")
-            XCTAssertEqual(Set(allCodes), Self.whisperTokenizerCodes,
+            let expected = model.identifier.contains("large-v3") ? Self.whisperTokenizerCodes : Self.whisperTokenizerCodes.subtracting(["yue"])
+            XCTAssertEqual(Set(allCodes), expected,
                            "\(model.identifier) must match the tokenizer set exactly")
         }
     }
@@ -208,10 +215,11 @@ final class ModelLanguageSupportTests: XCTestCase {
         XCTAssertTrue(fair.codes.contains("cs"))
         XCTAssertTrue(fair.codes.contains("hi"))
         XCTAssertTrue(limited.codes.contains("bn"))
-        XCTAssertTrue(limited.codes.contains("yue"))
-        XCTAssertTrue(limited.codes.contains("haw"))
+        let unmeasured = support.tierGroups.first { $0.tier == .unmeasured }!
+        XCTAssertFalse(support.languageCodes.contains("yue"))
+        XCTAssertTrue(unmeasured.codes.contains("haw"))
         // Whisper's legacy "jw" must be normalized to ISO "jv" for display.
-        XCTAssertTrue(limited.codes.contains("jv"))
+        XCTAssertTrue(unmeasured.codes.contains("jv"))
         XCTAssertFalse(limited.codes.contains("jw"))
     }
 

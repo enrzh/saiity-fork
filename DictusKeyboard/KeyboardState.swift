@@ -1420,6 +1420,7 @@ class KeyboardState: ObservableObject {
         // the idle reset above because that reset is what ends the dictation session
         // the undo belongs to.
         armDictationUndo(transcription, originalText: originalText)
+        dictationTranslationFallback = timings?.context["translationOutcome"]?.hasPrefix("originalKept:") == true
     }
 
     // MARK: - Dictation undo (#266)
@@ -1494,6 +1495,8 @@ class KeyboardState: ObservableObject {
     /// proxy's view of the document are not guaranteed to be in step within the same
     /// turn, and a check that runs too early reads the field as it was *before* the
     /// insertion and refuses. One hop costs a frame nobody sees.
+    private var dictationTranslationFallback = false
+
     private func armDictationUndo(_ transcription: String, originalText: String? = nil) {
         guard let documentID = HostInputTraits.documentIdentifier(for: controller?.textDocumentProxy) else {
             invalidateDictationUndo(reason: "document-unavailable")
@@ -1582,6 +1585,7 @@ class KeyboardState: ObservableObject {
         guard dictationUndoText != nil else { return }
         dictationUndoText = nil
         dictationOriginalText = nil
+        dictationTranslationFallback = false
         dictationUndoDocumentID = nil
         dictationUndoContextAfter = nil
         dictationUndoAvailable = false
@@ -1656,7 +1660,8 @@ class KeyboardState: ObservableObject {
                 self?.performDictationUndo()
             })
         }
-        return [UIMenu(title: "Last dictation", options: .displayInline, children: actions)]
+        return [UIMenu(title: dictationTranslationFallback ? "Translation unavailable — original kept" : "Last dictation",
+                      options: .displayInline, children: actions)]
     }
 
     private var canRestoreOriginal: Bool {

@@ -4,6 +4,8 @@ import Foundation
 guard CommandLine.arguments.count == 3 else { fatalError("Pass simulator ID and derived-data path") }
 let udid = CommandLine.arguments[1], derived = CommandLine.arguments[2]
 let products = derived + "/Build/Products/Debug-iphonesimulator"
+let resultDirectory = URL(fileURLWithPath: derived).appendingPathComponent("multilingual-result-renders")
+try FileManager.default.createDirectory(at: resultDirectory, withIntermediateDirectories: true)
 let componentFile = try String(contentsOfFile: "DictusApp/Views/HomeView.swift", encoding: .utf8)
 guard let start = componentFile.range(of: "struct DictationTranscriptResult: View {"),
       let end = componentFile.range(of: "private struct DictationHistoryEditView:", range: start.upperBound..<componentFile.endIndex) else {
@@ -22,14 +24,15 @@ import DictusCore
         for width in [320.0, 402.0] {
             for (name, sizeCategory) in [("normal", DynamicTypeSize.large), ("large", .accessibility3), ("largest", .accessibility5)] {
                 let content = DictationTranscriptResult(
-                    result: "Please ask José Müller about the invoice tomorrow. 我晚上确认。",
-                    original: "uh please ask José Müller about the invoice tomorrow 我晚上确认。",
-                    onRestore: { _ in }, onFeedback: { _ in })
+                    result: "明日の予定を確認します。 Cafe\u{301} — API_240\nשלום — يرجى تأكيد الفاتورة.",
+                    original: "明日の予定を確認します。 Cafe\u{301} — API_240\nשלום — يرجى تأكيد الفاتورة.",
+                    onRestore: { _ in }, onFeedback: { _ in }, translationFallback: true)
                     .padding(20).frame(width: width)
                     .background(Color(uiColor: .systemBackground))
                     .environment(\.dynamicTypeSize, sizeCategory)
                 let host = UIHostingController(rootView: content)
                 let size = host.sizeThatFits(in: CGSize(width: width, height: 4000))
+                precondition(size.height.isFinite && size.height > 0 && size.height < 4000)
                 let window = UIWindow(frame: CGRect(origin: .zero, size: size))
                 window.rootViewController = host
                 window.makeKeyAndVisible()
@@ -39,14 +42,16 @@ import DictusCore
                 let renderer = UIGraphicsImageRenderer(size: size)
                 let rendered = renderer.image { context in host.view.layer.render(in: context.cgContext) }
                 guard let data = rendered.pngData() else { fatalError("No result render") }
-                try data.write(to: URL(fileURLWithPath: "/tmp/saiity-product-result-\(Int(width))-\(name).png"))
+                let directory = URL(fileURLWithPath: RESULT_DIRECTORY)
+                try data.write(to: directory.appendingPathComponent("result-\(Int(width))-\(name).png"))
                 window.isHidden = true
             }
         }
-        print("PASS: shared result at two widths, normal text and accessibility sizes 3/5")
+        print("PASS: multilingual fallback result at two widths, normal text and accessibility sizes 3/5")
     }
 }
 """#.replacingOccurrences(of: "// PRODUCTION_RESULT_COMPONENT", with: component)
+    .replacingOccurrences(of: "RESULT_DIRECTORY", with: String(reflecting: resultDirectory.path))
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-product-render-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 let source = directory.appendingPathComponent("main.swift"), binary = directory.appendingPathComponent("render")

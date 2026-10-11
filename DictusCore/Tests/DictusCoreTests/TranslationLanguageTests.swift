@@ -3,6 +3,15 @@ import XCTest
 @testable import DictusCore
 
 final class TranslationLanguageTests: XCTestCase {
+    func testBaseChineseDoesNotSatisfyAnExplicitSimplifiedOutput() {
+        let traditional = "我們今天需要檢查這張發票並討論會議安排。"
+        XCTAssertFalse(TranslationLanguage.chineseSimplified.alreadyContains(traditional, sourceHint: "zh-Hant"))
+        XCTAssertFalse(TranslationLanguage.chineseSimplified.satisfiesOutputScript(traditional))
+        let simplified = "我们今天需要检查这张发票并讨论会议安排。"
+        XCTAssertTrue(TranslationLanguage.chineseSimplified.alreadyContains(simplified, sourceHint: "zh-Hans"))
+        XCTAssertFalse(TranslationLanguage.chineseSimplified.alreadyContains("字幕", sourceHint: "zh"))
+        XCTAssertFalse(TranslationLanguage.english.alreadyContains("Please send the invoice 明日の予定を確認します", sourceHint: "en"))
+    }
     func testAllCasesAreTheOrderedTopTenTargetSet() {
         XCTAssertEqual(
             TranslationLanguage.allCases,

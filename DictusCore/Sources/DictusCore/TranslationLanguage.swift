@@ -28,6 +28,20 @@ public enum TranslationLanguage: String, CaseIterable, Codable, Sendable {
     /// Foundation representation for APIs such as Apple's Translation framework.
     public var localeLanguage: Locale.Language { Locale.Language(identifier: translationIdentifier) }
 
+    /// Language identity never substitutes for the requested writing system.
+    public func satisfiesOutputScript(_ text: String) -> Bool {
+        guard self == .chineseSimplified else { return true }
+        return text.applyingTransform(StringTransform(rawValue: "Hant-Hans"), reverse: false) == text
+    }
+
+    public func alreadyContains(_ text: String, sourceHint: String? = nil) -> Bool {
+        guard satisfiesOutputScript(text) else { return false }
+        let spans = PolishSpanDetector.translationSpans(in: text, sourceHint: sourceHint)
+        return !spans.isEmpty && spans.allSatisfy {
+            SpeechLanguageEvidence.baseCode($0.languageCode) == SpeechLanguageEvidence.baseCode(code)
+        }
+    }
+
     /// English display names keep the registry independent of app localization.
     public var displayName: String {
         switch self {

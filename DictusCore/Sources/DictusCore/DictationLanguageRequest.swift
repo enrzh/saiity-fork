@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// The active ASR capability snapshot used by the keyboard language control.
 public struct ASRCapability: Equatable, Sendable {
@@ -101,7 +102,7 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
     }
 
     public func readyTargets(forSourceCode sourceCode: String?) -> [TranslationLanguage] {
-        guard matches(sourceCode) else { return [] }
+        guard matches(sourceCode), source != "auto" else { return [] }
         return TranslationLanguage.allCases.filter { installedTargets.contains($0.rawValue) }
     }
 
@@ -114,6 +115,7 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
         sourceCode: String?
     ) -> TranslationTargetStatus {
         guard matches(sourceCode) else { return .unavailable }
+        if source == "auto" { return .checking }
         if installedTargets.contains(target.rawValue) { return .installedReady }
         if supportedTargets.contains(target.rawValue) { return .supportedNeedsDownload }
         return .unavailable
@@ -125,7 +127,7 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
     ) -> String {
         switch status(for: target, sourceCode: sourceCode) {
         case .checking:
-            return "Translate to \(target.displayName) (Checking availability)"
+            return "Translate to \(target.displayName) (Check after source recognition)"
         case .installedReady:
             return "Translate to \(target.displayName)"
         case .supportedNeedsDownload:
@@ -141,7 +143,7 @@ public struct TranslationTargetReadiness: Equatable, Sendable {
     ) -> String {
         switch status(for: target, sourceCode: sourceCode) {
         case .checking:
-            return "Translate to \(target.displayName), checking availability"
+            return "Translate to \(target.displayName), check after source recognition"
         case .installedReady:
             return "Translate to \(target.displayName)"
         case .supportedNeedsDownload:
@@ -166,9 +168,11 @@ public enum TranslationFallbackReason: String, Equatable, Sendable {
     case emptyResponse
     case mismatchedClient
     case cancelled
+    case rejectedOutput
 }
 
 public enum TranslationOutcome: Equatable, Sendable {
+    case original(String)
     case translated(String)
     case fallbackOriginal(String, reason: TranslationFallbackReason)
 
@@ -179,7 +183,9 @@ public enum TranslationOutcome: Equatable, Sendable {
     public static func resolved(
         original: String,
         translated: String?,
-        clientIdentifierMatches: Bool
+        clientIdentifierMatches: Bool,
+        target: TranslationLanguage? = nil,
+        source: String? = nil
     ) -> Self {
         guard clientIdentifierMatches else {
             return .fallbackOriginal(original, reason: .mismatchedClient)
@@ -187,12 +193,197 @@ public enum TranslationOutcome: Equatable, Sendable {
         guard let translated, !translated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .fallbackOriginal(original, reason: .emptyResponse)
         }
+        guard preservesTranslationFacts(original, output: translated, source: source, target: target),
+              target.map({ acceptsTargetText(translated, original: original, target: $0) }) ?? true else {
+            return .fallbackOriginal(original, reason: .rejectedOutput)
+        }
         return .translated(translated)
+    }
+
+    public var fallbackReason: TranslationFallbackReason? {
+        if case .fallbackOriginal(_, let reason) = self { return reason }
+        return nil
+    }
+
+    public func replacingText(_ text: String) -> Self {
+        switch self {
+        case .original: return .original(text)
+        case .translated: return .translated(text)
+        case .fallbackOriginal(_, let reason): return .fallback(text, reason: reason)
+        }
+    }
+
+    public static func combined(original: String, clauses: [String], outcomes: [Self], target: TranslationLanguage) -> Self {
+        guard clauses.count == outcomes.count, !clauses.isEmpty else { return .fallback(original, reason: .emptyResponse) }
+        guard original == clauses.joined() else { return .fallback(original, reason: .rejectedOutput) }
+        if let reason = outcomes.compactMap(\.fallbackReason).first { return .fallback(original, reason: reason) }
+        for (clause, outcome) in zip(clauses, outcomes) where !clause.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if resolved(original: clause, translated: outcome.resolvedText, clientIdentifierMatches: true, target: target).fallbackReason != nil {
+                return .fallback(original, reason: .rejectedOutput)
+            }
+        }
+        let output = outcomes.map(\.resolvedText).joined()
+        // Facts are validated per clause with its locale, not a mixed dominant vote.
+        guard acceptsTargetText(output, original: original, target: target) else { return .fallback(original, reason: .rejectedOutput) }
+        return .translated(output)
+    }
+
+    private static func matches(_ pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
+            Range($0.range, in: text).map { String(text[$0]) }
+        }
+    }
+
+    private static func acceptsTargetText(_ output: String, original: String, target: TranslationLanguage) -> Bool {
+        guard target.satisfiesOutputScript(output) else { return false }
+        let wanted = SpeechLanguageEvidence.baseCode(target.code)
+        for span in PolishSpanDetector.translationSpans(in: output) {
+            let value = span.text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            guard value.contains(where: \.isLetter), !isPreservedNameOrIdentifier(value, original: original) else { continue }
+            let readings = SpeechLanguageEvidence.hypotheses(in: value)
+            if let reading = readings.max(by: { $0.value < $1.value }), reading.value >= 0.95, reading.key != wanted { return false }
+            if let code = span.languageCode, SpeechLanguageEvidence.baseCode(code) != wanted { return false }
+            let scripts = Set(value.unicodeScalars.compactMap(SpeechLanguageEvidence.script(for:)))
+            if value.filter(\.isLetter).count >= 2 {
+                if scripts.contains(.kana), wanted != "ja" { return false }
+                if scripts.contains(.hangul), wanted != "ko" { return false }
+                if scripts.contains(.han), !["zh", "ja", "ko"].contains(wanted) { return false }
+            }
+            if value.count < 24, scripts == [.latin], (readings[wanted] ?? 0) < 0.05,
+               (readings.values.max() ?? 0) >= 0.6 { return false }
+        }
+        // A dominant target reading must not hide a retained grammatical word.
+        for word in matches(#"[\p{L}\p{M}]+(?:[_0-9][\p{L}\p{M}\p{N}_]*)?"#, in: output) where word.count >= 4 {
+            guard !isPreservedNameOrIdentifier(word, original: original) else { continue }
+            let readings = SpeechLanguageEvidence.hypotheses(in: word)
+            if let best = readings.max(by: { $0.value < $1.value }), best.value >= 0.98,
+               best.key != wanted, (readings[wanted] ?? 0) < 0.01 { return false }
+        }
+        return true
+    }
+
+    private static func isPreservedNameOrIdentifier(_ value: String, original: String) -> Bool {
+        if value.lowercased() == "ok" { return true }
+        guard original.range(of: value, options: [.caseInsensitive, .widthInsensitive]) != nil else { return false }
+        if value.range(of: #"^(?:[A-Z]{2,5}|[\p{L}][\p{L}\p{N}_./+\-]*[\p{N}_][\p{L}\p{N}_./+\-]*|[A-Za-z]*[a-z][A-Z][A-Za-z]*|https?://\S+|[^\s]+@[^\s]+)$"#,
+                       options: .regularExpression) != nil { return true }
+        let tagger = NLTagger(tagSchemes: [.nameType])
+        tagger.string = value
+        var named = false, onlyNames = true
+        tagger.enumerateTags(in: value.startIndex..<value.endIndex, unit: .word, scheme: .nameType,
+                            options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, _ in
+            if let tag, [NLTag.personalName, .placeName, .organizationName].contains(tag) { named = true }
+            else { onlyNames = false }
+            return true
+        }
+        return named && onlyNames
+    }
+
+    private static func preservesTranslationFacts(_ original: String, output: String, source: String?, target: TranslationLanguage?) -> Bool {
+        let sourceCode = source == "auto" ? nil : SpeechLanguageEvidence.sourceLanguage(in: original, hint: source)
+        let outputCode = target?.code ?? SpeechLanguageEvidence.sourceLanguage(in: output)
+        guard numericFacts(in: original, language: sourceCode) == numericFacts(in: output, language: outputCode) else { return false }
+        // A multiset of numbers loses the order inside dates and clock times.
+        let datesAndTimes = #"(?<!\p{N})(?:\p{Nd}{4}[-/]\p{Nd}{1,2}[-/]\p{Nd}{1,2}|\p{Nd}{1,2}[/-]\p{Nd}{1,2}[/-]\p{Nd}{2,4}|\p{Nd}{1,2}:\p{Nd}{2}(?::\p{Nd}{2})?)(?!\p{N})"#
+        guard matches(datesAndTimes, in: original).map(normalizeDigits).sorted() == matches(datesAndTimes, in: output).map(normalizeDigits).sorted() else { return false }
+        let negationSource = sourceCode ?? SpeechLanguageEvidence.hypotheses(in: original).max(by: { $0.value < $1.value }).flatMap { $0.value >= 0.95 ? $0.key : nil }
+        if let negationSource, let outputCode,
+           let inputNegations = negationCount(original, language: negationSource),
+           let outputNegations = negationCount(output, language: outputCode), inputNegations != outputNegations { return false }
+        let identifiers = #"(?<![\p{L}\p{N}_])(?:[A-Za-z][A-Za-z0-9]*[_0-9][A-Za-z0-9_/-]*|https?://[^\s]+|[^\s]+@[^\s]+)"#
+        for identifier in matches(identifiers, in: original) {
+            guard output.range(of: identifier) != nil else { return false }
+        }
+        let ratio = Double(output.count) / Double(max(original.count, 1))
+        guard ratio >= 0.08, ratio <= 5 else { return false }
+        let sourceClauses = PolishSpanDetector.translationSpans(in: original).filter { $0.text.contains(where: \.isLetter) }
+        let outputClauses = PolishSpanDetector.translationSpans(in: output).filter { $0.text.contains(where: \.isLetter) }
+        if sourceClauses.count > outputClauses.count, ratio < 0.75 { return false }
+        let sourceWords = original.split(whereSeparator: \.isWhitespace).count
+        if sourceWords >= 8, output.split(whereSeparator: \.isWhitespace).count < sourceWords / 2,
+           Set(original.unicodeScalars.compactMap(SpeechLanguageEvidence.script(for:))) == [.latin],
+           Set(output.unicodeScalars.compactMap(SpeechLanguageEvidence.script(for:))) == [.latin] { return false }
+        return true
+    }
+
+    private static func normalizeDigits(_ text: String) -> String {
+        text.map { $0.wholeNumberValue.map(String.init) ?? ($0 == "٫" ? "." : $0 == "٬" ? "," : String($0)) }.joined()
+    }
+
+    static func numericFacts(in text: String, language: String?) -> [String] {
+        let locale = language.map { Locale(identifier: $0) }
+        let currencyAliases = ["EUR": #"(?i)€|\b(?:EUR|euros?|евро|евра|يورو)\b|欧元|歐元|यूरो|ইউরো|یورو"#,
+            "USD": #"(?i)\$|\b(?:USD|dollars?|dólares|доллар\p{L}*|دولار\p{L}*)\b|美元|डॉलर|ডলার|ڈالر"#,
+            "GBP": #"(?i)£|\b(?:GBP|pounds?|livres?|libras)\b|英镑|英鎊"#,
+            "JPY": #"(?i)\b(?:JPY|yen)\b|日元|日圓|円"#, "CNY": #"(?i)\bCNY\b|人民币|人民幣|(?<![日美欧歐])元"#]
+        let numberPattern = #"(?<![A-Za-z\p{N}])[+\-−]?\p{Nd}+(?:[.,٫٬'’\u00a0\u202f]\p{Nd}+)*"#
+        guard let regex = try? NSRegularExpression(pattern: numberPattern) else { return [] }
+        var values = regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match -> String? in
+            guard let range = Range(match.range, in: text) else { return nil }
+            let raw = String(text[range])
+            let before = String(text[..<range.lowerBound].suffix(16))
+            let after = String(text[range.upperBound...].prefix(16))
+            var currencies = currencyAliases.compactMap { code, pattern in
+                !matches("(?:" + pattern + #")[ \t]*$"#, in: before).isEmpty
+                    || !matches(#"^[ \t]*(?:"# + pattern + ")", in: after).isEmpty ? code : nil
+            }
+            let prefix = before.trimmingCharacters(in: .whitespacesAndNewlines)
+            let suffix = after.trimmingCharacters(in: .whitespacesAndNewlines)
+            let prefixCode = String(prefix.suffix(3)), suffixCode = String(suffix.prefix(3))
+            for code in [prefixCode, suffixCode] where !currencyAliases.keys.contains(code) && Locale.commonISOCurrencyCodes.contains(code) {
+                if (code == prefixCode && (prefix.count == 3 || prefix.dropLast(3).last?.isLetter == false))
+                    || (code == suffixCode && (suffix.count == 3 || suffix.dropFirst(3).first?.isLetter == false)) {
+                    currencies.append(code)
+                }
+            }
+            let adjacentSymbols = [before.last, after.first].compactMap { $0 }.filter {
+                $0.unicodeScalars.contains { $0.properties.generalCategory == .currencySymbol }
+            }.map(String.init)
+            if currencies.isEmpty { currencies = adjacentSymbols }
+            let digits = normalizeDigits(raw.replacingOccurrences(of: "٬", with: "")).replacingOccurrences(of: "−", with: "-")
+                .replacingOccurrences(of: #"['’\u00a0\u202f]"#, with: "", options: .regularExpression)
+            var value = digits
+            if value.contains("."), value.contains(",") {
+                let decimal = value.lastIndex(where: { $0 == "." || $0 == "," })!
+                value = value[..<decimal].replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: "")
+                    + "." + value[value.index(after: decimal)...]
+            } else if !raw.contains("٫"), let grouping = locale?.groupingSeparator,
+                      grouping != locale?.decimalSeparator, value.contains(grouping) {
+                value = value.replacingOccurrences(of: grouping, with: "")
+            } else { value = value.replacingOccurrences(of: ",", with: ".") }
+            let number = Decimal(string: value, locale: Locale(identifier: "en_US_POSIX")).map { NSDecimalNumber(decimal: $0).stringValue } ?? value
+            return number + "|" + currencies.sorted().joined(separator: ",")
+        }
+        // With amounts, currency belongs to each value. Bare 元 in 元気 is a word.
+        if values.isEmpty {
+            for (code, pattern) in currencyAliases {
+                let unambiguous = code == "CNY" ? #"(?i)\bCNY\b|人民币|人民幣"# : pattern
+                values += matches(unambiguous, in: text).map { _ in "currency:" + code }
+            }
+        }
+        return values.sorted()
+    }
+
+    private static func negationCount(_ text: String, language: String) -> Int? {
+        let patterns = [
+            "en": #"(?i)\b(?:not|never|no|cannot|without)\b|n't\b|n’t\b"#,
+            "de": #"(?i)\b(?:nicht|nie|kein\p{L}*|ohne)\b"#, "fr": #"(?i)\b(?:pas|jamais|sans|aucun\p{L}*)\b"#,
+            "es": #"(?i)\b(?:no|nunca|sin)\b"#, "pt": #"(?i)\b(?:não|nunca|sem)\b"#, "it": #"(?i)\b(?:non|mai|senza)\b"#,
+            "ru": #"(?i)\b(?:не|нет|никогда|без)\b"#, "he": #"\b(?:לא|אין|בלי)\b"#,
+            "ar": #"\b(?:لا|لم|لن|ليس|بدون)\b"#, "hi": #"नहीं|मत|बिना"#, "bn": #"না|নয়|নেই"#,
+            "ja": #"ません|ない|ぬ"#, "zh": #"不|没|无|未"#, "id": #"(?i)\b(?:tidak|bukan|tanpa|jangan)\b"#,
+            "ur": #"نہیں|مت|بغیر"#
+        ]
+        guard let pattern = patterns[SpeechLanguageEvidence.baseCode(language)] else { return nil }
+        let probe = SpeechLanguageEvidence.baseCode(language) == "zh"
+            ? text.applyingTransform(StringTransform(rawValue: "Hant-Hans"), reverse: false) ?? text : text
+        return matches(pattern, in: probe).count
     }
 
     public var resolvedText: String {
         switch self {
-        case .translated(let text), .fallbackOriginal(let text, _): return text
+        case .original(let text), .translated(let text), .fallbackOriginal(let text, _): return text
         }
     }
 }

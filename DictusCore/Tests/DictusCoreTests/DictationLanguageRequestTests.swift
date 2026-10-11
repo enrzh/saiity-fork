@@ -2,6 +2,125 @@ import XCTest
 @testable import DictusCore
 
 final class DictationLanguageRequestTests: XCTestCase {
+    func testAutomaticSourceCannotPromiseAnInstalledTranslationPair() {
+        let readiness = TranslationTargetReadiness(source: "auto", installedTargets: ["en"], supportedTargets: ["en", "zh-Hans"])
+        XCTAssertEqual(readiness.status(for: .english, sourceCode: nil), .checking)
+        XCTAssertEqual(readiness.readyTargets(forSourceCode: nil), [])
+        XCTAssertEqual(readiness.selectableTargets(forSourceCode: nil), [.english, .chineseSimplified])
+    }
+
+    func testCombinedTranslationPreservesSeparatorsRepetitionAndRejectsPartialSuccess() {
+        let clauses = ["Bonjour.\t\n", "Bonjour."]
+        let original = clauses.joined()
+        XCTAssertEqual(TranslationOutcome.combined(original: original, clauses: clauses,
+            outcomes: [.translated("Hello.\t\n"), .translated("Hello.")], target: .english), .translated("Hello.\t\nHello."))
+        XCTAssertEqual(TranslationOutcome.combined(original: original, clauses: clauses,
+            outcomes: [.translated("Hello.\t\n"), .fallback("Bonjour.", reason: .unavailable)], target: .english),
+            .fallback(original, reason: .unavailable))
+        XCTAssertEqual(TranslationOutcome.combined(original: original, clauses: clauses,
+            outcomes: [.translated("Hello.\t\n"), .translated("明日の予定を確認します。")], target: .english),
+            .fallback(original, reason: .rejectedOutput))
+    }
+    func testTranslationRejectsWrongLanguageAndUntranslatedClauses() {
+        for output in ["Merci.", "明日の予定を確認します。", "Please check the invoice. 明日の予定を確認します。", "我们今天需要检查这张发票。"] {
+            let original = "Veuillez vérifier la facture avant la réunion de demain."
+            let outcome = TranslationOutcome.resolved(original: original, translated: output,
+                clientIdentifierMatches: true, target: .english)
+            XCTAssertEqual(outcome.resolvedText, original, output)
+        }
+    }
+
+    func testTranslationKeepsAmountCurrencyAssociationAndIdentifiers() {
+        for (original, output) in [
+            ("Payez €10 et $20.", "Pay €20 and $10."),
+            ("Pay CHF 25.", "Pay CAD 25."),
+            ("Veuillez confirmer build_240 demain.", "Please confirm release_240 tomorrow."),
+            ("行きません。", "I will go."),
+            ("不要付款。", "Pay now.")
+        ] {
+            XCTAssertEqual(TranslationOutcome.resolved(original: original, translated: output,
+                clientIdentifierMatches: true, target: .english).resolvedText, original, original)
+        }
+        XCTAssertEqual(TranslationOutcome.resolved(original: "يرجى دفع ١٬٢٥٠ €.", translated: "Please pay €1,250.",
+            clientIdentifierMatches: true, target: .english), .translated("Please pay €1,250."))
+    }
+
+    func testTranslationDoesNotReorderDateOrClockComponents() {
+        for (original, changed) in [("Rendez-vous le 12/10/2026 à 09:30.", "Meet on 10/12/2026 at 09:30."),
+                                    ("Rendez-vous à 12:30.", "Meet at 30:12.")] {
+            XCTAssertEqual(TranslationOutcome.resolved(original: original, translated: changed,
+                clientIdentifierMatches: true, target: .english).resolvedText, original)
+        }
+        XCTAssertEqual(TranslationOutcome.resolved(original: "Rendez-vous le 12/10/2026 à 09:30.",
+            translated: "Meet on 12/10/2026 at 09:30.", clientIdentifierMatches: true, target: .english),
+            .translated("Meet on 12/10/2026 at 09:30."))
+    }
+
+    func testTranslationAcceptsChineseNegationVariantsAndClauseLocales() {
+        XCTAssertEqual(TranslationOutcome.numericFacts(in: "Pay €25.", language: "en"),
+                       TranslationOutcome.numericFacts(in: "支付25欧元。", language: "zh-Hans"))
+        let source = "我們今天無法完成全部付款請稍後再試。"
+        let result = "我们今天无法完成全部付款请稍后再试。"
+        XCTAssertEqual(TranslationOutcome.resolved(original: source, translated: result,
+            clientIdentifierMatches: true, target: .chineseSimplified), .translated(result))
+        let german = "Bitte überweisen Sie 1.000 Euro."
+        let english = "Please transfer 1000 euros."
+        XCTAssertEqual(TranslationOutcome.combined(original: german, clauses: [german],
+            outcomes: [.translated(english)], target: .english), .translated(english))
+        XCTAssertEqual(TranslationOutcome.resolved(original: "Pay €25.", translated: "支付25欧元。",
+            clientIdentifierMatches: true, target: .chineseSimplified), .translated("支付25欧元。"))
+        let omitted = "Veuillez envoyer la facture à Alice et annuler la livraison."
+        XCTAssertEqual(TranslationOutcome.resolved(original: omitted, translated: "Please send the invoice to Alice.",
+            clientIdentifierMatches: true, target: .english).resolvedText, omitted)
+        XCTAssertEqual(TranslationOutcome.resolved(original: "请支付25欧元。", translated: "请支付52欧元。",
+            clientIdentifierMatches: true, target: .chineseSimplified).resolvedText, "请支付25欧元。")
+        XCTAssertEqual(TranslationOutcome.resolved(original: "今日は元気です。", translated: "I feel fine today.",
+            clientIdentifierMatches: true, target: .english), .translated("I feel fine today."))
+    }
+
+    func testTranslationFallbackAssemblyKeepsTheExactOriginal() {
+        let original = "a escola\t\nCafe\u{301} — API_240"
+        let assembled = TranscriptionPipeline.assemble(cleaned: original, grammarLanguage: .english,
+            insertAsIs: true, preserveOriginal: true)
+        XCTAssertEqual(Array(assembled.body.utf8), Array(original.utf8))
+        XCTAssertEqual(Array(assembled.formatted.utf8), Array(original.utf8))
+    }
+
+    func testTranslationAcceptsPreservedNamesIdentifiersAndLocalizedNumbers() {
+        for (original, output) in [
+            ("Veuillez appeler Paris et confirmer API_240.", "Please call Paris and confirm API_240."),
+            ("Payez 25,50 € à Zoë le 2026-10-12.", "Pay €25.50 to Zoë on 2026-10-12."),
+            ("Ne payez pas la facture.", "Do not pay the invoice."),
+            ("請檢查這張發票。", "请检查这张发票。"),
+            ("Veuillez confirmer ٢٥٫٥٠ €.", "Please confirm €25.50.")
+        ] {
+            let target: TranslationLanguage = original.contains("請") ? .chineseSimplified : .english
+            XCTAssertEqual(TranslationOutcome.resolved(original: original, translated: output,
+                clientIdentifierMatches: true, target: target), .translated(output), original)
+        }
+        let original = "請檢查這張發票。"
+        XCTAssertEqual(TranslationOutcome.resolved(original: original, translated: original,
+            clientIdentifierMatches: true, target: .chineseSimplified).resolvedText, original)
+        let echo = TranslationOutcome.resolved(original: original, translated: original,
+            clientIdentifierMatches: true, target: .chineseSimplified)
+        if case .translated = echo { XCTFail("Traditional output was labelled Simplified") }
+    }
+    func testTranslationCannotSilentlyChangeOrDropFacts() {
+        for (original, translated) in [
+            ("Envoyez 25 euros demain.", "Send 52 euros tomorrow."),
+            ("Livraison le 2026-10-12.", "Delivery on 2026-12-10."),
+            ("Payez €25.", "Pay $25."),
+            ("Ne payez pas la facture.", "Pay the invoice."),
+            ("Envoyez la facture. Confirmez ensuite la livraison.", "Send the invoice.")
+        ] {
+            let outcome = TranslationOutcome.resolved(original: original, translated: translated, clientIdentifierMatches: true)
+            XCTAssertEqual(outcome.resolvedText, original, original)
+            if case .translated = outcome { XCTFail("Unsafe output was labelled translated: \(original)") }
+        }
+        XCTAssertEqual(TranslationOutcome.resolved(original: "Envoyez 25 euros demain.", translated: "Send 25 euros tomorrow.",
+                                                   clientIdentifierMatches: true), .translated("Send 25 euros tomorrow."))
+    }
+
 
     func testMissingRequestUsesAutomaticTranscriptionPreference() {
         let suiteName = "dictus.plan.missing-request-auto-tests"

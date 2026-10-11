@@ -555,7 +555,9 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(detail.contains("Good quality"))
         XCTAssertTrue(detail.contains("Fair quality"))
         XCTAssertTrue(detail.contains("Limited quality"))
-        XCTAssertTrue(detail.contains("Quality measured on the large Whisper models"))
+        XCTAssertTrue(detail.contains("Upstream large-v3 FLEURS reference"))
+        XCTAssertTrue(detail.contains("not measurements of this model export or this phone"))
+        XCTAssertTrue(detail.contains("No published reference measurement"))
         XCTAssertTrue(detail.contains("accessibilityLabel(\"Close language support\")"))
     }
 

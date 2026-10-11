@@ -490,6 +490,7 @@ struct DictationTranscriptResult: View {
     let original: String?
     var onRestore: ((String) -> Void)?
     var onFeedback: ((RecentDictation.Feedback) -> Void)?
+    var translationFallback = false
     @State private var showOriginal = false
     @State private var copied = false
     @State private var restoreBackup: String?
@@ -505,6 +506,10 @@ struct DictationTranscriptResult: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if translationFallback {
+                Label("Translation could not be verified. Original kept.", systemImage: "exclamationmark.circle")
+                    .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             Text(displayed).font(.system(size: transcriptSize, weight: .medium)).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)

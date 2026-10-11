@@ -77,7 +77,7 @@ struct ModelLanguageDetailView: View {
                         // Ground the tiers honestly: numbers come from the
                         // large models; the small ones degrade further.
                         if index == support.tierGroups.count - 1 {
-                            Text("Quality measured on the large Whisper models. Smaller models are less accurate.")
+                            Text("Upstream large-v3 FLEURS reference. These tiers are not measurements of this model export or this phone.")
                         }
                     }
                 }
@@ -92,7 +92,7 @@ struct ModelLanguageDetailView: View {
                             Text(language)
                         }
                     } header: {
-                        Text("Also supported")
+                        Text(model.engine == .qwenASR ? "Languages to verify" : "Also supported")
                     }
                 }
             }
@@ -138,6 +138,8 @@ struct ModelLanguageDetailView: View {
             return String(localized: "Fair quality")
         case .limited:
             return String(localized: "Limited quality")
+        case .unmeasured:
+            return String(localized: "No published reference measurement")
         }
     }
 
@@ -158,6 +160,8 @@ struct ModelLanguageDetailView: View {
             return "circle.lefthalf.filled"
         case .limited:
             return "exclamationmark.circle"
+        case .unmeasured:
+            return "questionmark.circle"
         }
     }
 }

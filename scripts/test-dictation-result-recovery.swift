@@ -52,13 +52,15 @@ import DictusCore
         window.isHidden = false
         let state = KeyboardState.shared
         state.controller = host
-        func deliver(_ text: String, original: String) {
+        func deliver(_ text: String, original: String, translationOutcome: String? = nil) {
             state.invalidateDictationUndo(reason: "fixture-reset")
             host.proxy.text = "Prefix "
             let request = DictationLanguageRequest(mode: .autoDetect, translationTarget: nil)
                 .bound(sessionID: UUID().uuidString, generation: 1, clientIdentifier: host.proxy.documentIdentifier.uuidString)
             request.persist(to: defaults)
-            DictationDeliveryStore.publishReady(text: text, request: request, to: defaults, originalText: original)
+            var timings = DictationRuntimeMetrics(sessionID: request.sessionID ?? "fixture")
+            if let translationOutcome { timings.setContext("translationOutcome", value: translationOutcome) }
+            DictationDeliveryStore.publishReady(text: text, request: request, to: defaults, timings: timings, originalText: original)
             state.registerControllerAppearance(controllerID: "fixture")
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
             precondition(state.dictationUndoAvailable)
@@ -69,6 +71,37 @@ import DictusCore
         precondition(menu.contains { $0.title == "Restore original" })
         state.restoreOriginalDictation()
         precondition(host.proxy.text == "Prefix uh hello ")
+
+        let original = "明日の予定を確認します。\t\nCafe\u{301} — API_240"
+        deliver(original + " ", original: original, translationOutcome: "originalKept:rejectedOutput")
+        precondition(host.proxy.text == "Prefix " + original + " ", "Unicode or separators changed during fallback delivery")
+        precondition(state.dictationResultMenuItems().contains { $0.title == "Translation unavailable — original kept" },
+                     "Keyboard labelled an unverified translation successful")
+        for model in [QwenASRModel.small, .large] {
+            let description = ModelInfo.forIdentifier(model.rawValue)!.localizedDescription
+            precondition(description.contains("Qwen") && description.contains("foreground"), "Qwen card described Whisper")
+        }
+        for (text, hint, expected) in [
+            ("APIとbuild_240の設定を確認します。", "zh", "ja"),
+            ("ﾐｰﾃｨﾝｸﾞの予定を確認します。", "zh", "ja"),
+            ("오늘 漢字 자료를 확인하고 회의 일정을 정합니다.", "zh", "ko")
+        ] {
+            precondition(SpeechLanguageEvidence.baseCode(SpeechLanguageEvidence.sourceLanguage(in: text, hint: hint)) == expected,
+                         "Native language policy split a coherent phrase")
+        }
+        precondition(SpeechLanguageEvidence.sourceLanguage(in: "a escola", hint: "en") == nil)
+        precondition(PolishPostpass.cleanupFloor("a escola", language: nil) == "A escola")
+        precondition(PolishPostpass.cleanupFloor("John, actually Jean", language: .portuguese) == "John, actually Jean")
+        precondition(PolishPostpass.cleanupFloor("[API_240] [HTTP] [USD] Cafe\u{301}", language: nil) == "[API_240] [HTTP] [USD] Cafe\u{301}")
+        precondition(TranslationOutcome.resolved(original: "Rendez-vous à 12:30.", translated: "Meet at 30:12.",
+            clientIdentifierMatches: true, target: .english).resolvedText == "Rendez-vous à 12:30.")
+        precondition(TranslationOutcome.resolved(original: "请支付25欧元。", translated: "请支付52欧元。",
+            clientIdentifierMatches: true, target: .chineseSimplified).resolvedText == "请支付25欧元。")
+        precondition(TranslationOutcome.resolved(original: "Pay €25.", translated: "支付25欧元。",
+            clientIdentifierMatches: true, target: .chineseSimplified) == .translated("支付25欧元。"))
+        precondition(TranslationOutcome.resolved(original: "我們今天無法完成全部付款請稍後再試。",
+            translated: "我们今天无法完成全部付款请稍后再试。", clientIdentifierMatches: true,
+            target: .chineseSimplified).fallbackReason == nil)
 
         deliver("Hello. ", original: "uh hello")
         host.proxy.documentIdentifier = UUID()
@@ -108,7 +141,7 @@ import DictusCore
         otherWindow.isHidden = true
         state.invalidateDictationUndo(reason: "fixture-end")
         window.isHidden = true
-        print("PASS: live delivery, recovery, field handoff/pending delivery and at-most-once repeated notifications")
+        print("PASS: live Unicode/fallback delivery, Qwen copy, recovery, field handoff/pending delivery and at-most-once repeated notifications")
     }
 }
 """#
@@ -128,6 +161,6 @@ func run(_ args: [String], capture: Bool = false) throws -> String {
 }
 let sdk = try run(["--sdk", "iphonesimulator", "--show-sdk-path"], capture: true)
 _ = try run(["swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator", "-I", products,
-    "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", source.path, extensionPath + "/DictusKeyboard.debug.dylib",
+    "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", source.path, "DictusApp/Extensions/ModelInfo+Localized.swift", extensionPath + "/DictusKeyboard.debug.dylib",
     "-Xlinker", "-rpath", "-Xlinker", extensionPath, "-o", binary.path])
 _ = try run(["simctl", "spawn", udid, binary.path])

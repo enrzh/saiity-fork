@@ -13,8 +13,10 @@ public enum TranscriptionPipeline {
     public static func assemble(
         cleaned: String,
         grammarLanguage: SupportedLanguage?,
-        insertAsIs: Bool
+        insertAsIs: Bool,
+        preserveOriginal: Bool = false
     ) -> Assembled {
+        if preserveOriginal { return Assembled(body: cleaned, formatted: cleaned) }
         let body = PolishPostpass.grammarFloor(cleaned, language: grammarLanguage)
         return Assembled(body: body, formatted: formatted(body, insertAsIs: insertAsIs))
     }

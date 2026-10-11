@@ -3,6 +3,41 @@ import XCTest
 @testable import DictusCore
 
 final class PolishPostpassTests: XCTestCase {
+    func testUnknownOrUnhandledLanguagesNeverUseEnglishLexicalRules() {
+        for (raw, expected) in [
+            ("a escola", "A escola"),
+            ("a escola fica perto de casa e um amigo vem comigo", "A escola fica perto de casa e um amigo vem comigo"),
+            ("hum a escola", "Hum a escola"),
+            ("um amigo e uma amiga", "Um amigo e uma amiga"),
+            ("ええ、明日の予定を確認します", "ええ、明日の予定を確認します"),
+            ("אה אנחנו צריכים לבדוק את החשבונית", "אה אנחנו צריכים לבדוק את החשבונית")
+        ] {
+            XCTAssertEqual(PolishPostpass.cleanupFloor(raw, language: nil), expected, raw)
+        }
+        XCTAssertEqual(PolishPostpass.cleanupFloor("a escola", language: .portuguese), "A escola")
+        XCTAssertEqual(PolishPostpass.cleanupFloor("uh I have a appointment at 2pm, actually 4pm", language: .english),
+                       "I have an appointment at 4pm")
+        XCTAssertEqual(PolishPostpass.cleanupFloor("go go now", language: .english), "Go go now")
+    }
+
+    func testUnknownCleanupKeepsBracketedTechnicalIdentifiers() {
+        let text = "[API_240] [HTTP] [USD] Cafe\u{301}"
+        XCTAssertEqual(PolishPostpass.cleanupFloor(text, language: nil), text)
+        XCTAssertEqual(PolishPostpass.cleanupFloor("[BLANK_AUDIO] [APPLAUSE] " + text, language: nil), text)
+    }
+
+    func testUnhandledLanguageKeepsEnglishCorrectionWordsAndRepetitions() {
+        for text in ["John, actually Jean", "el el texto", "well, a escola", "um amigo e uma amiga", "a palavra comma aparece no código"] {
+            let expected = String(text.prefix(1)).uppercased() + text.dropFirst()
+            XCTAssertEqual(PolishPostpass.cleanupFloor(text, language: .portuguese), expected, text)
+        }
+        XCTAssertEqual(PolishPostpass.cleanupFloor("John, actually Jean", language: .english), "Jean")
+        XCTAssertEqual(PolishPostpass.cleanupFloor("euh je je sais que que c'est important", language: .french),
+                       "Je sais que c'est important")
+        XCTAssertEqual(VerbalPunctuationPrepass.apply("a palavra comma aparece no código", language: .portuguese),
+                       "a palavra comma aparece no código")
+    }
+
 
     // MARK: - Encode
 

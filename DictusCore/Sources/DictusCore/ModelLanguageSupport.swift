@@ -70,14 +70,14 @@ public struct ModelLanguageSupport: Equatable, Sendable {
     /// in the openai/whisper repository, extracted 2026-07-28):
     /// - `good`: WER/CER <= ~10% (25 languages, Spanish 2.8% .. Arabic 9.6%)
     /// - `fair`: ~10-25% (19 languages, Czech 10.1% .. Lithuanian 23.7%)
-    /// - `limited`: > 25% (Hebrew 26.1% .. Bengali 50.0%) or no published
-    ///   FLEURS number at all (low-resource long tail).
-    /// Numbers are for the LARGE models; smaller checkpoints degrade
-    /// further — the UI surfaces that caveat alongside the tiers.
+    /// - `limited`: > 25% (Hebrew 26.1% .. Bengali 50.0%).
+    /// - `unmeasured`: no published reference result.
+    /// This upstream large-v3 reference does not measure the selected export.
     public enum QualityTier: Equatable, Sendable {
         case good
         case fair
         case limited
+        case unmeasured
     }
 
     /// A quality tier together with the language codes assigned to it.
@@ -148,8 +148,7 @@ extension ModelLanguageSupport {
     /// SOURCE OF TRUTH for tier assignment: OpenAI's published large-v3
     /// per-language FLEURS results (language-breakdown.svg in the
     /// openai/whisper repo; WER, or CER for zh/ja/ko/th). Codes without a
-    /// published FLEURS number default to `limited` — the honest claim for
-    /// the low-resource long tail. See `QualityTier` for thresholds.
+    /// published FLEURS number remain `unmeasured`.
     static let whisperTierGroups: [TierGroup] = [
         // <= ~10% WER/CER on FLEURS with large-v3 (best first):
         // es 2.8, it 3.0, ko 3.1, pt 4.1, en 4.1, pl 4.6, ca 4.8, ja 4.9,
@@ -174,7 +173,9 @@ extension ModelLanguageSupport {
         // number (low-resource long tail, alphabetical).
         TierGroup(tier: .limited, codes: [
             "he", "cy", "fa", "is", "kk", "af", "kn", "mr", "sw", "te",
-            "mi", "ne", "hy", "be", "gu", "pa", "bn",
+            "mi", "ne", "hy", "be", "gu", "pa", "bn"
+        ]),
+        TierGroup(tier: .unmeasured, codes: [
             "am", "as", "ba", "bo", "br", "eu", "fo", "ha", "haw", "ht",
             "jv", "ka", "km", "la", "lb", "ln", "lo", "mg", "ml", "mn",
             "mt", "my", "nn", "oc", "ps", "sa", "sd", "si", "sn", "so",
@@ -248,6 +249,7 @@ extension ModelInfo {
                 highlights: ["fr", "en", "es", "de", "zh"].map { .init(code: $0) },
                 additionalCodes: ["yue", "ja", "ko", "pt", "it", "ru", "th", "vi", "id", "ms", "ar", "hi", "he", "tr", "fa", "nl", "pl", "sv", "da", "fi", "cs", "fil", "el", "hu", "ro"])
         }
+        let support: ModelLanguageSupport
         switch identifier {
         case "openai_whisper-medium",
              "openai_whisper-large-v3_turbo_954MB",
@@ -256,16 +258,16 @@ extension ModelInfo {
              "openai_whisper-large-v3_947MB",
              "openai_whisper-large-v3-v20240930_626MB",
              "openai_whisper-large-v3-v20240930_turbo_632MB":
-            return .whisperHighAccuracy
+            support = .whisperHighAccuracy
         case "openai_whisper-tiny.en",
              "openai_whisper-base.en",
              "openai_whisper-small.en", "openai_whisper-small.en_217MB", "openai_whisper-medium.en",
              "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
-            return .whisperEnglishOnly
+            support = .whisperEnglishOnly
         case "parakeet-tdt-0.6b-v3":
-            return .parakeetV3
+            support = .parakeetV3
         case "parakeet-tdt-0.6b-v2":
-            return .parakeetV2
+            support = .parakeetV2
         default:
             // tiny / base / small / small_216MB, plus any future Whisper
             // entry until it is explicitly classified above. Defaulting to
@@ -273,12 +275,17 @@ extension ModelInfo {
             // direction for unclassified models.
             switch engine {
             case .whisperKit:
-                return .whisperSmallClass
+                support = .whisperSmallClass
             case .parakeet:
-                return .parakeetV3
+                support = .parakeetV3
             case .qwenASR:
-                return .whisperHighAccuracy // handled above
+                support = .whisperHighAccuracy // handled above
             }
         }
+        guard engine == .whisperKit, !identifier.contains("large-v3") else { return support }
+        // The classic 51,865-token tokenizer has 99 languages; yue is large-v3 only.
+        return ModelLanguageSupport(coverage: support.coverage, highlights: support.highlights,
+            additionalCodes: support.additionalCodes,
+            tierGroups: support.tierGroups.map { ModelLanguageSupport.TierGroup(tier: $0.tier, codes: $0.codes.filter { $0 != "yue" }) })
     }
 }

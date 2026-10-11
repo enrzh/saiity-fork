@@ -115,8 +115,8 @@ public enum PolishPostpass {
         return out
     }
 
-    /// `language` enables the legacy known-language lexical rules. Pass `nil`
-    /// when the input language is unknown; only language-neutral cleanup runs.
+    /// Explicit unhandled languages get neutral cleanup. In Auto, lexical rules
+    /// require a confident monolingual reading; unknown text stays unchanged.
     public static func cleanupFloor(_ text: String,
                                     language: SupportedLanguage? = .english) -> String {
         let leadingNewlines = String(text.prefix { $0 == "\n" })
@@ -128,28 +128,36 @@ public enum PolishPostpass {
         out = normalizeCleanupWhitespace(out)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !out.isEmpty else { return leadingNewlines + trailingNewlines }
-        // Spoken cleanup is language-neutral enough to run in Auto / mixed
-        // mode (`language == nil`). The product always uses that path, and
-        // prompt-only cleanup never runs there.
-        out = removeSpokenRestartFillers(out)
-        out = removeHesitationFillers(out)
-        out = removeFillerLike(out)
-        out = normalizeClockTimes(out)
-        out = resolveTimeCorrection(out)
-        out = resolveDateCorrection(out)
-        out = collapseRestatedClauses(out)
-        out = repairEnglishIndefiniteArticle(out)
-        if let language {
-            if language == .english {
+        let handled: Set<SupportedLanguage> = [.english, .french, .german, .spanish]
+        let inferredCode = SpeechLanguageEvidence.sourceLanguage(in: out)
+        let inferred = inferredCode.flatMap(SupportedLanguage.init(rawValue:))
+        let uncertain = PolishSpanDetector.looksMixedScript(out)
+            || PolishSpanDetector.languageSwitchBoundary(in: out) != nil
+            || language.map { !handled.contains($0) } == true
+        let lexicalLanguage = uncertain ? nil : inferredCode == nil ? language : inferred
+        if let lexicalLanguage, [.english, .french, .german, .spanish].contains(lexicalLanguage) {
+            out = removeHesitationFillers(out, language: lexicalLanguage)
+            if lexicalLanguage == .english {
+                out = removeSpokenRestartFillers(out)
+                out = removeFillerLike(out)
+                out = normalizeClockTimes(out)
+                out = resolveTimeCorrection(out)
+                out = collapseRestatedClauses(out)
+                out = repairEnglishIndefiniteArticle(out)
+            }
+            out = resolveDateCorrection(out, language: lexicalLanguage)
+        }
+        if language != nil, let lexicalLanguage {
+            if lexicalLanguage == .english {
                 out = removeEnglishUmFillers(out)
             }
-            out = removeDiscourseFillers(out)
+            out = removeDiscourseFillers(out, language: lexicalLanguage)
             out = removeImmediateStutters(out)
-            out = resolveProperNameCorrection(out)
+            if lexicalLanguage == .english { out = resolveProperNameCorrection(out) }
             // Apply this again to engine output. The pre-pass normally
             // converted commands before the LLM call, but a backend can echo
             // them verbatim.
-            out = VerbalPunctuationPrepass.apply(out, language: language)
+            out = VerbalPunctuationPrepass.apply(out, language: lexicalLanguage)
         }
         out = normalizeCleanupWhitespace(out)
         out = out.replacingOccurrences(
@@ -174,7 +182,7 @@ public enum PolishPostpass {
     public static func removeNonSpeechEventLabels(_ text: String) -> String {
         var out = stripVocabularyNoiseMarkers(text)
         out = out.replacingOccurrences(
-            of: #"\[(?:[A-Z][A-Z0-9 _-]{1,24})\]"#,
+            of: #"(?i)\[(?:BLANK[_ ]AUDIO|NO[_ ]SPEECH|SILENCE|MUSIC|APPLAUSE|INAUDIBLE)\]"#,
             with: "",
             options: [.regularExpression]
         )
@@ -285,14 +293,17 @@ public enum PolishPostpass {
         return out.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: [.regularExpression])
     }
 
-    private static func removeHesitationFillers(_ text: String) -> String {
-        let out = text.replacingOccurrences(
-            of: #"(?i)(^|[ \t,(])(?:uh+|euh+|äh+|ähm+|öhm+|hmm+|hum+|eeh|eh+|erm+|mmm+)(?=($|[ \t,!?;:.]))(?:[ \t]*[,;:])?[ \t]*"#,
-            with: "$1",
-            options: [.regularExpression]
-        )
-        return out.replacingOccurrences(
-            of: #"(^|[ \t,(])呃(?=($|[ \t,!?;:.\p{Han}]))(?:[ \t]*[,;:])?[ \t]*"#,
+    private static func removeHesitationFillers(_ text: String, language: SupportedLanguage) -> String {
+        let fillers: String
+        switch language {
+        case .english: fillers = "uh+|hmm+|erm+|mmm+"
+        case .french: fillers = "euh+|hum+|hmm+"
+        case .german: fillers = "äh+|ähm+|öhm+|hmm+"
+        case .spanish: fillers = "eh+|hmm+"
+        default: return text
+        }
+        return text.replacingOccurrences(
+            of: #"(?i)(^|[ \t,(])(?:"# + fillers + #")(?=($|[ \t,!?;:.]))(?:[ \t]*[,;:])?[ \t]*"#,
             with: "$1",
             options: [.regularExpression]
         )
@@ -308,10 +319,17 @@ public enum PolishPostpass {
         )
     }
 
-    private static func removeDiscourseFillers(_ text: String) -> String {
+    private static func removeDiscourseFillers(_ text: String, language: SupportedLanguage) -> String {
         // Discourse words are removed only when punctuation marks them as a
         // parenthetical filler at the beginning of a sentence.
-        let discourse = #"(?:like|well|you know|basically|enfin|voilà|tu vois|tu sais|also|na ja|sozusagen|pues|este|o sea)"#
+        let discourse: String
+        switch language {
+        case .english: discourse = "like|well|you know|basically"
+        case .french: discourse = "enfin|voilà|tu vois|tu sais"
+        case .german: discourse = "also|na ja|sozusagen"
+        case .spanish: discourse = "pues|este|o sea"
+        default: return text
+        }
         return text.replacingOccurrences(
             of: "(?i)^(?:" + discourse + ")[ \\t]*[,;:][ \\t]*",
             with: "",
@@ -376,8 +394,8 @@ public enum PolishPostpass {
     }
 
     private static func removeImmediateStutters(_ text: String) -> String {
-        let meaningfulRepetitions = #"very|really|so|too|quite|much|many|more|less|again|bien|très"#
-        let pattern = "(?i)\\b(?!(?:" + meaningfulRepetitions + ")\\b)([\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*)[ \\t]+\\1\\b"
+        // Only grammatical false starts: repeated content words may be emphasis.
+        let pattern = #"(?i)\b(i|we|he|she|they|the|a|an|je|tu|que|le|la|les|ich|wir|der|die|das|de|el|los|las|yo)[ \t]+\1\b"#
         var out = text
         while true {
             let cleaned = out.replacingOccurrences(of: pattern, with: "$1", options: [.regularExpression])
@@ -386,10 +404,26 @@ public enum PolishPostpass {
         }
     }
 
-    private static func resolveDateCorrection(_ text: String) -> String {
-        let weekday = #"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo))"#
+    private static func resolveDateCorrection(_ text: String, language: SupportedLanguage) -> String {
+        let weekday: String
+        let correction: String
+        switch language {
+        case .english:
+            weekday = "monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+            correction = "actually|rather|i mean"
+        case .french:
+            weekday = "lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche"
+            correction = "enfin|plutôt|je veux dire"
+        case .german:
+            weekday = "montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag"
+            correction = "eigentlich|besser gesagt|ich meine"
+        case .spanish:
+            weekday = #"(?:el[ \t]+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)"#
+            correction = "mejor|más bien|quiero decir|en realidad"
+        default: return text
+        }
         return text.replacingOccurrences(
-            of: "(?i)" + weekday + #"[ \t]*,[ \t]*(?:actually|rather|i mean|enfin|plutôt|je veux dire|eigentlich|besser gesagt|ich meine|mejor|más bien|quiero decir|en realidad)[ \t]+("# + weekday + ")",
+            of: "(?i)(?:" + weekday + #")[ \t]*,[ \t]*(?:"# + correction + #")[ \t]+("# + weekday + ")",
             with: "$1",
             options: [.regularExpression]
         )

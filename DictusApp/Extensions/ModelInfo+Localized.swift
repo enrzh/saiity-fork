@@ -29,6 +29,8 @@ extension ModelInfo {
             return String(localized: "NVIDIA speech recognition for English.")
         case "parakeet-tdt-0.6b-v3":
             return String(localized: "NVIDIA speech recognition for 25 European languages.")
+        case QwenASRModel.small.rawValue, QwenASRModel.large.rawValue:
+            return String(localized: "Qwen streaming recognition in the foreground app. Requires compatible iOS 18+ hardware; phone accuracy and speed remain unverified.")
         case "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
             return String(localized: "Distilled Whisper model specialized for English.")
         default:
@@ -70,7 +72,7 @@ extension ModelLanguageSupport.Coverage {
         case .parakeetEuropean:
             return String(localized: "25 European languages")
         case .qwenMultilingual:
-            return String(localized: "30 languages, including Chinese")
+            return String(localized: "Multilingual streaming; complete language coverage remains unverified")
         }
     }
 }
@@ -80,9 +82,9 @@ extension ModelLanguageSupport.QualityNote {
     var localizedText: String {
         switch self {
         case .impreciseUpgradeRecommended:
-            return String(localized: "Works but imprecise. Medium or Turbo recommended.")
+            return String(localized: "Smaller models may be less accurate. Verify on your own speech.")
         case .goodOnThisModel:
-            return String(localized: "Good quality on this model.")
+            return String(localized: "More model capacity; accuracy on this phone remains unverified.")
         }
     }
 }

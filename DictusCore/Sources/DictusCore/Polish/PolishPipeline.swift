@@ -236,16 +236,16 @@ public enum PolishPipeline {
 
     // MARK: - Language detection + mode selection
 
-    /// Default top-language confidence below which text is treated as gibberish
+    /// Default top-language confidence below which language identity is uncertain
     /// and polish is skipped. ADR 0002 leaves the exact threshold open; 0.5 is a
     /// starting point tuned from logs.
     public static let defaultConfidenceThreshold: Double = 0.5
 
     /// Detect the dominant language as a raw `NLLanguage` code ("fr", "it",
     /// "zh-Hans", …), or `nil` when confidence is below `confidenceThreshold`
-    /// (treated as gibberish → skip). Unlike `detectLanguage(in:)` this is NOT
+    /// (uncertain text stays recoverable). Unlike `detectLanguage(in:)` this is NOT
     /// restricted to the four supported languages — Auto-detect mode (#239)
-    /// needs the whole long tail, both for its gibberish gate and for the
+    /// needs the whole long tail for conservative passthrough and for the
     /// never-translate guardrail comparison.
     public static func detectLanguageCode(in text: String,
                                           confidenceThreshold: Double = defaultConfidenceThreshold) -> String? {
@@ -261,7 +261,7 @@ public enum PolishPipeline {
     }
 
     /// Detect the dominant language, or `nil` when confidence is below
-    /// `confidenceThreshold` (treated as gibberish → skip) OR when the detected
+    /// `confidenceThreshold` (uncertain → passthrough) OR when the detected
     /// language has no dedicated polish prompt. Typing layouts can include more
     /// Latin-script languages than polish can authoritatively clean.
     public static func detectLanguage(in text: String,

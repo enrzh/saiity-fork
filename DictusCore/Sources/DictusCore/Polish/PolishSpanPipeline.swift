@@ -209,7 +209,7 @@ public enum PolishSpanPipeline {
                 languageEvidenceScore: region.languageEvidenceScore
             )
         }
-        let floor = SpeechTranscriptMerger.merge(floorRegions)
+        let floor = floorRegions.count == 1 ? floorRegions[0].text : SpeechTranscriptMerger.merge(floorRegions)
         let detectedLanguages = Array(Set(floorRegions.compactMap { $0.validatedLanguage })).sorted()
 
         if skipEngine {
@@ -261,9 +261,10 @@ public enum PolishSpanPipeline {
 
             let evidence = SpeechLanguageEvidence.analyze(
                 text: region.text,
-                detectedLanguage: region.detectedLanguage
+                detectedLanguage: region.validatedLanguage ?? region.detectedLanguage
             )
-            guard region.validatedLanguage != nil || evidence.validatedLanguageCode != nil else {
+            guard !PolishSpanDetector.looksMixedScript(region.text),
+                  evidence.validatedLanguageCode != nil else {
                 cleanedRegions.append(region)
                 passthroughCount += 1
                 continue
@@ -350,7 +351,7 @@ public enum PolishSpanPipeline {
             outcome = .skipped
         }
         return Result(
-            text: SpeechTranscriptMerger.merge(cleanedRegions),
+            text: cleanedRegions.count == 1 ? cleanedRegions[0].text : SpeechTranscriptMerger.merge(cleanedRegions),
             outcome: outcome,
             engineMs: engineMs,
             postprocessMs: postprocessMs,
