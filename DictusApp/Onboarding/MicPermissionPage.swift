@@ -22,7 +22,7 @@ struct MicPermissionPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             SaiityPageHeader(title: "Allow microphone access",
-                             subtitle: "sAiity uses the microphone when you start a dictation.")
+                             subtitle: "Syllivra uses the microphone when you start a dictation.")
             VStack(alignment: .leading, spacing: 20) {
                 Text("iOS will ask for microphone access. You can change it at any time in Settings.")
                     .foregroundStyle(.secondary)

@@ -199,7 +199,7 @@ private actor QwenInference {
         try Task.checkCancellation()
         guard await MainActor.run(body: { UIApplication.shared.applicationState == .active }) else {
             throw NSError(domain: "QwenASR", code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "Keep sAiity open for Qwen dictation. Choose Whisper Auto to dictate from another app."])
+                userInfo: [NSLocalizedDescriptionKey: "Keep Syllivra open for Qwen dictation. Choose Whisper Auto to dictate from another app."])
         }
     }
 }

@@ -121,7 +121,7 @@ struct HomeView: View {
             VStack(spacing: 10) {
                 readinessAction
                 if currentReadiness.action == .start && modelManager.recognizer == .streaming {
-                    Text("Keep sAiity open while streaming.")
+                    Text("Keep Syllivra open while streaming.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -373,9 +373,9 @@ struct VoiceOptionsView: View {
                 SpokenLanguagesPicker(modelManager: modelManager)
             }
             DictationSettingsAdvisor(modelManager: modelManager)
-            Section("In sAiity") {
+            Section("In Syllivra") {
                 DictationModelQuickPicker(scope: .app, modelManager: modelManager)
-                Label(modelManager.isModelReady ? "Ready in sAiity" : "Choose or install a voice model", systemImage: modelManager.isModelReady ? "checkmark.circle" : "arrow.down.circle")
+                Label(modelManager.isModelReady ? "Ready in Syllivra" : "Choose or install a voice model", systemImage: modelManager.isModelReady ? "checkmark.circle" : "arrow.down.circle")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("From your keyboard") {

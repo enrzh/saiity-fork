@@ -99,7 +99,7 @@ extension KeyboardRootView {
         .frame(width: frame.width, height: frame.height)
         .contentShape(Capsule())
         .accessibilityLabel(state.primaryBoardActionLabel)
-        .accessibilityHint("Opens sAiity so dictation can be prepared.")
+        .accessibilityHint("Opens Syllivra so dictation can be prepared.")
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("open-saiity-button")
     }

@@ -36,7 +36,7 @@ public enum ProFeature: String, CaseIterable {
         switch self {
         case .smartMode: return "Reformulate your text with on-device AI"
         case .history: return "Search and export all your transcriptions"
-        case .vocabulary: return "Teach sAiity your technical terms"
+        case .vocabulary: return "Teach Syllivra your technical terms"
         }
     }
 
@@ -45,7 +45,7 @@ public enum ProFeature: String, CaseIterable {
         switch self {
         case .smartMode: return "Reformulez vos textes avec une IA embarqu\u{00E9}e"
         case .history: return "Recherchez et exportez toutes vos transcriptions"
-        case .vocabulary: return "Apprenez \u{00E0} sAiity vos termes techniques"
+        case .vocabulary: return "Apprenez \u{00E0} Syllivra vos termes techniques"
         }
     }
 

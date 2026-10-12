@@ -661,7 +661,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(tutorial.contains("setup.fullAccessVerified"))
         XCTAssertTrue(tutorial.contains("fullAccessRequired = false"))
         XCTAssertTrue(tutorial.contains("dictationFailed = false"))
-        XCTAssertTrue(tutorial.contains("sAiity keyboard is active. Tap the microphone to dictate."))
+        XCTAssertTrue(tutorial.contains("Syllivra keyboard is active. Tap the microphone to dictate."))
     }
 
     func testGlobeTutorialDoesNotStackGenericFailureReturnWithFullAccessRecovery() throws {
@@ -692,7 +692,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testMissingModelErrorDirectsUsersToSettingsModels() throws {
         let speechModelProtocol = try source("DictusApp/Audio/SpeechModelProtocol.swift")
 
-        XCTAssertTrue(speechModelProtocol.contains("Open sAiity and download it in Settings > Models."))
+        XCTAssertTrue(speechModelProtocol.contains("Open Syllivra and download it in Settings > Models."))
         XCTAssertFalse(speechModelProtocol.contains("in the Models tab"))
     }
 

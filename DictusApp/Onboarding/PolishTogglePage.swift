@@ -50,7 +50,7 @@ struct PolishTogglePage: View {
 
             // Explanation — what polish does, faithful to the issue copy:
             // local model, light corrections, possible added processing time.
-            Text("After speech recognition, sAiity automatically cleans up punctuation, casing, accents and small corrections with Apple's local Foundation Model.")
+            Text("After speech recognition, Syllivra automatically cleans up punctuation, casing, accents and small corrections with Apple's local Foundation Model.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

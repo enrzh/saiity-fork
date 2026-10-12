@@ -294,7 +294,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let failedLine = String(stateSource[failedBranch.upperBound...].prefix(80))
         XCTAssertTrue(failedLine.contains("\"Hold to dictate\""),
                       "a failed dictation that can retry in-keyboard must offer the hold action")
-        XCTAssertFalse(failedLine.contains("\"Open sAiity\""),
+        XCTAssertFalse(failedLine.contains("\"Open Syllivra\""),
                        "the recovery label belongs to the recovery control, not the dictate capsule")
         XCTAssertFalse(failedLine.contains("statusMessage"),
                        "failure copy belongs in the separate error line")

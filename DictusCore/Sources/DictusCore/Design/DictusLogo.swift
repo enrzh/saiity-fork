@@ -22,7 +22,7 @@ public struct DictusLogo: View {
             }
         }
             .frame(width: height, height: height)
-            .accessibilityLabel("sAiity")
+            .accessibilityLabel("Syllivra")
     }
 
     /// UIKit command faces use the same vector, rendered once per glyph size.

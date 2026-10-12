@@ -26,9 +26,9 @@ public enum LocalCleanupModel: String, CaseIterable, Sendable {
     }
     public var explanation: String {
         switch self {
-        case .gemma3_1b: return "English-focused · 4-bit · keep sAiity open while processing"
-        case .qwen2_5_0_5b: return "Small multilingual model · 4-bit · keep sAiity open while processing"
-        case .qwen2_5_1_5b: return "Larger multilingual model · 4-bit · keep sAiity open while processing"
+        case .gemma3_1b: return "English-focused · 4-bit · keep Syllivra open while processing"
+        case .qwen2_5_0_5b: return "Small multilingual model · 4-bit · keep Syllivra open while processing"
+        case .qwen2_5_1_5b: return "Larger multilingual model · 4-bit · keep Syllivra open while processing"
         }
     }
 

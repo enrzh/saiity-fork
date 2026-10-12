@@ -311,7 +311,7 @@ struct SettingsView: View {
         List {
             Section("Setup") {
                 Button("Open iPhone Settings", action: openSystemSettings)
-                Text("Enable sAiity under General → Keyboard → Keyboards. Allow microphone access for dictation.")
+                Text("Enable Syllivra under General → Keyboard → Keyboards. Allow microphone access for dictation.")
                     .font(.caption)
             }
             Section("On this iPhone") {

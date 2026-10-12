@@ -37,7 +37,7 @@ struct SwipeBackOverlayView: View {
                     Label("1. Speak and finish recording", systemImage: "mic")
                     Label("2. Wait for your transcript", systemImage: "text.alignleft")
                     Label("3. Return to your previous app", systemImage: "arrow.uturn.backward")
-                    Text("Use the back-to-app link at the top of the screen, or swipe along the bottom edge. The sAiity keyboard inserts the completed text.")
+                    Text("Use the back-to-app link at the top of the screen, or swipe along the bottom edge. The Syllivra keyboard inserts the completed text.")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
             }

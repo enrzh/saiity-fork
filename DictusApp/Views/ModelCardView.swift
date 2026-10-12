@@ -379,7 +379,7 @@ struct CleanupModelCardView: View {
                         } ?? "Not downloaded")
                     }
                     Section("Use") {
-                        Text("Punctuation, cleanup and grammar run in one pass. Keep sAiity open while processing; Apple Foundation Models remains the background option.")
+                        Text("Punctuation, cleanup and grammar run in one pass. Keep Syllivra open while processing; Apple Foundation Models remains the background option.")
                         Text("Speed depends on text length and your iPhone. Mixed-language rewrites are checked and fall back to conservative cleanup when meaning changes.")
                         Text(model.explanation)
                     }

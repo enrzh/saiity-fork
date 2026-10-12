@@ -5,7 +5,7 @@ import Foundation
 /// The model can be available on disk while the app is loading it into RAM. In that state
 /// the keyboard shows an explicit preparation action. The app's scene phase is deliberately
 /// not used here: a keyboard is normally visible while DictusApp is in the background, and
-/// treating that normal phase as unavailable would leave the button stuck on "Open sAiity".
+/// treating that normal phase as unavailable would leave the button stuck on "Open Syllivra".
 public enum KeyboardModelPreparationPolicy {
     /// Loading should never block the keyboard indefinitely after an app crash or
     /// a lost cross-process notification. This is longer than the normal large
@@ -64,7 +64,7 @@ public enum KeyboardModelPreparationPolicy {
     ) -> Bool {
         // `.ready` is the stronger signal: it means the active model is already
         // loaded in RAM. A stale `modelReady` value from an older app process must
-        // not leave every keyboard instance stuck on "Open sAiity".
+        // not leave every keyboard instance stuck on "Open Syllivra".
         if modelLoadState == .ready {
             return false
         }

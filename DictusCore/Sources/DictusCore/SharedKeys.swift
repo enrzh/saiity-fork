@@ -34,7 +34,7 @@ public enum SharedKeys {
     public static let modelLoadFailureTimestamp = "dictus.modelLoadFailureTimestamp"
     /// Double (timeIntervalSince1970): when the current model load started.
     /// A loading state without a fresh timestamp is treated as abandoned so a
-    /// crashed or suspended app cannot leave the keyboard on "Open sAiity" forever.
+    /// crashed or suspended app cannot leave the keyboard on "Open Syllivra" forever.
     public static let modelLoadStateTimestamp = "dictus.modelLoadStateTimestamp"
     /// JSON map of model identifier to exponentially smoothed warm decode time.
     /// Kept in the App Group so the next process can choose a faster local fallback.

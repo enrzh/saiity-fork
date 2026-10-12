@@ -68,7 +68,7 @@ struct ModelLoadingOverlay: View {
             VStack(alignment: .leading, spacing: 28) {
                 DictusLogo(height: 52)
                 SaiityPageHeader(title: "Preparing your voice model",
-                                 subtitle: "Keep sAiity open until preparation finishes.")
+                                 subtitle: "Keep Syllivra open until preparation finishes.")
                 modelTitleHeader
                 VStack(alignment: .leading, spacing: 24) {
                     phaseRow("Download", detail: "Save the voice model on this iPhone.", phase: .downloading, index: 0)
@@ -227,7 +227,7 @@ struct ModelLoadingOverlay: View {
 
     private var preparationSteps: some View {
         VStack(alignment: .leading, spacing: 5) {
-            preparationStep("1", "Keep sAiity open while the model loads.")
+            preparationStep("1", "Keep Syllivra open while the model loads.")
             preparationStep("2", "Wait for the model and microphone to be ready.")
             preparationStep("3", "Return to your app. Hold the microphone to speak and release to insert your words.")
         }
@@ -250,11 +250,11 @@ struct ModelLoadingOverlay: View {
     private var explanationText: LocalizedStringKey {
         switch activeContext {
         case .onboarding:
-            return "sAiity prepares your transcription model for offline dictation."
+            return "Syllivra prepares your transcription model for offline dictation."
         case .modelSelection:
             return "This preparation may take a moment and is usually not needed for every dictation."
         case .keyboardColdStart:
-            return "Keyboard dictation keeps the microphone ready in the background. Idle audio is discarded. Disable it in sAiity or the Live Activity; it also ends after 10 idle minutes."
+            return "Keyboard dictation keeps the microphone ready in the background. Idle audio is discarded. Disable it in Syllivra or the Live Activity; it also ends after 10 idle minutes."
         }
     }
 

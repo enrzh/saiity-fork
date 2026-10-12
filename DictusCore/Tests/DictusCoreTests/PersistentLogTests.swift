@@ -372,7 +372,7 @@ final class PersistentLogTests: XCTestCase {
             activeModel: "base"
         )
 
-        XCTAssertTrue(header.hasPrefix("sAiity Diagnostic Log\n"))
+        XCTAssertTrue(header.hasPrefix("Syllivra Diagnostic Log\n"))
         XCTAssertFalse(header.contains("Dictus Debug Log"))
         XCTAssertTrue(header.contains("iOS 18.2"))
         XCTAssertTrue(header.contains("App 1.2 (42)"))

@@ -95,7 +95,7 @@ struct PaywallView: View {
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         // Empty bar title: the hero's gradient title is the screen title.
-        .navigationTitle("sAiity Pro")
+        .navigationTitle("Syllivra Pro")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { closeButton }
         .task {
@@ -169,7 +169,7 @@ struct PaywallView: View {
                 .environment(\.colorScheme, .dark)
                 .padding(20)
 
-            Text("sAiity Pro")
+            Text("Syllivra Pro")
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(.primary)
 
@@ -225,7 +225,7 @@ struct PaywallView: View {
                 .font(.title2)
                 .foregroundColor(.dictusSuccess)
 
-                Text("sAiity Pro Active")
+                Text("Syllivra Pro Active")
                 .font(.dictusSubheading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,7 +281,7 @@ struct PaywallView: View {
     /// anything on Dictus infrastructure carries a per-user marginal cost that
     /// a single payment cannot fund. "Local" only approximated that line.
     private var lifetimeScopeFootnote: some View {
-        Text("The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on sAiity infrastructure is a separate offering.")
+        Text("The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on Syllivra infrastructure is a separate offering.")
             .font(.dictusCaption)
             .foregroundColor(.secondary)
             // Long copy inside a VStack of fixed-height cards: without this it
@@ -617,7 +617,7 @@ struct PaywallView: View {
                 .opacity(successEntrance ? 1 : 0)
                 .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.6), value: successEntrance)
 
-            Text("Welcome to sAiity Pro")
+            Text("Welcome to Syllivra Pro")
                 .font(.title.weight(.bold))
                 .foregroundStyle(.primary)
                 .padding(.top, 28)

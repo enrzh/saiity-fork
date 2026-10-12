@@ -28,7 +28,7 @@ struct StopStandbyIntent: LiveActivityIntent {
     }
 
     static var title: LocalizedStringResource = "Toggle dictation"
-    static var description = IntentDescription("Turn sAiity dictation and microphone access on or off")
+    static var description = IntentDescription("Turn Syllivra dictation and microphone access on or off")
 
     func perform() async throws -> some IntentResult {
         if toggleDetection {

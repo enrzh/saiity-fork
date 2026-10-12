@@ -21,7 +21,7 @@ struct MicButtonDisabled: View {
             VStack(spacing: 8) {
                 Text("Full access required")
                     .font(.headline)
-                Text("Enable Full Access in Settings > Keyboards > sAiity to use dictation.")
+                Text("Enable Full Access in Settings > Keyboards > Syllivra to use dictation.")
                     .font(.caption)
                     .multilineTextAlignment(.center)
                 if let settingsURL = URL(string: "app-settings:") {

@@ -214,12 +214,12 @@ struct KeyboardSetupCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            status("sAiity keyboard", done: setup.keyboardInstalled, detail: "Add it in iPhone Settings")
+            status("Syllivra keyboard", done: setup.keyboardInstalled, detail: "Add it in iPhone Settings")
             status("Full Access", done: setup.fullAccessVerified,
-                   detail: setup.fullAccessDenied ? "Off · enable Allow Full Access in Settings" : "Choose sAiity below to verify the current permission")
+                   detail: setup.fullAccessDenied ? "Off · enable Allow Full Access in Settings" : "Choose Syllivra below to verify the current permission")
             KeyboardSetupVideo(guide: guide).aspectRatio(16 / 9, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .accessibilityLabel("Keyboard setup video: Settings, General, Keyboard, Keyboards, sAiity, Allow Full Access")
+                .accessibilityLabel("Keyboard setup video: Settings, General, Keyboard, Keyboards, Syllivra, Allow Full Access")
             HStack {
                 Button("Play guide", systemImage: "play.fill") { guide.player.play() }
                 Button("Pause", systemImage: "pause.fill") { guide.player.pause() }
@@ -233,10 +233,10 @@ struct KeyboardSetupCard: View {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 }
             }.buttonStyle(.borderedProminent).controlSize(.large)
-            Text("Settings → General → Keyboard → Keyboards → Add New Keyboard → sAiity. Then open sAiity and enable Allow Full Access.")
+            Text("Settings → General → Keyboard → Keyboards → Add New Keyboard → Syllivra. Then open Syllivra and enable Allow Full Access.")
                 .font(.footnote).foregroundStyle(.secondary)
             if let message = guide.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-            TextField("Tap here, then choose sAiity with the globe", text: $testText)
+            TextField("Tap here, then choose Syllivra with the globe", text: $testText)
                 .textFieldStyle(.roundedBorder).autocorrectionDisabled().focused($checkingKeyboard)
                 .accessibilityIdentifier("setup.keyboard-check")
             Text("Permission is confirmed by the actual keyboard. No recording is needed for this check.")

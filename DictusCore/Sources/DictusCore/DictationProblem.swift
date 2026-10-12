@@ -34,7 +34,7 @@ public struct DictationProblem: Equatable, Sendable {
                 : "This action needs a connection. Your installed local voice models still work offline."
             action = .retry
         } else if text.contains("foreground") || text.contains("keep saiity open") {
-            message = "This voice model needs sAiity to stay open. Choose Whisper for dictation from your keyboard."
+            message = "This voice model needs Syllivra to stay open. Choose Whisper for dictation from your keyboard."
             action = .models
         } else if downloading && (text.contains("server") || text.contains("could not be downloaded")) {
             message = text.contains("busy")

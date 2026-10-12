@@ -34,7 +34,7 @@ struct DictationSettingsAdvisor: View {
     var body: some View {
         Section {
             DisclosureGroup("View recommendation", isExpanded: $showsAdvice) {
-                recommendation("In sAiity", recognizer: modelManager.recognizer, profile: .recommended)
+                recommendation("In Syllivra", recognizer: modelManager.recognizer, profile: .recommended)
                 recommendation("From your keyboard", recognizer: .whisper, profile: .balanced)
                 Text("For \(phoneName) and your spoken languages. Automatic selection uses installed models and adapts to heat and available memory.")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -68,7 +68,7 @@ struct DictationSettingsAdvisor: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if model?.engine == .qwenASR {
-                Text("Keep sAiity open for Streaming. The keyboard uses Whisper independently.")
+                Text("Keep Syllivra open for Streaming. The keyboard uses Whisper independently.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -134,7 +134,7 @@ struct DictationModelQuickPicker: View {
             }
             if ModelInfo.forIdentifier(selectedModel)?.engine == .qwenASR {
                 Toggle("Realtime text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
-                Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while sAiity is open; your keyboard uses its own model.")
+                Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while Syllivra is open; your keyboard uses its own model.")
                     .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if selectedModel == "unavailable" {
@@ -419,7 +419,7 @@ struct DefaultKeyboardModePicker: View {
                 selectedMode = DefaultKeyboardMode.active.rawValue
             }
         }
-        .accessibilityHint("Choose whether sAiity opens on the dictation board or typing keyboard.")
+        .accessibilityHint("Choose whether Syllivra opens on the dictation board or typing keyboard.")
     }
 }
 

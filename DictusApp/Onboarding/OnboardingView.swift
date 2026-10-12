@@ -28,7 +28,7 @@ struct OnboardingView: View {
                         .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 24)
                 }.scrollBounceBehavior(.basedOnSize)
             }
-            .navigationTitle("Set up sAiity")
+            .navigationTitle("Set up Syllivra")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if stage != .welcome {

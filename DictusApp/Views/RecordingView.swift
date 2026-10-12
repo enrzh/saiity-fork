@@ -83,7 +83,7 @@ struct RecordingView: View {
             HStack {
                 HStack(spacing: 8) {
                     DictusLogo(height: 22, foregroundOnly: true).accessibilityHidden(true)
-                    Text("sAiity").font(.headline)
+                    Text("Syllivra").font(.headline)
                 }
                 Spacer()
                     Button(action: dismissRecording) {

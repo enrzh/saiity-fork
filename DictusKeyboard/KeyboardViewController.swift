@@ -560,7 +560,7 @@ class KeyboardViewController: UIInputViewController,
         KeyboardState.shared.startClipboardMonitoring()
         // Model readiness and the app scene phase can change while this cached
         // keyboard controller is off-screen. Refresh before laying out the mic
-        // action so the button does not keep a stale "Open sAiity" state.
+        // action so the button does not keep a stale "Open Syllivra" state.
         KeyboardState.shared.refreshFromDefaults()
         HapticFeedback.refreshEnabledState()
         KeyboardVariantPreferences.reload()
@@ -1557,13 +1557,13 @@ class KeyboardViewController: UIInputViewController,
         // state.
         recoveryButton = makeKeyboardActionButton(
             identifier: "open-saiity-button",
-            label: "Open sAiity to prepare dictation",
+            label: "Open Syllivra to prepare dictation",
             installPrimaryAction: false
         ) { [weak self] in
             self?.openDictusForRecovery()
         }
         (recoveryButton as? KeyboardRecoveryButton)?.onOpen = { [weak self] in self?.openDictusForRecovery() }
-        recoveryButton?.accessibilityHint = String(localized: "Opens sAiity so dictation can be prepared.")
+        recoveryButton?.accessibilityHint = String(localized: "Opens Syllivra so dictation can be prepared.")
         let space = SpaceTrackingButton.TrackingControl()
         space.accessibilityIdentifier = "space-key"
         space.accessibilityLabel = "Space"
@@ -1817,7 +1817,7 @@ class KeyboardViewController: UIInputViewController,
         micButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         recoveryButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction
-            ? "Tap to open sAiity and prepare dictation. Press and hold to dictate."
+            ? "Tap to open Syllivra and prepare dictation. Press and hold to dictate."
             : "Press and hold to dictate. Release to finish."
         spaceButton?.frame = inputFrame(layout.spaceFrame)
         returnButton?.frame = inputFrame(layout.chromeReturnFrame)
@@ -1894,7 +1894,7 @@ class KeyboardViewController: UIInputViewController,
         }
         if wasShowingRecovery || state.showsRecoveryAction {
             // Recovery is a tap action. Waiting for the speaking hold threshold
-            // made the visible "Open sAiity" control feel unresponsive.
+            // made the visible "Open Syllivra" control feel unresponsive.
             openDictusForRecovery()
             return
         }

@@ -89,7 +89,7 @@ struct ModelManagerView: View {
                 customModelToDelete = nil
             }
         } message: {
-            Text("This removes the saved model configuration from sAiity.")
+            Text("This removes the saved model configuration from Syllivra.")
         }
         .onAppear {
             modelManager.loadState()
@@ -248,7 +248,7 @@ struct ModelManagerView: View {
         } header: {
             modelSectionHeader("Dictation cleanup", systemImage: "sparkles")
         } footer: {
-            Text("Speech recognition and text processing use separate models. Apple supports background processing; downloaded local processing models require sAiity to stay open.")
+            Text("Speech recognition and text processing use separate models. Apple supports background processing; downloaded local processing models require Syllivra to stay open.")
                 .font(.caption)
         }
         .listSectionSeparator(.hidden)

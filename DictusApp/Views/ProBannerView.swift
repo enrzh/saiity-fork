@@ -26,7 +26,7 @@ struct ProBannerView: View {
                         .foregroundStyle(.tint)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Unlock sAiity Pro")
+                        Text("Unlock Syllivra Pro")
                             .font(.body.weight(.medium))
                         Text("AI reformulation, history & more")
                             .font(.footnote)

@@ -146,7 +146,7 @@ actor LocalPolishEngine: PolishEngineProtocol {
     private func requireForeground() async throws {
         guard await MainActor.run(body: { UIApplication.shared.applicationState == .active }) else {
             throw NSError(domain: "LocalCleanup", code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Keep sAiity open for local processing. Apple Foundation Models supports keyboard dictation in the background."])
+                userInfo: [NSLocalizedDescriptionKey: "Keep Syllivra open for local processing. Apple Foundation Models supports keyboard dictation in the background."])
         }
     }
 }

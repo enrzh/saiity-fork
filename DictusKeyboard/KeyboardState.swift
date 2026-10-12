@@ -613,7 +613,7 @@ class KeyboardState: ObservableObject {
             lastModelPreparationOpenDate = .distantPast
             HapticFeedback.actionRefused()
             presentStatusMessage(
-                "Unable to open sAiity. Try again.",
+                "Unable to open Syllivra. Try again.",
                 reason: "recoveryURLFailed",
                 timeoutReason: "recoveryURLFailed-timeout"
             )
@@ -622,7 +622,7 @@ class KeyboardState: ObservableObject {
         isOpeningForDictation = true
         HapticFeedback.dictationPressBegan()
         presentStatusMessage(
-            "Opening sAiity…",
+            "Opening Syllivra…",
             reason: "recovery-opening",
             timeoutReason: "recovery-opening-timeout"
         )
@@ -1295,7 +1295,7 @@ class KeyboardState: ObservableObject {
 
         // A previous app process can die between `.loading` and its terminal
         // state. Clear that orphaned marker here so the keyboard recovers on its
-        // next appearance instead of presenting a dead "Open sAiity" control.
+        // next appearance instead of presenting a dead "Open Syllivra" control.
         if loadState == .loading,
            !KeyboardModelPreparationPolicy.isLoadingStateFresh(
                modelLoadState: loadState,
@@ -2130,7 +2130,7 @@ class KeyboardState: ObservableObject {
         requestCancel()
         refreshModelPreparationState()
         appNeedsAppAction = true
-        presentStatusMessage("Enable keyboard dictation in sAiity, then return here.",
+        presentStatusMessage("Enable keyboard dictation in Syllivra, then return here.",
                              reason: "keyboard-session-unavailable", timeoutReason: "keyboard-session-unavailable-timeout")
     }
 
@@ -2165,7 +2165,7 @@ class KeyboardState: ObservableObject {
         )
     }
 
-    /// Single source of truth for "the board offers to open sAiity" instead of
+    /// Single source of truth for "the board offers to open Syllivra" instead of
     /// the dictate control.
     ///
     /// Two gates used to disagree. The label consulted only `appNeedsAppAction`
@@ -2183,7 +2183,7 @@ class KeyboardState: ObservableObject {
 
     /// Label for whichever control currently occupies the board's primary slot.
     var primaryBoardActionLabel: String {
-        if showsRecoveryAction { return "Open sAiity to prepare dictation" }
+        if showsRecoveryAction { return "Open Syllivra to prepare dictation" }
         switch dictationStatus {
         case .requested: return "Cancel dictation preparation"
         case .recording: return isFinishingRecording ? "Finishing dictation" : "Finish dictation"
@@ -2208,9 +2208,9 @@ class KeyboardState: ObservableObject {
     }
 
     var recoveryBoardTitle: String {
-        if isOpeningForDictation { return "Opening sAiity…" }
+        if isOpeningForDictation { return "Opening Syllivra…" }
         if dictationStatus == .failed, statusMessage != nil { return "Try again" }
-        return "Open sAiity"
+        return "Open Syllivra"
     }
 
     var dictationBoardTitle: String {
@@ -2233,7 +2233,7 @@ class KeyboardState: ObservableObject {
     var dictationActionLabel: String { primaryBoardActionLabel }
 
     /// Defer recording without leaving a requested state behind in the keyboard.
-    private func deferRecordingForModelPreparation(reason: String = "keyboard opened sAiity for model preparation") {
+    private func deferRecordingForModelPreparation(reason: String = "keyboard opened Syllivra for model preparation") {
         PersistentLog.log(.dictationDeferred(reason: reason))
         openModelPreparation()
     }
@@ -2248,7 +2248,7 @@ class KeyboardState: ObservableObject {
                 action: "extensionURLFailedClosed",
                 details: "missing extension context"
             ))
-            presentStatusMessage("Unable to open sAiity. Try again.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
+            presentStatusMessage("Unable to open Syllivra. Try again.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
             return
         }
         openURLFromExtension(url) { [weak self] succeeded in
@@ -2267,7 +2267,7 @@ class KeyboardState: ObservableObject {
                 guard let self, !succeeded else { return }
                 self.isOpeningForDictation = false
                 self.lastModelPreparationOpenDate = .distantPast
-                self.presentStatusMessage("iOS could not open sAiity. Open it from the Home Screen to start dictation.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
+                self.presentStatusMessage("iOS could not open Syllivra. Open it from the Home Screen to start dictation.", reason: "recoveryURLFailed", timeoutReason: "recoveryURLFailed-timeout")
                 PersistentLog.log(.diagnosticProbe(
                     component: "KeyboardState", instanceID: self.instanceID,
                     action: "extensionURLFailedClosed", details: "extensionContext.open returned false"

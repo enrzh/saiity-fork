@@ -618,7 +618,7 @@ final class KeyboardRegressionTests: XCTestCase {
         // Both the face and the hit owner label themselves from the one label.
         XCTAssertTrue(board.contains("state.primaryBoardActionLabel"))
         XCTAssertTrue(controller.contains("KeyboardState.shared.primaryBoardActionLabel"))
-        XCTAssertFalse(state.contains("appNeedsAppAction ? \"Open sAiity to prepare dictation\""),
+        XCTAssertFalse(state.contains("appNeedsAppAction ? \"Open Syllivra to prepare dictation\""),
                        "the label must not re-derive its own gate")
     }
 

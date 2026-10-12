@@ -18,7 +18,7 @@ public enum DictationServiceLivenessPolicy {
     ///
     /// A fresh process heartbeat is enough to keep Hold-to-dictate. ActivityKit
     /// can keep a Live Activity after the app has been killed, so a stale or
-    /// missing heartbeat must surface "Open sAiity" even when a model file is
+    /// missing heartbeat must surface "Open Syllivra" even when a model file is
     /// still marked ready.
     public static func shouldOfferRecovery(
         modelReady: Bool,

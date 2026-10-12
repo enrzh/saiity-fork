@@ -16,7 +16,7 @@ struct DictusLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 8) {
                         DictusLogo(height: 28, foregroundOnly: true)
-                        Text("sAiity").font(.headline).foregroundStyle(.white)
+                        Text("Syllivra").font(.headline).foregroundStyle(.white)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -28,7 +28,7 @@ struct DictusLiveActivity: Widget {
                 }
             } compactLeading: {
                 DictusLogo(height: 20, foregroundOnly: true)
-                    .accessibilityLabel("sAiity")
+                    .accessibilityLabel("Syllivra")
             } compactTrailing: {
                 ActivitySignal(state: context.state, compact: true)
             } minimal: {
@@ -56,12 +56,12 @@ private struct DictationActivityStatus {
     }
     var detail: String {
         switch state.phase {
-        case .standby: return !state.serviceEnabled ? "Turn on when you’re ready" : state.detectionMuted ? "Open sAiity to resume" : "Hold the microphone on your keyboard"
+        case .standby: return !state.serviceEnabled ? "Turn on when you’re ready" : state.detectionMuted ? "Open Syllivra to resume" : "Hold the microphone on your keyboard"
         case .recording: return "Release the microphone to finish"
         case .transcribing: return "Turning speech into text"
         case .processing: return "Following your chosen settings"
         case .ready: return "Return to your text field"
-        case .failed: return "Open sAiity to try again"
+        case .failed: return "Open Syllivra to try again"
         }
     }
     var symbol: String {
@@ -91,7 +91,7 @@ struct DictationActivityCard: View {
             HStack(spacing: 8) {
                 DictusLogo(height: 24, foregroundOnly: true)
                 if !typeSize.isAccessibilitySize {
-                    Text("sAiity").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Syllivra").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
                 ActivityAction(state: state)
@@ -176,7 +176,7 @@ private struct ActivityAction: View {
                       let url = URL(string: "saiity://dictate?source=keyboard&intent=prepare") {
                 Link(destination: url) {
                     actionLabel("arrow.up.forward", title: "Open")
-                }.accessibilityLabel("Open sAiity to prepare dictation")
+                }.accessibilityLabel("Open Syllivra to prepare dictation")
             }
         }
         .buttonStyle(.plain)

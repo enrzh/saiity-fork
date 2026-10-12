@@ -9,7 +9,7 @@ struct WelcomePage: View {
         VStack(alignment: .leading, spacing: 16) {
             DictusLogo(height: 40, foregroundOnly: true)
             SaiityPageHeader(title: "Write with your voice",
-                             subtitle: "Speak here, or use sAiity wherever you type.")
+                             subtitle: "Speak here, or use Syllivra wherever you type.")
             VStack(alignment: .leading, spacing: 16) {
                 benefit("Edit your words", detail: "Review, copy or recover the original text.", icon: "text.cursor")
                 benefit("Your languages", detail: "Choose the languages you speak.", icon: "globe")

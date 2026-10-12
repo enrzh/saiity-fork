@@ -31,7 +31,7 @@ struct GlobeKeyTutorialPage: View {
         VStack(alignment: .leading, spacing: 20) {
             SaiityPageHeader(title: "Try your keyboard",
                              subtitle: "Try the real keyboard below. We’ll confirm when your dictation arrives.")
-            Text(dictusKeyboardActive ? "Tap the microphone in the sAiity keyboard. Your words should appear below." : "Tap and hold the globe key, then choose sAiity.")
+            Text(dictusKeyboardActive ? "Tap the microphone in the Syllivra keyboard. Your words should appear below." : "Tap and hold the globe key, then choose Syllivra.")
                 .font(.body).foregroundStyle(.secondary)
             KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
                 .frame(minHeight: 150, maxHeight: 260)
@@ -43,7 +43,7 @@ struct GlobeKeyTutorialPage: View {
                     .frame(minHeight: 180)
             } else {
                 if fullAccessRequired {
-                    Text("Full Access required. Switch on Allow Full Access for sAiity in Settings, then return to the keyboard.")
+                    Text("Full Access required. Switch on Allow Full Access for Syllivra in Settings, then return to the keyboard.")
                         .font(.caption).foregroundStyle(.red)
                     HStack {
                         Button("Open Settings", action: openSettings).buttonStyle(.borderedProminent)
@@ -90,7 +90,7 @@ struct GlobeKeyTutorialPage: View {
             fullAccessRequired = !verified
             if verified {
                 dictationFailed = false
-                accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
+                accessibilityAnnouncement = "Syllivra keyboard is active. Tap the microphone to dictate."
                 UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
             }
         }
@@ -108,7 +108,7 @@ struct GlobeKeyTutorialPage: View {
             return
         }
         fullAccessRequired = false
-        accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
+        accessibilityAnnouncement = "Syllivra keyboard is active. Tap the microphone to dictate."
         UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
         PersistentLog.log(.onboardingDictusKeyboardActivated)
     }
@@ -397,7 +397,7 @@ private struct KeyboardSwitchAnimation: View {
             Divider().opacity(0.2)
             pickerRow("Emoji")
             Divider().opacity(0.2)
-            pickerRow("sAiity", highlighted: dictusHighlighted, accent: dictusHighlighted)
+            pickerRow("Syllivra", highlighted: dictusHighlighted, accent: dictusHighlighted)
 
             // Keyboard type icons (dock/split/full)
             HStack(spacing: 12) {

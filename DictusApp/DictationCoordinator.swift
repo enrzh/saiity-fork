@@ -606,7 +606,7 @@ class DictationCoordinator: ObservableObject {
         captureLanguageRequest()
         if currentLanguagePolicy.engine == .qwenASR,
            UIApplication.shared.applicationState != .active {
-            handleError("Keep sAiity open for Qwen dictation. Choose Whisper Auto to dictate from another app.",
+            handleError("Keep Syllivra open for Qwen dictation. Choose Whisper Auto to dictate from another app.",
                         disposition: .requiresApp)
             return
         }
@@ -614,7 +614,7 @@ class DictationCoordinator: ObservableObject {
         // explicit recovery action without switching apps during a keyboard hold.
         let appState = UIApplication.shared.applicationState
         if !fromURL && appState != .active && !audioEngine.isEngineRunning {
-            handleError("Keyboard dictation is not enabled. Open sAiity to enable it.", disposition: .requiresApp)
+            handleError("Keyboard dictation is not enabled. Open Syllivra to enable it.", disposition: .requiresApp)
             return
         }
 
@@ -631,7 +631,7 @@ class DictationCoordinator: ObservableObject {
             PersistentLog.log(.dictationFailed(error: "No model downloaded"))
             // Localised since #249 — this sibling of the model-availability failure
             // reached the keyboard banner in English regardless of device language.
-            handleError(String(localized: "No model downloaded. Open sAiity to download a model."), disposition: .requiresApp)
+            handleError(String(localized: "No model downloaded. Open Syllivra to download a model."), disposition: .requiresApp)
             return
         }
 
@@ -1600,7 +1600,7 @@ class DictationCoordinator: ObservableObject {
         guard currentLanguagePolicy.engine == .qwenASR,
               DictationSessionLivenessPolicy.isActive(status) else { return }
         cancelDictation()
-        handleError("Qwen dictation stopped when sAiity left the foreground. Choose Whisper Auto for keyboard dictation.",
+        handleError("Qwen dictation stopped when Syllivra left the foreground. Choose Whisper Auto for keyboard dictation.",
                     disposition: .requiresApp)
     }
 

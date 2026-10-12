@@ -48,7 +48,7 @@ struct ModelDownloadPage: View {
                 .padding(.bottom, 12)
 
             // Explanatory text
-            Text("To transcribe your voice, sAiity needs a voice model. The download may take a few minutes.")
+            Text("To transcribe your voice, Syllivra needs a voice model. The download may take a few minutes.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
