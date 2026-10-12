@@ -102,9 +102,6 @@ struct SettingsView: View {
     private var dictationSettings: some View {
         settingsPage("Dictation") {
             Section {
-                NavigationLink("Voice options") { VoiceOptionsView(modelManager: modelManager) }
-            }
-            Section {
                 if cleanupAvailable {
                     Toggle("Automatic cleanup", isOn: $polishEnabled)
                         .accessibilityHint("Cleans up dictation after speech recognition.")
@@ -132,6 +129,9 @@ struct SettingsView: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            }
+            Section {
+                NavigationLink("Voice options") { VoiceOptionsView(modelManager: modelManager) }
             }
             Section("Advanced") {
                 Toggle("Keep last recording briefly", isOn: $replayEnabled)
@@ -373,6 +373,7 @@ struct SettingsView: View {
 }
 
 struct VocabularyView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var newWord = ""
     @State private var words: [String] = []
     @State private var hints: [String] = []
@@ -382,16 +383,20 @@ struct VocabularyView: View {
     var body: some View {
         List {
             Section {
-                HStack(spacing: 10) {
+                let entryLayout = typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout(spacing: 10))
+                entryLayout {
                     TextField("Add a word or name", text: $newWord)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .onSubmit(addWord)
                     Button("Add", action: addWord)
+                        .frame(minWidth: 44, minHeight: 44)
                         .disabled(newWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } footer: {
-                Text("Words you add are protected from autocorrection. Whisper recognition and cleanup use approved spellings; Parakeet uses them during cleanup. Automatically learned words become hints only when you choose Use in dictation. Server processing receives only hints already present in its transcript.")
+                Text("Words you add stay protected from autocorrection. Choose Use in dictation to approve a learned word as a hint.")
             }
 
             Section("Learned words") {
@@ -400,15 +405,14 @@ struct VocabularyView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(words, id: \.self) { word in
-                        HStack {
+                        let wordLayout = typeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                            : AnyLayout(HStackLayout(spacing: 12))
+                        wordLayout {
                             Text(hints.first { $0.caseInsensitiveCompare(word) == .orderedSame } ?? word)
-                            Spacer()
-                            if isHint(word) {
-                                Image(systemName: "mic.fill").foregroundStyle(.secondary)
-                                    .accessibilityLabel("Dictation hint enabled")
-                            }
-                        }
-                        .contextMenu {
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                            Menu {
                             Button(isHint(word) ? "Remove dictation hint" : "Use in dictation") {
                                 if isHint(word) { DictationVocabulary.remove(word, in: AppGroup.defaults) }
                                 else if !DictationVocabulary.approve(word, in: AppGroup.defaults) {
@@ -417,9 +421,25 @@ struct VocabularyView: View {
                                 reload()
                                 KeyboardInteractionPreferences.notifyVocabularyChanged()
                             }
+                            } label: {
+                                Label(LocalizedStringKey(isHint(word) ? "Hint on" : "Use in dictation"),
+                                      systemImage: isHint(word) ? "mic.fill" : "mic")
+                                    .font(.subheadline).frame(minHeight: 44)
+                            }
+                            .accessibilityLabel("Dictation hint for \(word)")
+                            .accessibilityValue(isHint(word) ? "On" : "Off")
+                            .accessibilityIdentifier("vocabulary.hint")
                         }
                     }
                     .onDelete(perform: deleteWords)
+                }
+            }
+
+            Section {
+                DisclosureGroup("About dictation hints") {
+                    Text("Whisper uses approved spellings for recognition and cleanup. Parakeet uses them during cleanup. Learned words become hints only when you approve them.")
+                    Text("Server cleanup receives only hints already present in its transcript.")
+                    Text("Keep up to 32 hints, each under 65 characters and six words.")
                 }
             }
 

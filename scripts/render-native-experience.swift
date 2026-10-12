@@ -6,6 +6,10 @@ guard CommandLine.arguments.count >= 4 else { fatalError("Pass simulator ID, der
 let simulator = CommandLine.arguments[1], derived = CommandLine.arguments[2], output = CommandLine.arguments[3]
 let advisorOnly = CommandLine.arguments.contains("--advisor")
 let optionsOnly = CommandLine.arguments.contains("--voice-options")
+let modelsOnly = CommandLine.arguments.contains("--model-cards")
+let privacyOnly = CommandLine.arguments.contains("--privacy-only")
+let landscapeOnly = CommandLine.arguments.contains("--landscape")
+let vocabularyOnly = CommandLine.arguments.contains("--vocabulary")
 let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 func read(_ path: String) throws -> String { try String(contentsOfFile: path, encoding: .utf8) }
@@ -36,6 +40,12 @@ let voicePickers = section(try read("DictusApp/Views/KeyboardModePicker.swift"),
     .replacingOccurrences(of: "DisclosureGroup(\"Choose a voice model\") {", with: "DisclosureGroup(\"Choose a voice model\", isExpanded: .constant(fixtureOptionsExpanded)) {")
 let modelState = section(try read("DictusApp/Models/ModelManager.swift"), from: "enum ModelState", to: "/// Byte counters")
 let modelLocalization = try read("DictusApp/Extensions/ModelInfo+Localized.swift")
+let modelCardSource = try read("DictusApp/Views/ModelCardView.swift")
+let modelCards = String(modelCardSource[modelCardSource.range(of: "struct ModelCardView: View")!.lowerBound...])
+var vocabulary = section(try read("DictusApp/Views/SettingsView.swift"), from: "struct VocabularyView: View", to: "struct TextSnippetsView: View")
+let vocabularyReload = section(vocabulary, from: "    private func reload()", to: "    private func addWord()")
+vocabulary = vocabulary.replacingOccurrences(of: vocabularyReload, with: "    private func reload() { words = [\"Zoë\", \"東京\"]; hints = [\"Zoë\"] }\n")
+    .replacingOccurrences(of: "AppGroup.defaults", with: "fixtureDefaults")
 
 let program = #"""
 import SwiftUI
@@ -69,6 +79,11 @@ final class ModelManager: ObservableObject {
     var isModelReady: Bool { downloadedModels.contains(activeModel ?? "") }
     var downloadProgress: [String: Float] = [:]
     var modelStates: [String: ModelState] = [:]
+    var modelLoadState = ModelLoadState.idle
+    var downloadByteInfo: [String: ModelDownloadBytes] = [:]
+    var cleanupBackend = PolishCleanupBackend.appleIntelligence
+    func isRecommended(_ id: String) -> Bool { id == "openai_whisper-small" }
+    func selectModel(_ id: String) { activeModel = id }
     func useRecommendedSettings() { selectionMode = .automatic; selectionProfile = .recommended }
     func chooseDictationModel(_ model: String) { activeModel = model }
     func chooseKeyboardModel(_ model: String) { keyboardModel = model }
@@ -76,6 +91,23 @@ final class ModelManager: ObservableObject {
     func setSpokenLanguages(_ codes: [String]) {}
     func startCatalogDownload(_ model: String, onError: @escaping (String) -> Void) {}
     func cancelCatalogDownload(_ model: String) {}
+}
+struct ModelDownloadBytes { let downloadedMB: Int; let totalMB: Int }
+final class CleanupModelManager: ObservableObject {
+    static let shared = CleanupModelManager()
+    var preparing: LocalCleanupModel?
+    var failedModel: LocalCleanupModel?
+    var installedBytes: [LocalCleanupModel: Int64] = [:]
+    var progress: Double = 0.42
+    var error: String?
+    func cancel() {}
+    func select(_ model: LocalCleanupModel, manager: ModelManager) {}
+    func refreshArtifacts() {}
+    func delete(_ model: LocalCleanupModel, manager: ModelManager) throws {}
+}
+struct ModelLanguageDetailView: View {
+    let model: ModelInfo
+    var body: some View { Text(model.languageSupport.coverage.localizedSummary) }
 }
 struct Device {
     static let current = Device()
@@ -88,6 +120,9 @@ final class DictationCoordinator: ObservableObject {
     var realtimeTranscript = fixtureText
     var lastOriginalResult: String? = fixtureOriginal
     var lastResult: String? = fixtureText
+    var lastTranslationFallbackReason: String?
+    var keyboardSessionEnabled = false
+    var isPreparingKeyboardSession = false
     var dictationGeneration = 1
     var bufferSeconds: Double = 8
     var bufferEnergy: [Float] = [0.1, 0.3, 0.4]
@@ -125,6 +160,18 @@ struct StopStandbyIntent: AppIntent {
 
 @main @MainActor struct RenderNativeExperience {
     static func main() throws {
+        if PRIVACY_ONLY {
+            let legacy = Data(#"{"phase":"ready","transcriptionPreview":"Fixture private words","detectionMuted":true,"serviceEnabled":false}"#.utf8)
+            let state = try JSONDecoder().decode(DictusLiveActivityAttributes.ContentState.self, from: legacy)
+            precondition(state.phase == .ready && state.detectionMuted && !state.serviceEnabled,
+                         "Legacy activity status and power must survive")
+            let encoded = try JSONEncoder().encode(state)
+            let payload = String(decoding: encoded, as: UTF8.self)
+            precondition(!payload.contains("transcriptionPreview") && !payload.contains("Fixture private words"),
+                         "Live Activity payload exposes transcript content")
+            print("PASS: legacy activity status/power survive without transcript payload")
+            return
+        }
         fixtureDefaults.set(false, forKey: SharedKeys.serviceEnabled)
         defer { fixtureDefaults.removePersistentDomain(forName: fixtureSuite) }
         try FileManager.default.createDirectory(atPath: "OUTPUT", withIntermediateDirectories: true)
@@ -132,9 +179,11 @@ struct StopStandbyIntent: AppIntent {
         let manager = ModelManager()
         for dark in [false, true] {
             for large in [false, true] {
-                let width: CGFloat = large ? 320 : 402
+                let width: CGFloat = LANDSCAPE_ONLY ? 874 : large ? 320 : 402
                 let category: DynamicTypeSize = large ? .accessibility5 : .large
-                let names = OPTIONS_ONLY ? ["voice-options", "voice-details", "voice-streaming", "voice-downloading"]
+                let names = VOCABULARY_ONLY ? ["vocabulary"]
+                    : MODELS_ONLY ? ["model-downloading", "model-qwen", "model-error", "model-installed", "cleanup-installed"]
+                    : OPTIONS_ONLY ? ["voice-options", "voice-details", "voice-streaming", "voice-downloading"]
                     : ADVISOR_ONLY ? ["advisor", "advisor-details", "advisor-streaming", "advisor-installed"]
                     : ["speak", "listening", "result", "failed", "welcome", "activity-recording", "activity-off", "activity-processing", "activity-ready", "activity-failed"]
                 for name in names {
@@ -142,6 +191,28 @@ struct StopStandbyIntent: AppIntent {
                     coordinator.status = fixturePhase
                     let content: AnyView
                     switch name {
+                    case "vocabulary":
+                        content = AnyView(NavigationStack { VocabularyView() })
+                    case "cleanup-installed":
+                        guard let model = LocalCleanupModel.allCases.first else { fatalError("No cleanup model") }
+                        CleanupModelManager.shared.installedBytes = [model: 600_000_000]
+                        content = large ? AnyView(CleanupModelCardView(model: model, manager: manager).padding(32))
+                            : AnyView(NavigationStack { List { CleanupModelCardView(model: model, manager: manager) }.navigationTitle("Models") })
+                    case let modelName where modelName.hasPrefix("model-"):
+                        let identifier = modelName == "model-qwen" ? QwenASRModel.small.rawValue : "openai_whisper-small"
+                        guard let model = ModelInfo.forIdentifier(identifier) else { fatalError("Missing model fixture") }
+                        manager.activeModel = "openai_whisper-tiny"
+                        manager.downloadedModels = ["openai_whisper-tiny", "openai_whisper-small"]
+                        manager.modelStates = [identifier: modelName == "model-downloading" ? .downloading
+                            : modelName == "model-error" ? .error("Download interrupted")
+                            : modelName == "model-installed" ? .ready : .notDownloaded]
+                        manager.downloadProgress = [identifier: 0.42]
+                        manager.downloadByteInfo = [identifier: ModelDownloadBytes(downloadedMB: 203, totalMB: 483)]
+                        content = large ? AnyView(ModelCardView(model: model, modelManager: manager, onDownloadError: { _ in }).padding(32))
+                            : AnyView(NavigationStack {
+                            List { ModelCardView(model: model, modelManager: manager, onDownloadError: { _ in }) }
+                                .navigationTitle("Models")
+                        })
                     case let optionsName where optionsName.hasPrefix("voice-"):
                         fixtureOptionsExpanded = optionsName == "voice-details"
                         fixtureAdvisorExpanded = false
@@ -162,7 +233,7 @@ struct StopStandbyIntent: AppIntent {
                         })
                     case "speak":
                         coordinator.status = .idle
-                        content = AnyView(TabView {
+                        content = LANDSCAPE_ONLY ? AnyView(HomeView(modelManager: manager)) : AnyView(TabView {
                             NavigationStack { HomeView(modelManager: manager) }.tabItem { Label("Speak", systemImage: "waveform") }
                             Text("Settings").tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
                         })
@@ -173,7 +244,7 @@ struct StopStandbyIntent: AppIntent {
                             : activityName == "activity-off" ? .standby : .recording
                         let state = DictusLiveActivityAttributes.ContentState(phase: phase,
                             recordingStartDate: phase == .recording ? Date().addingTimeInterval(-8) : nil,
-                            waveformLevels: [0.1, 0.3, 0.4], transcriptionPreview: phase == .ready ? fixtureText : nil,
+                            waveformLevels: [0.1, 0.3, 0.4],
                             serviceEnabled: activityName != "activity-off")
                         content = AnyView(DictationActivityCard(state: state))
                     default: content = AnyView(RecordingView(mode: .standalone))
@@ -183,12 +254,18 @@ struct StopStandbyIntent: AppIntent {
                         .tint(Color.saiityAction)
                     let host = UIHostingController(rootView: hosted)
                     if name.hasPrefix("activity-") { host.safeAreaRegions = [] }
+                    if MODELS_ONLY && large { host.safeAreaRegions = [] }
                     let height: CGFloat
                     if name.hasPrefix("activity-") {
                         let measured = host.sizeThatFits(in: CGSize(width: width, height: 4000))
                         precondition(measured.height <= 160, "Activity exceeds system height: \(name) \(measured)")
                         height = max(84, measured.height)
-                    } else { height = 874 }
+                    } else if MODELS_ONLY && large {
+                        let measured = host.sizeThatFits(in: CGSize(width: width, height: 4000))
+                        precondition(measured.height.isFinite && measured.height > 0 && measured.height < 4000,
+                                     "Model content cannot be laid out at largest text size")
+                        height = measured.height
+                    } else { height = LANDSCAPE_ONLY ? 402 : 874 }
                     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
                     window.overrideUserInterfaceStyle = dark ? .dark : .light
                     window.rootViewController = host
@@ -209,10 +286,14 @@ struct StopStandbyIntent: AppIntent {
         }
     }
 }
-"""#.replacingOccurrences(of: "// PRODUCTION_VIEWS", with: modelState + "\n" + modelLocalization + "\n" + home + "\n" + result + "\n" + header + "\n" + recording + "\n" + welcome + "\n" + activity + "\n" + advisor + "\n" + voiceOptions + "\n" + voicePickers)
+"""#.replacingOccurrences(of: "// PRODUCTION_VIEWS", with: modelState + "\n" + modelLocalization + "\n" + home + "\n" + result + "\n" + header + "\n" + recording + "\n" + welcome + "\n" + activity + "\n" + advisor + "\n" + voiceOptions + "\n" + voicePickers + "\n" + modelCards + "\n" + vocabulary)
     .replacingOccurrences(of: "OUTPUT", with: output)
     .replacingOccurrences(of: "ADVISOR_ONLY", with: String(advisorOnly))
     .replacingOccurrences(of: "OPTIONS_ONLY", with: String(optionsOnly))
+    .replacingOccurrences(of: "MODELS_ONLY", with: String(modelsOnly))
+    .replacingOccurrences(of: "PRIVACY_ONLY", with: String(privacyOnly))
+    .replacingOccurrences(of: "LANDSCAPE_ONLY", with: String(landscapeOnly))
+    .replacingOccurrences(of: "VOCABULARY_ONLY", with: String(vocabularyOnly))
     .replacingOccurrences(of: "import AVFoundation", with: "import AVFoundation\nimport AppIntents")
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-native-design-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

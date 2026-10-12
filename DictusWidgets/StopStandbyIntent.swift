@@ -42,7 +42,6 @@ struct StopStandbyIntent: LiveActivityIntent {
                     phase: current.phase,
                     recordingStartDate: current.recordingStartDate,
                     waveformLevels: current.waveformLevels,
-                    transcriptionPreview: current.transcriptionPreview,
                     detectionMuted: current.detectionMuted,
                     serviceEnabled: enabled
                 )

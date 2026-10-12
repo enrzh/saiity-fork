@@ -496,7 +496,6 @@ class LiveActivityManager {
             phase: current.phase,
             recordingStartDate: current.recordingStartDate,
             waveformLevels: current.waveformLevels,
-            transcriptionPreview: current.transcriptionPreview,
             detectionMuted: current.detectionMuted,
             serviceEnabled: enabled
         )
@@ -688,13 +687,13 @@ class LiveActivityManager {
         }
     }
 
-    /// Show transcription result, then return to standby after 1 second.
+    /// Show completion status, then return to standby after 1 second.
     ///
     /// WHY return to standby instead of ending:
     /// The user expects the Dynamic Island to persist as long as the app is alive.
     /// After showing the result briefly, we go back to the "On" standby state
     /// so they can start another recording from the Dynamic Island.
-    func endWithResult(preview: String?) {
+    func endWithResult() {
         guard isEnabled else { return }
 
         // WHY: State machine guard prevents DI desync from concurrent transitions (#42)
@@ -711,10 +710,8 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: currentPhase.rawValue, to: "ready"))
         currentPhase = .ready  // Update BEFORE async work to prevent races (#49)
         Task {
-            let truncatedPreview = preview.map { String($0.prefix(100)) }
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .ready,
-                transcriptionPreview: truncatedPreview,
                 detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))

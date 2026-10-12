@@ -387,9 +387,7 @@ struct RecordingView: View {
         switch displayedStatus {
         case .idle, .ready: return "Ready to record"
         case .requested: return "Starting dictation"
-        case .recording: return "Listening"
-        case .transcribing: return "Preparing your text"
-        case .processing: return "Applying your writing options"
+        case .recording, .transcribing, .processing: return displayedStatus.recordingLabel
         case .failed: return "Dictation failed"
         }
     }
@@ -398,9 +396,8 @@ struct RecordingView: View {
         switch status {
         case .idle: return "Ready to record"
         case .requested: return "Starting dictation"
-        case .recording: return "Recording"
-        case .transcribing: return "Transcribing"
-        case .processing: return "Processing"
+        case .recording, .transcribing, .processing:
+            return NSLocalizedString(status.recordingLabel, comment: "Dictation progress")
         case .ready: return "Dictation complete"
         case .failed: return "Dictation failed. Try again or close."
         }

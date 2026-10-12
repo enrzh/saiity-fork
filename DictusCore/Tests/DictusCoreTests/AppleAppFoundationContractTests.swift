@@ -496,8 +496,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(manager.contains(".listRowSeparator(.hidden)"))
         XCTAssertEqual(
             manager.components(separatedBy: ".listSectionSeparator(.hidden)").count - 1,
-            4,
-            "Recommended, Installed, All models, and Dictation cleanup should not render section rules"
+            3,
+            "Installed, Downloads, and Dictation cleanup should not render section rules"
         )
         XCTAssertTrue(manager.contains("Dictation cleanup"))
         XCTAssertTrue(manager.contains("Apple Intelligence"))
@@ -509,7 +509,9 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(card.contains(".buttonStyle(.borderedProminent)"))
         XCTAssertTrue(card.contains(".font(.subheadline)"))
         XCTAssertFalse(card.contains("GaugeBarView("), "Catalog estimates must not appear as measured scores")
-        XCTAssertTrue(manager.contains("DictationSettingsAdvisor(modelManager: modelManager)"))
+        XCTAssertFalse(manager.contains("DictationSettingsAdvisor(modelManager: modelManager)"))
+        XCTAssertTrue(manager.contains("VoiceOptionsView(modelManager: modelManager)"))
+        XCTAssertTrue(try source("DictusApp/Views/HomeView.swift").contains("DictationSettingsAdvisor(modelManager: modelManager)"))
         XCTAssertFalse(manager.contains("ModelSelectionProfilePicker"))
         XCTAssertFalse(manager.contains("ModelSelectionModePicker"))
         XCTAssertFalse(manager.contains(".fullScreenCover("), "Model preparation should leave navigation available")

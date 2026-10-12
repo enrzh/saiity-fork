@@ -9,11 +9,11 @@ struct WelcomePage: View {
         VStack(alignment: .leading, spacing: 16) {
             DictusLogo(height: 40, foregroundOnly: true)
             SaiityPageHeader(title: "Write with your voice",
-                             subtitle: "Dictate into the apps you use, with voice recognition on your iPhone.")
+                             subtitle: "Speak here, or use sAiity wherever you type.")
             VStack(alignment: .leading, spacing: 16) {
-                benefit("Your keyboard", detail: "Speak where you would normally type.", icon: "keyboard")
-                benefit("Your languages", detail: "Choose a model that supports the languages you speak.", icon: "globe")
-                benefit("On your iPhone", detail: "Download a voice model once to use it offline.", icon: "iphone")
+                benefit("Edit your words", detail: "Review, copy or recover the original text.", icon: "text.cursor")
+                benefit("Your languages", detail: "Choose the languages you speak.", icon: "globe")
+                benefit("On your iPhone", detail: "Download once for offline voice recognition.", icon: "iphone")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onNext) {

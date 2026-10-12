@@ -5,7 +5,9 @@ final class DictationStatusTests: XCTestCase {
     func testRecordingStatusUsesTruthfulLabelsWithoutInsertionAck() {
         XCTAssertEqual(DictationStatus.idle.recordingLabel, "Ready")
         XCTAssertEqual(DictationStatus.ready.recordingLabel, "Ready")
-        XCTAssertEqual(DictationStatus.processing.recordingLabel, "Processing")
+        XCTAssertEqual(DictationStatus.recording.recordingLabel, "Listening")
+        XCTAssertEqual(DictationStatus.transcribing.recordingLabel, "Preparing your text")
+        XCTAssertEqual(DictationStatus.processing.recordingLabel, "Finishing your text")
         XCTAssertNotEqual(DictationStatus.ready.recordingLabel, "Inserted")
     }
 

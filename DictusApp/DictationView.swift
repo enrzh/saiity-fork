@@ -13,7 +13,7 @@ struct DictationStatusView: View {
                 .foregroundColor(iconColor)
 
             VStack(alignment: .leading) {
-                Text(status.recordingLabel)
+                Text(LocalizedStringKey(status.recordingLabel))
                     .font(.subheadline.weight(.semibold))
                 Text(statusDescription)
                     .font(.subheadline)

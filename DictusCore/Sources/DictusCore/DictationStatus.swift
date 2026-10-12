@@ -52,11 +52,11 @@ public enum DictationStatus: String, Codable, CaseIterable, Sendable {
         case .requested:
             return "Starting"
         case .recording:
-            return "Recording"
+            return "Listening"
         case .transcribing:
-            return "Transcribing"
+            return "Preparing your text"
         case .processing:
-            return "Processing"
+            return "Finishing your text"
         case .failed:
             return "Could not complete"
         }

@@ -4,7 +4,7 @@ import SwiftUI
 import DictusCore
 import DeviceKit
 
-/// Advice is shared by Voice options, Dictation settings and Models.
+/// Voice options owns recommendations; Models manages the installed inventory.
 /// Recommendations are applied explicitly; downloads remain a separate action.
 struct DictationSettingsAdvisor: View {
     @ObservedObject var modelManager: ModelManager
@@ -36,16 +36,22 @@ struct DictationSettingsAdvisor: View {
             DisclosureGroup("View recommendation", isExpanded: $showsAdvice) {
                 recommendation("In sAiity", recognizer: modelManager.recognizer, profile: .recommended)
                 recommendation("From your keyboard", recognizer: .whisper, profile: .balanced)
+                Text("For \(phoneName) and your spoken languages. Automatic selection uses installed models and adapts to heat and available memory.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Button(usesRecommendation ? "Recommended settings applied" : "Use recommended settings") {
                 modelManager.useRecommendedSettings()
             }
             .accessibilityIdentifier("dictation.useRecommendedSettings")
             .disabled(usesRecommendation || !coordinator.canChangeSpeechRuntime)
+            if !coordinator.canChangeSpeechRuntime {
+                Text("Finish this dictation before changing voice settings.").font(.footnote)
+            }
         } header: {
             Text("Recommended settings")
         } footer: {
-            Text("For \(phoneName) and your spoken languages. Apply changes voice model routing only; writing options and languages stay as you chose them. Uses installed models and adapts when your phone is warm or low on memory. Downloads are optional.")
+            Text("Applies voice model choices only. Your languages and writing options stay unchanged. No download starts.")
         }
         .accessibilityIdentifier("dictation.settingsAdvisor")
     }
@@ -98,6 +104,15 @@ struct DictationModelQuickPicker: View {
         Group {
             if scope != .keyboard {
             if textSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Voice model").font(.subheadline).foregroundStyle(.secondary)
+                    Text(ModelInfo.forIdentifier(selectedModel)?.displayName ?? NSLocalizedString("No compatible model", comment: "Voice model readiness"))
+                }
+            } else {
+                LabeledContent("Voice model", value: ModelInfo.forIdentifier(selectedModel)?.displayName ?? NSLocalizedString("No compatible model", comment: "Voice model readiness"))
+            }
+            DisclosureGroup("Choose a voice model") {
+            if textSize.isAccessibilitySize {
                 recognizerPicker.pickerStyle(.menu)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -105,7 +120,6 @@ struct DictationModelQuickPicker: View {
                     recognizerPicker.pickerStyle(.segmented)
                 }.padding(.vertical, 4)
             }
-            DisclosureGroup("Choose a voice model") {
             Picker(modelManager.recognizer == .streaming ? "Streaming model" : "Whisper model",
                    selection: Binding(get: { selectedModel }, set: modelManager.chooseDictationModel)) {
                 if selectedModel == "unavailable" { Text("No compatible recommendation").tag("unavailable") }
@@ -158,6 +172,10 @@ struct DictationModelQuickPicker: View {
                 "Keyboard dictation uses \($0.displayName), independently of your in-app choice."
             } ?? "Download a Whisper model to enable dictation from your keyboard.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if !coordinator.canChangeSpeechRuntime {
+                Text("Finish this dictation before changing voice settings.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .disabled(!coordinator.canChangeSpeechRuntime)

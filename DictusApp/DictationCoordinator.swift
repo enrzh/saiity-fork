@@ -1083,7 +1083,7 @@ class DictationCoordinator: ObservableObject {
 
                 DarwinNotificationCenter.post(DarwinNotificationName.statusChanged)
                 DarwinNotificationCenter.post(DarwinNotificationName.transcriptionReady)
-                LiveActivityManager.shared.endWithResult(preview: finalText)
+                LiveActivityManager.shared.endWithResult()
                 // This one-slot snapshot also supports explicit raw recovery;
                 // its report export separately requires Include transcript text.
                 let keepTranscript = defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true

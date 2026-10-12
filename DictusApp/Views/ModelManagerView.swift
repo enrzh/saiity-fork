@@ -40,6 +40,9 @@ struct ModelManagerView: View {
                 let leftActive = modelManager.activeModel == lhs.identifier
                 let rightActive = modelManager.activeModel == rhs.identifier
                 if leftActive != rightActive { return leftActive }
+                let leftRecommended = modelManager.isRecommended(lhs.identifier)
+                let rightRecommended = modelManager.isRecommended(rhs.identifier)
+                if leftRecommended != rightRecommended { return leftRecommended }
                 return lhs.sizeBytes < rhs.sizeBytes
             }
     }
@@ -52,16 +55,6 @@ struct ModelManagerView: View {
                 let rightRecommended = modelManager.isRecommended(rhs.identifier)
                 if leftRecommended != rightRecommended { return leftRecommended }
                 if lhs.isExperimental != rhs.isExperimental { return !lhs.isExperimental }
-                return lhs.sizeBytes < rhs.sizeBytes
-            }
-    }
-
-    private var recommendedModels: [ModelInfo] {
-        catalogModels
-            .filter { modelManager.isRecommended($0.identifier) }
-            .filter(matchesFilter)
-            .sorted { lhs, rhs in
-                if isInstalled(lhs) != isInstalled(rhs) { return isInstalled(lhs) }
                 return lhs.sizeBytes < rhs.sizeBytes
             }
     }
@@ -153,38 +146,18 @@ struct ModelManagerView: View {
     @ViewBuilder
     private var modelList: some View {
         List {
-            DictationSettingsAdvisor(modelManager: modelManager)
             Section {
-                DictationModelQuickPicker(modelManager: modelManager)
-            } header: {
-                Text("Selection")
+                NavigationLink {
+                    VoiceOptionsView(modelManager: modelManager)
+                } label: {
+                    Label("Voice options", systemImage: "slider.horizontal.3")
+                }
             } footer: {
-                Text("Choosing a model keeps that choice until you apply recommended settings.")
+                Text("Choose app and keyboard models in Voice options. Manage downloads here.")
             }
-            recommendedSection
             installedSection
             availableSection
             dictationCleanupSection
-        }
-    }
-
-    @ViewBuilder
-    private var recommendedSection: some View {
-        if !recommendedModels.isEmpty {
-            Section {
-                ForEach(recommendedModels) { model in
-                    modelRow(
-                        model,
-                        incompatibilityReason: model.incompatibilityReason(on: deviceCapabilities)
-                    )
-                }
-            } header: {
-                modelSectionHeader("Recommended", systemImage: "sparkles")
-            } footer: {
-                Text("Recommendations are based on device compatibility and editorial guidance. They are not accuracy measurements.")
-                    .font(.caption)
-            }
-            .listSectionSeparator(.hidden)
         }
     }
 
@@ -222,9 +195,12 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            modelSectionHeader("All models", systemImage: "square.stack.3d.up")
+            modelSectionHeader("Downloads", systemImage: "arrow.down.circle")
         } footer: {
-            modelEngineFooter(for: availableModels)
+            VStack(alignment: .leading, spacing: 6) {
+                modelEngineFooter(for: availableModels)
+                Text("Recommendations reflect compatibility and editorial guidance, not measured accuracy on your iPhone.")
+            }
         }
         .listSectionSeparator(.hidden)
     }
@@ -309,6 +285,7 @@ struct ModelManagerView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color.saiityOnAction)
                 .controlSize(.small)
                 .accessibilityHint("Uses Apple Intelligence for dictation cleanup")
             }

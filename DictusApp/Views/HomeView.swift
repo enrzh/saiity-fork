@@ -15,6 +15,7 @@ struct HomeView: View {
     @ObservedObject private var replay = RecordingReplay.shared
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @State private var recentDictationItems: [RecentDictation] = []
+    @AppStorage(SharedKeys.historyEnabled, store: AppGroup.defaults) private var historyEnabled = true
     @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
     @AppStorage(SharedKeys.modelLoadState, store: AppGroup.defaults) private var modelLoadStateRaw = ModelLoadState.idle.rawValue
     @AppStorage(SharedKeys.modelLoadFailure, store: AppGroup.defaults) private var modelLoadFailure = ""
@@ -24,6 +25,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
+                VStack(alignment: .leading, spacing: 4) {
                 let serviceLayout = typeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                     : AnyLayout(HStackLayout(spacing: 12))
@@ -45,10 +47,18 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(serviceEnabled ? Color.saiityAction : .secondary)
                     .accessibilityLabel(serviceEnabled ? "Disable keyboard dictation" : "Enable keyboard dictation")
-                    .accessibilityHint("Controls availability from your keyboard. Starting a dictation is a separate action.")
+                    .accessibilityHint("Turning on prepares the microphone for your keyboard. Hold its microphone to record a dictation.")
                     .accessibilityAddTraits(serviceEnabled ? .isSelected : [])
                     .accessibilityValue(serviceEnabled ? "On" : "Off")
                     .accessibilityIdentifier("home.keyboardDictationToggle")
+                }
+                if serviceEnabled {
+                    Text(LocalizedStringKey(coordinator.isPreparingKeyboardSession ? "Preparing the keyboard microphone…"
+                         : coordinator.keyboardSessionEnabled ? "Microphone prepared. Hold the microphone on your keyboard to dictate."
+                         : "Microphone needs preparation. Turn keyboard dictation off and on when you’re ready."))
+                        .font(.footnote).foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 }
 
                 readinessPanel
@@ -59,12 +69,21 @@ struct HomeView: View {
                 }
 
                 Button { showVoiceOptions = true } label: {
+                    VStack(alignment: .leading, spacing: 6) {
                     Label("Voice options", systemImage: "slider.horizontal.3")
+                        .font(.headline)
+                    let languages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+                    Text(LocalizedStringKey(languages.isEmpty ? "No preferred languages" : SpokenLanguagePreferences.summary(languages)))
                         .font(.subheadline).foregroundStyle(.secondary)
-                        .padding(.horizontal, 14).frame(minHeight: 44)
-                        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(modelManager.initialVoiceModel.flatMap(ModelInfo.forIdentifier)?.displayName ?? modelManager.recognizer.displayName)
+                        .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
+                .foregroundStyle(.primary)
                 .accessibilityIdentifier("home.voiceOptions")
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -76,10 +95,14 @@ struct HomeView: View {
                                 .contentShape(Rectangle())
                         }
                     }
-                    if recentDictationItems.isEmpty {
-                        Text("Completed dictations can be saved on this iPhone.")
+                    if !historyEnabled {
+                        Text("History is off. New dictations aren’t saved.")
                             .font(.subheadline).foregroundStyle(.secondary)
-                    } else {
+                    } else if recentDictationItems.isEmpty {
+                        Text("Your next dictation will appear here.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    if !recentDictationItems.isEmpty {
                         recentActivity(items: recentDictationItems)
                     }
                 }
@@ -133,7 +156,7 @@ struct HomeView: View {
         let readiness = currentReadiness
         return VStack(alignment: .leading, spacing: 12) {
             Text(readiness.action == .start ? "New dictation" : readiness.title)
-                .font(.largeTitle.weight(.semibold))
+                .font(.title2.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
             Text(readiness.action == .start ? "Your text appears when you finish." : readinessSubtitle)
                 .font(.body).foregroundStyle(.secondary)
@@ -212,6 +235,20 @@ struct HomeView: View {
     @ViewBuilder
     private func recentActivity(items: [RecentDictation]) -> some View {
         ForEach(items) { item in
+            if item.id == items.first?.id {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Date(timeIntervalSince1970: item.createdAt), style: .relative)
+                        .font(.caption).foregroundStyle(.secondary)
+                    DictationTranscriptResult(result: item.text, original: item.originalText, onRestore: { replacement in
+                        RecentDictations.update(RecentDictation(id: item.id, text: replacement, createdAt: item.createdAt,
+                            originalText: item.originalText, feedback: replacement == item.text ? item.feedback : .needsEditing),
+                            in: AppGroup.defaults)
+                        reloadRecentDictations()
+                    })
+                }
+                .padding(.vertical, 8)
+                Divider()
+            } else {
             HStack(alignment: .top, spacing: 12) {
                 NavigationLink {
                     DictationHistoryEditView(item: item) { edited in
@@ -248,6 +285,7 @@ struct HomeView: View {
             .frame(minHeight: 44)
             .padding(.vertical, 8)
             Divider()
+            }
         }
         if showCopiedFeedback {
             Label("Copied", systemImage: "checkmark.circle.fill")
@@ -485,7 +523,6 @@ struct DictationHistoryView: View {
 /// Shared comparison/copy/recovery controls for a live result and saved history.
 struct DictationTranscriptResult: View {
     @Environment(\.dynamicTypeSize) private var typeSize
-    @ScaledMetric(relativeTo: .title2) private var transcriptSize: CGFloat = 26
     let result: String
     let original: String?
     var onRestore: ((String) -> Void)?
@@ -510,7 +547,7 @@ struct DictationTranscriptResult: View {
                 Label("Translation could not be verified. Original kept.", systemImage: "exclamationmark.circle")
                     .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            Text(displayed).font(.system(size: transcriptSize, weight: .medium)).textSelection(.enabled)
+            Text(displayed).font(.body).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             ViewThatFits(in: .horizontal) {

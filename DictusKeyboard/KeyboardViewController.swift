@@ -1813,7 +1813,7 @@ class KeyboardViewController: UIInputViewController,
         emojiButton?.frame = inputFrame(layout.chromeEmojiFrame)
         numberButton?.frame = inputFrame(layout.chromeNumbersFrame)
         numberButton?.holdDuration = KeyboardDeletion.holdRecognitionDuration
-        micButton?.accessibilityValue = KeyboardState.shared.dictationStatus.recordingLabel
+        micButton?.accessibilityValue = NSLocalizedString(KeyboardState.shared.dictationStatus.recordingLabel, comment: "Dictation progress")
         micButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         recoveryButton?.accessibilityLabel = KeyboardState.shared.primaryBoardActionLabel
         micButton?.accessibilityHint = KeyboardState.shared.appNeedsAppAction

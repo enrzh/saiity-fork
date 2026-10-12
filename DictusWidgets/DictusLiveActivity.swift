@@ -113,9 +113,9 @@ private struct DictationActivityDetail: View {
                 ActivitySignal(state: state)
                     .frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(status.title).font(.headline).foregroundStyle(dark ? .white : .primary)
+                    Text(LocalizedStringKey(status.title)).font(.headline).foregroundStyle(dark ? .white : .primary)
                     if !typeSize.isAccessibilitySize && state.phase != .ready {
-                        Text(status.detail).font(.caption.weight(.medium))
+                        Text(LocalizedStringKey(status.detail)).font(.caption.weight(.medium))
                             .foregroundStyle(dark ? .white.opacity(0.7) : .secondary)
                     }
                 }
@@ -125,11 +125,6 @@ private struct DictationActivityDetail: View {
                         .foregroundStyle(dark ? .white : .primary)
                         .multilineTextAlignment(.trailing).frame(maxWidth: 72)
                 }
-            }
-            if state.phase == .ready, let preview = state.transcriptionPreview, !preview.isEmpty {
-                Text(preview).font(.subheadline.weight(.medium)).lineLimit(typeSize.isAccessibilitySize ? 1 : 2)
-                    .foregroundStyle(dark ? .white.opacity(0.85) : .primary)
-                    .privacySensitive()
             }
         }
         .accessibilityElement(children: .combine)
@@ -195,7 +190,7 @@ private struct ActivityAction: View {
         .accessibilityValue(state.serviceEnabled ? "On" : "Off")
     }
     private func actionLabel(_ symbol: String, title: String) -> some View {
-        Label(title, systemImage: symbol).font(.caption.weight(.semibold))
+        Label(LocalizedStringKey(title), systemImage: symbol).font(.caption.weight(.semibold))
             .fixedSize(horizontal: true, vertical: true)
             .foregroundStyle(dark ? .white : .primary)
             .padding(.horizontal, 12).frame(minHeight: 44)
