@@ -1,6 +1,138 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Preferences" : {},
+    "Words & shortcuts" : {},
+    "Your words" : {},
+    "Setup & help" : {},
+    "Recognition" : {},
+    "Writing" : {},
+    "Advanced" : {},
+    "Models and Live Activity" : {},
+    "Typing" : {},
+    "Appearance & feedback" : {},
+    "Press and hold" : {},
+    "Emoji & key variants" : {},
+    "Advanced keyboard options" : {},
+    "Typing follows the language of the sentence. Autocorrection and adaptive touch support English, German, French and Spanish. Other scripts, names, codes and web addresses stay unchanged." : {},
+    "Preview export. Test accuracy and speed on your own recordings." : {},
+    "A compact starting point for everyday dictation." : {},
+    "Specialized for English dictation." : {},
+    "Compressed multilingual model with a smaller download." : {},
+    "A middle-ground multilingual voice model." : {},
+    "More capacity for difficult speech; needs more memory." : {},
+    "NVIDIA speech recognition for English." : {},
+    "NVIDIA speech recognition for 25 European languages." : {},
+    "Distilled Whisper model specialized for English." : {},
+    "Large multilingual Whisper export. Speed varies with your device." : {},
+    "WORDS WITHOUT BORDERS" : {},
+    "Your languages." : {},
+    "Language coverage depends on the model. Try your own phrases before choosing." : {},
+    "CONNECTION CHECK" : {},
+    "App. Keyboard. Connected." : {},
+    "Check the shared space that carries your dictation between apps." : {},
+    "Speak" : {},
+    "YOUR VOICE, YOUR WORDS" : {},
+    "A little less typing." : {},
+    "Speak naturally. Keep every language. Stay on your device." : {},
+    "Your voice engine" : {},
+    "Choose a model" : {},
+    "Microphone is recording" : {},
+    "Microphone is not recording" : {},
+    "Turn on dictation" : {},
+    "Choose a voice model" : {},
+    "FROM YOUR KEYBOARD" : {},
+    "Your words are coming with you." : {},
+    "Finish speaking here, then return to the app you were typing in." : {},
+    "The microphone is listening. Stop when you have finished." : {},
+    "Finish recording" : {},
+    "Working on your device" : {},
+    "1. Speak and finish recording" : {},
+    "2. Wait for your transcript" : {},
+    "3. Return to your previous app" : {},
+    "Use the back-to-app link at the top of the screen, or swipe along the bottom edge. The Syllivra keyboard inserts the completed text." : {},
+    "Ready when you are" : {},
+    "Starting the microphone" : {},
+    "Listening to you" : {},
+    "Writing your words" : {},
+    "Tidying your transcript" : {},
+    "Ready to take back" : {},
+    "Let’s try that again" : {},
+    "HELLO, SAIITY" : {},
+    "Think it.\nSay it.\nSend it." : {},
+    "A private voice keyboard for everything you want to say." : {},
+    "Stay in your flow" : {},
+    "Dictate into the apps you already use." : {},
+    "Keep your languages" : {},
+    "Multilingual models keep your words in their spoken language." : {},
+    "Make it yours" : {},
+    "Choose a local voice model. Audio stays on your iPhone." : {},
+    "Let’s set you up" : {},
+    "VOICE WORKSPACE" : {},
+    "Make room for your thoughts." : {},
+    "Speak in your own words. Your transcript stays on this device." : {},
+    "YOUR TRANSCRIPT" : {},
+    "CAPTURING YOUR WORDS" : {},
+    "Share transcript" : {},
+    "Copied" : {},
+    "Copy transcript" : {},
+    "Something interrupted dictation" : {},
+    "Your words will appear here." : {},
+    "Listening to you…" : {},
+    "No need to watch the screen. Finish recording when you’re ready." : {},
+    "ON YOUR DEVICE" : {},
+    "Meet your voice engine." : {},
+    "One setup. A more personal way to write." : {},
+    "Download" : {},
+    "Save the voice model on this iPhone." : {},
+    "Prepare" : {},
+    "Optimize it for your device." : {},
+    "Activate" : {},
+    "Load the model for dictation." : {},
+    "Complete" : {},
+    "In progress" : {},
+    "Waiting" : {},
+    "LOCAL VOICE LIBRARY" : {},
+    "Find your voice." : {},
+    "Choose by language and size. Larger is not always better for your iPhone." : {},
+    "Model, engine or language" : {},
+    "Show models" : {},
+    "All" : {},
+    "Compact" : {},
+    "Multilingual" : {},
+    "No matching downloads" : {},
+    "Preview · validate on your iPhone" : {},
+    "MAKE IT YOURS" : {},
+    "Your way with words." : {},
+    "Shape how Syllivra listens, writes and feels." : {},
+    "On this iPhone" : {},
+    "Device memory" : {},
+    "Thermal condition" : {},
+    "Normal" : {},
+    "Warm" : {},
+    "Hot · slower processing" : {},
+    "Cooling needed" : {},
+    "Help & about" : {},
+    "YOU’RE IN CONTROL" : {},
+    "A voice needs a microphone." : {},
+    "Syllivra uses your microphone for dictation. Your recordings stay on your device." : {},
+    "Permission is yours to give" : {},
+    "iOS will ask for microphone access. You can change it at any time in Settings." : {},
+    "Your first words. Delivered." : {},
+    "Your keyboard is connected. You’re ready to write with your voice." : {},
+    "Make yourself heard" : {},
+    "CONNECT YOUR KEYBOARD" : {},
+    "Three small steps.\nA lot less typing." : {},
+    "Connect the keyboard, grant Full Access and install your first voice model." : {},
+    "TAKE IT FOR A SPIN" : {},
+    "Your first words." : {},
+    "Try the real keyboard below. We’ll confirm when your dictation arrives." : {},
+    "Start dictation" : {},
+    "Recent dictation" : {},
+    "Try again" : {},
+    "Preparing your model" : {},
+    "Ready to dictate" : {},
+    "Speech recognition runs locally. Larger models need more memory and can use more battery. Device performance reports are available in Debug Logs." : {},
     "" : {
 
     },
@@ -328,38 +460,38 @@
       "localizations" : {
       }
     },
-    "sAiity" : {
-      "comment" : "A toggle label for enabling the sAiity keyboard.",
+    "Syllivra" : {
+      "comment" : "A toggle label for enabling the Syllivra keyboard.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
       }
     },
-    "sAiity can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections." : {
+    "Syllivra can use Apple's local Foundation Model to lightly polish your transcription after speech recognition: punctuation, casing, accents and small corrections." : {
       "comment" : "Onboarding polish opt-in page explanation (issue #213).",
       "localizations" : {
       }
     },
-    "sAiity is set up and ready to use" : {
+    "Syllivra is set up and ready to use" : {
       "localizations" : {
       }
     },
-    "sAiity may restart automatically — this is normal" : {
+    "Syllivra may restart automatically — this is normal" : {
       "localizations" : {
       }
     },
-    "sAiity needs the microphone to transcribe your voice. Your recordings stay on your device." : {
+    "Syllivra needs the microphone to transcribe your voice. Your recordings stay on your device." : {
       "localizations" : {
       }
     },
-    "sAiity prepares your transcription model for offline dictation." : {
+    "Syllivra prepares your transcription model for offline dictation." : {
       "localizations" : {
       }
     },
-    "sAiity Pro" : {
+    "Syllivra Pro" : {
       "localizations" : {
       }
     },
-    "sAiity Pro Active" : {
+    "Syllivra Pro Active" : {
       "localizations" : {
       }
     },
@@ -472,7 +604,7 @@
       "localizations" : {
       }
     },
-    "Getting sAiity ready…" : {
+    "Getting Syllivra ready…" : {
       "localizations" : {
       }
     },
@@ -511,13 +643,13 @@
       "localizations" : {
       }
     },
-    "Hold \\(Image(systemName: \"globe\")) and select sAiity" : {
+    "Hold \\(Image(systemName: \"globe\")) and select Syllivra" : {
       "extractionState" : "stale",
       "localizations" : {
       }
     },
-    "Hold %@ and select sAiity" : {
-      "comment" : "A step-by-step guide to using the globe key to switch to the sAiity keyboard. The argument is the globe symbol.",
+    "Hold %@ and select Syllivra" : {
+      "comment" : "A step-by-step guide to using the globe key to switch to the Syllivra keyboard. The argument is the globe symbol.",
       "isCommentAutoGenerated" : true
     },
     "Home" : {
@@ -653,13 +785,13 @@
       "localizations" : {
       }
     },
-    "No model downloaded. Open sAiity to download a model." : {
+    "No model downloaded. Open Syllivra to download a model." : {
       "comment" : "Error shown when dictation is triggered before any model has been downloaded (issue #249).",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No model downloaded. Open sAiity to download a model."
+            "value" : "No model downloaded. Open Syllivra to download a model."
           }
         }
       }
@@ -950,11 +1082,11 @@
       "localizations" : {
       }
     },
-    "Settings > sAiity" : {
+    "Settings > Syllivra" : {
       "localizations" : {
       }
     },
-    "Settings > sAiity > Keyboards" : {
+    "Settings > Syllivra > Keyboards" : {
       "localizations" : {
       }
     },
@@ -1006,7 +1138,7 @@
       }
     },
     "Stop Standby" : {
-      "comment" : "Title of the Live Activity intent to stop sAiity standby mode.",
+      "comment" : "Title of the Live Activity intent to stop Syllivra standby mode.",
       "isCommentAutoGenerated" : true
     },
     "Streaming model files…" : {
@@ -1037,12 +1169,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "We’d love to skip this step, but iOS requires opening sAiity to activate the microphone."
+            "value" : "We’d love to skip this step, but iOS requires opening Syllivra to activate the microphone."
           }
         }
       }
     },
-    "switch to the sAiity keyboard" : {
+    "switch to the Syllivra keyboard" : {
       "comment" : "A phrase that",
       "extractionState" : "stale",
       "isCommentAutoGenerated" : true,
@@ -1069,7 +1201,7 @@
       "localizations" : {
       }
     },
-    "Teach sAiity your technical terms" : {
+    "Teach Syllivra your technical terms" : {
       "extractionState" : "stale",
       "localizations" : {
       }
@@ -1100,7 +1232,7 @@
       "localizations" : {
       }
     },
-    "The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on sAiity infrastructure is a separate offering." : {
+    "The lifetime purchase covers every current and future Pro feature that runs on your device or on a server you provide. Any feature relying on Syllivra infrastructure is a separate offering." : {
       "localizations" : {
       }
     },
@@ -1124,7 +1256,7 @@
       "localizations" : {
       }
     },
-    "The transcription model could not be loaded. Open sAiity and try again." : {
+    "The transcription model could not be loaded. Open Syllivra and try again." : {
       "comment" : "Error shown when the local Whisper model files are present but fail to load (issue #249).",
       "localizations" : {
       }
@@ -1134,7 +1266,7 @@
       "localizations" : {
       }
     },
-    "This model is not installed. Open sAiity and download it in the Models tab." : {
+    "This model is not installed. Open Syllivra and download it in the Models tab." : {
       "comment" : "Error shown when dictation is triggered while the selected Whisper model is missing from the local model repository (issue #249).",
       "localizations" : {
       }
@@ -1143,7 +1275,7 @@
       "localizations" : {
       }
     },
-    "To transcribe your voice, sAiity needs a voice model. The download may take a few minutes." : {
+    "To transcribe your voice, Syllivra needs a voice model. The download may take a few minutes." : {
       "localizations" : {
       }
     },
@@ -1165,11 +1297,11 @@
       "localizations" : {
       }
     },
-    "Turn off sAiity standby mode" : {
-      "comment" : "Title of the Live Activity intent to stop sAiity standby mode.",
+    "Turn off Syllivra standby mode" : {
+      "comment" : "Title of the Live Activity intent to stop Syllivra standby mode.",
       "isCommentAutoGenerated" : true
     },
-    "Unlock sAiity Pro" : {
+    "Unlock Syllivra Pro" : {
       "localizations" : {
       }
     },
@@ -1205,7 +1337,7 @@
       "localizations" : {
       }
     },
-    "Welcome to sAiity Pro" : {
+    "Welcome to Syllivra Pro" : {
       "localizations" : {
       }
     },

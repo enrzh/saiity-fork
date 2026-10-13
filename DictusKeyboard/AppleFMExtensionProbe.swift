@@ -1,7 +1,7 @@
 // DictusKeyboard/AppleFMExtensionProbe.swift
 import Foundation
 import os
-import DictusCore
+import SyllivraKernel
 #if canImport(FoundationModels)
 import FoundationModels
 #endif

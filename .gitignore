@@ -69,3 +69,17 @@ designs/
 tools/ane-harness/.deps/
 tools/ane-harness/build/
 tools/ane-harness/AneBenchKit/Sources/AneBenchKit/Resources/
+
+# Generated build cache Xcode writes inside the project bundle (32MB of clang
+# module records, regenerated on every build). It was tracked by mistake.
+Dictus.xcodeproj/-Xcc/
+
+# Per-user Xcode state
+Dictus.xcodeproj/xcuserdata/
+
+# Tool output, not source
+graphify-out/
+.superpowers/
+
+# Reference logs: machine-generated, large, and not source.
+assets/reference/logs/

@@ -61,9 +61,14 @@ struct DeviceContext {
     // MARK: - Factory
 
     static var current: DeviceContext {
-        DeviceContext(
+        // The vendored `UIScreen.isDeviceLandscape` helper this used to call lived
+        // in GiellaUtils.swift, which is deleted along with the rest of the dead
+        // vendored view stack. The check is a bounds comparison, so it lives here
+        // now rather than pulling the whole utility grab-bag back in.
+        let bounds = UIScreen.main.bounds.size
+        return DeviceContext(
             device: Device.current,
-            isLandscape: UIScreen.main.isDeviceLandscape
+            isLandscape: bounds.width > bounds.height
         )
     }
 }

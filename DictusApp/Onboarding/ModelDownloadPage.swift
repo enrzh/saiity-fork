@@ -1,7 +1,7 @@
 // DictusApp/Onboarding/ModelDownloadPage.swift
 // Step 4 of onboarding: download the initial voice model.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Downloads the recommended model with visible progress.
 ///
@@ -48,7 +48,7 @@ struct ModelDownloadPage: View {
                 .padding(.bottom, 12)
 
             // Explanatory text
-            Text("To transcribe your voice, sAiity needs a voice model. The download may take a few minutes.")
+            Text("To transcribe your voice, Syllivra needs a voice model. The download may take a few minutes.")
                 .font(.dictusBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -1,6 +1,6 @@
 // DictusApp/Extensions/ModelInfo+Localized.swift
 // Localized display strings for ModelInfo, resolved via String Catalog.
-import DictusCore
+import SyllivraKernel
 import SwiftUI
 
 extension ModelInfo {
@@ -11,47 +11,30 @@ extension ModelInfo {
     /// Localized description for display in model cards.
     /// Source strings are in English; French provided via String Catalog.
     var localizedDescription: String {
+        if isExperimental {
+            return String(localized: "Preview export. Test accuracy and speed on your own recordings.")
+        }
         switch identifier {
         case "openai_whisper-tiny", "openai_whisper-base":
-            return String(localized: "Fast but inaccurate")
-        case "openai_whisper-tiny.en":
-            return String(localized: "English-only and fast")
-        case "openai_whisper-base.en":
-            return String(localized: "English-only and balanced")
-        case "openai_whisper-small":
-            return String(localized: "Accurate and balanced")
-        case "openai_whisper-small.en":
-            return String(localized: "English-only and accurate")
+            return String(localized: "A compact starting point for everyday dictation.")
+        case "openai_whisper-tiny.en", "openai_whisper-base.en", "openai_whisper-small.en":
+            return String(localized: "Specialized for English dictation.")
         case "openai_whisper-small_216MB":
-            return String(localized: "Compact and fast")
+            return String(localized: "Compressed multilingual model with a smaller download.")
+        case "openai_whisper-small":
+            return String(localized: "A middle-ground multilingual voice model.")
         case "openai_whisper-medium":
-            return String(localized: "Best accuracy")
+            return String(localized: "More capacity for difficult speech; needs more memory.")
         case "parakeet-tdt-0.6b-v2":
-            return String(localized: "Fast and accurate, English only (NVIDIA)")
+            return String(localized: "NVIDIA speech recognition for English.")
         case "parakeet-tdt-0.6b-v3":
-            return String(localized: "Fast and accurate (NVIDIA)")
-        case "qwen3-asr-0.6b-f32":
-            return String(localized: "Multilingual ASR, best Qwen speed and quality")
-        case "qwen3-asr-0.6b-int8":
-            return String(localized: "Multilingual ASR, lower storage footprint")
-        case "openai_whisper-large-v3_turbo_954MB":
-            return String(localized: "Most accurate but slowest")
-        case "openai_whisper-large-v2_949MB":
-            return String(localized: "High accuracy, older generation")
-        case "openai_whisper-large-v2_turbo_955MB":
-            return String(localized: "High accuracy and faster")
-        case "openai_whisper-large-v3_947MB":
-            return String(localized: "Highest accuracy")
-        case "distil-whisper_distil-large-v3_594MB":
-            return String(localized: "High accuracy, compact")
-        case "distil-whisper_distil-large-v3_turbo_600MB":
-            return String(localized: "High accuracy, compact and fast")
-        case "openai_whisper-large-v3-v20240930_626MB":
-            return String(localized: "High accuracy, optimized")
-        case "openai_whisper-large-v3-v20240930_turbo_632MB":
-            return String(localized: "High accuracy, optimized and faster")
+            return String(localized: "NVIDIA speech recognition for 25 European languages.")
+        case QwenASRModel.small.rawValue, QwenASRModel.large.rawValue:
+            return String(localized: "Qwen streaming recognition in the foreground app. Requires compatible iOS 18+ hardware; phone accuracy and speed remain unverified.")
+        case "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
+            return String(localized: "Distilled Whisper model specialized for English.")
         default:
-            return description
+            return String(localized: "Large multilingual Whisper export. Speed varies with your device.")
         }
     }
 }
@@ -89,7 +72,7 @@ extension ModelLanguageSupport.Coverage {
         case .parakeetEuropean:
             return String(localized: "25 European languages")
         case .qwenMultilingual:
-            return String(localized: "30 languages with automatic detection")
+            return String(localized: "Multilingual streaming; complete language coverage remains unverified")
         }
     }
 }
@@ -99,9 +82,9 @@ extension ModelLanguageSupport.QualityNote {
     var localizedText: String {
         switch self {
         case .impreciseUpgradeRecommended:
-            return String(localized: "Works but imprecise. Medium or Turbo recommended.")
+            return String(localized: "Smaller models may be less accurate. Verify on your own speech.")
         case .goodOnThisModel:
-            return String(localized: "Good quality on this model.")
+            return String(localized: "More model capacity; accuracy on this phone remains unverified.")
         }
     }
 }

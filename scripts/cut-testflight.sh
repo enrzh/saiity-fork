@@ -75,14 +75,42 @@ printf "Proceed? [y/N] "
 read -r ANSWER
 case "$ANSWER" in [yY]*) : ;; *) echo "Aborted."; exit 1 ;; esac
 
-# --- Apply to all three plists ----------------------------------------------
+# --- Apply to all three plists and the Xcode project ------------------------
 for P in $PLISTS; do
   $PB -c "Set :CFBundleVersion $NEW_BUILD" "$P"
   $PB -c "Set :CFBundleShortVersionString $VERSION" "$P"
 done
 
+PBXPROJ="Dictus.xcodeproj/project.pbxproj"
+python3 - "$PBXPROJ" "$NEW_BUILD" "$VERSION" <<'PY'
+import pathlib, re, sys
+path, build, version = sys.argv[1:]
+file = pathlib.Path(path)
+text = file.read_text()
+updated = re.sub(r"CURRENT_PROJECT_VERSION = \d+;", f"CURRENT_PROJECT_VERSION = {build};", text)
+updated = re.sub(r"MARKETING_VERSION = [^;]+;", f"MARKETING_VERSION = {version};", updated)
+if updated == text:
+    raise SystemExit(f"error: {path} has no project version settings to update")
+file.write_text(updated)
+PY
+
+build_settings=$(grep -c "CURRENT_PROJECT_VERSION = ${NEW_BUILD};" "$PBXPROJ")
+marketing_settings=$(grep -c "MARKETING_VERSION = ${VERSION};" "$PBXPROJ")
+if [ "$build_settings" -ne 6 ] || [ "$marketing_settings" -ne 6 ]; then
+  echo "error: project build settings did not all update (build=$build_settings marketing=$marketing_settings)." >&2
+  exit 1
+fi
+for P in $PLISTS; do
+  got_build=$($PB -c "Print :CFBundleVersion" "$P")
+  got_version=$($PB -c "Print :CFBundleShortVersionString" "$P")
+  if [ "$got_build" != "$NEW_BUILD" ] || [ "$got_version" != "$VERSION" ]; then
+    echo "error: $P is $got_version ($got_build), expected $VERSION ($NEW_BUILD)." >&2
+    exit 1
+  fi
+done
+
 # --- Commit, tag, push ------------------------------------------------------
-git add $PLISTS
+git add $PLISTS "$PBXPROJ"
 git commit -m "chore: bump to $VERSION (build $NEW_BUILD)"
 git tag "build/$NEW_BUILD"
 git push origin develop "build/$NEW_BUILD"

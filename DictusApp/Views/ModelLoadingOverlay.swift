@@ -2,7 +2,7 @@
 // Full-screen blocking overlay shown while a model is downloading, compiling
 // for the Neural Engine, or being loaded into RAM. Issue #144.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Full-screen cover that surfaces long-running model preparation work to the user.
 ///
@@ -19,6 +19,7 @@ import DictusCore
 ///    `.loading` once `DictationCoordinator.preloadActiveModel` is in flight.
 struct ModelLoadingOverlay: View {
     @ObservedObject var modelManager: ModelManager
+    @ObservedObject private var coordinator = DictationCoordinator.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Identifier of the model the user just acted on (download or select).
@@ -63,51 +64,25 @@ struct ModelLoadingOverlay: View {
     }
 
     var body: some View {
-        ZStack {
-            // Adaptive brand background — auto switches between light/dark
-            // (#F2F2F7 in light, #0A1628 in dark).
-            Color.dictusBackground.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer(minLength: 24)
-
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                DictusLogo(height: 52)
+                SaiityPageHeader(title: "Preparing your voice model",
+                                 subtitle: "Keep Syllivra open until preparation finishes.")
                 modelTitleHeader
-                    .padding(.top, 24)
-
-                Spacer()
-
-                // Waveform lives in the vertical flow, ABOVE the progress area.
-                // It used to be a ZStack background centered on the screen, which
-                // collided with the (also centered) progress bar on squat aspect
-                // ratios — iPad letterboxed compatibility mode, iPhone SE. Same
-                // height/opacity as the onboarding welcome screen; edge-to-edge
-                // width, no horizontal padding.
-                BrandWaveform(maxHeight: 100, animation: reduceMotion ? .still : .sweep)
-                    .opacity(0.55)
-                    .allowsHitTesting(false)
-
-                // Fixed-height swap area so toggling between active and completion
-                // states doesn't reflow the surrounding layout (and shift the
-                // waveform above).
-                ZStack {
-                    if showCompletion {
-                        completionView
-                            .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.94)))
-                    } else {
-                        activeView
-                            .transition(reduceMotion ? .identity : .opacity)
-                    }
+                VStack(alignment: .leading, spacing: 24) {
+                    phaseRow("Download", detail: "Save the voice model on this iPhone.", phase: .downloading, index: 0)
+                    phaseRow("Prepare", detail: "Optimize it for your device.", phase: .compiling, index: 1)
+                    phaseRow("Activate", detail: "Load the model for dictation.", phase: .loading, index: 2)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: activeContext.isPrepareOnly ? 164 : 140)
-                .padding(.top, 24)
-
-                Spacer()
-
+                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 28))
+                if showCompletion { completionView } else { activeView }
                 stayOnPageNotice
-                    .padding(.bottom, 40)
             }
+            .padding(24).frame(maxWidth: 620).frame(maxWidth: .infinity)
         }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .accessibilityAddTraits(.isModal)
         .interactiveDismissDisabled(true)
         .onReceive(NotificationCenter.default.publisher(for: .dictusModelLoadStateChanged)) { _ in
@@ -119,6 +94,17 @@ struct ModelLoadingOverlay: View {
         .onChange(of: currentModelState) { _, _ in
             checkForCompletion()
         }
+        .onChange(of: coordinator.status) { _, _ in
+            checkForCompletion()
+        }
+        .onChange(of: coordinator.keyboardSessionEnabled) { _, _ in
+            checkForCompletion()
+        }
+        .onChange(of: coordinator.isPreparingKeyboardSession) { _, _ in
+            // The model may already be ready, so microphone activation does not
+            // necessarily emit a model-load-state change.
+            checkForCompletion()
+        }
         .onAppear {
             checkForCompletion()
         }
@@ -127,30 +113,45 @@ struct ModelLoadingOverlay: View {
     // MARK: - Sub-views
 
     private var modelTitleHeader: some View {
-        // Tracking value used on the phase label. Pulled out so the leading
-        // compensation padding stays in sync — `.tracking()` adds half its width
-        // of trailing space after the last character, which shifts the optical
-        // center off relative to the un-tracked model name above. We add the
-        // same width as a leading offset to push the label back to true center.
-        let labelTracking: CGFloat = 1.4
-
-        return VStack(spacing: 8) {
-            if let info = ModelInfo.forIdentifier(modelIdentifier) {
-                Text(info.displayName)
-                    .font(.dictusSubheading)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(ModelInfo.forIdentifier(modelIdentifier)?.displayName ?? modelIdentifier)
+                    .font(.title2.weight(.semibold))
+                Text(showCompletion ? "Ready" : phaseLabel).font(.subheadline).foregroundStyle(.secondary)
             }
-            Text(phaseLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tint)
-                .tracking(labelTracking)
-                .padding(.leading, labelTracking)
-                .frame(maxWidth: .infinity)
-                .multilineTextAlignment(.center)
+            Spacer()
+            Image(systemName: showCompletion ? "checkmark.circle.fill" : "cpu")
+                .font(.largeTitle).foregroundStyle(.tint)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var phaseIndex: Int {
+        if showCompletion { return 3 }
+        switch currentPhase {
+        case .downloading: return 0
+        case .compiling: return 1
+        case .loading: return 2
+        case .ready: return 3
+        }
+    }
+
+    private func phaseRow(_ title: LocalizedStringKey, detail: LocalizedStringKey, phase: Phase, index: Int) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            ZStack {
+                Circle().fill(Color.accentColor.opacity(index <= phaseIndex ? 0.15 : 0.04))
+                if index < phaseIndex {
+                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                } else {
+                    Text("\(index + 1)").font(.headline).foregroundStyle(index == phaseIndex ? Color.accentColor : .secondary)
+                }
+            }.frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(index < phaseIndex ? "Complete" : index == phaseIndex ? "In progress" : "Waiting")
     }
 
     @ViewBuilder
@@ -176,7 +177,8 @@ struct ModelLoadingOverlay: View {
                     }
                 }
             }
-            CyclingLoadingText(phrases: phrases(for: currentPhase))
+            Text(phaseLabel).font(.headline)
+            if currentPhase != .downloading { ProgressView() }
         }
     }
 
@@ -190,7 +192,7 @@ struct ModelLoadingOverlay: View {
                 .foregroundStyle(.primary)
 
             if activeContext.isPrepareOnly {
-                Text("Start dictation in sAiity, then return to your app when finished.")
+                Text("Return to your app and hold the keyboard microphone to dictate.")
                     .font(.dictusCaption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -225,9 +227,9 @@ struct ModelLoadingOverlay: View {
 
     private var preparationSteps: some View {
         VStack(alignment: .leading, spacing: 5) {
-            preparationStep("1", "Keep sAiity open while the model loads.")
-            preparationStep("2", "Wait until the model says Ready.")
-            preparationStep("3", "Start dictation here. After finishing, return to your app to insert the text.")
+            preparationStep("1", "Keep Syllivra open while the model loads.")
+            preparationStep("2", "Wait for the model and microphone to be ready.")
+            preparationStep("3", "Return to your app. Hold the microphone to speak and release to insert your words.")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -248,11 +250,11 @@ struct ModelLoadingOverlay: View {
     private var explanationText: LocalizedStringKey {
         switch activeContext {
         case .onboarding:
-            return "sAiity prepares your transcription model for offline dictation."
+            return "Syllivra prepares your transcription model for offline dictation."
         case .modelSelection:
             return "This preparation may take a moment and is usually not needed for every dictation."
         case .keyboardColdStart:
-            return "Prepare the model here. A Live Activity keeps controls available, but does not keep the microphone running."
+            return "Keyboard dictation keeps the microphone ready in the background. Idle audio is discarded. Disable it in Syllivra or the Live Activity; it also ends after 10 idle minutes."
         }
     }
 
@@ -264,6 +266,9 @@ struct ModelLoadingOverlay: View {
 
     private var currentPhase: Phase {
         let raw = rawPhase
+        if activeContext.isPrepareOnly && raw == .ready && !showCompletion {
+            return .loading
+        }
         // While we have not yet seen a real work phase, treat `.ready` as the
         // initial download phase so the copy doesn't briefly flash "ready"
         // before the parent's async download Task starts. This is the seam
@@ -305,51 +310,15 @@ struct ModelLoadingOverlay: View {
         }
     }
 
-    private func phrases(for phase: Phase) -> [String] {
-        switch phase {
-        case .downloading:
-            return [
-                String(localized: "Downloading the model…"),
-                String(localized: "Preparing the files…"),
-                String(localized: "Getting everything ready…"),
-                String(localized: "Almost there…"),
-                String(localized: "Finishing the download…")
-            ]
-        case .compiling:
-            // Turbo's compile takes ~2 minutes — needs enough variety so the
-            // copy doesn't visibly loop within that window.
-            return [
-                String(localized: "Preparing the model…"),
-                String(localized: "Optimizing for your iPhone…"),
-                String(localized: "Setting up offline transcription…"),
-                String(localized: "Adapting the model to your iPhone…"),
-                String(localized: "Configuring voice transcription…"),
-                String(localized: "Preparing the final steps…"),
-                String(localized: "Getting sAiity ready…"),
-                String(localized: "Setting up the transcription engine…"),
-                String(localized: "Checking the model…"),
-                String(localized: "Almost ready…"),
-                String(localized: "A few more seconds…"),
-                String(localized: "Finishing the preparation…")
-            ]
-        case .loading:
-            return [
-                String(localized: "Loading the model…"),
-                String(localized: "Preparing dictation…"),
-                String(localized: "Getting transcription ready…"),
-                String(localized: "Almost ready…"),
-                String(localized: "One last step…")
-            ]
-        case .ready:
-            return []
-        }
-    }
-
     private func progressLabel(_ progress: Float) -> String {
         "\(Int(progress * 100))%"
     }
 
     private func checkForCompletion() {
+        if activeContext.isPrepareOnly && coordinator.status == .failed {
+            isPresented = false
+            return
+        }
         // A failed download must dismiss the cover immediately — without this,
         // `.error` falls into rawPhase's `.ready` mapping below and flashes the
         // "Model ready" celebration on a failure (issue #207). The parent view
@@ -369,6 +338,12 @@ struct ModelLoadingOverlay: View {
         if rawPhase != .ready {
             hasSeenWorkPhase = true
             return
+        }
+        // Model readiness alone must not dismiss microphone preparation. Check
+        // errors and latch model work first so failures cannot strand this cover.
+        if activeContext.isPrepareOnly {
+            guard coordinator.keyboardSessionEnabled && coordinator.isEngineRunning
+                    && coordinator.isKeyboardModelReady else { return }
         }
         // The model is ready, but if we have never seen any actual work happen
         // yet, the parent likely just opened the overlay and the state will

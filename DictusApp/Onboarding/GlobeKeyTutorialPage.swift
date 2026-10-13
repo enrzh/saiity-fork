@@ -2,7 +2,7 @@
 // Stage 4: real keyboard switch and first dictation.
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 struct GlobeKeyTutorialPage: View {
     let onComplete: () -> Void
@@ -13,35 +13,37 @@ struct GlobeKeyTutorialPage: View {
     /// goes through DictationCoordinator. If we don't reset the coordinator before
     /// completing onboarding, HomeView will show the "last transcription card"
     /// from this test dictation — which is not the desired landing screen.
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var coordinator: DictationCoordinator
 
     @State private var dictusKeyboardActive = false
     @State private var textFieldContent = ""
     @State private var firstDictationVerified = false
     @State private var awaitingInsertion = false
+    @State private var dictationBaselineText = ""
     @State private var accessibilityAnnouncement = ""
-    @AppStorage(SharedKeys.onboardingFullAccessVerified, store: AppGroup.defaults) private var fullAccessVerified = false
-    @AppStorage(SharedKeys.onboardingFullAccessHandshakeDate, store: AppGroup.defaults) private var fullAccessHandshakeDate = 0.0
+    @ObservedObject private var setup = KeyboardSetupModel.shared
+    private var fullAccessVerified: Bool { setup.fullAccessVerified }
     @State private var dictationFailed = false
     @State private var fullAccessRequired = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Label(dictusKeyboardActive ? "Dictate a short phrase" : "Switch to sAiity", systemImage: dictusKeyboardActive ? "mic" : "globe")
-                .font(.title2.weight(.semibold))
-            Text(dictusKeyboardActive ? "Tap the microphone in the sAiity keyboard. Your words should appear below." : "Tap and hold the globe key, then choose sAiity.")
+            SaiityPageHeader(title: "Try your keyboard",
+                             subtitle: "Try the real keyboard below. We’ll confirm when your dictation arrives.")
+            Text(dictusKeyboardActive ? "Tap the microphone in the Syllivra keyboard. Your words should appear below." : "Tap and hold the globe key, then choose Syllivra.")
                 .font(.body).foregroundStyle(.secondary)
             KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
                 .frame(minHeight: 150, maxHeight: 260)
-                .padding(14)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                .padding(20)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
                 .accessibilityLabel("Dictation result")
             if firstDictationVerified {
                 OnboardingSuccessView(onComplete: finishOnboarding)
                     .frame(minHeight: 180)
             } else {
                 if fullAccessRequired {
-                    Text("Full Access required. Switch on Allow Full Access for sAiity in Settings, then return to the keyboard.")
+                    Text("Full Access required. Switch on Allow Full Access for Syllivra in Settings, then return to the keyboard.")
                         .font(.caption).foregroundStyle(.red)
                     HStack {
                         Button("Open Settings", action: openSettings).buttonStyle(.borderedProminent)
@@ -55,23 +57,42 @@ struct GlobeKeyTutorialPage: View {
                     Button("Return to setup", action: onReturnToSetup)
                         .buttonStyle(.bordered)
                 }
+                Button("Finish setup without dictating", action: finishOnboarding)
+                    .buttonStyle(.bordered)
             }
         }
         .padding(.vertical, 20)
-        .onAppear { observeTranscriptionReady() }
+        .onAppear {
+            coordinator.enableKeyboardSession()
+            observeTranscriptionReady()
+            refreshFullAccess()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshFullAccess() }
+        }
         .onDisappear {
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
             DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
-            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.keyboardFullAccessChanged)
         }
         .onChange(of: textFieldContent) { _, newValue in
-            guard awaitingInsertion, !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard awaitingInsertion,
+                  newValue != dictationBaselineText,
+                  !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             guard fullAccessVerified else { return }
             firstDictationVerified = true
             awaitingInsertion = false
             accessibilityAnnouncement = "First dictation inserted. Setup is complete."
             UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
             PersistentLog.log(.onboardingGlobeTutorialTextDetected)
+        }
+        .onChange(of: setup.fullAccessVerified) { _, verified in
+            guard dictusKeyboardActive else { return }
+            fullAccessRequired = !verified
+            if verified {
+                dictationFailed = false
+                accessibilityAnnouncement = "Syllivra keyboard is active. Tap the microphone to dictate."
+                UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
+            }
         }
     }
 
@@ -87,23 +108,12 @@ struct GlobeKeyTutorialPage: View {
             return
         }
         fullAccessRequired = false
-        accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
+        accessibilityAnnouncement = "Syllivra keyboard is active. Tap the microphone to dictate."
         UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
         PersistentLog.log(.onboardingDictusKeyboardActivated)
     }
 
     private func observeTranscriptionReady() {
-        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessChanged) {
-            DispatchQueue.main.async {
-                guard dictusKeyboardActive else { return }
-                refreshFullAccess()
-                guard fullAccessVerified else { return }
-                fullAccessRequired = false
-                dictationFailed = false
-                accessibilityAnnouncement = "sAiity keyboard is active. Tap the microphone to dictate."
-                UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
-            }
-        }
         DarwinNotificationCenter.addObserver(for: DarwinNotificationName.transcriptionReady) {
             DispatchQueue.main.async {
                 guard dictusKeyboardActive else { return }
@@ -114,7 +124,7 @@ struct GlobeKeyTutorialPage: View {
                     accessibilityAnnouncement = "Full Access required before dictation can start."
                     return
                 }
-                textFieldContent = ""
+                dictationBaselineText = textFieldContent
                 awaitingInsertion = true
                 accessibilityAnnouncement = "Dictation received. Waiting for insertion."
                 UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
@@ -130,13 +140,7 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func refreshFullAccess() {
-        let handshake = AppGroup.defaults.bool(forKey: SharedKeys.onboardingFullAccessVerified)
-        let date = AppGroup.defaults.double(forKey: SharedKeys.onboardingFullAccessHandshakeDate)
-        fullAccessVerified = KeyboardSetupStatus(
-            keyboardInstalled: dictusKeyboardActive,
-            fullAccessHandshake: handshake,
-            handshakeDate: date > 0 ? Date(timeIntervalSince1970: date) : nil
-        ).fullAccessVerified
+        setup.requestProbe()
     }
 
     private func openSettings() {
@@ -393,7 +397,7 @@ private struct KeyboardSwitchAnimation: View {
             Divider().opacity(0.2)
             pickerRow("Emoji")
             Divider().opacity(0.2)
-            pickerRow("sAiity", highlighted: dictusHighlighted, accent: dictusHighlighted)
+            pickerRow("Syllivra", highlighted: dictusHighlighted, accent: dictusHighlighted)
 
             // Keyboard type icons (dock/split/full)
             HStack(spacing: 12) {

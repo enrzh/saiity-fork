@@ -38,9 +38,9 @@ inline int substitutionSlot(uint16_t c) {
 
 /// Keyboard proximity costs for weighted edit distance scoring.
 ///
-/// The table is computed in DictusCore (`KeyboardProximity`) and installed here. WHY the
+/// The table is computed in SyllivraKernel (`KeyboardProximity`) and installed here. WHY the
 /// split: the key geometry and the distance formula are data, evaluated once per
-/// dictionary load, and DictusCore is the only place in this repo that can run a test
+/// dictionary load, and SyllivraKernel is the only place in this repo that can run a test
 /// against them -- the keyboard target has no test bundle. What stays here is the lookup
 /// the scorer's inner loop performs.
 class ProximityMap {

@@ -25,9 +25,9 @@ python3 tools/onboard_language.py verify it
 
 ## Pieces involved
 
-- **`SupportedLanguage`** (`DictusCore/Sources/DictusCore/SupportedLanguage.swift`) — the type-safe enum. Adding a case unlocks settings picker, keyboard cycle, and the autocorrect pipeline.
-- **`LanguageProfile`** (`DictusCore/Sources/DictusCore/Languages/LanguageProfile.swift`) — pure-data struct. One file per language under `Languages/<Lang>.swift`. Holds: `code`, `displayName`, `shortCode`, `defaultLayout`, `spaceName`, `returnName`, `overrides`, `accentMap`, `contractionPrefixes`. Algorithms read the profile; they don't switch on language code.
-- **Per-language tests** under `DictusCore/Tests/DictusCoreTests/Languages/<Lang>LanguageTests.swift`. One file per language.
+- **`SupportedLanguage`** (`SyllivraKernel/Sources/SyllivraKernel/SupportedLanguage.swift`) — the type-safe enum. Adding a case unlocks settings picker, keyboard cycle, and the autocorrect pipeline.
+- **`LanguageProfile`** (`SyllivraKernel/Sources/SyllivraKernel/Languages/LanguageProfile.swift`) — pure-data struct. One file per language under `Languages/<Lang>.swift`. Holds: `code`, `displayName`, `shortCode`, `defaultLayout`, `spaceName`, `returnName`, `overrides`, `accentMap`, `contractionPrefixes`. Algorithms read the profile; they don't switch on language code.
+- **Per-language tests** under `SyllivraKernel/Tests/SyllivraKernelTests/Languages/<Lang>LanguageTests.swift`. One file per language.
 - **Frequency JSON** at `DictusKeyboard/Resources/<code>_frequency.json` — top ~40K word→count entries. Authored by `scripts/curate_<code>_dictionary.py`.
 - **Spellcheck binary** at `DictusKeyboard/Resources/<code>_spellcheck.dict` — built by `tools/dict_builder.py` from the frequency JSON.
 - **N-gram binary** at `DictusKeyboard/Resources/<code>_ngrams.dict` — built by `tools/ngram_builder.py` from OpenSubtitles + Google Books + Wikipedia CirrusSearch dumps.
@@ -78,11 +78,11 @@ Four sections of the pbxproj need updates: `PBXBuildFile`, `PBXFileReference`, `
 Runs:
 
 ```
-cd DictusCore && swift test
+cd SyllivraKernel && swift test
 xcodebuild build -project Dictus.xcodeproj -scheme DictusApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -configuration Debug
 ```
 
-The DictusCore suite runs on the host Mac, not on a simulator. The package builds for macOS on purpose — that is what the `#if canImport(UIKit)` guards scattered through the library are for — and no test in the suite is gated to iOS, so a simulator destination costs minutes and buys no coverage. The app build below it is the part that needs a simulator.
+The SyllivraKernel suite runs on the host Mac, not on a simulator. The package builds for macOS on purpose — that is what the `#if canImport(UIKit)` guards scattered through the library are for — and no test in the suite is gated to iOS, so a simulator destination costs minutes and buys no coverage. The app build below it is the part that needs a simulator.
 
 ## Curated decisions (no automation can guess these)
 
@@ -118,7 +118,7 @@ The polish layer (issue #141, ADR 0003) runs a per-language system prompt agains
 
 ### Where to add the prompt
 
-`DictusCore/Sources/DictusCore/Polish/Prompts/PolishNaturalPrompt<XX>.swift` where `<XX>` is the uppercase two-letter ISO 639-1 code (`FR`, `EN`, `ES`, `DE`, …). One file per language, one `enum` per file, single static `instructions(glossary:)` method returning the prompt string.
+`SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPrompt<XX>.swift` where `<XX>` is the uppercase two-letter ISO 639-1 code (`FR`, `EN`, `ES`, `DE`, …). One file per language, one `enum` per file, single static `instructions(glossary:)` method returning the prompt string.
 
 ### What to copy from
 
@@ -164,7 +164,7 @@ case (.natural, .<yourLanguage>):
 
 The compiler enforces exhaustiveness — adding a new `SupportedLanguage` case without an arm here is a build error, which is what we want.
 
-No Xcode project edits are needed: the prompts live in the `DictusCore` SwiftPM target (`path: "Sources/DictusCore"`), which auto-discovers every `.swift` file under it. Just create the file in the `Prompts/` directory and it compiles.
+No Xcode project edits are needed: the prompts live in the `SyllivraKernel` SwiftPM target (`path: "Sources/SyllivraKernel"`), which auto-discovers every `.swift` file under it. Just create the file in the `Prompts/` directory and it compiles.
 
 ### Repair prompts
 

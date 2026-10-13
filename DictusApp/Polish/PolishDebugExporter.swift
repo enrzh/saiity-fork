@@ -1,7 +1,7 @@
 // DictusApp/Polish/PolishDebugExporter.swift
 import Foundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Wire format for Polish debug exports. Stable schema — when iterating on the
 /// Light/Repair prompts, this is what gets shared from the device for analysis.
@@ -57,6 +57,8 @@ struct PolishDebugExport: Codable {
         /// triage when `appleFMAvailable` is false (e.g. user has Siri in
         /// English but iPhone in French → "appleIntelligenceNotEnabled").
         let appleFMState: String
+        /// Stored cleanup backend (`appleIntelligence` or `ollama:<uuid>`).
+        let polishCleanupBackend: String
     }
 
     struct Event: Codable {
@@ -100,7 +102,7 @@ struct PolishDebugExport: Codable {
         let postprocessMs: Int?
         let rawCharCount: Int
         let polishedCharCount: Int
-        let raw: String
+        let raw: String?
         let polished: String?
         let sttEngine: String?
         let sttModelID: String?
@@ -133,7 +135,8 @@ enum PolishDebugExporter {
             activeModelID: activeModelID,
             activeModelEngine: activeEngine,
             appleFMAvailable: PolishAvailability.isAppleFMAvailable,
-            appleFMState: String(describing: PolishAvailability.state)
+            appleFMState: String(describing: PolishAvailability.state),
+            polishCleanupBackend: PolishCleanupBackend.load(from: defaults).storageValue
         )
 
         var outcomes: [String: Int] = [

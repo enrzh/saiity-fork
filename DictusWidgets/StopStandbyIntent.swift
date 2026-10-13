@@ -14,7 +14,7 @@
 import AppIntents
 import ActivityKit
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 struct StopStandbyIntent: LiveActivityIntent {
     @Parameter(title: "Toggle dictation") var toggleDetection: Bool
@@ -28,15 +28,13 @@ struct StopStandbyIntent: LiveActivityIntent {
     }
 
     static var title: LocalizedStringResource = "Toggle dictation"
-    static var description = IntentDescription("Turn sAiity dictation and microphone access on or off")
+    static var description = IntentDescription("Turn Syllivra dictation and microphone access on or off")
 
     func perform() async throws -> some IntentResult {
         if toggleDetection {
             let defaults = UserDefaults(suiteName: AppGroup.identifier)
-            let enabled = !(defaults?.object(forKey: SharedKeys.serviceEnabled) == nil
-                || defaults?.bool(forKey: SharedKeys.serviceEnabled) == true)
-            defaults?.set(enabled, forKey: SharedKeys.serviceEnabled)
-            defaults?.synchronize()
+            let enabled = !KeyboardDictationService.isEnabled(in: defaults)
+            KeyboardDictationService.setEnabled(enabled, in: defaults)
 
             for activity in Activity<DictusLiveActivityAttributes>.activities {
                 let current = activity.content.state
@@ -44,7 +42,6 @@ struct StopStandbyIntent: LiveActivityIntent {
                     phase: current.phase,
                     recordingStartDate: current.recordingStartDate,
                     waveformLevels: current.waveformLevels,
-                    transcriptionPreview: current.transcriptionPreview,
                     detectionMuted: current.detectionMuted,
                     serviceEnabled: enabled
                 )
@@ -55,6 +52,11 @@ struct StopStandbyIntent: LiveActivityIntent {
                     name: Notification.Name("DictusServiceToggleRequested"),
                     object: nil
                 )
+            }
+            // A cold microphone needs foreground preparation; disabling stays
+            // in the Live Activity. Older systems use the same URL as a Link.
+            if enabled, #available(iOS 18.2, *), let url = KeyboardDictationBridge.recoveryURL() {
+                return .result(opensIntent: OpenURLIntent(url))
             }
             return .result()
         }

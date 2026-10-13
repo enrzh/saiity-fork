@@ -3,7 +3,7 @@
 // active, when the app leaves the foreground instead (issue #311).
 import Foundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// The exit a parked cold start is guaranteed to get.
 ///
@@ -11,7 +11,7 @@ import DictusCore
 /// it is one concern with one entry point, and the coordinator is already the largest
 /// type in the app -- adding this to it put the file past both of SwiftLint's length
 /// limits, which is the linter making the same point. The decision these methods act
-/// on is `ColdStartResolutionPolicy` in DictusCore; this is the half that needs UIKit
+/// on is `ColdStartResolutionPolicy` in SyllivraKernel; this is the half that needs UIKit
 /// and the App Group.
 ///
 /// WHY three members of the coordinator are not `private`: Swift scopes `private` to

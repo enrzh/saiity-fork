@@ -1,7 +1,7 @@
 // DictusApp/Services/SoundFeedbackService.swift
-// Plays short WAV sounds at key dictation lifecycle events using AVAudioPlayer.
+// Plays short feedback sounds at key dictation lifecycle events using AVAudioPlayer.
 import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 /// Plays audio feedback for dictation recording events (start, stop, cancel).
 ///
@@ -17,7 +17,7 @@ import DictusCore
 /// near-instant. We call prepareToPlay() on cache to pre-fill audio buffers.
 ///
 /// WHY enum with static methods (same pattern as HapticFeedback):
-/// Consistency with the existing DictusCore HapticFeedback enum.
+/// Consistency with the existing SyllivraKernel HapticFeedback enum.
 enum SoundFeedbackService {
 
     // MARK: - Cache
@@ -60,7 +60,7 @@ enum SoundFeedbackService {
 
     // MARK: - Playback
 
-    /// Play a sound by file name (without .wav extension).
+    /// Play a sound by file name (without its extension).
     ///
     /// Uses AVAudioPlayer with the ambient category so the silent switch is respected.
     /// Volume is applied from user preferences on each play.
@@ -82,9 +82,10 @@ enum SoundFeedbackService {
             return
         }
 
-        // Find the WAV file in the app bundle's Sounds subdirectory.
-        guard let url = Bundle.main.url(forResource: soundName, withExtension: "wav", subdirectory: "Sounds") else {
-            PersistentLog.log("[Sound] WAV not found in bundle: \(soundName).wav (subdirectory: Sounds)")
+        // Prefer the lossless bundled sound, preserving WAV fallback for older bundles.
+        guard let url = Bundle.main.url(forResource: soundName, withExtension: "caf", subdirectory: "Sounds")
+            ?? Bundle.main.url(forResource: soundName, withExtension: "wav", subdirectory: "Sounds") else {
+            PersistentLog.log("[Sound] File not found in bundle: \(soundName) (subdirectory: Sounds)")
             return
         }
 

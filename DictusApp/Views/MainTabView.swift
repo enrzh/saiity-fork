@@ -1,7 +1,7 @@
 // DictusApp/Views/MainTabView.swift
 // Root navigation container with 2 tabs and full-screen recording overlay.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Root view presenting the Home and Settings tab navigation structure.
 ///
@@ -50,6 +50,11 @@ struct MainTabView: View {
         _preparingModelID = State(
             initialValue: launchIntent == .prepare ? Self.persistedActiveModelIdentifier : nil
         )
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe") {
+            _selectedTab = State(initialValue: 1)
+        }
+        #endif
     }
 
     /// The active model as persisted in the App Group, with the shipped default.
@@ -60,7 +65,7 @@ struct MainTabView: View {
     }
 
     private var activeModelIdentifier: String {
-        modelManager.activeModel ?? Self.persistedActiveModelIdentifier
+        modelManager.keyboardModel ?? Self.persistedActiveModelIdentifier
     }
 
     var body: some View {
@@ -86,16 +91,16 @@ struct MainTabView: View {
                 TabView(selection: $selectedTab) {
                     // Tab 0: Home dashboard
                     NavigationStack {
-                        HomeView()
+                        HomeView(modelManager: modelManager)
                     }
                     .tabItem {
-                        Label("Home", systemImage: "waveform")
+                        Label("Speak", systemImage: "waveform")
                     }
                     .tag(0)
 
                     // Tab 1: Settings
                     NavigationStack {
-                        SettingsView()
+                        SettingsView(modelManager: modelManager)
                     }
                     .tabItem {
                         Label("Settings", systemImage: "slider.horizontal.3")

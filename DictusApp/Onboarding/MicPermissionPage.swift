@@ -3,7 +3,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 /// Requests microphone permission with clear explanation of privacy.
 ///
@@ -20,104 +20,37 @@ struct MicPermissionPage: View {
     @State private var isRequesting = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // Mic icon
-            Image(systemName: "mic.circle.fill")
-                .font(.system(.largeTitle, weight: .semibold))
-                .foregroundColor(.dictusAccent)
-                .padding(.bottom, 24)
-
-            // Title
-            Text("Microphone")
-                .font(.dictusHeading)
-                .foregroundStyle(.primary)
-                .padding(.bottom, 16)
-
-            // Explanation
-            Text("sAiity needs the microphone to transcribe your voice. Your recordings stay on your device.")
-                .font(.dictusBody)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Spacer()
-
-            // Permission result feedback
-            if let granted = permissionGranted {
-                if granted {
-                    Label("Microphone authorized", systemImage: "checkmark.circle.fill")
-                        .font(.dictusBody)
-                        .foregroundColor(.dictusSuccess)
-                        .padding(.bottom, 16)
-                } else {
-                    Text("You can enable the microphone later in Settings")
-                        .font(.dictusCaption)
-                        .foregroundColor(.orange)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 16)
+        VStack(alignment: .leading, spacing: 28) {
+            SaiityPageHeader(title: "Allow microphone access",
+                             subtitle: "Syllivra uses the microphone when you start a dictation.")
+            VStack(alignment: .leading, spacing: 20) {
+                Text("iOS will ask for microphone access. You can change it at any time in Settings.")
+                    .foregroundStyle(.secondary)
+                if permissionGranted == true {
+                    Label("Microphone authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+                } else if permissionGranted == false {
+                    Text("Dictation needs the microphone. You can finish setup and turn the microphone on later in Settings.")
+                        .foregroundStyle(.secondary)
                 }
             }
-
-            // Action button
+            .frame(maxWidth: .infinity, alignment: .leading)
             if permissionGranted == nil {
-                // Request permission button.
-                // WHY neutral wording ("Continue", not "Allow microphone"):
-                // App Review guideline 5.1.1(iv) forbids priming buttons that direct
-                // the user toward granting a system permission. The button only advances
-                // to the OS prompt — iOS owns the actual allow/deny choice.
-                Button(action: requestPermission) {
-                    Text("Continue")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(.headline)
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                .controlSize(.large)
-                .disabled(isRequesting)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 48)
+                Button("Allow microphone", action: requestPermission)
+                    .buttonStyle(SaiityPrimaryActionStyle()).disabled(isRequesting)
             } else if permissionGranted == true {
-                Button(action: onNext) {
-                    Text("Continue after authorization")
-                        .frame(maxWidth: .infinity)
-                }
-                .font(.headline)
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                .controlSize(.large)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 48)
+                Button("Continue", action: onNext)
+                    .buttonStyle(SaiityPrimaryActionStyle())
             } else {
-                VStack(spacing: 12) {
-                    Button(action: openSettings) {
-                        Label("Open Settings", systemImage: "arrow.up.right")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .font(.headline)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding(.horizontal, 32)
-
-                    Text("Microphone access is required for dictation")
-                        .font(.dictusCaption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                .padding(.bottom, 48)
+                Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
+                    .buttonStyle(SaiityPrimaryActionStyle())
+                Button("Continue without microphone", action: onNext)
+                    .buttonStyle(.bordered).controlSize(.large)
             }
         }
+        .onAppear(perform: refreshPermission)
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
-            switch AVAudioSession.sharedInstance().recordPermission {
-            case .granted: permissionGranted = true
-            case .denied: permissionGranted = false
-            case .undetermined: permissionGranted = nil
-            @unknown default: permissionGranted = false
-            }
+            refreshPermission()
             UIAccessibility.post(notification: .announcement, argument: permissionGranted == true ? "Microphone authorized" : "Microphone permission still required")
         }
     }
@@ -132,7 +65,7 @@ struct MicPermissionPage: View {
         switch session.recordPermission {
         case .granted:
             permissionGranted = true
-            autoAdvance()
+            isRequesting = false
         case .denied:
             permissionGranted = false
             isRequesting = false
@@ -148,9 +81,6 @@ struct MicPermissionPage: View {
                 DispatchQueue.main.async {
                     permissionGranted = allowed
                     isRequesting = false
-                    if allowed {
-                        autoAdvance()
-                    }
                 }
             }
         @unknown default:
@@ -159,10 +89,12 @@ struct MicPermissionPage: View {
         }
     }
 
-    private func autoAdvance() {
-        // Auto-advance after brief delay to show the checkmark
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            onNext()
+    private func refreshPermission() {
+        switch AVAudioSession.sharedInstance().recordPermission {
+        case .granted: permissionGranted = true
+        case .denied: permissionGranted = false
+        case .undetermined: permissionGranted = nil
+        @unknown default: permissionGranted = false
         }
     }
 

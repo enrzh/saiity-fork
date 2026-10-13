@@ -1,6 +1,6 @@
 // DictusKeyboard/Models/RecentEmojis.swift
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 /// Manages recently used emojis, persisted via App Group UserDefaults.
 /// The caller supplies the page capacity so recents never spill into a second

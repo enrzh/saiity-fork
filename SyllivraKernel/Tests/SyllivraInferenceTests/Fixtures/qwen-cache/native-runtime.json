@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "modelIdentifier": "native-qwen-cache-probe",
+  "upstreamRevision": "owned-qwen-cache-v1",
+  "architecture": "coreml-probe",
+  "minimumIOSMajor": 18,
+  "license": {
+    "identifier": "MIT",
+    "source": "scripts/convert-native-qwen.py; repository LICENSE; synthetic weights"
+  },
+  "contextWindowTokens": 16,
+  "vocabularySize": 32,
+  "graphs": [
+    {
+      "name": "decoder",
+      "path": "decoder.mlpackage",
+      "inputs": [
+        {
+          "name": "input_ids",
+          "dataType": "int32",
+          "shape": [
+            1,
+            1
+          ]
+        },
+        {
+          "name": "position",
+          "dataType": "int32",
+          "shape": [
+            1
+          ]
+        },
+        {
+          "name": "causal_mask",
+          "dataType": "float32",
+          "shape": [
+            1,
+            1,
+            1,
+            16
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dataType": "float32",
+          "shape": [
+            1,
+            32
+          ]
+        }
+      ],
+      "states": [
+        {
+          "name": "key_cache_0",
+          "dataType": "float16",
+          "shape": [
+            1,
+            2,
+            16,
+            8
+          ],
+          "contextAxis": 2
+        },
+        {
+          "name": "value_cache_0",
+          "dataType": "float16",
+          "shape": [
+            1,
+            2,
+            16,
+            8
+          ],
+          "contextAxis": 2
+        },
+        {
+          "name": "key_cache_1",
+          "dataType": "float16",
+          "shape": [
+            1,
+            2,
+            16,
+            8
+          ],
+          "contextAxis": 2
+        },
+        {
+          "name": "value_cache_1",
+          "dataType": "float16",
+          "shape": [
+            1,
+            2,
+            16,
+            8
+          ],
+          "contextAxis": 2
+        }
+      ]
+    }
+  ],
+  "files": {
+    "cache-golden.json": "bdc0e45f54b639548577d500cf5852e49266af1c15333d391c7c3d9b9afe8a68",
+    "conversion.json": "03970cf097b447a37a6e33a9fc418913d6bb0c078ce4c68e5ecf5e0de35c957b",
+    "decoder.mlpackage/Manifest.json": "0fc8fa987fdda22b97d33139dd6f0cf946aec6d4823559cd345c1a7db5c4a359",
+    "decoder.mlpackage/Data/com.apple.CoreML/model.mlmodel": "cb102ac6ee2207f7f80ce6ba74c35f01cdbb710a02871ec846103d3d155359f2",
+    "decoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin": "960f590939cd654520fd5408be04a4f68f7c73341e999b6cdbcc9777f3c2b740"
+  }
+}

@@ -60,7 +60,7 @@ GERMAN_SINGLE_ACCENTS = {
 }
 
 # Two-character sequences that collapse to a single German character. Mirrors
-# `germanProfile.collapseRules` in DictusCore/Sources/DictusCore/Languages/German.swift
+# `germanProfile.collapseRules` in SyllivraKernel/Sources/SyllivraKernel/Languages/German.swift
 # one for one — the curation and the runtime expander must agree on what counts
 # as a transliteration, or a word gets dropped here that the expander can never
 # reconstruct (or the reverse, which is issue #326).

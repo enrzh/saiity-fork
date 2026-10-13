@@ -85,4 +85,24 @@ public enum PolishAvailability {
     public static func canOpenSystemSettings(for state: PolishAvailabilityState) -> Bool {
         state == .appleIntelligenceNotEnabled
     }
+
+    /// Short guidance for Settings and the Models cleanup row.
+    public static func guidance(for state: PolishAvailabilityState) -> String {
+        switch state {
+        case .available:
+            return "On-device Foundation Models · ready when cleanup is on."
+        case .appleIntelligenceNotEnabled:
+            return "Apple Intelligence is required for polish. Enable it in iPhone Settings."
+        case .modelNotReady:
+            return "The Apple Intelligence model is downloading. Try again in a few minutes."
+        case .deviceNotEligible:
+            return "Apple Intelligence is not supported on this device."
+        case .osTooOld:
+            return "Polish requires iOS 26 or later."
+        case .sdkMissing:
+            return "Polish is not available in this build."
+        case .other(let reason):
+            return "Apple Intelligence is unavailable (\(reason))."
+        }
+    }
 }

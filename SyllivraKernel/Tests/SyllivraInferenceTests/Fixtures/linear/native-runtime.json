@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "modelIdentifier": "native-linear-probe",
+  "upstreamRevision": "owned-linear-v1",
+  "architecture": "coreml-probe",
+  "minimumIOSMajor": 17,
+  "license": {
+    "identifier": "Apache-2.0",
+    "source": "scripts/generate-native-model-fixture.py; repository LICENSE"
+  },
+  "files": {
+    "linear.mlmodel": "c4b1623b112d18701eac736eed4d123487ace68a2b0b4ba6b5828cd76338ad59"
+  },
+  "graphs": [
+    {
+      "name": "decoder",
+      "path": "linear.mlmodel",
+      "inputs": [
+        {
+          "name": "input",
+          "dataType": "float32",
+          "shape": [
+            2
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dataType": "float32",
+          "shape": [
+            3
+          ]
+        }
+      ],
+      "states": []
+    }
+  ]
+}

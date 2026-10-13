@@ -1,7 +1,7 @@
 // DictusApp/Views/DiagnosticDetailView.swift
 // App Group diagnostic display, extracted from ContentView for reuse in Settings.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Displays App Group diagnostic results (read/write health check).
 ///
@@ -14,6 +14,10 @@ struct DiagnosticDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                SaiityPageHeader(title: "Keyboard connection",
+                                 subtitle: "Check the shared space that carries your dictation between apps.")
+            }.listRowBackground(Color.clear)
             Section("App Group") {
                 diagnosticRow("Container", result.containerExists)
                 diagnosticRow("Read", result.canRead)
@@ -27,7 +31,7 @@ struct DiagnosticDetailView: View {
             }
         }
         .navigationTitle("Diagnostics")
-        .accessibilityAddTraits(.isModal)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder

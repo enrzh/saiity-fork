@@ -1,7 +1,7 @@
 // DictusKeyboard/KeySoundPolicy.swift
 // Which click a key produces, decided without performing the key's action.
 
-import DictusCore
+import SyllivraKernel
 
 extension KeySound {
     /// The click `key` produces, or nil for keys that stay silent.

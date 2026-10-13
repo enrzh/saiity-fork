@@ -1,9 +1,9 @@
 // DictusApp/Views/ProBannerView.swift
-// Compact gradient banner for HomeView, hidden when Pro is active.
+// Compact native list row for HomeView, hidden when Pro is active.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
-/// Compact Pro banner at the bottom of HomeView.
+/// Compact Pro action at the bottom of HomeView.
 ///
 /// WHY a separate view:
 /// Keeps HomeView clean and makes the banner independently testable.
@@ -23,28 +23,24 @@ struct ProBannerView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "crown.fill")
                         .font(.title3)
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(.tint)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Unlock sAiity Pro")
-                            .font(.dictusSubheading)
-                            .foregroundColor(.primary)
+                        Text("Unlock Syllivra Pro")
+                            .font(.body.weight(.medium))
                         Text("AI reformulation, history & more")
-                            .font(.dictusCaption)
-                            .foregroundColor(.secondary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(16)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 1))
             }
-            .buttonStyle(GlassPressStyle(pressedScale: 0.97))
+            .buttonStyle(.plain)
             .transition(reduceMotion ? .identity : .opacity.combined(with: .scale))
             .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: proStatus.isProActive)
             .paywallCover(isPresented: $showPaywall)

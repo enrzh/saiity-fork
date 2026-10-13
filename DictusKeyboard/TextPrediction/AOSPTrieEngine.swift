@@ -1,7 +1,8 @@
 // DictusKeyboard/TextPrediction/AOSPTrieEngine.swift
 // Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
 import Foundation
-import DictusCore
+import SyllivraKernel
+import os
 
 /// Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
 ///
@@ -12,39 +13,31 @@ import DictusCore
 final class AOSPTrieEngine {
 
     private let bridge = AOSPTrieBridge()
-    private var wordCount: Int = 0
+    private var wordCount: Int { loadGeneration.withLock { $0.wordCount } }
 
     /// Serial queue for dictionary loading. Ensures only one load runs at a time.
     private let loadQueue = DispatchQueue(
         label: "de.aiity.saiity.aosptrie-load",
         qos: .userInitiated
     )
+    private let loadGeneration = OSAllocatedUnfairLock(initialState:
+        (generation: UInt(0), loading: false, language: "fr", mounted: Optional<String>.none, wordCount: 0))
 
     /// True while a background load is in progress.
-    private(set) var isLoading: Bool = false
+    var isLoading: Bool { loadGeneration.withLock { $0.loading } }
 
     /// The currently loaded language code ("fr", "en", "es").
     /// Set by load(language:) so overrides and apostrophe handling can be language-aware.
-    private var currentLanguage: String = "fr"
+    private var currentLanguage: String { loadGeneration.withLock { $0.language } }
 
-    /// The language whose data is mmap'd **right now**, or nil when none is.
-    ///
-    /// WHY this is not `currentLanguage`: that one is the language most recently
-    /// *requested*, assigned synchronously when `load` is called, so it names a
-    /// dictionary that will not exist for another few hundred milliseconds. Any
-    /// decision about the data itself — see `UserDictionaryPruneGate` — has to
-    /// ask what is mounted, not what was ordered.
-    ///
-    /// Written on the main thread only: cleared in `load` at the same instant the
-    /// previous mmap is torn down, set in the load's main-thread completion. So a
-    /// non-nil value implies the bridge is loaded, and the pair cannot be
-    /// observed disagreeing from the main thread.
-    private(set) var mountedLanguage: String?
+    /// The dictionary available for lookups. A pending request makes the old map
+    /// unavailable immediately; teardown and mapping run on the serial load queue.
+    var mountedLanguage: String? { loadGeneration.withLock { $0.mounted } }
 
     /// The active language's data profile, or nil if `currentLanguage` is not a
     /// registered `SupportedLanguage`. All per-language data (overrides, accentMap,
     /// contractionPrefixes) is read from here so adding a language is a matter of
-    /// authoring `Languages/<Lang>.swift` in DictusCore.
+    /// authoring `Languages/<Lang>.swift` in SyllivraKernel.
     private var currentProfile: LanguageProfile? {
         SupportedLanguage(rawValue: currentLanguage)?.profile
     }
@@ -60,23 +53,34 @@ final class AOSPTrieEngine {
     ///   can run work that needs to ask the dictionary questions — there is no
     ///   other moment at which `wordExists` starts telling the truth.
     func load(language: String, bundle: Bundle = .main, completion: ((Bool) -> Void)? = nil) {
-        isLoading = true
-        currentLanguage = language
-        // Cleared here, with the teardown it describes: from this line until the
-        // completion below, nothing is mounted.
-        mountedLanguage = nil
-        bridge.unloadDictionary()
-        wordCount = 0
+        let generation = loadGeneration.withLock { state in
+            state.generation &+= 1
+            state.loading = true
+            state.language = language
+            state.mounted = nil
+            state.wordCount = 0
+            return state.generation
+        }
 
         loadQueue.async { [weak self] in
             guard let self = self else { return }
+            guard self.loadGeneration.withLock({ $0.generation == generation }) else { return }
+
+            // A newer load cannot tear down the bridge while this job is mapping it.
+            self.bridge.unloadDictionary()
+            self.bridge.unloadNgrams()
 
             guard let path = bundle.path(
                 forResource: "\(language)_spellcheck", ofType: "dict"
             ) else {
                 print("[AOSPTrieEngine] Failed to find \(language)_spellcheck.dict")
                 DispatchQueue.main.async {
-                    self.isLoading = false
+                    let completed = self.loadGeneration.withLock { state in
+                        guard state.generation == generation else { return false }
+                        state.loading = false
+                        return true
+                    }
+                    guard completed else { return }
                     completion?(false)
                 }
                 return
@@ -94,14 +98,22 @@ final class AOSPTrieEngine {
             }
 
             DispatchQueue.main.async {
+                // A previous language's completion must not mark a replacement
+                // ready while the latest dictionary is still loading.
+                let wordCount = success ? Int(self.bridge.wordCount()) : 0
+                let completed = self.loadGeneration.withLock { state in
+                    guard state.generation == generation else { return false }
+                    state.wordCount = wordCount
+                    state.mounted = success ? language : nil
+                    state.loading = false
+                    return true
+                }
+                guard completed else { return }
                 if success {
-                    self.wordCount = Int(self.bridge.wordCount())
-                    self.mountedLanguage = language
-                    print("[AOSPTrieEngine] Loaded \(language)_spellcheck.dict (\(self.wordCount) words)")
+                    print("[AOSPTrieEngine] Loaded \(language)_spellcheck.dict (\(wordCount) words)")
                 } else {
                     print("[AOSPTrieEngine] Failed to load \(language)_spellcheck.dict")
                 }
-                self.isLoading = false
                 completion?(success)
             }
         }
@@ -110,9 +122,9 @@ final class AOSPTrieEngine {
     /// Installs the two substitution-cost tables the C++ scorer scores typos with: keyboard
     /// proximity for the active layout, and the accent relation.
     ///
-    /// WHY both tables come from DictusCore rather than being built in the C++:
+    /// WHY both tables come from SyllivraKernel rather than being built in the C++:
     /// they are data, evaluated once here per dictionary load and never in the scoring
-    /// loop, and DictusCore is the only target in this repo with a test bundle. Before
+    /// loop, and SyllivraKernel is the only target in this repo with a test bundle. Before
     /// #321 the geometry was hardcoded as `float[26][26]` indexed by `c - 'a'`, which left
     /// QWERTZ's ü/ö/ä keys with nowhere to sit and sent QWERTZ to the QWERTY table, where
     /// y and z are in each other's places.
@@ -159,7 +171,7 @@ final class AOSPTrieEngine {
             return (corrected, [])
         }
 
-        guard bridge.isLoaded(), !word.isEmpty else { return nil }
+        guard isLoaded, !word.isEmpty else { return nil }
 
         // Handle apostrophe words: "qu'il" -> check "il", "l'homme" -> check "homme"
         // French contractions split at the apostrophe; only the main word can be misspelled.
@@ -195,20 +207,20 @@ final class AOSPTrieEngine {
     }
 
     /// Whether a dictionary is loaded and ready for lookups.
-    var isLoaded: Bool { bridge.isLoaded() }
+    var isLoaded: Bool { !isLoading && bridge.isLoaded() }
 
     /// Number of words in the loaded dictionary.
     var dictionarySize: Int { wordCount }
 
     /// Check if a word exists in the trie dictionary.
     func wordExists(_ word: String) -> Bool {
-        guard bridge.isLoaded() else { return false }
+        guard isLoaded else { return false }
         return bridge.wordExists(word)
     }
 
     /// Get the frequency of a word in the trie (0 if not found).
     func wordFrequency(_ word: String) -> UInt16 {
-        guard bridge.isLoaded() else { return 0 }
+        guard isLoaded else { return 0 }
         return UInt16(bridge.getFrequency(word))
     }
 
@@ -290,7 +302,7 @@ final class AOSPTrieEngine {
     /// Used by n-gram context boosting to find alternatives for valid-but-rare words
     /// (e.g., "sui" is valid but "suis" is much more likely after "je").
     func nearbyWords(for word: String) -> [String] {
-        guard bridge.isLoaded(), !word.isEmpty else { return [] }
+        guard isLoaded, !word.isEmpty else { return [] }
         return bridge.nearbyWords(word, maxEditDistance: 2.0, maxResults: 5) as? [String] ?? []
     }
 
@@ -300,7 +312,7 @@ final class AOSPTrieEngine {
 
 // MARK: - FrequencyProvider conformance
 //
-// Lets DictusCore autocorrect helpers (`expandAccents`, `expandContractions`)
+// Lets SyllivraKernel autocorrect helpers (`expandAccents`, `expandContractions`)
 // query the trie via the protocol without importing the bridge. `wordExists(_:)`
 // is already defined on the class and matches the protocol signature.
 extension AOSPTrieEngine: FrequencyProvider {

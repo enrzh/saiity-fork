@@ -1,12 +1,9 @@
 // DictusApp/Polish/PolishDebugView.swift
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
-/// Hidden screen surfacing recent polish invocations. Reached by long-pressing
-/// the Version row in Settings for 3 seconds. Round-1 debugging tool — no
-/// analytics, no shipping in product UX. Events persist in the App Group
-/// container for 7 days so cold-start tests survive an app kill.
+/// Optional local diagnostics, reached from Settings → Troubleshooting.
 struct PolishDebugView: View {
 
     @State private var entries: [PolishDebugEntry] = []
@@ -20,9 +17,16 @@ struct PolishDebugView: View {
     /// #357 spike, throwaway. Arms ONE Apple FM probe run inside the keyboard
     /// extension; see `DictusKeyboard/AppleFMExtensionProbe.swift`.
     @State private var probeArmed = false
+    @AppStorage(SharedKeys.polishDebugTranscriptsEnabled, store: AppGroup.defaults)
+    private var retainTranscripts = false
 
     var body: some View {
         List {
+            Section {
+                Toggle("Include transcripts in diagnostics", isOn: $retainTranscripts)
+            } footer: {
+                Text("Off by default. Requires dictation history to be enabled. Previously stored transcripts remain local until you choose Clear; exports hide them while this is off.")
+            }
             if !entries.isEmpty {
                 Section {
                     BreakdownRow(entries: entries)
@@ -53,7 +57,8 @@ struct PolishDebugView: View {
                     }
                 }
             }
-            // #357 spike, throwaway. Delete with the spike.
+            #if DEBUG
+            // Internal probe stays out of distribution diagnostics.
             Section {
                 Toggle("Arm keyboard Apple FM probe", isOn: $probeArmed)
                     .onChange(of: probeArmed) { _, armed in
@@ -71,6 +76,7 @@ struct PolishDebugView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            #endif
         }
         .navigationTitle("Polish debug")
         .toolbar {
@@ -87,7 +93,6 @@ struct PolishDebugView: View {
                     } label: {
                         Label("Clear", systemImage: "trash")
                     }
-                    .disabled(storedCount == 0)
                 } label: {
                     if isExporting {
                         ProgressView()
@@ -110,7 +115,7 @@ struct PolishDebugView: View {
                 PolishExportShareSheet(items: [exportURL])
             }
         }
-        .alert("Export failed",
+        .alert("Diagnostics action failed",
                isPresented: Binding(
                 get: { exportError != nil },
                 set: { if !$0 { exportError = nil } }
@@ -120,7 +125,8 @@ struct PolishDebugView: View {
         .confirmationDialog("Clear polish diagnostics", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("Clear polish diagnostics", role: .destructive) {
                 Task {
-                    await PolishCoordinator.shared.clearMetricsRing()
+                    do { try await PolishCoordinator.shared.clearMetricsRing() }
+                    catch { exportError = error.localizedDescription }
                     await refresh()
                 }
             }
@@ -134,6 +140,7 @@ struct PolishDebugView: View {
             Text("The complete seven-day polish window is ready to share.")
         }
         .task { await refresh() }
+        .onChange(of: retainTranscripts) { _, _ in Task { await refresh() } }
         .refreshable { await refresh() }
     }
 
@@ -215,7 +222,7 @@ private struct EntryRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text(entry.raw)
+            Text(entry.raw ?? "Transcript not retained")
                 .font(.caption)
                 .foregroundStyle(.primary)
                 .lineLimit(2)
@@ -247,9 +254,9 @@ private struct EntryDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 metaRow
-                section("Raw STT output", text: entry.raw)
+                section("Raw STT output", text: entry.raw ?? "Transcript not retained")
                 section("Engine output",
-                        text: entry.polished ?? "(engine did not run successfully)")
+                        text: entry.polished ?? (entry.raw == nil ? "Transcript not retained" : "(engine did not run successfully)"))
             }
             .padding()
         }

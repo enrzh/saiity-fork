@@ -1,0 +1,48 @@
+[
+  {
+    "id": "cleanup-mixed-negation-names-numbers",
+    "lang": "auto",
+    "raw": "Bitte nicht senden: 42 EUR an Léa. Keep the invoice unchanged und 我明天再确认，不要发送。",
+    "expect": [
+      { "contains": "nicht" },
+      { "contains": "42" },
+      { "contains": "Léa" },
+      { "contains": "Keep the invoice" },
+      { "contains": "不要发送" }
+    ]
+  },
+  {
+    "id": "cleanup-list-negation-numbers",
+    "lang": "auto",
+    "raw": "Do not send the payment to Marco.\n1. Keep invoice 1042\n2. Do not change 17.50 EUR",
+    "expect": [
+      { "contains": "not" },
+      { "contains": "Marco" },
+      { "contains": "1042" },
+      { "contains": "17.50 EUR" },
+      { "contains": "\n1." },
+      { "contains": "\n2." },
+      { "regexAbsent": "<<NL>>" }
+    ]
+  },
+  {
+    "id": "cleanup-units-identifiers-punctuation",
+    "lang": "auto",
+    "raw": "Ship SKU AB-120, 3 kg, not 4 kg, to Léa.",
+    "expect": [
+      { "contains": "AB-120" },
+      { "contains": "3 kg" },
+      { "contains": "not" },
+      { "contains": "Léa" }
+    ]
+  },
+  {
+    "id": "cleanup-self-correction-stays-corrected",
+    "lang": "auto",
+    "raw": "send it Tuesday actually Wednesday and keep invoice 1042",
+    "expect": [
+      { "contains": "Wednesday" },
+      { "contains": "1042" }
+    ]
+  }
+]

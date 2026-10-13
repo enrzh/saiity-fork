@@ -1,7 +1,7 @@
 // DictusApp/ColdStartLaunch.swift
 // Captures the dictation URL that launched the process, before SwiftUI draws anything.
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// The keyboard dictation intent this process was *launched with*, if any.
 ///

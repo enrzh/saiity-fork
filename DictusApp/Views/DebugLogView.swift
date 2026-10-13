@@ -2,7 +2,7 @@
 // Displays persistent debug logs from App Group file with color-coded entries.
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// A single parsed log entry from the persistent log file.
 ///

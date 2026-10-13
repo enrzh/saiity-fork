@@ -132,7 +132,7 @@ TrieNode Trie::readNode(uint32_t pos) const {
 
     // Characters (UTF-16 LE)
     if (p + node.charCount * 2 > end) return node;
-    node.chars = reinterpret_cast<const uint16_t*>(p);
+    node.chars = p;
     p += node.charCount * 2;
 
     // Frequency (only if terminal)
@@ -184,7 +184,7 @@ uint16_t Trie::traverse(const uint16_t* chars, int len) const {
             } else {
                 for (int i = 0; i < matchLen; i++) {
                     uint16_t nc;
-                    std::memcpy(&nc, &node.chars[i], 2);
+                    std::memcpy(&nc, node.chars + i * 2, 2);
                     if (nc != chars[inputPos + i]) {
                         matches = false;
                         break;

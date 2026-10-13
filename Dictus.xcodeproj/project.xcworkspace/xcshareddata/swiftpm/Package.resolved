@@ -1,5 +1,5 @@
 {
-  "originHash" : "88db910374b403b5c5b7376cc5d0a3cec8a35d05a4ffc070fb6ed89459506c14",
+  "originHash" : "ad0999c28c5138faf46b47da0d234da79f6e688bc6d52fa06ad3e84e6ac6bdf9",
   "pins" : [
     {
       "identity" : "devicekit",
@@ -15,8 +15,26 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidInference/FluidAudio.git",
       "state" : {
-		"revision" : "9830ce835881c0d0d40f90aabfaae3a6da5bebfb",
-		"version" : "0.12.4"
+        "revision" : "9830ce835881c0d0d40f90aabfaae3a6da5bebfb",
+        "version" : "0.12.4"
+      }
+    },
+    {
+      "identity" : "mlx-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ml-explore/mlx-swift",
+      "state" : {
+        "revision" : "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d",
+        "version" : "0.30.6"
+      }
+    },
+    {
+      "identity" : "mlx-swift-lm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ml-explore/mlx-swift-lm",
+      "state" : {
+        "revision" : "7e19e09027923d89ac47dd087d9627f610e5a91a",
+        "version" : "2.30.6"
       }
     },
     {
@@ -62,6 +80,15 @@
       "state" : {
         "revision" : "7d0b8880ef8e567dd4e0089f8b99fb354129017c",
         "version" : "2.4.2"
+      }
+    },
+    {
+      "identity" : "swift-numerics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-numerics",
+      "state" : {
+        "revision" : "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
+        "version" : "1.1.1"
       }
     },
     {

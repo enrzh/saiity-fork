@@ -1,7 +1,7 @@
 // DictusApp/Models/ModelRepoDownloader.swift
 // Downloads model files from a HuggingFace repo with real byte-level progress.
 import Foundation
-import DictusCore
+import SyllivraKernel
 import FluidAudio
 
 /// Downloads a HuggingFace model repo (Parakeet or WhisperKit) into the exact
@@ -46,7 +46,7 @@ final class ModelRepoDownloader {
         }
     }
 
-    struct Configuration: Sendable {
+    struct Configuration: Sendable, Codable, Equatable {
         /// Seconds without a single received byte before a file attempt is aborted.
         /// Applied as `timeoutIntervalForRequest`, which for download tasks is an
         /// IDLE timeout that resets whenever data arrives — a slow-but-alive
@@ -65,10 +65,8 @@ final class ModelRepoDownloader {
         /// Repo-relative paths that must exist on disk after the download —
         /// the final-verification tripwire (see Phase 4 in `download`).
         let requiredPaths: [String]
-        /// Optional remote directory prefix that is already represented by
-        /// `cacheDir` (Qwen's `f32/` or `int8/` folder).
-        let remotePathPrefixToStrip: String?
-
+        /// Quantized local cleanup weights and tokenizer assets at the repo root.
+        var includesRootWeights = false
         /// Parakeet v3 repo. Matches FluidAudio's `Repo.parakeet.remotePath`,
         /// its file selection, and mirrors `AsrModels.modelsExist` verification.
         static func parakeet(version: AsrModelVersion = .v3) -> Configuration {
@@ -83,27 +81,7 @@ final class ModelRepoDownloader {
                 repoPath: repo.remotePath,
                 directoryPatterns: ModelNames.ASR.requiredModels.map { "\($0)/" }.sorted(),
                 includesRootMetadata: true,
-                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile],
-                remotePathPrefixToStrip: nil
-            )
-        }
-
-        /// One Qwen3-ASR precision variant. The downloader traverses only the
-        /// selected precision folder and writes its contents into the variant
-        /// cache directory expected by FluidAudio.
-        static func qwen3ASR(variant: Qwen3AsrVariant) -> Configuration {
-            let prefix = "\(variant.rawValue)/"
-            return Configuration(
-                repoPath: variant.repo.remotePath,
-                directoryPatterns: [prefix],
-                includesRootMetadata: false,
-                requiredPaths: [
-                    ModelNames.Qwen3ASR.audioEncoderFile,
-                    ModelNames.Qwen3ASR.decoderStatefulFile,
-                    ModelNames.Qwen3ASR.embeddingsFile,
-                    "vocab.json"
-                ],
-                remotePathPrefixToStrip: prefix
+                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile]
             )
         }
 
@@ -129,8 +107,7 @@ final class ModelRepoDownloader {
                     "\(variant)/AudioEncoder.mlmodelc",
                     "\(variant)/TextDecoder.mlmodelc",
                     "\(variant)/config.json"
-                ],
-                remotePathPrefixToStrip: nil
+                ]
             )
         }
     }
@@ -189,6 +166,13 @@ final class ModelRepoDownloader {
         modelName: String,
         onProgress: @escaping @Sendable (Progress) -> Void
     ) async throws {
+        try Task.checkCancellation()
+        if let receipt = Self.validReceipt(in: cacheDir, configuration: configuration) {
+            let bytes = receipt.files.reduce(Int64(0)) { $0 + Int64(max(0, $1.size)) }
+            onProgress(Progress(bytesDownloaded: bytes, totalBytes: bytes,
+                                completedFiles: receipt.files.count, totalFiles: receipt.files.count))
+            return
+        }
         // Phase 1: list the repo tree and select files (engine parity via Configuration).
         let files = try await listRequiredFiles()
 
@@ -210,13 +194,10 @@ final class ModelRepoDownloader {
         for file in files {
             try Task.checkCancellation()
 
-            let localPath = configuration.remotePathPrefixToStrip.map {
-                String(file.path.dropFirst($0.count))
-            } ?? file.path
-            let destination = cacheDir.appendingPathComponent(localPath)
+            let destination = cacheDir.appendingPathComponent(file.path)
 
             // Skip complete files — this is what makes retry resumable.
-            if FileManager.default.fileExists(atPath: destination.path) {
+            if Self.isCompleteDownloadedFile(destination, expectedSize: file.size) {
                 reporter.fileCompleted(sizeBytes: Int64(max(0, file.size)))
                 continue
             }
@@ -253,14 +234,107 @@ final class ModelRepoDownloader {
                 throw DownloadError.missingRequiredFile(requiredPath)
             }
         }
+        if configuration.includesRootWeights && !files.contains(where: { $0.path.hasSuffix(".safetensors") && $0.size > 0 }) {
+            throw DownloadError.missingRequiredFile("model weights")
+        }
+        // Keep the successfully downloaded snapshot usable offline. Refreshing
+        // upstream weights is an explicit delete/download operation.
+        let receipt = DownloadReceipt(version: 1, configuration: configuration, files: files)
+        try Task.checkCancellation()
+        try JSONEncoder().encode(receipt).write(to: Self.receiptURL(in: cacheDir, configuration: configuration), options: .atomic)
+    }
+
+    private struct DownloadReceipt: Codable {
+        let version: Int
+        let configuration: Configuration
+        let files: [RepoFile]
+    }
+
+    private static func receiptURL(in directory: URL, configuration: Configuration) -> URL {
+        if configuration.repoPath == WhisperModelRepository.repositoryID,
+           configuration.directoryPatterns.count == 1, let variant = configuration.directoryPatterns.first {
+            return directory.appendingPathComponent(variant, isDirectory: true)
+                .appendingPathComponent(WhisperModelRepository.downloadReceiptFileName)
+        }
+        return directory.appendingPathComponent(WhisperModelRepository.downloadReceiptFileName)
+    }
+
+    private static func validReceipt(in directory: URL, configuration: Configuration) -> DownloadReceipt? {
+        let receiptURL = receiptURL(in: directory, configuration: configuration)
+        guard WhisperModelRepository.receiptFilesAreComplete(at: receiptURL, relativeTo: directory),
+              let data = try? Data(contentsOf: receiptURL),
+              let receipt = try? JSONDecoder().decode(DownloadReceipt.self, from: data),
+              receipt.version == 1, receipt.configuration == configuration, !receipt.files.isEmpty,
+              Set(receipt.files.map(\.path)).count == receipt.files.count,
+              !configuration.includesRootWeights || receipt.files.contains(where: { $0.path.hasSuffix(".safetensors") && $0.size > 0 }),
+              configuration.requiredPaths.allSatisfy({ FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }),
+              receipt.files.allSatisfy({ file in
+                  shouldInclude(filePath: file.path, patterns: configuration.directoryPatterns,
+                      includesRootMetadata: configuration.includesRootMetadata, includesRootWeights: configuration.includesRootWeights)
+              }) else { return nil }
+        return receipt
+    }
+
+    static func completedDownloadSize(in directory: URL, configuration: Configuration) -> Int64? {
+        validReceipt(in: directory, configuration: configuration)?.files.reduce(0) { $0 + Int64(max(0, $1.size)) }
+    }
+
+    /// A directory can be left behind by an interrupted Core ML extraction.
+    /// Only skip regular, non-empty payload files; incomplete bundles are repaired.
+    private static func isCompleteDownloadedFile(_ url: URL, expectedSize: Int) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            return false
+        }
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+        return expectedSize >= 0 ? size == expectedSize : size > 0
     }
 
     // MARK: - File listing (HuggingFace tree API)
 
-    struct RepoFile: Sendable {
+    struct RepoFile: Sendable, Codable {
         let path: String
         let size: Int
     }
+
+    #if DEBUG
+    static func checkDownloadReceipt() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-receipt-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = Configuration(repoPath: "fixture/model", directoryPatterns: [], includesRootMetadata: true,
+                                   requiredPaths: ["config.json", "model.safetensors"], includesRootWeights: true)
+        try Data("{}".utf8).write(to: directory.appendingPathComponent("config.json"))
+        try Data([1, 2, 3]).write(to: directory.appendingPathComponent("model.safetensors"))
+        let files = [RepoFile(path: "config.json", size: 2), RepoFile(path: "model.safetensors", size: 3)]
+        try JSONEncoder().encode(DownloadReceipt(version: 1, configuration: config, files: files)).write(to: receiptURL(in: directory, configuration: config))
+        precondition(completedDownloadSize(in: directory, configuration: config) == 5)
+        try Data([1]).write(to: directory.appendingPathComponent("model.safetensors"))
+        precondition(completedDownloadSize(in: directory, configuration: config) == nil, "Truncated weights passed validation")
+        try JSONEncoder().encode(DownloadReceipt(version: 1, configuration: config,
+            files: [RepoFile(path: "../model.safetensors", size: 1)])).write(to: receiptURL(in: directory, configuration: config))
+        precondition(completedDownloadSize(in: directory, configuration: config) == nil, "Traversal receipt passed validation")
+        for variant in ["openai_whisper-small", "openai_whisper-medium"] {
+            let configuration = Configuration.whisperKit(variant: variant)
+            var files: [RepoFile] = []
+            for path in configuration.requiredPaths {
+                let filePath = path.hasSuffix(".mlmodelc") ? path + "/coremldata.bin" : path
+                let url = directory.appendingPathComponent(filePath)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data([1, 2, 3]).write(to: url)
+                files.append(RepoFile(path: filePath, size: 3))
+            }
+            try JSONEncoder().encode(DownloadReceipt(version: 1, configuration: configuration, files: files))
+                .write(to: receiptURL(in: directory, configuration: configuration))
+        }
+        precondition(completedDownloadSize(in: directory, configuration: .whisperKit(variant: "openai_whisper-small")) == 12)
+        precondition(completedDownloadSize(in: directory, configuration: .whisperKit(variant: "openai_whisper-medium")) == 12)
+        try Data([1]).write(to: directory.appendingPathComponent("openai_whisper-small/AudioEncoder.mlmodelc/coremldata.bin"))
+        precondition(completedDownloadSize(in: directory, configuration: .whisperKit(variant: "openai_whisper-small")) == nil)
+        precondition(completedDownloadSize(in: directory, configuration: .whisperKit(variant: "openai_whisper-medium")) == 12)
+        NSLog("MODEL_DOWNLOAD_PROBE passed: offline receipt, truncated weights and relative paths")
+    }
+    #endif
 
     private struct TreeItem: Decodable {
         let path: String
@@ -290,7 +364,8 @@ final class ModelRepoDownloader {
                     if Self.shouldInclude(
                         filePath: item.path,
                         patterns: patterns,
-                        includesRootMetadata: configuration.includesRootMetadata
+                        includesRootMetadata: configuration.includesRootMetadata,
+                        includesRootWeights: configuration.includesRootWeights
                     ) {
                         files.append(RepoFile(path: item.path, size: item.size ?? -1))
                     }
@@ -313,9 +388,17 @@ final class ModelRepoDownloader {
     static func shouldInclude(
         filePath: String,
         patterns: [String],
-        includesRootMetadata: Bool
+        includesRootMetadata: Bool,
+        includesRootWeights: Bool = false
     ) -> Bool {
+        let components = filePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard !filePath.contains("\0"), !components.isEmpty,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
         if patterns.contains(where: { filePath.hasPrefix($0) }) {
+            return true
+        }
+        if includesRootWeights,
+           filePath.hasSuffix(".safetensors") || filePath.hasSuffix(".model") || filePath.hasSuffix(".jinja") {
             return true
         }
         guard includesRootMetadata else { return false }
@@ -374,6 +457,9 @@ final class ModelRepoDownloader {
             do {
                 try await downloadFile(from: url, filePath: file.path, to: destination) { bytesWritten in
                     reporter.currentFileBytes(bytesWritten)
+                }
+                guard Self.isCompleteDownloadedFile(destination, expectedSize: file.size) else {
+                    throw DownloadError.missingRequiredFile(file.path)
                 }
                 return
             } catch {
@@ -566,6 +652,7 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
     private var task: URLSessionDownloadTask?
+    private var isCancelled = false
     // Delegate-queue-only state (serial queue — no locking needed).
     private var moveOrHTTPError: Error?
 
@@ -585,6 +672,12 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
     /// can observe a nil continuation.
     func start(task: URLSessionDownloadTask, continuation: CheckedContinuation<Void, Error>) {
         lock.lock()
+        if isCancelled {
+            lock.unlock()
+            task.cancel()
+            continuation.resume(throwing: CancellationError())
+            return
+        }
         self.task = task
         self.continuation = continuation
         lock.unlock()
@@ -594,6 +687,7 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
     /// Called from the structured-concurrency cancellation handler (any thread).
     func cancel() {
         lock.lock()
+        isCancelled = true
         let task = self.task
         lock.unlock()
         task?.cancel()
@@ -643,12 +737,15 @@ private final class FileDownloadDelegate: NSObject, URLSessionDownloadDelegate, 
         lock.lock()
         let continuation = self.continuation
         self.continuation = nil
+        self.task = nil
         lock.unlock()
         guard let continuation else { return }
 
         if let error {
             let nsError = error as NSError
-            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                continuation.resume(throwing: CancellationError())
+            } else if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
                 // timeoutIntervalForRequest tripped = no bytes for the stall window.
                 continuation.resume(throwing: ModelRepoDownloader.DownloadError.stalled(
                     path: filePath, timeoutSeconds: stallTimeoutSeconds))

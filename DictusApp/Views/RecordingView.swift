@@ -2,7 +2,7 @@
 // Stable-layout recording screen: waveform + mic button always in place, text appears below.
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Determines the context in which RecordingView is shown.
 ///
@@ -12,6 +12,17 @@ import DictusCore
 /// The only difference is what happens when the user finishes:
 /// - onboarding: calls onComplete to advance onboarding
 /// - standalone: user taps mic again for new recording, or X to dismiss
+private struct RecordingModelRecoveryView: View {
+    @StateObject private var manager = ModelManager()
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            ModelManagerView(modelManager: manager)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
 enum RecordingMode {
     case onboarding
     case standalone
@@ -33,6 +44,7 @@ struct RecordingView: View {
     var onComplete: (() -> Void)?
 
     @EnvironmentObject var coordinator: DictationCoordinator
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var transcriptionResult: String?
@@ -43,6 +55,8 @@ struct RecordingView: View {
     @State private var showCopiedFeedback = false
     /// Two-step dismissal: animate out first, then reset coordinator status.
     @State private var isDismissing = false
+    @ObservedObject private var replay = RecordingReplay.shared
+    @State private var showRecoveryModels = false
 
     /// The stage this screen draws, which trails `coordinator.status` by up to
     /// `TranscribingStageHold.minimumDisplayDuration` (#309).
@@ -53,7 +67,7 @@ struct RecordingView: View {
     /// the phone is doing within the same second.
     @State private var displayedStatus: DictationStatus = .idle
 
-    /// The rule. Pure and tested in DictusCore; the timer below is this surface's.
+    /// The rule. Pure and tested in SyllivraKernel; the timer below is this surface's.
     @State private var hold = TranscribingStageHold()
 
     /// Fires when a held stage becomes drawable. At most one is ever in flight.
@@ -65,151 +79,95 @@ struct RecordingView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.dictusBackground.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Close button (top-left) — standalone only
-                HStack {
-                    if mode == .standalone {
-                        Button {
-                            HapticFeedback.recordingStopped()
-                            // Step 1: animate RecordingView out
-                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
-                                isDismissing = true
-                            }
-                            // Step 2: after animation, reset status (no animation leak to HomeView).
-                            // Generation guard (issue #60): if a new dictation started while the
-                            // dismiss animation ran, this stale reset must not tear it down.
-                            let generation = coordinator.dictationGeneration
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                guard coordinator.dictationGeneration == generation else { return }
-                                coordinator.resetStatus()
-                            }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .frame(width: 40, height: 40)
-                                .background(Color(.secondarySystemBackground), in: Circle())
-                                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
-                        }
-                        .frame(width: 44, height: 44)
-                        .buttonStyle(GlassPressStyle(pressedScale: 1.35))
-                        .accessibilityLabel("Close dictation")
-                        .accessibilityHint("Returns to Home")
-                        .padding(.leading, 20)
-                        .padding(.top, 8)
-                    }
-                    Spacer()
+        VStack(spacing: 0) {
+            HStack {
+                HStack(spacing: 8) {
+                    DictusLogo(height: 22, foregroundOnly: true).accessibilityHidden(true)
+                    Text("Syllivra").font(.headline)
                 }
-
-                Text("Dictation")
-                    .font(.title2.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-
-                // MARK: - Upper zone: result text (centered between top and waveform)
-                // WHY above waveform: The waveform+mic are anchored in the bottom
-                // third. Placing the result in the large empty upper zone avoids
-                // pushing anything down when text appears.
-                ZStack {
-                    if showResult, let result = transcriptionResult {
-                        // WHY GeometryReader + ScrollView combo:
-                        // GeometryReader gives us the available height so we can
-                        // vertically center short text. ScrollView handles long text
-                        // that exceeds the zone. Short text sits centered; long text scrolls.
-                        GeometryReader { geo in
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Processed result")
-                                        .font(.headline)
-                                    Text(result)
-                                        .font(.dictusBody)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Button("Copy") {
-                                        UIPasteboard.general.string = result
-                                        showCopiedFeedback = true
-                                        HapticFeedback.recordingStopped()
-                                        UIAccessibility.post(notification: .announcement, argument: "Copied")
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                            showCopiedFeedback = false
-                                        }
-                                    }
-                                    if showCopiedFeedback {
-                                        Text("Copied")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.horizontal, 24)
-                                .frame(minHeight: geo.size.height)
-                            }
-                        }
-                        .transition(reduceMotion ? .identity : .opacity)
-                    } else if showError, let error = errorMessage {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(.orange)
-                            Text(userFacingError(error))
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-
-                            Button("Try again") {
-                                retryRecording()
-                            }
-                            .buttonStyle(.borderedProminent)
-
-                            if mode == .standalone {
-                                Button("Close") {
-                                    dismissRecording()
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                    } else {
-                        VStack(spacing: 8) {
-                            Text("Live transcript")
-                                .font(.headline)
-                            Text(displayedStatus == .recording ? "Listening..." : "Your words will appear after recording.")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-
-                    // Onboarding: auto-advance handled in handleStatusChange
-                }
-                .frame(maxHeight: .infinity)
-
-                // MARK: - Waveform (always visible, anchored in bottom third)
-                waveformSection
-                    .padding(.horizontal)
-                    .frame(height: 120)
-
-                // MARK: - Status text (duration or processing indicator)
-                statusText
-                    .frame(height: 30)
-                    .padding(.top, 8)
-
-                // MARK: - Mic / Stop button (always in same position)
-                micOrStopButton
-                    .frame(height: 100)
-                    .padding(.top, 16)
-
                 Spacer()
-                    .frame(height: 40)
+                    Button(action: dismissRecording) {
+                        Image(systemName: "xmark").frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.bordered).buttonBorderShape(.circle)
+                    .accessibilityLabel("Close dictation")
             }
+            .padding(.horizontal, 24).padding(.top, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if replay.available && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
+                        Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay recording") { replay.toggle() }
+                            .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("dictation.replay")
+                        if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(showResult ? "Transcript" : statusTitle)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if displayedStatus == .recording {
+                                Text(formattedTime).font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if showResult, let result = transcriptionResult {
+                            DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
+                                onRestore: { transcriptionResult = $0 },
+                                onFeedback: savedResultFeedback(for: result),
+                                translationFallback: coordinator.lastTranslationFallbackReason != nil)
+                        } else if showError, let error = errorMessage {
+                            Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
+                                .font(.headline)
+                            Text(userFacingError(error)).foregroundStyle(.secondary)
+                            if DictationProblem(error).action != .retry {
+                                Button("Try dictation again", action: retryRecording).buttonStyle(.bordered)
+                                    .disabled(!coordinator.canChangeSpeechRuntime)
+                            }
+                        } else {
+                            Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
+                                 displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
+                                .font(.title2).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !coordinator.realtimeTranscript.isEmpty {
+                                Text("Live preview. Your final text appears when you finish.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+                }
+                .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+
+            VStack(spacing: 16) {
+                if showResult {
+                    Image(systemName: "checkmark").foregroundStyle(Color.saiityAction)
+                        .frame(height: 28).accessibilityHidden(true)
+                } else {
+                    SaiityVoiceSignal(level: displayedStatus == .recording ? coordinator.bufferEnergy.max() ?? 0 : nil)
+                        .frame(height: 28)
+                }
+                if mode == .onboarding && showResult {
+                    Button("Continue", action: completeOnboarding)
+                        .buttonStyle(SaiityPrimaryActionStyle())
+                } else {
+                    micOrStopButton
+                }
+            }
+            .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            .background(Color(.systemBackground))
+        }
+        .background(Color(.systemBackground).ignoresSafeArea())
+        .sheet(isPresented: $showRecoveryModels) {
+            RecordingModelRecoveryView()
         }
         .opacity(isDismissing ? 0 : 1)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showResult)
         .animation(AccessibilityMotionPolicy.animation(reduceMotion: reduceMotion), value: showCopiedFeedback)
-        .onChange(of: coordinator.status) { newStatus in
+        .onChange(of: coordinator.status) { _, newStatus in
             // `handleStatusChange` is deliberately still driven by the real status: it
             // does not draw a stage, it reveals the result text and the error, and a
             // terminal status preempts the hold anyway (#309).
@@ -223,14 +181,14 @@ struct RecordingView: View {
             // start that dies puts `.failed` in place while `SwipeBackOverlayView` owns
             // the window; MainTabView inserts this view only once the overlay is gone, by
             // which time the status has stopped changing and `onChange` will never fire.
-            // Only `.failed` is adopted on appear: `.ready` would replay the result card
-            // and, in onboarding, its auto-advance.
-            if coordinator.status == .failed {
-                handleStatusChange(.failed)
+            // Reopening Speak restores its result; setup does not adopt an old dictation.
+            if coordinator.status == .failed || (coordinator.status == .ready && mode == .standalone) {
+                handleStatusChange(coordinator.status)
             }
             advanceDisplayedStatus(to: coordinator.status)
         }
         .onDisappear {
+            replay.stop()
             holdTask?.cancel()
             holdTask = nil
             // Reset, not merely cancel: `.onAppear` re-adopts the stage in flight, and
@@ -251,105 +209,47 @@ struct RecordingView: View {
         .navigationBarHidden(true)
     }
 
-    // MARK: - Waveform Section
-
-    /// Always-visible waveform that changes behavior based on state.
-    /// Single BrandWaveform instance — properties change dynamically instead of
-    /// swapping 3 separate instances. Prevents ghost CADisplayLinks when the app
-    /// continues its run loop in background (UIBackgroundModes:audio).
-    private var waveformSection: some View {
-        BrandWaveform(
-            energyLevels: displayedStatus == .recording
-                ? coordinator.bufferEnergy
-                : Array(repeating: Float(0), count: 30),
-            maxHeight: 120,
-            animation: waveformAnimation,
-            isActive: displayedStatus == .recording || isPostRecordingStage
-        )
-        .opacity(displayedStatus == .recording ? 0.5 :
-                 isPostRecordingStage ? 0.3 : 0.15)
+    private var isCancellationStage: Bool {
+        coordinator.status == .requested
+            || coordinator.status == .transcribing
+            || coordinator.status == .processing
     }
 
-    /// The animation for the current stage.
-    ///
-    /// This screen draws the same three animations as the keyboard overlay, from
-    /// the same `ProcessingWaveform` maths (#267). An earlier round shared one
-    /// animation across both post-recording stages, on the argument that the
-    /// distinction belongs where the user waits during a keyboard dictation. Device
-    /// testing settled it the other way: someone dictating inside DictusApp is
-    /// waiting on this screen, and it owes them the same answer.
-    ///
-    /// Driven by `displayedStatus` rather than the coordinator's, so the animation and
-    /// the label below change together (#309).
-    private var waveformAnimation: WaveformAnimation {
-        if reduceMotion { return .still }
-        switch displayedStatus {
-        case .recording:
-            return .micLevels
-        case .transcribing:
-            return .sweep
-        case .processing:
-            return .travellingPeak
-        case .idle, .requested, .ready, .failed:
-            return .still
+    private var cancellationTitle: String {
+        switch coordinator.status {
+        case .transcribing: return "Cancel transcription"
+        case .processing: return "Cancel cleanup"
+        default: return "Cancel dictation"
         }
     }
 
-    /// Whether the pipeline is past the microphone and working on the audio or the
-    /// transcript. Drives opacity and the disabled mic button, both of which are
-    /// the same for either stage.
-    private var isPostRecordingStage: Bool {
-        displayedStatus == .transcribing || displayedStatus == .processing
-    }
-
-    // MARK: - Status Text
-
-    @ViewBuilder
-    private var statusText: some View {
-        Text(displayedStatus == .recording ? formattedTime : statusTitle)
-            .font(displayedStatus == .recording ? .title3.monospacedDigit() : .subheadline)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel(statusTitle)
-    }
-
-    // MARK: - Mic / Stop Button
-
-    /// Always-present button that changes appearance based on state.
-    /// WHY always present: Prevents layout jumps. The button is the visual anchor
-    /// of the screen — it transforms in place (mic → stop → shimmer → mic).
-    @ViewBuilder
     private var micOrStopButton: some View {
-        if displayedStatus == .recording {
-            // Red stop button with glass ring
-            Button(action: stopRecording) {
-                ZStack {
-                    // Glass ring behind the stop button
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 96, height: 96)
-                        .dictusGlass(in: Circle())
-                    Circle()
-                        .fill(Color.dictusRecording)
-                        .frame(width: 72, height: 72)
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.white)
-                        .frame(width: 26, height: 26)
+        Button {
+            if showError, let errorMessage {
+                switch DictationProblem(errorMessage).action {
+                case .openSettings:
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    return
+                case .models, .repairDownload: showRecoveryModels = true; return
+                case .retry: break
                 }
             }
-            .buttonStyle(GlassPressStyle(pressedScale: 0.88))
-            .accessibilityLabel("Stop recording")
-        } else if isPostRecordingStage {
-            // Shimmer mic during processing (disabled). The status is passed
-            // through rather than pinned to `.transcribing` so the button reflects
-            // the stage it is actually in (#267); the shimmer is the same for both.
-            AnimatedMicButton(status: displayedStatus) {}
-                .disabled(true)
-        } else {
-            // Idle / result state: mic button ready for (new) recording
-            AnimatedMicButton(status: .idle) {
+            switch coordinator.status {
+            case .recording:
+                stopRecording()
+            case .requested, .transcribing, .processing:
+                cancelRecording()
+            default:
                 startRecording()
             }
+        } label: {
+            SaiityVoiceActionLabel(
+                LocalizedStringKey(showError ? recoveryTitle : isCancellationStage ? cancellationTitle :
+                    coordinator.status == .recording ? "Finish dictation" : showResult ? "Dictate again" : "Start dictation"),
+                systemImage: isCancellationStage ? "xmark" : coordinator.status == .recording ? "stop.fill" : nil)
         }
+        .buttonStyle(SaiityPrimaryActionStyle())
+        .accessibilityIdentifier(isCancellationStage ? "dictation.cancel" : "dictation.start")
     }
 
     // MARK: - Actions
@@ -371,6 +271,11 @@ struct RecordingView: View {
         startRecording()
     }
 
+    private func completeOnboarding() {
+        coordinator.resetStatus()
+        onComplete?()
+    }
+
     private func dismissRecording() {
         HapticFeedback.recordingStopped()
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { isDismissing = true }
@@ -378,6 +283,7 @@ struct RecordingView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             guard coordinator.dictationGeneration == generation else { return }
             coordinator.resetStatus()
+            if mode == .onboarding { dismiss() }
         }
     }
 
@@ -386,17 +292,25 @@ struct RecordingView: View {
         coordinator.stopDictation()
     }
 
+    private func cancelRecording() {
+        HapticFeedback.recordingStopped()
+        coordinator.cancelDictation()
+    }
+
     private func userFacingError(_ message: String) -> String {
-        message
-            .replacingOccurrences(of: "Dictus", with: "sAiity")
-            .replacingOccurrences(of: "dictus", with: "sAiity")
+        DictationProblem(message).message
+    }
+
+    private var recoveryTitle: String {
+        let problem = DictationProblem(errorMessage ?? "")
+        return problem.action == .repairDownload ? "Models & downloads" : problem.actionTitle
     }
 
     // MARK: - Stage display (#309)
 
     /// Move `displayedStatus` toward `status`, honouring the transcription floor.
     ///
-    /// The decision is `TranscribingStageHold`'s, in DictusCore, where it is tested.
+    /// The decision is `TranscribingStageHold`'s, in SyllivraKernel, where it is tested.
     /// What lives here is only this screen's timer — a `Task` rather than a `Timer`,
     /// because it has to be cancelled from the view and cancellation is what keeps a
     /// terminal status from ever waiting behind a stage that no longer matters.
@@ -422,6 +336,14 @@ struct RecordingView: View {
 
     // MARK: - Status Handling
 
+    private func savedResultFeedback(for result: String) -> ((RecentDictation.Feedback) -> Void)? {
+        guard AppGroup.defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true else { return nil }
+        guard let item = RecentDictations.load(from: AppGroup.defaults).first(where: {
+            $0.text == String(result.trimmingCharacters(in: .whitespacesAndNewlines).prefix(RecentDictations.maxTextCharacters))
+        }) else { return nil }
+        return { RecentDictations.recordFeedback($0, for: item.id, in: AppGroup.defaults) }
+    }
+
     private func handleStatusChange(_ newStatus: DictationStatus) {
         UIAccessibility.post(notification: .announcement, argument: statusAnnouncement(for: newStatus))
         switch newStatus {
@@ -430,21 +352,6 @@ struct RecordingView: View {
                 transcriptionResult = result
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4)) {
                     showResult = true
-                }
-                // Auto-advance to success screen in onboarding mode
-                // Shows transcription result for 1.5s then triggers onComplete
-                if mode == .onboarding {
-                    // Generation guard (issue #60): if the user started a new dictation
-                    // during the 1.5s delay, this stale auto-advance must not fire.
-                    let generation = coordinator.dictationGeneration
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(1500))
-                        await MainActor.run {
-                            guard coordinator.dictationGeneration == generation else { return }
-                            coordinator.resetStatus()
-                            onComplete?()
-                        }
-                    }
                 }
             }
         case .failed:
@@ -476,13 +383,11 @@ struct RecordingView: View {
 
     private var statusTitle: String {
         if showCopiedFeedback { return "Copied" }
-        if showResult { return "Dictation complete" }
+        if showResult { return "Ready to use" }
         switch displayedStatus {
         case .idle, .ready: return "Ready to record"
         case .requested: return "Starting dictation"
-        case .recording: return "Recording"
-        case .transcribing: return "Transcribing"
-        case .processing: return "Processing"
+        case .recording, .transcribing, .processing: return displayedStatus.recordingLabel
         case .failed: return "Dictation failed"
         }
     }
@@ -491,9 +396,8 @@ struct RecordingView: View {
         switch status {
         case .idle: return "Ready to record"
         case .requested: return "Starting dictation"
-        case .recording: return "Recording"
-        case .transcribing: return "Transcribing"
-        case .processing: return "Processing"
+        case .recording, .transcribing, .processing:
+            return NSLocalizedString(status.recordingLabel, comment: "Dictation progress")
         case .ready: return "Dictation complete"
         case .failed: return "Dictation failed. Try again or close."
         }

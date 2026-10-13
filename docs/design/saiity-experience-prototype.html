@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en" data-appearance="light" data-view="all" data-material="glass">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>sAiity · Experience prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #edf0f5; --surface: #fafafc; --raised: #ffffff; --ink: #171a22;
+      --secondary: #646b78; --line: #dfe3eb; --fill: #eceef3; --blue: #245de3;
+      --blue-ink: #ffffff; --blue-well: #edf2ff;
+      --shadow: 0 20px 60px #17244612; --chrome: #fffffff0; --scale: 1;
+    }
+    [data-appearance="dark"] {
+      color-scheme: dark;
+      --canvas: #090c12; --surface: #111318; --raised: #1b1f27; --ink: #f5f7fb;
+      --secondary: #a3aab8; --line: #303641; --fill: #272d38; --blue: #8cadff;
+      --blue-ink: #101a35; --blue-well: #1c2945;
+      --shadow: 0 20px 60px #00000036; --chrome: #1b1f27ef;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: transparent; -webkit-tap-highlight-color: transparent; }
+    button:disabled { cursor: default; opacity: .5; }
+    button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+    button, select, input { touch-action: manipulation; }
+    button:active:not(:disabled) { opacity: .72; }
+    svg { width: 22px; height: 22px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    svg.brand { stroke: none; fill: currentColor; }
+    [hidden] { display: none !important; }
+    .study { max-width: 1350px; margin: auto; padding: 28px 28px 32px; }
+    .study-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .study-name { display: flex; align-items: center; gap: 12px; }
+    .study-name .brand { color: var(--blue); width: 28px; height: 36px; }
+    .study h1 { font-size: 22px; font-weight: 600; letter-spacing: -.6px; margin: 0; }
+    .study-note { font-size: 13px; color: var(--secondary); margin: 5px 0 0; }
+    .study-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .study-controls label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--secondary); }
+    .study-controls select, .study-controls button { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); color: var(--ink); font-size: 13px; }
+    .study-controls input { accent-color: var(--blue); }
+    .artboards { display: grid; grid-template-columns: repeat(3, minmax(0, 402px)); gap: 22px; align-items: start; justify-content: center; }
+    .artboard { min-width: 0; }
+    .artboard-label { font-size: 13px; font-weight: 500; margin: 0 0 10px 4px; color: var(--secondary); }
+    .phone { position: relative; height: 830px; overflow: hidden; border: 1px solid var(--line); border-radius: 36px; background: var(--surface); box-shadow: var(--shadow); font-size: calc(17px * var(--scale)); }
+    .statusbar { height: 58px; padding: 18px 26px 0; display: flex; justify-content: space-between; align-items: flex-start; font-size: 14px; font-weight: 600; }
+    .island { width: 100px; height: 28px; background: #06070a; border-radius: 20px; position: absolute; left: calc(50% - 50px); top: 13px; }
+    .status-icons { display: flex; gap: 6px; align-items: center; padding-top: 3px; }
+    .status-icons svg { width: 14px; height: 14px; stroke-width: 2.1; }
+    .battery { width: 22px; height: 10px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; }
+    .battery::before { content: ""; position: absolute; inset: 1px 3px 1px 1px; background: currentColor; border-radius: 1px; }
+    .battery::after { content: ""; width: 2px; height: 4px; background: currentColor; position: absolute; right: -4px; top: 2px; border-radius: 2px; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px 8px; }
+    .app-header h2 { margin: 0; font-size: 1.9em; letter-spacing: -1.2px; font-weight: 650; }
+    .icon-button { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+    .muted-button { background: var(--fill); }
+    .status-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--secondary); font-size: .76em; margin: 0 24px; }
+    .status-line span { display: flex; align-items: center; gap: 5px; }
+    .status-line svg { width: 14px; height: 14px; }
+    .power { min-height: 44px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; font-size: calc(13px * var(--scale)); white-space: nowrap; border-radius: 16px; color: var(--secondary); }
+    .power svg { width: 18px; height: 18px; }
+    .power[aria-pressed="true"] { color: var(--blue); }
+    .home-content { overflow-y: auto; position: absolute; top: 176px; bottom: 218px; left: 24px; right: 24px; scrollbar-width: none; }
+    .prompt { font-size: 2.05em; line-height: 1.12; letter-spacing: -1.2px; font-weight: 550; margin: 35px 0 16px; max-width: 290px; }
+    .supporting { font-size: .94em; color: var(--secondary); line-height: 1.55; margin: 0; }
+    .model-shortcut { margin: 23px 0 40px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: var(--secondary); font-size: .76em; padding: 0 12px; border-radius: 16px; background: var(--fill); max-width: 100%; text-align: left; }
+    .model-shortcut svg { width: 15px; height: 15px; }
+    .model-shortcut .model-value { overflow-wrap: anywhere; }
+    .recent-heading { display: flex; align-items: center; justify-content: space-between; font-size: .82em; font-weight: 600; margin-bottom: 6px; }
+    .recent-heading button { min-height: 44px; color: var(--blue); font-size: .9em; }
+    .recent-row { width: 100%; text-align: left; padding: 13px 0; border-top: 1px solid var(--line); }
+    .recent-row p { font-size: .88em; line-height: 1.45; margin: 0 0 6px; }
+    .recent-row small { color: var(--secondary); font-size: .7em; }
+    .home-action { position: absolute; left: 24px; right: 24px; bottom: 108px; }
+    .primary { min-height: 58px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 20px; width: 100%; background: var(--blue); color: var(--blue-ink); font-size: 1em; font-weight: 600; padding: 12px 18px; }
+    .primary .brand { width: 24px; height: 28px; }
+    .action-note { display: block; font-size: .7em; text-align: center; color: var(--secondary); margin-top: 11px; }
+    .tabbar { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); min-width: 215px; display: flex; padding: 5px; gap: 4px; border: 1px solid var(--line); border-radius: 32px; background: var(--chrome); backdrop-filter: blur(18px); }
+    .tabbar button { width: 108px; min-height: 56px; border-radius: 28px; font-size: .65em; display: grid; justify-items: center; align-content: center; gap: 3px; color: var(--secondary); }
+    .tabbar button.selected { background: var(--blue-well); color: var(--blue); }
+    .tabbar svg { width: 21px; height: 21px; }
+    .home-indicator { width: 114px; height: 5px; background: var(--ink); opacity: .85; border-radius: 4px; position: absolute; bottom: 8px; left: calc(50% - 57px); }
+    .session-header { padding: 12px 20px 18px; display: flex; justify-content: space-between; align-items: center; }
+    .session-name { display: flex; gap: 8px; align-items: center; font-size: .9em; font-weight: 600; }
+    .session-name .brand { color: var(--blue); width: 20px; height: 26px; }
+    .session-body { position: absolute; top: 136px; left: 26px; right: 26px; bottom: 190px; overflow: auto; scrollbar-width: thin; }
+    .session-kicker { display: flex; justify-content: space-between; align-items: center; font-size: .76em; color: var(--secondary); margin-bottom: 30px; min-height: 22px; }
+    .session-kicker span { display: inline-flex; gap: 7px; align-items: center; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+    .session-text { font-size: 1.52em; line-height: 1.5; font-weight: 450; letter-spacing: -.45px; margin: 0; white-space: pre-wrap; }
+    .session-text.preview { color: var(--secondary); }
+    .session-caption { font-size: .73em; line-height: 1.5; color: var(--secondary); margin: 24px 0 0; }
+    .result-options { display: flex; align-items: center; gap: 4px; margin-top: 28px; flex-wrap: wrap; }
+    .result-options button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 11px; border-radius: 14px; color: var(--secondary); font-size: .76em; }
+    .result-options button:first-child { color: var(--blue); background: var(--blue-well); }
+    .result-options svg { width: 16px; height: 16px; }
+    .original-text { padding: 15px 0; border-top: 1px solid var(--line); margin-top: 18px; }
+    .original-text small { color: var(--secondary); font-size: .73em; }
+    .original-text p { margin: 9px 0 0; line-height: 1.6; font-size: .9em; }
+    .result-editor { width: 100%; min-height: 210px; background: var(--raised); border: 1px solid var(--line); border-radius: 16px; padding: 15px; resize: vertical; font-size: 1.05em; line-height: 1.5; }
+    .session-bottom { position: absolute; bottom: 32px; left: 24px; right: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .signal { color: var(--blue); height: 34px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; }
+    .signal .brand { width: 27px; height: 34px; }
+    .listening .brand { transform-origin: center; animation: voice-breathe 1.3s ease-in-out infinite alternate; }
+    @keyframes voice-breathe { from { transform: scaleY(.62); } to { transform: scaleY(1); } }
+    .stop-square { width: 15px; height: 15px; background: currentColor; border-radius: 4px; }
+    .error-copy { line-height: 1.55; font-size: .94em; color: var(--secondary); }
+    .message-header { padding: 7px 18px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .contact { text-align: center; display: flex; align-items: center; gap: 8px; font-size: .82em; }
+    .avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--fill); color: var(--secondary); font-size: 14px; font-weight: 550; }
+    .message-header button { color: var(--blue); }
+    .conversation { position: absolute; top: 130px; bottom: 414px; left: 20px; right: 20px; overflow: auto; }
+    .conversation-time { text-align: center; color: var(--secondary); font-size: .7em; margin: 4px 0 25px; }
+    .bubble { max-width: 87%; font-size: .94em; line-height: 1.5; padding: 13px 16px; border-radius: 20px 20px 20px 6px; background: var(--fill); margin-bottom: 16px; }
+    .bubble.sent { background: var(--blue); color: var(--blue-ink); border-radius: 20px 20px 6px 20px; margin-left: auto; }
+    .message-composer { position: absolute; bottom: 333px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; }
+    .message-composer .icon-button { width: 36px; }
+    .message-composer textarea { flex: 1; width: 0; height: 68px; resize: none; border: 1px solid var(--line); border-radius: 22px; padding: 12px 14px; background: var(--raised); font-size: .88em; line-height: 1.45; }
+    .send { width: 32px; height: 32px; background: var(--blue); color: var(--blue-ink); border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+    .send svg { width: 16px; height: 16px; }
+    .keyboard { position: absolute; bottom: 20px; left: 0; right: 0; height: 302px; background: var(--surface); border-top: 1px solid var(--line); }
+    .keyboard-accessory { height: 33px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: .67em; color: var(--secondary); }
+    .keyboard-accessory button { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; font-size: 1em; }
+    .keyboard-accessory svg { width: 16px; height: 16px; }
+    .board-surface { position: relative; height: 269px; background: var(--surface); }
+    .board-inset { position: absolute; inset: 4px 6px 2px; border-radius: 25px; background: var(--raised); pointer-events: none; }
+    .board-top { position: absolute; left: 10px; right: 10px; top: 8px; display: flex; align-items: center; justify-content: space-between; }
+    .language { min-height: 44px; padding: 0 9px; color: var(--secondary); font-size: .73em; display: inline-flex; align-items: center; gap: 6px; border-radius: 16px; }
+    .language svg { width: 16px; height: 16px; }
+    .board-voice { position: absolute; top: 61px; left: 70px; right: 70px; text-align: center; }
+    .board-heading { font-size: .94em; font-weight: 550; letter-spacing: -.15px; margin: 0 0 7px; }
+    .board-subtitle { font-size: .7em; line-height: 1.35; color: var(--secondary); margin: 0; }
+    .board-primary { height: 54px; min-height: 54px; width: min(100%, 182px); margin: 15px auto 0; border-radius: 27px; padding: 6px 10px; font-size: clamp(14px, calc(14px * var(--scale)), 17px); }
+    .board-primary .brand { width: 19px; height: 25px; }
+    .command { background: var(--fill); min-height: 45px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; }
+    .board-delete { position: absolute; right: 8px; bottom: 63px; width: calc((100% - 16px) * .15); height: 45px; }
+    .bottom-row { position: absolute; bottom: 6px; left: 8px; right: 8px; height: 53px; display: grid; grid-template-columns: 45px 45px minmax(0, 1fr) 88px; gap: 2px; align-items: center; }
+    .bottom-row .command { height: 45px; min-height: 45px; }
+    .bottom-row .round { width: 45px; border-radius: 50%; }
+    .bottom-row .space { border-radius: 24px; }
+    [data-material="glass"] .keyboard .command { background: var(--chrome); backdrop-filter: blur(14px); box-shadow: inset 0 0 0 1px var(--line), 0 2px 5px #101a3010; }
+    .typing-grid { position: absolute; top: 15px; left: 6.5px; right: 6.5px; display: grid; gap: 9px; }
+    .typing-row { display: flex; gap: 5.5px; justify-content: center; }
+    .letter { width: calc((100% - 49.5px) / 10); height: 45px; border-radius: 8px; background: var(--fill); display: flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 400; }
+    .typing-row .command { width: 15%; flex-shrink: 0; }
+    .typing-row.last { justify-content: space-between; gap: 3px; }
+    .typing-row.last .letter { flex-shrink: 1; }
+    .overlay { position: absolute; inset: 58px 0 0; background: var(--surface); z-index: 4; display: flex; flex-direction: column; border-radius: 24px 24px 0 0; }
+    .overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+    .overlay-header h3 { font-size: 1.05em; margin: 0; font-weight: 600; }
+    .overlay-content { overflow-y: auto; padding: 22px 20px 45px; flex: 1; }
+    .settings-group { background: var(--raised); border-radius: 20px; padding: 0 14px; margin-bottom: 23px; }
+    .settings-group .row + .row { border-top: 1px solid var(--line); }
+    .row { display: flex; align-items: center; gap: 9px; min-height: 58px; padding: 12px 0; justify-content: space-between; font-size: .88em; }
+    .row > span { display: inline-flex; gap: 9px; align-items: center; }
+    .row svg { width: 18px; height: 18px; color: var(--secondary); }
+    .row button { min-height: 44px; font-size: .9em; color: var(--blue); }
+    .row select { min-height: 44px; max-width: 56%; border: 0; background: transparent; color: var(--blue); text-align: right; font-size: .9em; }
+    [data-large="true"] .row:has(select) { flex-direction: column; align-items: stretch; gap: 6px; }
+    [data-large="true"] .row select { width: 100%; max-width: 100%; text-align: left; }
+    .group-title { font-size: .75em; font-weight: 550; margin: 0 0 10px 3px; color: var(--secondary); }
+    .helper { font-size: .76em; line-height: 1.5; color: var(--secondary); margin: -8px 4px 25px; }
+    .switch { appearance: none; width: 44px; height: 28px; border-radius: 16px; background: var(--line); position: relative; flex-shrink: 0; margin: 8px 0 8px 10px; cursor: pointer; }
+    .switch::before { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px #0002; transition: transform .15s; }
+    .switch:checked { background: var(--blue); }
+    .switch:checked::before { transform: translateX(16px); }
+    .choice { display: flex; padding: 16px 0; gap: 11px; align-items: center; min-height: 58px; }
+    .choice input { accent-color: var(--blue); width: 19px; height: 19px; }
+    .choice div { font-size: .88em; }
+    .choice small { display: block; color: var(--secondary); font-size: .82em; margin-top: 4px; line-height: 1.4; }
+    .toast { position: absolute; bottom: 105px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 30px); border-radius: 20px; background: var(--ink); color: var(--surface); padding: 10px 16px; z-index: 10; font-size: .76em; text-align: center; }
+    .board-feedback { position: absolute; bottom: 65px; left: 12px; font-size: .65em; color: var(--secondary); max-width: 75%; }
+    .study-footer { color: var(--secondary); font-size: 13px; line-height: 1.5; margin: 20px 4px 0; }
+    [data-view="speak"] .artboard:not([data-surface="speak"]), [data-view="session"] .artboard:not([data-surface="session"]), [data-view="keyboard"] .artboard:not([data-surface="keyboard"]) { display: none; }
+    html:not([data-view="all"]) .artboards { max-width: 402px; margin: auto; grid-template-columns: 1fr; }
+    @media (max-width: 1050px) { .artboards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .artboard { max-width: 402px; } .study-header { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 690px) { .study { padding: 20px 12px; } .artboards { grid-template-columns: minmax(0, 1fr); max-width: 402px; margin: auto; } .phone { border-radius: 28px; } .study-controls { gap: 7px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+    @media (prefers-reduced-transparency: reduce) { .tabbar, [data-material="glass"] .keyboard .command { background: var(--raised); backdrop-filter: none; } }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="brand" viewBox="16 18 48 48"><rect x="19" y="34" width="9" height="18" rx="4.5" opacity=".6"/><rect x="35.5" y="22" width="9" height="42" rx="4.5"/><rect x="52" y="29" width="9" height="27" rx="4.5" opacity=".8"/></symbol>
+    <symbol id="power" viewBox="0 0 24 24"><path d="M12 2v10M7 4.5a9 9 0 1 0 10 0"/></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M3 6h6m4 0h8M3 12h12m4 0h2M3 18h2m4 0h12"/><circle cx="11" cy="6" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v12h5"/></symbol>
+    <symbol id="edit" viewBox="0 0 24 24"><path d="m15 3 6 6-12 12H3v-6zM12 6l6 6"/></symbol>
+    <symbol id="undo" viewBox="0 0 24 24"><path d="m8 3-5 5 5 5M3 8h11a7 7 0 0 1 0 14"/></symbol>
+    <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+    <symbol id="delete" viewBox="0 0 24 24"><path d="m8 5-6 7 6 7h13V5zM11 9l6 6m0-6-6 6"/></symbol>
+    <symbol id="return" viewBox="0 0 24 24"><path d="M20 4v9H3m5-5-5 5 5 5"/></symbol>
+    <symbol id="smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7 14s1 4 5 4 5-4 5-4M8 8h.01M16 8h.01"/></symbol>
+    <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6"/></symbol>
+    <symbol id="keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.1M10 9h.1M14 9h.1M18 9h.1M6 12h.1M10 12h.1M14 12h.1M18 12h.1M7 16h10"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L20 5"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="wifi" viewBox="0 0 24 24"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0M9 16a4 4 0 0 1 6 0M12 20h.01"/></symbol>
+    <symbol id="shift" viewBox="0 0 24 24"><path d="m12 3 9 10h-6v8H9v-8H3z"/></symbol>
+  </defs></svg>
+  <main class="study">
+    <header class="study-header">
+      <div><div class="study-name"><svg class="brand" aria-hidden="true"><use href="#brand"/></svg><h1>sAiity · Experience study</h1></div><p class="study-note">Interactive prototype · Sample text only · No audio or model calls</p></div>
+      <div class="study-controls" aria-label="Prototype controls">
+        <label>Appearance <select id="appearance"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <label>Surface <select id="surface"><option value="all">All three</option><option value="speak">Speak</option><option value="session">Dictation</option><option value="keyboard">Keyboard</option></select></label>
+        <label>Material <select id="material"><option value="glass">Glass</option><option value="solid">Solid</option></select></label>
+        <label><input id="large-text" type="checkbox">Larger text</label>
+      </div>
+    </header>
+    <div class="artboards">
+      <section class="artboard" data-surface="speak"><h2 class="artboard-label">Speak</h2><div class="phone" id="speak-phone" aria-label="Speak screen prototype"></div></section>
+      <section class="artboard" data-surface="session"><h2 class="artboard-label">Listening & results</h2><div class="phone" id="session-phone" aria-label="Dictation screen prototype"></div></section>
+      <section class="artboard" data-surface="keyboard"><h2 class="artboard-label">Dictation board</h2><div class="phone" id="keyboard-phone" aria-label="Keyboard screen prototype"></div></section>
+    </div>
+    <footer class="study-footer">Try Start, Finish, Copy, Edit, Original and the power controls. Model and language controls open compact sheets. <label>Preview a state <select id="preview-state"><option value="recording">Listening</option><option value="processing">Preparing text</option><option value="result">Finished result</option><option value="failed">Interrupted</option><option value="off">Dictation off</option><option value="setup">Setup needed</option></select></label></footer>
+  </main>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const sample = "I’ll send the updated proposal tomorrow morning.\n\n我們下午再確認一次。";
+      const original = "um I’ll send the updated proposal tomorrow morning 我們下午再確認一次";
+      const state = { enabled: true, ready: true, largeModelReady: false, speak: "idle", session: "recording", board: "idle", engine: "Streaming", model: "Qwen3-ASR 0.6B", realtime: true, language: "Auto", keyboard: "voice", caps: false, inset: true, original: false, editing: false, result: sample, message: "", sheet: null };
+      let sheetOpener = null;
+      const icons = (name, cls = "") => `<svg class="${cls}" aria-hidden="true"><use href="#${name}"/></svg>`;
+      const esc = text => String(text).replace(/[&<>"']/g, x => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
+      const action = (name, label, body, cls = "", attrs = "") => `<button type="button" class="${cls}" data-action="${name}" aria-label="${esc(label)}" ${attrs}>${body}</button>`;
+      const statusbar = () => `<div class="statusbar"><span>9:41</span><div class="island" aria-hidden="true"></div><div class="status-icons">${icons("wifi")}<span class="battery" aria-label="Battery charged"></span></div></div>`;
+      const indicator = `<div class="home-indicator" aria-hidden="true"></div>`;
+      const power = where => action("power", state.enabled ? "Disable dictation" : "Enable dictation", `${icons("power")}<span>${state.enabled ? "On" : "Off"}</span>`, "power", `aria-pressed="${state.enabled}" data-where="${where}"`);
+      const idleTitle = () => !state.enabled ? "Dictation is off." : state.speak === "recording" ? "Listening." : !state.ready ? "Set up your voice." : "New dictation.";
+      const primaryLabel = phase => !state.enabled ? "Enable dictation" : phase === "recording" ? "Finish dictation" : phase === "processing" ? "Cancel" : !state.ready ? "Finish setup" : phase === "result" ? "Dictate again" : phase === "failed" ? "Try again" : "Start dictation";
+      const primaryIcon = phase => phase === "recording" ? `<span class="stop-square" aria-hidden="true"></span>` : phase === "processing" ? icons("close") : icons("brand", "brand");
+      const primary = (where, phase, extra = "") => action(`primary-${where}`, primaryLabel(phase), `${primaryIcon(phase)}<span>${primaryLabel(phase)}</span>`, `primary ${extra}`);
+      function renderSpeak() {
+        document.getElementById("speak-phone").innerHTML = `${statusbar()}
+          <div class="app-header"><h2>Speak</h2></div>
+          <div class="status-line"><span>${icons("shield")}On this iPhone</span>${power("speak")}</div>
+          <div class="home-content"><h3 class="prompt">${idleTitle()}</h3><p class="supporting">${!state.enabled ? "Turn it on when you’re ready." : state.speak === "recording" ? "Finish when you’re ready." : !state.ready ? "Choose a voice model to get started." : state.engine === "Streaming" && state.realtime ? "See your words as you speak." : "Your text appears when you finish."}</p>
+            ${action("sheet-models", "Voice options", `${icons("globe")}<span class="model-value">${state.language === "Auto" ? "Automatic languages" : state.language}</span>${icons("arrow")}`, "model-shortcut", 'data-where="speak"')}
+            <div class="recent-heading"><span>Earlier today</span>${action("sheet-history", "See dictation history", "See all", "", 'data-where="speak"')}</div>
+            ${action("recent", "Open sample dictation", `<p>I’ll send the updated proposal tomorrow morning.</p><small>8 minutes ago</small>`, "recent-row")}
+            ${action("recent", "Open another sample dictation", `<p>Thanks, José. 我們下午再確認一次。</p><small>Today, 9:12</small>`, "recent-row")}
+          </div>
+          <div class="home-action">${primary("speak", state.speak)}<span class="action-note">${state.engine === "Streaming" ? "Keep sAiity open while streaming." : "Voice recognition happens on your iPhone."}</span></div>
+          <nav class="tabbar" aria-label="App navigation">${action("tab-speak", "Speak", `${icons("brand", "brand")}Speak`, "selected", 'aria-current="page"')}${action("sheet-settings", "Settings", `${icons("settings")}Settings`, "", 'data-where="speak"')}</nav>${indicator}`;
+      }
+      function renderSession() {
+        const phase = state.session;
+        const title = !state.enabled ? "Dictation is off" : !state.ready && !["recording", "processing", "result", "failed"].includes(phase) ? "Set up your voice" : ({idle:"Ready to speak",recording:"Listening",processing:"Preparing your text",result:"Ready to use",failed:"Dictation interrupted"}[phase]);
+        const text = phase === "result" ? state.result : phase === "recording" && state.realtime ? "I’ll send the updated proposal\ntomorrow morning.\n\n我們下午再確認一次…" : phase === "failed" ? "Your original words are still here." : phase === "processing" ? "I’ll send the updated proposal tomorrow morning.\n\n我們下午再確認一次。" : "Your words will appear here.";
+        document.getElementById("session-phone").innerHTML = `${statusbar()}<div class="session-header"><span class="session-name">${icons("brand", "brand")}sAiity</span>${action("close-session", "Close dictation", icons("close"), "icon-button muted-button")}</div>
+          <div class="session-body"><div class="session-kicker" aria-live="polite"><span><i class="status-dot" aria-hidden="true"></i>${title}</span>${phase === "recording" && state.enabled ? "0:08" : ""}</div>
+            ${state.editing ? `<label class="session-caption" for="result-editor">Edit transcript</label><textarea id="result-editor" class="result-editor">${esc(state.result)}</textarea>${action("save-edit", "Save transcript edit", "Done", "primary")}` : `<p class="session-text ${phase === "result" ? "" : "preview"}">${esc(text)}</p>`}
+            ${phase === "result" || phase === "failed" ? `<div class="result-options">${action("copy", "Copy transcript", icons("copy") + "Copy")}${action("edit", "Edit transcript", icons("edit") + "Edit")}${action("original", "Show original transcript", icons("undo") + "Original", "", `aria-expanded="${state.original}"`)}</div>` : `<p class="session-caption">${phase === "recording" ? "Live preview. Your final text appears when you finish." : phase === "processing" ? "Keeping your words and languages intact." : !state.enabled ? "Enable dictation to start a new session." : "Speak at your own pace."}</p>`}
+            ${phase === "failed" ? `<p class="error-copy">Something interrupted this session. Copy your original words or try again.</p>` : ""}
+            ${state.original ? `<div class="original-text"><small>Original · before cleanup</small><p>${esc(original)}</p>${action("restore", "Use original transcript", "Use original", "model-shortcut")}</div>` : ""}
+          </div><div class="session-bottom"><div class="signal ${phase === "recording" && state.enabled ? "listening" : ""}">${icons(phase === "result" ? "check" : "brand", phase === "result" ? "" : "brand")}</div>${primary("session", phase)}</div>${indicator}`;
+      }
+      function renderKeys() {
+        if (state.keyboard === "voice") return "";
+        const rows = state.keyboard === "symbols" ? state.caps ? ["[]{}#%^*+=", "_|~<>$£¥•", ".,?!'"] : ["1234567890", "-/:;()€&@\"", ".,?!'"] : ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
+        return `<div class="typing-grid">${rows.map((row, index) => `<div class="typing-row ${index === 2 ? "last" : ""}">${index === 2 ? action("caps", state.keyboard === "symbols" ? "Change symbols" : "Caps", state.keyboard === "symbols" ? state.caps ? "123" : "#+=" : icons("shift"), "command", `aria-pressed="${state.caps}"`) : ""}${Array.from(row).map(key => action("insert", `Type ${key}`, esc(state.caps ? key.toUpperCase() : key), "letter", `data-value="${esc(state.caps ? key.toUpperCase() : key)}"`)).join("")}${index === 2 ? action("delete", "Delete backward", icons("delete"), "command") : ""}</div>`).join("")}</div>`;
+      }
+      function renderBoard() {
+        const phase = state.board;
+        const headline = !state.enabled ? "Dictation is off" : !state.ready && !["recording", "processing", "result", "failed"].includes(phase) ? "Choose a voice model" : ({idle:"Ready to listen",recording:"Listening",processing:"Preparing your text",result:"Text inserted",failed:"Dictation interrupted"}[phase]);
+        document.getElementById("keyboard-phone").innerHTML = `${statusbar()}<div class="message-header">${action("host-back", "Back to conversations", icons("back"), "icon-button")}<div class="contact"><span class="avatar">J</span>Jamie</div>${action("host-info", "Conversation information", "···", "icon-button")}</div>
+          <div class="conversation"><p class="conversation-time">Today 9:41</p><div class="bubble">Could you send the updated proposal when you have a moment?</div><div class="bubble sent">Of course. I’m just checking one last detail.</div><div class="bubble sent" id="sent-sample" hidden></div></div>
+          <div class="message-composer">${action("host-plus", "Message options", icons("plus"), "icon-button")}<textarea id="message-draft" aria-label="Message draft" placeholder="Message">${esc(state.message)}</textarea>${action("send", "Send sample message", icons("up"), "send")}</div>
+          <div class="keyboard"><div class="keyboard-accessory"><span>${icons("shield")} On this iPhone</span>${state.keyboard === "voice" ? action("sheet-models", "Keyboard voice options", "Voice options " + icons("settings"), "", 'data-where="keyboard"') : action("voice", "Return to dictation board", icons("brand", "brand"))}${state.keyboard !== "voice" ? power("keyboard") : ""}</div>
+            <div class="board-surface"><div class="board-inset" ${state.inset ? "" : "hidden"}></div>${state.keyboard === "voice" ? `<div class="board-top">${action("sheet-language", "Dictation language", icons("globe") + state.language + icons("arrow"), "language", 'data-where="keyboard"')}${power("keyboard")}</div>
+              <div class="board-voice"><p class="board-heading" aria-live="polite">${headline}</p><p class="board-subtitle">${phase === "recording" ? "Finish when you’re ready." : phase === "processing" ? "You can cancel at any time." : "Whisper Auto · On this iPhone"}</p>${primary("board", phase, "board-primary")}</div>${action("delete", "Delete backward", icons("delete"), "command board-delete")}` : renderKeys()}
+              <div class="bottom-row">${action("numbers", state.keyboard === "symbols" ? "Letters" : "Numbers and symbols", state.keyboard === "symbols" ? "ABC" : "123", "command round")}${action("letters", "Letters", state.keyboard === "voice" ? "ABC" : icons("brand", "brand"), "command round")}${action("space", "Space", "space", "command space")}${action("return", "Return", icons("return"), "command")}</div>
+            </div></div>${indicator}`;
+      }
+      function sheetContent(type) {
+        if (type === "models") return {title:"Voice options", content:`<div class="settings-group"><div class="row"><span>Language</span>${action("sheet-language", "Choose dictation language", state.language + icons("arrow"))}</div></div><p class="group-title">In sAiity</p><div class="settings-group">${["Streaming", "Whisper Auto"].map(engine => `<label class="choice"><input type="radio" name="engine" value="${engine}" ${state.engine === engine ? "checked" : ""}><div>${engine}<small>${engine === "Streaming" ? "Qwen · keep sAiity open while speaking" : "Whisper · also available from your keyboard"}</small></div></label>`).join("")}</div>${state.engine === "Streaming" ? `<div class="settings-group"><label class="row"><span>Streaming model</span><select id="streaming-model"><option ${state.model.endsWith("0.6B") ? "selected" : ""}>Qwen3-ASR 0.6B</option><option ${state.model.endsWith("1.7B") ? "selected" : ""}>Qwen3-ASR 1.7B</option></select></label><label class="row"><span>Realtime text</span><input class="switch" id="realtime" type="checkbox" ${state.realtime ? "checked" : ""}></label></div><p class="helper">Live text is a preview. Final text arrives when you finish.</p>` : ""}<p class="group-title">From your keyboard</p><div class="settings-group"><div class="row"><span>Whisper Auto</span>${icons("check")}</div></div><p class="helper">The keyboard uses its own voice model, so it can work while you’re in another app.</p><p class="group-title">More control</p><div class="settings-group"><div class="row"><span>Model library</span>${action("sheet-library", "Open model library", icons("arrow"))}</div></div><p class="helper">Model changes apply to your next dictation.</p>`};
+        if (type === "library") return {title:"Voice models",content:`<p class="helper" style="margin-top:0">Select a model for sAiity or your keyboard.</p><div class="settings-group"><div class="row"><span>Qwen3-ASR 0.6B</span><span>${state.model.endsWith("0.6B") && state.engine === "Streaming" ? "Selected" : "Installed"}</span></div><div class="row"><span>Whisper</span><span>Keyboard ready</span></div><div class="row"><span>Qwen3-ASR 1.7B</span><span>${state.largeModelReady ? state.model.endsWith("1.7B") && state.engine === "Streaming" ? "Selected" : "Installed" : "Not installed"}</span></div></div>`};
+        if (type === "language") return {title:"Your languages",content:`<p class="helper" style="margin-top:0">Keep the languages you speak. Translation remains an explicit choice.</p><div class="settings-group">${["Auto", "English", "中文", "Deutsch"].map(language => `<label class="choice"><input type="radio" name="language" value="${language}" ${state.language === language ? "checked" : ""}><div>${language === "Auto" ? "Automatic" : language}<small>${language === "Auto" ? "Follow the language of your speech" : "A hint for this dictation"}</small></div></label>`).join("")}</div>`};
+        if (type === "history") return {title:"Your words",content:`<p class="group-title">Earlier today</p>${action("recent", "Open saved sample transcript", `<p>${esc(sample)}</p><small>9:33 · On this iPhone</small>`, "recent-row")}<p class="helper" style="margin-top:20px">History stays optional. You can review, edit or copy your saved text.</p>`};
+        if (type === "setup") return {title:"Ready in one step",content:`<p class="helper" style="margin-top:0">Your microphone and keyboard are configured in this example. A voice model is the remaining step.</p><div class="settings-group"><div class="row"><span>${icons("check")}Microphone allowed</span></div><div class="row"><span>${icons("check")}Keyboard configured</span></div><div class="row"><span>Voice model</span><span>Needed</span></div></div>${action("setup-done", "Preview model ready state", "Preview ready state", "primary")}<p class="helper" style="margin-top:15px">Prototype state only. No download, permission request or recording occurs.</p>`};
+        return {title:"Settings",content:`<p class="group-title">Make it yours</p><div class="settings-group">${[["models","Voice & language","brand"],["keyboard-options","Keyboard","keyboard"],["history","Words & history","edit"]].map(([name,label,icon]) => `<div class="row"><span>${icons(icon, icon === "brand" ? "brand" : "")}${label}</span>${action("sheet-" + name, label, icons("arrow"))}</div>`).join("")}</div><p class="group-title">Privacy & help</p><div class="settings-group"><div class="row"><span>${icons("shield")}On-device privacy</span>${action("privacy", "On-device privacy details", icons("arrow"))}</div><div class="row"><span>Setup & help</span>${action("sheet-setup", "Setup and help", icons("arrow"))}</div></div><p class="helper">Advanced model options, licenses and diagnostics stay available in their detail pages.</p>`};
+      }
+      function renderSheet() {
+        if (!state.sheet) return;
+        const {type, where} = state.sheet;
+        let info = sheetContent(type);
+        if (type === "keyboard-options") info = {title:"Keyboard", content:`<div class="settings-group"><label class="row"><span>Material</span><select id="sheet-material"><option value="glass" ${root.dataset.material === "glass" ? "selected" : ""}>Glass</option><option value="solid" ${root.dataset.material === "solid" ? "selected" : ""}>Solid</option></select></label><label class="row"><span>Inset background</span><input class="switch" id="inset" type="checkbox" ${state.inset ? "checked" : ""}></label><div class="row"><span>Haptics</span><span>Default</span></div><div class="row"><span>Emoji & key variants</span>${action("variants", "Emoji and key variants", icons("arrow"))}</div></div><p class="helper">Appearance and feedback apply to all keyboard pages.</p>`};
+        const host = document.getElementById(where === "keyboard" ? "keyboard-phone" : "speak-phone");
+        const layer = document.createElement("section"); layer.className = "overlay"; layer.setAttribute("role", "dialog"); layer.setAttribute("aria-modal", "true"); layer.setAttribute("aria-label", info.title);
+        layer.innerHTML = `<div class="overlay-header"><h3>${info.title}</h3>${action("close-sheet", "Close " + info.title, icons("close"), "icon-button muted-button")}</div><div class="overlay-content">${info.content}</div>`;
+        host.append(layer);
+      }
+      function render() { renderSpeak(); renderSession(); renderBoard(); renderSheet(); }
+      function closeSheet() {
+        state.sheet = null; render();
+        if (sheetOpener) document.getElementById(sheetOpener.phone)?.querySelector(`[data-action="${sheetOpener.action}"]`)?.focus();
+        sheetOpener = null;
+      }
+      function toast(where, text) {
+        const host = document.getElementById(where + "-phone");
+        host.querySelector(".toast")?.remove(); const el = document.createElement("div"); el.className = "toast"; el.setAttribute("role", "status"); el.textContent = text; host.append(el);
+        setTimeout(() => el.remove(), 2000);
+      }
+      function insert(value, backwards = false) {
+        const input = document.getElementById("message-draft");
+        let start = input.selectionStart, end = input.selectionEnd;
+        if (backwards && start === end && start > 0) { const parts = [...new Intl.Segmenter(undefined, {granularity:"grapheme"}).segment(input.value.slice(0, start))]; start = parts.at(-1).index; }
+        input.setRangeText(value, start, end, "end"); state.message = input.value; input.focus();
+      }
+      function setPreview(phase) {
+        state.enabled = phase !== "off"; state.ready = phase !== "setup";
+        const resolved = ["off", "setup"].includes(phase) ? "idle" : phase;
+        state.speak = resolved; state.session = resolved; state.board = resolved; state.editing = false;
+        if (phase === "result") state.message = state.result;
+        render();
+      }
+      document.addEventListener("click", event => {
+        const button = event.target.closest("[data-action]"); if (!button) return;
+        const name = button.dataset.action;
+        const where = button.closest("#keyboard-phone") ? "keyboard" : button.closest("#session-phone") ? "session" : "speak";
+        if (name.startsWith("sheet-")) { if (!state.sheet) sheetOpener = {phone:button.closest(".phone").id, action:name}; state.sheet = {type:name.slice(6), where:button.dataset.where || state.sheet?.where || where}; render(); document.querySelector(".overlay .icon-button").focus(); return; }
+        if (name === "close-sheet" || name === "tab-speak") { closeSheet(); return; }
+        if (name === "power") { state.enabled = !state.enabled; state.speak = state.session = state.board = "idle"; state.editing = false; render(); return; }
+        if (name.startsWith("primary-")) {
+          if (!state.enabled) { state.enabled = true; state.speak = state.session = state.board = "idle"; render(); return; }
+          const phaseKey = name.slice(8), current = state[phaseKey];
+          if (!state.ready && !["recording", "processing"].includes(current)) { sheetOpener = {phone:button.closest(".phone").id, action:name}; state.sheet = {type:"setup", where:where === "keyboard" ? "keyboard" : "speak"}; render(); return; }
+          const next = current === "recording" ? "result" : current === "processing" ? "idle" : "recording";
+          if (phaseKey === "board") state.board = next; else state.speak = state.session = next;
+          state.original = false; state.editing = false;
+          if (next === "result" && phaseKey === "board") state.message = state.result;
+          render(); return;
+        }
+        if (name === "copy") { (navigator.clipboard?.writeText(state.result) ?? Promise.reject()).then(() => toast("session", "Copied"), () => { state.editing = true; render(); const editor = document.getElementById("result-editor"); editor.focus(); editor.select(); toast("session", "Text selected. Use your copy shortcut."); }); return; }
+        if (name === "edit") { state.editing = true; render(); document.getElementById("result-editor").focus(); return; }
+        if (name === "save-edit") { state.result = document.getElementById("result-editor").value; state.editing = false; render(); return; }
+        if (name === "original") { state.original = !state.original; render(); return; }
+        if (name === "restore") { state.result = original; state.original = false; render(); toast("session", "Original restored"); return; }
+        if (name === "recent") { state.session = "result"; state.sheet = null; render(); return; }
+        if (name === "close-session") { state.speak = state.session = "idle"; state.editing = false; render(); return; }
+        if (name === "setup-done") { state.ready = true; if (state.model.endsWith("1.7B")) state.largeModelReady = true; state.speak = state.session = state.board = "idle"; closeSheet(); return; }
+        if (name === "voice") { state.keyboard = "voice"; render(); return; }
+        if (name === "letters") { state.keyboard = state.keyboard === "voice" ? "letters" : "voice"; render(); return; }
+        if (name === "numbers") { state.keyboard = state.keyboard === "symbols" ? "letters" : "symbols"; render(); return; }
+        if (name === "caps") { state.caps = !state.caps; render(); return; }
+        if (name === "delete") { insert("", true); return; }
+        if (name === "space") { insert(" "); return; }
+        if (name === "return") { insert("\n"); return; }
+        if (name === "insert") { insert(button.dataset.value); return; }
+        if (name === "send") { if (state.message.trim()) { const bubble = document.getElementById("sent-sample"); bubble.textContent = state.message; bubble.hidden = false; state.message = ""; document.getElementById("message-draft").value = ""; } else toast("keyboard", "Add some words first"); return; }
+        if (name === "privacy") { toast("speak", "This prototype uses sample text only"); return; }
+        toast(where, name === "variants" ? "Existing variants remain available" : "Sample conversation");
+      });
+      document.addEventListener("input", event => { if (event.target.id === "message-draft") state.message = event.target.value; });
+      document.addEventListener("change", event => {
+        const {id, value, checked, name} = event.target;
+        if (id === "appearance") root.dataset.appearance = value;
+        else if (id === "surface") root.dataset.view = value;
+        else if (id === "material" || id === "sheet-material") { root.dataset.material = value; document.getElementById("material").value = value; }
+        else if (id === "large-text") { root.style.setProperty("--scale", checked ? "1.3" : "1"); root.dataset.large = String(checked); }
+        else if (id === "preview-state") setPreview(value);
+        else if (name === "engine") { state.engine = value; state.ready = value === "Whisper Auto" || state.model.endsWith("0.6B") || state.largeModelReady; render(); }
+        else if (id === "streaming-model") { state.model = value; state.ready = value.endsWith("0.6B") || state.largeModelReady; render(); }
+        else if (id === "realtime") { state.realtime = checked; render(); }
+        else if (id === "inset") { state.inset = checked; render(); }
+        else if (name === "language") { state.language = value; closeSheet(); }
+      });
+      document.addEventListener("keydown", event => {
+        if (!state.sheet) return;
+        if (event.key === "Escape") { closeSheet(); return; }
+        if (event.key === "Tab") {
+          const controls = [...document.querySelectorAll(".overlay button, .overlay input, .overlay select")].filter(el => !el.disabled && el.offsetParent !== null);
+          const first = controls[0], last = controls.at(-1);
+          if (event.shiftKey && (document.activeElement === first || !document.activeElement.closest(".overlay"))) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && (document.activeElement === last || !document.activeElement.closest(".overlay"))) { event.preventDefault(); first?.focus(); }
+        }
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>

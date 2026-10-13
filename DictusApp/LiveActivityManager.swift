@@ -3,7 +3,7 @@
 import ActivityKit
 import Foundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Manages Live Activity lifecycle for Dynamic Island and Lock Screen display.
 ///
@@ -44,7 +44,7 @@ class LiveActivityManager {
     /// WHY: Without validation, concurrent Activity.update() calls arrive out of order
     /// and autoDismissTask from previous recordings can fire mid-recording (#42).
     private func validateTransition(to target: LiveActivityPhase) -> Bool {
-        // Delegate validation to the extracted state machine in DictusCore.
+        // Delegate validation to the extracted state machine in SyllivraKernel.
         // WHY keep both: The state machine provides unit-testable validation logic.
         // The private enum stays as the canonical internal state. We map to the
         // shared Phase type for validation, then sync if accepted.
@@ -124,9 +124,9 @@ class LiveActivityManager {
     /// validation to prevent DI desync after chaining recordings (#42).
     private var currentPhase: LiveActivityPhase = .idle
 
-    /// Extracted state machine for transition validation (lives in DictusCore for unit testing).
+    /// Extracted state machine for transition validation (lives in SyllivraKernel for unit testing).
     /// WHY a separate struct: The transition rules are pure logic with no ActivityKit dependency.
-    /// Keeping them in DictusCore enables unit testing all valid/invalid paths.
+    /// Keeping them in SyllivraKernel enables unit testing all valid/invalid paths.
     private var stateMachine = LiveActivityStateMachine()
 
     /// Post-recording watchdog: forces DI back to standby if stuck on .recording.
@@ -147,11 +147,22 @@ class LiveActivityManager {
     /// WHY UserDefaults read (not @AppStorage): LiveActivityManager is not a SwiftUI view.
     private var isEnabled: Bool {
         let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        let activityEnabled = defaults?.object(forKey: SharedKeys.liveActivityEnabled) == nil
-            || defaults?.bool(forKey: SharedKeys.liveActivityEnabled) == true
         let serviceEnabled = defaults?.object(forKey: SharedKeys.serviceEnabled) == nil
             || defaults?.bool(forKey: SharedKeys.serviceEnabled) == true
-        return activityEnabled && serviceEnabled
+        return DictationPresenceMode.active.showsLiveActivity && serviceEnabled
+    }
+
+    func applyPresenceMode(_ mode: DictationPresenceMode, isBackground: Bool) {
+        if mode.showsLiveActivity {
+            if LiveActivityStateMachine.shouldStartStandbyActivity(
+                isEnabled: true,
+                isBackground: isBackground
+            ) {
+                startStandbyActivity()
+            }
+        } else {
+            stopStandbyActivity()
+        }
     }
 
     private var detectionMuted: Bool {
@@ -199,7 +210,7 @@ class LiveActivityManager {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.endActivityForWarmStateRelease()
+                self?.updateServiceEnabled(false, persistSetting: false)
             }
         }
     }
@@ -415,7 +426,10 @@ class LiveActivityManager {
         }
 
         let attributes = DictusLiveActivityAttributes()
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         // staleDate: if app is killed without willTerminate firing, iOS auto-removes
         // the DI after this interval. 30s is short enough to clear ghosts quickly (#84).
         let staleDate = Date().addingTimeInterval(staleInterval)
@@ -466,9 +480,11 @@ class LiveActivityManager {
 
     /// Updates the standby control without dismissing the Live Activity.
     /// The activity remains the user's recovery control while dictation is disabled.
-    func updateServiceEnabled(_ enabled: Bool) {
-        AppGroup.defaults.set(enabled, forKey: SharedKeys.serviceEnabled)
-        AppGroup.defaults.synchronize()
+    func updateServiceEnabled(_ enabled: Bool, persistSetting: Bool = true) {
+        if persistSetting {
+            AppGroup.defaults.set(enabled, forKey: SharedKeys.serviceEnabled)
+            AppGroup.defaults.synchronize()
+        }
 
         guard let activity = currentActivity else {
             if enabled { startStandbyActivity() }
@@ -480,7 +496,6 @@ class LiveActivityManager {
             phase: current.phase,
             recordingStartDate: current.recordingStartDate,
             waveformLevels: current.waveformLevels,
-            transcriptionPreview: current.transcriptionPreview,
             detectionMuted: current.detectionMuted,
             serviceEnabled: enabled
         )
@@ -672,13 +687,13 @@ class LiveActivityManager {
         }
     }
 
-    /// Show transcription result, then return to standby after 1 second.
+    /// Show completion status, then return to standby after 1 second.
     ///
     /// WHY return to standby instead of ending:
     /// The user expects the Dynamic Island to persist as long as the app is alive.
     /// After showing the result briefly, we go back to the "On" standby state
     /// so they can start another recording from the Dynamic Island.
-    func endWithResult(preview: String?) {
+    func endWithResult() {
         guard isEnabled else { return }
 
         // WHY: State machine guard prevents DI desync from concurrent transitions (#42)
@@ -695,10 +710,8 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: currentPhase.rawValue, to: "ready"))
         currentPhase = .ready  // Update BEFORE async work to prevent races (#49)
         Task {
-            let truncatedPreview = preview.map { String($0.prefix(100)) }
             let state = DictusLiveActivityAttributes.ContentState(
                 phase: .ready,
-                transcriptionPreview: truncatedPreview,
                 detectionMuted: self.detectionMuted
             )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
@@ -951,7 +964,10 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: currentPhase.rawValue, to: "standby"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         syncStateMachine(to: .standby)
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         // Refresh staleDate on each return to standby (#84: 30s clears ghosts after force-quit)
         let staleDate = Date().addingTimeInterval(staleInterval)
         await activity.update(.init(state: state, staleDate: staleDate))
@@ -999,7 +1015,10 @@ class LiveActivityManager {
         PersistentLog.log(.liveActivityTransition(from: abandoned.rawValue, to: "standby-abandoned"))
         currentPhase = .standby  // Update BEFORE async work to prevent races (#49)
         Task {
-            let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted)
+            let state = LiveActivityStateMapper.standby(
+                detectionMuted: self.detectionMuted,
+                defaults: AppGroup.defaults
+            )
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(self.staleInterval)))
             DictusLogger.app.info("Live Activity -> standby (abandoned \(abandoned.rawValue, privacy: .public))")
         }
@@ -1026,7 +1045,10 @@ class LiveActivityManager {
 
                 await activity.end(
                     .init(
-                        state: DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: self.detectionMuted),
+                        state: LiveActivityStateMapper.standby(
+                            detectionMuted: self.detectionMuted,
+                            defaults: AppGroup.defaults
+                        ),
                         staleDate: nil
                     ),
                     dismissalPolicy: .immediate
@@ -1051,7 +1073,10 @@ class LiveActivityManager {
         let activities = Activity<DictusLiveActivityAttributes>.activities
         guard !activities.isEmpty else { return }
 
-        let state = DictusLiveActivityAttributes.ContentState(phase: .standby, detectionMuted: detectionMuted)
+        let state = LiveActivityStateMapper.standby(
+            detectionMuted: detectionMuted,
+            defaults: AppGroup.defaults
+        )
         for activity in activities {
             Task {
                 await activity.end(

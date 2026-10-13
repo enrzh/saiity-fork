@@ -1,7 +1,7 @@
 // DictusKeyboard/TextPrediction/SuggestionState.swift
 // Observable state for the suggestion bar UI, bridging TextPredictionEngine to SwiftUI.
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// The current mode of the suggestion bar.
 ///
@@ -31,6 +31,17 @@ struct AutocorrectState {
     let insertedSpace: Bool
 }
 
+/// A correction that is still close enough to the caret to learn an explicit
+/// user override. This stays in memory only; the final word is persisted through
+/// UserDictionary after a stable boundary is observed.
+private struct PendingAutocorrection {
+    let originalWord: String
+    let correctedWord: String
+    let prefixContext: String
+    let expectedContext: String
+    let afterContext: String
+}
+
 /// Observable suggestion state for SwiftUI binding.
 ///
 /// WHY ObservableObject:
@@ -55,6 +66,11 @@ class SuggestionState: ObservableObject {
     @Published var mode: SuggestionMode = .idle
     @Published var currentWord: String = ""
 
+    /// Latest bounded next-character distribution for invisible letter routing.
+    /// It is intentionally separate from `suggestions`: this never changes the
+    /// suggestion lane or creates visible prediction UI.
+    @Published private(set) var adaptiveTouchPrediction: NextCharacterProbabilities?
+
     /// Tracks an autocorrection that can be undone by tapping the suggestion bar.
     /// Set when autocorrect fires on space, cleared on next space or undo tap.
     @Published var pendingUndo: AutocorrectState?
@@ -74,8 +90,11 @@ class SuggestionState: ObservableObject {
     /// Shared engine — heavy resources (frequency dict, trie) are process-wide singletons
     /// to avoid the per-controller leak documented in #134.
     private let engine = TextPredictionEngine.shared
-
-    private init() {}
+    private init() {
+        suggestionQueue.async { [weak self] in
+            self?.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+        }
+    }
 
     /// Serial background queue for suggestion computation.
     /// WHY serial: Ensures suggestion computations don't race each other.
@@ -91,10 +110,143 @@ class SuggestionState: ObservableObject {
     /// all running to completion. With coalescing, only the latest keystroke runs.
     private var currentSuggestionWork: DispatchWorkItem?
     private var suggestionRequestGate = SuggestionRequestGate()
+    private struct SpaceCommit {
+        let word: String
+        // Nil is a completed "no correction needed" result, not a cache miss.
+        let correction: String?
+        let isUnknownWord: Bool
+        let contextKey: String
+        let selectedLanguage: String
+        let spokenLanguages: [String]
+    }
+
+    private var pendingAutocorrection: PendingAutocorrection?
+    /// Correction prepared on the suggestion queue for the word currently
+    /// being typed. Space reads it instead of waiting on a dictionary load.
+    private var spaceCommit: SpaceCommit?
+    private var suppressNextAutocorrectionBoundary = false
+    private var adaptiveTouchWork: DispatchWorkItem?
+    private var adaptiveTouchRequestGate = SuggestionRequestGate()
+    private var lastAutocorrectEnabled = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled) as? Bool ?? true
+    private var lastSpokenLanguages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+    private struct AdaptiveContext: Equatable {
+        let text: String
+        let policy: HostFieldPolicy
+        let autocorrect: Bool
+        let language: String
+        let spokenLanguages: [String]
+        let rejected: Set<String>
+    }
+    private var lastAdaptiveContext: AdaptiveContext?
 
     /// Whether autocorrect is enabled (reads from App Group shared preferences).
     var autocorrectEnabled: Bool {
         AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled) as? Bool ?? true
+    }
+
+    /// Applies autocorrect on space and inserts the space. Does not populate the
+    /// accessory lane — this keyboard does not show word suggestions in the bar.
+    func handleSpace(proxy: UITextDocumentProxy) {
+        hostPolicy = HostInputTraits.policy(for: proxy)
+        let context = proxy.documentContextBeforeInput ?? ""
+        reconcilePendingAutocorrection(context: context, boundary: true)
+
+        if context.isEmpty {
+            proxy.insertText(" ")
+            clear()
+            noteTypedCharacter(" ")
+            return
+        }
+
+        if let last = context.last, last.isWhitespace || last.isNewline {
+            proxy.insertText(" ")
+            clear(resetLanguage: false)
+            noteTypedCharacter(" ")
+            return
+        }
+
+        let word = extractLastWord(from: context)
+        var corrected = false
+        let prepared = spaceCommit
+        let snapshotMatches = prepared?.word.caseInsensitiveCompare(word) == .orderedSame
+            && prepared?.contextKey == String(context.suffix(240))
+            && prepared?.selectedLanguage == SupportedLanguage.active.rawValue
+            && prepared?.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults)
+        let canLearn = snapshotMatches ? prepared?.isUnknownWord : nil
+        if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults),
+           case .ok(let deleteCount) = AutocorrectReplacement.check(context: proxy.documentContextBeforeInput, word: word) {
+            for _ in 0..<deleteCount { proxy.deleteBackward() }
+            proxy.insertText(expansion)
+            proxy.insertText(" ")
+            rejectedWords.removeAll()
+            pendingUndo = nil
+            clear(resetLanguage: false)
+            noteTypedCharacter(" ")
+            HapticFeedback.playInputClick()
+            return
+        }
+        if hostPolicy.autocorrectAllowed,
+           autocorrectEnabled,
+           !word.isEmpty,
+           !word.unicodeScalars.contains(where: { CharacterSet.decimalDigits.contains($0) }),
+           !engine.shouldSkipTokenPrediction(for: word),
+           !rejectedWords.contains(word.lowercased()) {
+            let correction: String?
+            if let prepared, snapshotMatches {
+                correction = prepared.correction.flatMap { TypingCommit.accepts(typed: word, correction: $0) ? $0 : nil }
+            } else {
+                // A missed background result preserves the typed word. Never
+                // wait for dictionary loading or a prediction backlog on Space.
+                correction = nil
+            }
+            if let correction,
+               case .ok(let deleteCount) = AutocorrectReplacement.check(context: proxy.documentContextBeforeInput, word: word) {
+                corrected = true
+                let prefix = prefixBeforeWord(in: context, word: word)
+                let pending = PendingAutocorrection(
+                    originalWord: word,
+                    correctedWord: correction,
+                    prefixContext: prefix,
+                    expectedContext: prefix + correction + " ",
+                    afterContext: proxy.documentContextAfterInput ?? ""
+                )
+                for _ in 0..<deleteCount { proxy.deleteBackward() }
+                proxy.insertText(correction)
+                pendingAutocorrection = pending
+                suppressNextAutocorrectionBoundary = true
+            }
+        } else {
+            pendingUndo = nil
+        }
+
+        // Learning does not require a supported autocorrection language or an
+        // enabled corrector. Sensitive/token fields keep their existing policy.
+        let learningWord = context.split(whereSeparator: \.isWhitespace).last.map(String.init)?
+            .trimmingCharacters(in: .punctuationCharacters) ?? ""
+        if !corrected, canLearn != false, hostPolicy.suggestionsAllowed, isSafeUserOverride(learningWord) {
+            suggestionQueue.async { [weak self] in
+                guard let self, canLearn ?? self.engine.isUnknownToDictionary(learningWord) else { return }
+                DispatchQueue.main.async { _ = UserDictionary.shared.recordUsage(learningWord) }
+            }
+        }
+
+        proxy.insertText(" ")
+        rejectedWords.removeAll()
+        pendingUndo = nil
+        // A space ends the word. It does not end the sentence language.
+        clear(resetLanguage: false)
+        noteTypedCharacter(" ")
+    }
+
+    /// Drop a stale hit bias immediately; the contextual replacement is computed
+    /// off the main thread by updateAdaptiveTouchPrediction.
+    func noteTypedCharacter(_ _: String) {
+        lastAdaptiveContext = nil
+        adaptiveTouchWork?.cancel()
+        _ = adaptiveTouchRequestGate.begin()
+        if adaptiveTouchPrediction != nil {
+            adaptiveTouchPrediction = nil
+        }
     }
 
     /// Updates suggestions based on the current text input state.
@@ -153,30 +305,46 @@ class SuggestionState: ObservableObject {
             return
         }
 
-        // If text ends with whitespace, no partial word to complete.
-        // BUT don't clear if we're showing predictions — handleSpace() already
-        // triggered updatePredictions(), and clearing here would race with the
-        // async prediction result. Predictions are the correct state after space.
+        // If text ends with whitespace, show next-word predictions. Undo stays
+        // until the next non-space edit so the previous correction can still
+        // be reversed from the accessory lane.
         if let lastChar = context.last, lastChar.isWhitespace || lastChar.isNewline {
-            if mode != .predictions && mode != .undoAvailable {
-                clear()
+            if mode != .undoAvailable {
+                updatePredictions(context: context)
             }
             return
         }
 
         let requestToken = beginSuggestionRequest()
 
+        weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
 
+            // Detection may have refined the previous request to another
+            // language. Re-anchor every new context to the selected keyboard
+            // language before allowing a confident refinement.
+            self.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+
+            guard !work.isCancelled else { return }
+            guard !self.engine.shouldAbstainFromPrediction(for: context) else {
+                DispatchQueue.main.async { [weak self] in self?.clear(ifCurrent: requestToken) }
+                return
+            }
             self.engine.setLanguage(forRecentText: context)
+            guard !work.isCancelled else { return }
 
             let partial = self.extractLastWord(from: context)
             guard !partial.isEmpty else {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
-                    self.clear()
+                    self?.clear(ifCurrent: requestToken)
+                }
+                return
+            }
+
+            if self.engine.shouldSkipTokenPrediction(for: partial) {
+                DispatchQueue.main.async { [weak self] in
+                    self?.clear(ifCurrent: requestToken)
                 }
                 return
             }
@@ -213,6 +381,7 @@ class SuggestionState: ObservableObject {
                 spellResult = nil
             }
 
+            guard !work.isCancelled else { return }
             // Compute completions as fallback
             let completions = self.engine.suggestions(for: partial)
 
@@ -259,8 +428,137 @@ class SuggestionState: ObservableObject {
             }
         }
 
+        cancellableWork = work
         currentSuggestionWork = work
         suggestionQueue.async(execute: work)
+    }
+
+    /// Refreshes the invisible next-character cache from a live context snapshot.
+    /// The owning controller must call this on the main thread after document edits
+    /// and caret/field changes; stale workers cannot publish after a newer request.
+    func updateAdaptiveTouchPrediction(context: String?, policy: HostFieldPolicy? = nil) {
+        if let policy {
+            hostPolicy = policy
+        }
+        let selectedLanguage = SupportedLanguage.active.rawValue
+        let snapshot = AdaptiveContext(text: context ?? "", policy: hostPolicy,
+            autocorrect: autocorrectEnabled, language: selectedLanguage,
+            spokenLanguages: SpokenLanguagePreferences.load(from: AppGroup.defaults), rejected: rejectedWords)
+        guard snapshot != lastAdaptiveContext else { return }
+        lastAdaptiveContext = snapshot
+        adaptiveTouchWork?.cancel()
+        let requestToken = adaptiveTouchRequestGate.begin()
+        spaceCommit = nil
+
+        guard hostPolicy.suggestionsAllowed else {
+            // URL, email, search, and the other protected fields must not keep
+            // a prior computed in the previous field.
+            adaptiveTouchPrediction = nil
+            return
+        }
+        guard let inputContext = context, !inputContext.isEmpty else {
+            // The host may withhold context; no guess is safer than an old field's bias.
+            if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
+            return
+        }
+
+        let last = inputContext.last
+        let isBoundary = last?.isWhitespace == true || last?.isNewline == true
+        let sentenceContext = contextSinceSentenceBoundary(inputContext)
+        let allWords = extractLastWords(from: sentenceContext, count: 3)
+        let previousWords = isBoundary ? allWords : Array(allWords.dropLast())
+        let partial = isBoundary ? "" : extractLastWord(from: inputContext)
+        let atSentenceStart = isBoundary
+            ? isAtSentenceStartAfterBoundary(inputContext)
+            : isAtSentenceStart(context: inputContext, word: partial)
+        guard isBoundary || !partial.isEmpty else { return }
+
+        let rejected = !partial.isEmpty && rejectedWords.contains(partial.lowercased())
+        if adaptiveTouchPrediction != nil { adaptiveTouchPrediction = nil }
+
+        let allowsAutocorrect = hostPolicy.autocorrectAllowed && autocorrectEnabled
+        weak var cancellableWork: DispatchWorkItem?
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
+            guard snapshot.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults) else { return }
+            // The keyboard language can stay fixed while spoken-language
+            // membership changes in the app. Exact acceptance follows both.
+            self.engine.setSelectedLanguage(selectedLanguage)
+            // A completed word is the cheap, stable language boundary. This
+            // live path previously never called typed-language detection.
+            if isBoundary { self.engine.setLanguage(forRecentText: inputContext) }
+            let abstains = self.engine.shouldAbstainFromPrediction(for: inputContext)
+            guard !work.isCancelled else { return }
+            // Prepare Space first. Adaptive hit refinement must not hold up
+            // the correction a fast typist is about to commit.
+            let commit = abstains ? nil : self.preparedSpaceCommit(
+                partial: partial, context: inputContext, previousWord: previousWords.last,
+                isAtSentenceStart: atSentenceStart, isBoundary: isBoundary,
+                allowsAutocorrect: allowsAutocorrect, rejected: rejected,
+                selectedLanguage: selectedLanguage, spokenLanguages: snapshot.spokenLanguages)
+            self.publishSpaceCommit(commit, token: requestToken)
+            guard !work.isCancelled else { return }
+            let probabilities = rejected || abstains
+                ? NextCharacterProbabilities([:])
+                : isBoundary
+                    ? self.engine.nextCharacterProbabilities(
+                        after: previousWords, isAtSentenceStart: atSentenceStart)
+                    : self.engine.nextCharacterProbabilities(
+                        for: partial, after: previousWords, isAtSentenceStart: atSentenceStart)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.adaptiveTouchRequestGate.isCurrent(requestToken),
+                      self.hostPolicy.suggestionsAllowed else { return }
+                self.adaptiveTouchPrediction = probabilities.isEmpty ? nil : probabilities
+                self.adaptiveTouchWork = nil
+            }
+        }
+        cancellableWork = work
+        adaptiveTouchWork = work
+        suggestionQueue.async(execute: work)
+    }
+
+    private func preparedSpaceCommit(
+        partial: String,
+        context: String,
+        previousWord: String?,
+        isAtSentenceStart: Bool,
+        isBoundary: Bool,
+        allowsAutocorrect: Bool,
+        rejected: Bool,
+        selectedLanguage: String,
+        spokenLanguages: [String]
+    ) -> SpaceCommit? {
+        guard !isBoundary, !partial.isEmpty, !engine.dictionaryLoadInFlight else { return nil }
+        let permitsCorrection = allowsAutocorrect && !engine.shouldSkipTokenPrediction(for: partial) && !rejected
+        let result = permitsCorrection ? engine.spellCheck(
+            partial,
+            previousWord: previousWord,
+            isAtSentenceStart: isAtSentenceStart
+        ) : nil
+        return SpaceCommit(
+            word: partial,
+            correction: result.flatMap { TypingCommit.accepts(typed: partial, correction: $0.correction) ? $0.correction : nil },
+            isUnknownWord: engine.isUnknownToDictionary(partial),
+            contextKey: String(context.suffix(240)),
+            selectedLanguage: selectedLanguage,
+            spokenLanguages: spokenLanguages
+        )
+    }
+
+    private func publishSpaceCommit(_ commit: SpaceCommit?, token: SuggestionRequestGate.Token) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.adaptiveTouchRequestGate.isCurrent(token) else { return }
+            self.spaceCommit = commit
+        }
+    }
+
+    /// Drops only the invisible routing cache, leaving the suggestion lane intact.
+    func clearAdaptiveTouchPrediction() {
+        lastAdaptiveContext = nil
+        adaptiveTouchWork?.cancel()
+        adaptiveTouchWork = nil
+        _ = adaptiveTouchRequestGate.begin()
+        adaptiveTouchPrediction = nil
     }
 
     /// Delegates spell-checking to the engine.
@@ -284,11 +582,161 @@ class SuggestionState: ObservableObject {
     }
 
     /// Resets the suggestion state to idle.
-    func clear() {
+    func clear(resetLanguage: Bool = true) {
         _ = beginSuggestionRequest()
+        spaceCommit = nil
+        clearAdaptiveTouchPrediction()
         suggestions = []
         mode = .idle
         currentWord = ""
+        // Fully deleted input: drop sticky typed-language so plates/priors
+        // return to the selected keyboard language. A space is not that.
+        guard resetLanguage else { return }
+        suggestionQueue.async { [weak self] in
+            self?.engine.resetTypedLanguageDetection()
+        }
+    }
+
+    private func clear(ifCurrent token: SuggestionRequestGate.Token) {
+        guard suggestionRequestGate.isCurrent(token) else { return }
+        clear()
+    }
+
+    /// Re-read preference-backed behavior after the app changes a setting while
+    /// the keyboard extension is cached.
+    func refreshPreferences() {
+        let enabled = autocorrectEnabled
+        let spoken = SpokenLanguagePreferences.load(from: AppGroup.defaults)
+        if spoken != lastSpokenLanguages {
+            lastSpokenLanguages = spoken
+            spaceCommit = nil
+            clearAdaptiveTouchPrediction()
+            suggestionQueue.async { [weak self] in
+                self?.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+            }
+        }
+        guard enabled != lastAutocorrectEnabled else { return }
+        lastAutocorrectEnabled = enabled
+        spaceCommit = nil
+        clearAdaptiveTouchPrediction()
+        guard !enabled else { return }
+        pendingUndo = nil
+        pendingAutocorrection = nil
+        suppressNextAutocorrectionBoundary = false
+        if mode == .corrections || mode == .undoAvailable {
+            suggestions = []
+            mode = .idle
+            currentWord = ""
+        }
+    }
+
+    func refreshVocabulary() {
+        UserDictionary.shared.reload()
+        spaceCommit = nil
+        clearAdaptiveTouchPrediction()
+    }
+
+    /// The keyboard gets selection callbacks for both its own insertions and a
+    /// user's caret movement. Text edits are reconciled by
+    /// `reconcilePendingAutocorrection(proxy:)`; this callback only invalidates
+    /// a pending correction when the caret moved away from the original trailing
+    /// context. That distinction keeps a normal backspace-and-retype override
+    /// learnable while still failing closed for a genuine caret move.
+    func noteSelectionChanged(proxy: UITextDocumentProxy) {
+        guard let pending = pendingAutocorrection else { return }
+        guard let after = proxy.documentContextAfterInput else {
+            pendingAutocorrection = nil
+            return
+        }
+        guard after == pending.afterContext else {
+            pendingAutocorrection = nil
+            return
+        }
+    }
+
+    /// Reconciles an edit reported by the host after text insertion. This is
+    /// intentionally separate from `handleSpace`, which evaluates the pending
+    /// word before it inserts the new boundary itself.
+    func reconcilePendingAutocorrection(proxy: UITextDocumentProxy) {
+        let context = proxy.documentContextBeforeInput ?? ""
+        let boundary = context.last.map {
+            $0.isWhitespace || $0.isNewline || $0.unicodeScalars.allSatisfy {
+                CharacterSet.punctuationCharacters.contains($0)
+            }
+        } ?? false
+        reconcilePendingAutocorrection(context: context, boundary: boundary)
+    }
+
+    /// Learns only a final word that replaced the applied correction at the same
+    /// caret. A changed word is accepted on a word/punctuation boundary; edits
+    /// without a boundary remain pending until the next one.
+    private func reconcilePendingAutocorrection(
+        context: String,
+        boundary: Bool
+    ) {
+        guard let pending = pendingAutocorrection else { return }
+
+        if context == pending.expectedContext {
+            if boundary, suppressNextAutocorrectionBoundary {
+                suppressNextAutocorrectionBoundary = false
+                return
+            }
+            if boundary { pendingAutocorrection = nil }
+            return
+        }
+
+        suppressNextAutocorrectionBoundary = false
+
+        guard let wordRange = lastWordRange(in: context),
+              context[..<wordRange.lowerBound].hasSuffix(pending.prefixContext) else {
+            pendingAutocorrection = nil
+            return
+        }
+        guard boundary else { return }
+
+        let word = String(context[wordRange])
+        if word.caseInsensitiveCompare(pending.correctedWord) == .orderedSame {
+            pendingAutocorrection = nil
+            return
+        }
+        if isSafeUserOverride(word), word.caseInsensitiveCompare(pending.originalWord) != .orderedSame {
+            _ = UserDictionary.shared.learn(word)
+        }
+        pendingAutocorrection = nil
+    }
+
+    private func isSafeUserOverride(_ word: String) -> Bool {
+        guard word.count > 1, word.count <= DictationVocabulary.maxTermCharacters else { return false }
+        var hasLetter = false
+        for scalar in word.unicodeScalars {
+            if CharacterSet.letters.contains(scalar) {
+                hasLetter = true
+                continue
+            }
+            if CharacterSet.nonBaseCharacters.contains(scalar) || scalar == "'" || scalar == "’" || scalar == "-" {
+                continue
+            }
+            return false
+        }
+        return hasLetter
+    }
+
+    private func prefixBeforeWord(in context: String, word: String) -> String {
+        guard let range = context.range(of: word, options: .backwards) else { return context }
+        return String(context[..<range.lowerBound])
+    }
+
+    private func lastWordRange(in text: String) -> Range<String.Index>? {
+        guard !text.isEmpty else { return nil }
+        var result: Range<String.Index>?
+        text.enumerateSubstrings(
+            in: text.startIndex..<text.endIndex,
+            options: [.byWords, .reverse]
+        ) { _, range, _, stop in
+            result = range
+            stop = true
+        }
+        return result
     }
 
     /// Applies a visible suggestion directly to the host field.
@@ -302,6 +750,7 @@ class SuggestionState: ObservableObject {
             let count = undo.correctedWord.count + (undo.insertedSpace ? 1 : 0)
             for _ in 0..<count { proxy.deleteBackward() }
             proxy.insertText(undo.originalWord)
+            rejectedWords.insert(undo.originalWord.lowercased())
             pendingUndo = nil
             clear()
             return
@@ -319,7 +768,8 @@ class SuggestionState: ObservableObject {
     /// Updates the prediction engine's language.
     func setLanguage(_ lang: String) {
         suggestionQueue.async { [weak self] in
-            self?.engine.setLanguage(lang)
+            guard let self else { return }
+            self.engine.setSelectedLanguage(lang)
         }
     }
 
@@ -357,25 +807,33 @@ class SuggestionState: ObservableObject {
             return
         }
 
+        weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
 
+            // Keep the n-gram path consistent with partial-word suggestions:
+            // a previous field's detected language must not become this field's
+            // silent default.
+            self.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
+
+            guard !work.isCancelled else { return }
+            guard !self.engine.shouldAbstainFromPrediction(for: context) else {
+                DispatchQueue.main.async { [weak self] in self?.clear(ifCurrent: requestToken) }
+                return
+            }
             self.engine.setLanguage(forRecentText: context)
+            guard !work.isCancelled else { return }
 
             // Extract last 1-2 complete words from context
             let words = self.extractLastWords(from: context, count: 2)
             guard !words.isEmpty else {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
-                    self.clear()
+                    self?.clear(ifCurrent: requestToken)
                 }
                 return
             }
 
             let predictions = self.engine.predictNextWords(after: words)
-            print("[SuggestionState] updatePredictions context=\(words) results=\(predictions)")
-
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 guard self.suggestionRequestGate.isCurrent(requestToken) else { return }
@@ -395,6 +853,7 @@ class SuggestionState: ObservableObject {
             }
         }
 
+        cancellableWork = work
         currentSuggestionWork = work
         suggestionQueue.async(execute: work)
     }
@@ -414,6 +873,23 @@ class SuggestionState: ObservableObject {
         }
         let start = max(0, words.count - count)
         return Array(words[start...])
+    }
+
+    private func isAtSentenceStartAfterBoundary(_ context: String) -> Bool {
+        // Keep a trailing newline visible as a sentence boundary while
+        // ignoring ordinary spaces typed after punctuation.
+        let trimmed = context.trimmingCharacters(in: .whitespaces)
+        guard let last = trimmed.last else { return true }
+        return last == "." || last == "!" || last == "?" || last.isNewline
+    }
+
+    private func contextSinceSentenceBoundary(_ text: String) -> String {
+        guard let boundary = text.lastIndex(where: {
+            $0 == "." || $0 == "!" || $0 == "?" || $0 == "\n"
+        }) else {
+            return text
+        }
+        return String(text[text.index(after: boundary)...])
     }
 
     // MARK: - Private
@@ -451,6 +927,14 @@ class SuggestionState: ObservableObject {
     /// We use Swift's built-in word boundary detection via enumerateSubstrings
     /// to correctly handle Unicode, apostrophes in French (l'homme), and
     /// other edge cases. This is more reliable than splitting on spaces.
+    private func isAtSentenceStart(context: String, word: String) -> Bool {
+        guard let range = context.range(of: word, options: .backwards) else { return true }
+        let prefix = context[..<range.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prefix.isEmpty else { return true }
+        guard let last = prefix.last else { return true }
+        return last == "." || last == "!" || last == "?" || last == "\n"
+    }
+
     private func extractLastWord(from text: String) -> String {
         var lastWord = ""
         text.enumerateSubstrings(in: text.startIndex..., options: .byWords) { substring, _, _, _ in

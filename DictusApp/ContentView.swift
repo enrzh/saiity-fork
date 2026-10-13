@@ -1,7 +1,7 @@
 // DictusApp/ContentView.swift
 // Legacy wrapper — redirects to MainTabView. Kept for backward compatibility.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Thin wrapper that redirects to MainTabView.
 ///

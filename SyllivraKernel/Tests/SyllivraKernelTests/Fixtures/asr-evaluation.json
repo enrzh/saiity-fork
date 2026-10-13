@@ -1,0 +1,10 @@
+[
+  {"id":"en-reminder","languages":["en"],"metric":"wer","reference":"Please remind me to call Anna tomorrow morning"},
+  {"id":"de-reminder","languages":["de"],"metric":"wer","reference":"Bitte erinnere mich morgen früh an den Termin bei Anna"},
+  {"id":"fr-reminder","languages":["fr"],"metric":"wer","reference":"Rappelle moi de téléphoner à Anna demain matin"},
+  {"id":"es-reminder","languages":["es"],"metric":"wer","reference":"Recuérdame llamar a Ana mañana por la mañana"},
+  {"id":"zh-reminder","languages":["zh"],"metric":"cer","reference":"请提醒我明天早上给安娜打电话"},
+  {"id":"ja-reminder","languages":["ja"],"metric":"cer","reference":"明日の朝アンナに電話するように教えてください"},
+  {"id":"de-en-switch","languages":["de","en"],"metric":"wer","reference":"Der Termin ist morgen Please send me the address"},
+  {"id":"en-zh-switch","languages":["en","zh"],"metric":"cer","reference":"Please call Anna 明天早上九点"}
+]

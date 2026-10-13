@@ -1,16 +1,16 @@
 // DictusApp/Audio/WhisperComputeOptions.swift
-// Translates DictusCore's compute policy into WhisperKit's ModelComputeOptions.
-import DictusCore
+// Translates SyllivraKernel's compute policy into WhisperKit's ModelComputeOptions.
+import SyllivraKernel
 import WhisperKit
 
 /// The single place where the device's audio-encoder compute policy becomes a
 /// WhisperKit type (issue #370).
 ///
-/// WHY one helper instead of four inline expressions:
-/// Dictus initialises WhisperKit at four sites (DictationCoordinator, ModelManager,
-/// TranscriptionService, WhisperKitEngine). A copy of the rule at each one is a copy
+/// WHY one helper instead of three inline expressions:
+/// Dictus initialises WhisperKit at three sites (DictationCoordinator, ModelManager,
+/// WhisperKitEngine). A copy of the rule at each one is a copy
 /// that can drift, and the one that drifts is the one that silently puts an iPhone 11
-/// back on the Neural Engine. All four call `current()`.
+/// back on the Neural Engine. All three call `current()`.
 ///
 /// WHY it can return nil rather than always building an options object:
 /// `WhisperKitConfig.computeOptions` is optional and every site passes nothing today.

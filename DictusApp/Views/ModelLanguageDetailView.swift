@@ -1,13 +1,13 @@
 // DictusApp/Views/ModelLanguageDetailView.swift
 // Per-model supported-languages detail sheet (issue #240).
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Curated language-support detail for one model, presented as a sheet from
 /// the ⓘ affordance on a model card.
 ///
 /// WHY a sheet instead of an inline list on the card (#240 locked decision):
-/// Model cards are already dense (badges, gauges, states, overflow menu).
+/// Model cards are already dense (badges, states, overflow menu).
 /// A dedicated scrollable sheet leaves room for per-language quality notes
 /// and stays safe at large Dynamic Type sizes.
 ///
@@ -34,6 +34,8 @@ struct ModelLanguageDetailView: View {
             List {
                 // Coverage summary
                 Section {
+                    SaiityPageHeader(title: "Supported languages",
+                                     subtitle: "Language coverage depends on the model. Try your own phrases before choosing.")
                     Label {
                         Text(support.coverage.localizedSummary)
                             .font(.headline)
@@ -75,7 +77,7 @@ struct ModelLanguageDetailView: View {
                         // Ground the tiers honestly: numbers come from the
                         // large models; the small ones degrade further.
                         if index == support.tierGroups.count - 1 {
-                            Text("Quality measured on the large Whisper models. Smaller models are less accurate.")
+                            Text("Upstream large-v3 FLEURS reference. These tiers are not measurements of this model export or this phone.")
                         }
                     }
                 }
@@ -90,7 +92,7 @@ struct ModelLanguageDetailView: View {
                             Text(language)
                         }
                     } header: {
-                        Text("Also supported")
+                        Text(model.engine == .qwenASR ? "Languages to verify" : "Also supported")
                     }
                 }
             }
@@ -136,6 +138,8 @@ struct ModelLanguageDetailView: View {
             return String(localized: "Fair quality")
         case .limited:
             return String(localized: "Limited quality")
+        case .unmeasured:
+            return String(localized: "No published reference measurement")
         }
     }
 
@@ -156,6 +160,8 @@ struct ModelLanguageDetailView: View {
             return "circle.lefthalf.filled"
         case .limited:
             return "exclamationmark.circle"
+        case .unmeasured:
+            return "questionmark.circle"
         }
     }
 }

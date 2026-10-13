@@ -1,6 +1,6 @@
 // DictusKeyboard/Views/RecordingOverlay.swift
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Full-screen recording overlay that replaces the keyboard during active recording.
 /// Shows different visual states based on DictationStatus:
