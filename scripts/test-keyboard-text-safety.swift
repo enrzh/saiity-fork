@@ -24,7 +24,7 @@ let loaderWithTimingHook = loader.replacingOccurrences(of: "final class AOSPTrie
                          with: "                self.beforePublication?()\n                let completed = self.loadGeneration.withLock")
 let program = loaderWithTimingHook + #"""
 import UIKit
-import DictusCore
+import SyllivraKernel
 @testable import DictusKeyboard
 
 final class Proxy: NSObject, UITextDocumentProxy {

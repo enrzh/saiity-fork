@@ -1,7 +1,7 @@
 import AVFoundation
 import UIKit
 import Combine
-import DictusCore
+import SyllivraKernel
 
 @MainActor final class RecordingReplay: NSObject, ObservableObject, AVAudioPlayerDelegate {
     static let shared = RecordingReplay()

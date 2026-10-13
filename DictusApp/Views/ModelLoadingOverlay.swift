@@ -2,7 +2,7 @@
 // Full-screen blocking overlay shown while a model is downloading, compiling
 // for the Neural Engine, or being loaded into RAM. Issue #144.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Full-screen cover that surfaces long-running model preparation work to the user.
 ///

@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 enum EmojiCategoryBarMetrics {
     static let railInset: CGFloat = 3

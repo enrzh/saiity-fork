@@ -15,7 +15,7 @@ let shortcutsOnly = CommandLine.arguments.contains("--shortcuts")
 let program = #"""
 import UIKit
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 @testable import DictusKeyboard
 
 final class FixtureProxy: UITextView, UITextDocumentProxy {

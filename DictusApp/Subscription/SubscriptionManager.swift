@@ -2,9 +2,9 @@
 // StoreKit 2 subscription management: product fetch, purchase, restore, transaction listener.
 import Foundation
 import StoreKit
-import DictusCore
+import SyllivraKernel
 
-// `PremiumFlags` moved to DictusCore so DictusKeyboard can read the same flag
+// `PremiumFlags` moved to SyllivraKernel so DictusKeyboard can read the same flag
 // (#241): the keyboard panel has a Pro entry point too, and an app-target
 // constant is invisible to the extension.
 
@@ -26,7 +26,7 @@ final class SubscriptionManager: ObservableObject {
     @Published private(set) var products: [Product] = []
     @Published private(set) var purchaseState: PurchaseState = .idle
 
-    /// Identifiers live in `DictusCore.ProProductID`, which the DictusCore test
+    /// Identifiers live in `SyllivraKernel.ProProductID`, which the SyllivraKernel test
     /// suite checks against the local StoreKit configuration — this target has
     /// no tests of its own and an identifier typo is unrecoverable (#215).
     /// PaywallView looks products up by ID (never by array index, since

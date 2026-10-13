@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 import UIKit
-import DictusCore
+import SyllivraKernel
 import MLX
 import MLXLLM
 import MLXLMCommon

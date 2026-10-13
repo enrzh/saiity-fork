@@ -1,13 +1,13 @@
 // DictusKeyboard/HostInputTraits.swift
 // Maps the host text field's UITextInputTraits (read from UITextDocumentProxy)
-// to the pure HostFieldPolicy decision in DictusCore (issue #200).
+// to the pure HostFieldPolicy decision in SyllivraKernel (issue #200).
 //
 // WHY this split: UIKeyboardType/UITextContentType only exist in UIKit, but the
-// policy logic must be unit-testable in DictusCoreTests (no UIKit on macOS).
-// This file is the thin, untestable UIKit shim; the tested logic is in DictusCore.
+// policy logic must be unit-testable in SyllivraKernelTests (no UIKit on macOS).
+// This file is the thin, untestable UIKit shim; the tested logic is in SyllivraKernel.
 
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 enum HostInputTraits {
     static func documentIdentifier(for proxy: UITextDocumentProxy?) -> UUID? {

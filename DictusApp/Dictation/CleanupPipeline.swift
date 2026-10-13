@@ -1,5 +1,5 @@
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 /// The cleanup call used after transcription. `DictationCoordinator` stays the
 /// facade; this type is the only place that asks `PolishCoordinator` to run.

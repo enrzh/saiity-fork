@@ -1,7 +1,7 @@
 // DictusKeyboard/TextPrediction/AOSPTrieEngine.swift
 // Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
 import Foundation
-import DictusCore
+import SyllivraKernel
 import os
 
 /// Wraps the AOSP-inspired C++ trie engine via ObjC++ bridge.
@@ -37,7 +37,7 @@ final class AOSPTrieEngine {
     /// The active language's data profile, or nil if `currentLanguage` is not a
     /// registered `SupportedLanguage`. All per-language data (overrides, accentMap,
     /// contractionPrefixes) is read from here so adding a language is a matter of
-    /// authoring `Languages/<Lang>.swift` in DictusCore.
+    /// authoring `Languages/<Lang>.swift` in SyllivraKernel.
     private var currentProfile: LanguageProfile? {
         SupportedLanguage(rawValue: currentLanguage)?.profile
     }
@@ -122,9 +122,9 @@ final class AOSPTrieEngine {
     /// Installs the two substitution-cost tables the C++ scorer scores typos with: keyboard
     /// proximity for the active layout, and the accent relation.
     ///
-    /// WHY both tables come from DictusCore rather than being built in the C++:
+    /// WHY both tables come from SyllivraKernel rather than being built in the C++:
     /// they are data, evaluated once here per dictionary load and never in the scoring
-    /// loop, and DictusCore is the only target in this repo with a test bundle. Before
+    /// loop, and SyllivraKernel is the only target in this repo with a test bundle. Before
     /// #321 the geometry was hardcoded as `float[26][26]` indexed by `c - 'a'`, which left
     /// QWERTZ's ü/ö/ä keys with nowhere to sit and sent QWERTZ to the QWERTY table, where
     /// y and z are in each other's places.
@@ -312,7 +312,7 @@ final class AOSPTrieEngine {
 
 // MARK: - FrequencyProvider conformance
 //
-// Lets DictusCore autocorrect helpers (`expandAccents`, `expandContractions`)
+// Lets SyllivraKernel autocorrect helpers (`expandAccents`, `expandContractions`)
 // query the trie via the protocol without importing the bridge. `wordExists(_:)`
 // is already defined on the class and matches the protocol signature.
 extension AOSPTrieEngine: FrequencyProvider {

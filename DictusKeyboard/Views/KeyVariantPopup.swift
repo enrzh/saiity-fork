@@ -1,6 +1,6 @@
 // DictusKeyboard/Views/KeyVariantPopup.swift
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Native-style long-press bubble of alternate characters or emoji skin tones.
 struct KeyVariantPopup: View {

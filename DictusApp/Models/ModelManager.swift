@@ -2,7 +2,7 @@
 // Manages the WhisperKit model lifecycle: download, select, delete, state tracking.
 import Foundation
 import Combine
-import DictusCore
+import SyllivraKernel
 import WhisperKit
 import FluidAudio
 

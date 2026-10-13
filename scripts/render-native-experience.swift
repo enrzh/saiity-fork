@@ -51,7 +51,7 @@ let program = #"""
 import SwiftUI
 import UIKit
 import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 let fixtureText = "I’ll send the updated proposal tomorrow morning. 我們下午再確認一次。"
 let fixtureOriginal = "um I’ll send the updated proposal tomorrow morning 我們下午再確認一次"

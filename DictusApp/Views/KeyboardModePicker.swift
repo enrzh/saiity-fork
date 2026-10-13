@@ -1,7 +1,7 @@
 // DictusApp/Views/KeyboardModePicker.swift
 // Native pickers for keyboard defaults and interaction preferences.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 import DeviceKit
 
 /// Voice options owns recommendations; Models manages the installed inventory.

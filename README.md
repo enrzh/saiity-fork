@@ -25,7 +25,7 @@ model, and app-extension architecture.
 | --- | --- |
 | `DictusApp` | Onboarding, settings, model management, and processing |
 | `DictusKeyboard` | Compact system keyboard extension and dictation control |
-| `DictusCore` | Shared preferences, model metadata, and App Group storage |
+| `SyllivraKernel` | Shared preferences, model metadata, and App Group storage |
 
 The keyboard extension stays lightweight. Audio capture and model processing
 remain in the containing app where iOS permits the required resources.
@@ -46,7 +46,7 @@ Keyboard > Keyboards > Add New Keyboard**.
 For shared package tests:
 
 ```bash
-cd DictusCore
+cd SyllivraKernel
 swift test
 ```
 

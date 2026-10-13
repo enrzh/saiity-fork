@@ -1,7 +1,7 @@
 // DictusApp/Views/ModelCardView.swift
 // Native model-management row with real lifecycle state and actions.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Renders one catalog model as a native List row.
 ///

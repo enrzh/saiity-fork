@@ -1,6 +1,6 @@
 // DictusKeyboard/InputView.swift
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Custom UIInputView that enables the system keyboard click sound.
 /// UIInputViewAudioFeedback protocol must be adopted by a UIView subclass,

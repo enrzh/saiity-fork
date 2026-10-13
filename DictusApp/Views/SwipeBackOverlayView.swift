@@ -1,5 +1,5 @@
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Keyboard handoff reflects the actual session, with no timer or simulated waveform.
 struct SwipeBackOverlayView: View {

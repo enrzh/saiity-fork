@@ -40,7 +40,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Install the proximity cost table for the active keyboard layout.
 ///
-/// The table is computed by DictusCore's `KeyboardProximity`, which owns the key geometry
+/// The table is computed by SyllivraKernel's `KeyboardProximity`, which owns the key geometry
 /// of every layout: the keyboard target has no test bundle, so a table declared here could
 /// not be pinned by anything (#321). Pass `ProximityCostTable.charactersData` (UTF-16 code
 /// units, one per key) and `.distancesData` (count x count floats, row-major).
@@ -50,7 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Install the accent substitution costs.
 ///
-/// Computed by DictusCore's `AccentRelation`, for the same reason. Pass
+/// Computed by SyllivraKernel's `AccentRelation`, for the same reason. Pass
 /// `AccentCostPairs.fromData` / `.toData` (UTF-16 code units) and `.costsData` (floats),
 /// three parallel buffers of equal length.
 /// Returns NO if the buffers disagree on size; the previous table then stays installed.

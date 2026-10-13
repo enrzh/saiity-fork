@@ -1,7 +1,7 @@
 // DictusApp/Views/DiagnosticDetailView.swift
 // App Group diagnostic display, extracted from ContentView for reuse in Settings.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Displays App Group diagnostic results (read/write health check).
 ///

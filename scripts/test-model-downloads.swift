@@ -4,7 +4,7 @@ import Foundation
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-download-check-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-let coreBuild = root.appendingPathComponent("DictusCore/.build/out/Products/Debug")
+let coreBuild = root.appendingPathComponent("SyllivraKernel/.build/out/Products/Debug")
 let production = try String(contentsOf: root.appendingPathComponent("DictusApp/Models/ModelRepoDownloader.swift"), encoding: .utf8)
     .replacingOccurrences(of: "import FluidAudio", with: "")
 let stubs = #"""
@@ -67,5 +67,5 @@ func run(_ executable: URL, _ arguments: [String]) throws {
     guard process.terminationStatus == 0 else { fatalError("Failed: \(executable.lastPathComponent), status \(process.terminationStatus)") }
 }
 try run(URL(fileURLWithPath: "/usr/bin/xcrun"), ["swiftc", "-parse-as-library", "-DDEBUG", "-I", coreBuild.path,
-    "-L", coreBuild.path, "-lDictusCore", source.path, "-o", binary.path])
+    "-L", coreBuild.path, "-lSyllivraKernel", source.path, "-o", binary.path])
 try run(binary, [])

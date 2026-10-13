@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import AVKit
 import Combine
-import DictusCore
+import SyllivraKernel
 
 /// One observer owns setup permission state across all onboarding pages.
 @MainActor final class KeyboardSetupModel: ObservableObject {

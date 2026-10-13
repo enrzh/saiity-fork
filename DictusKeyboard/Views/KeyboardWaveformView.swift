@@ -1,6 +1,6 @@
 import SwiftUI
 import QuartzCore
-import DictusCore
+import SyllivraKernel
 
 @MainActor
 final class KeyboardWaveformDriver: ObservableObject {

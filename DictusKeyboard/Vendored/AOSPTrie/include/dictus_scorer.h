@@ -21,9 +21,9 @@ struct Candidate {
 /// Accent substitution costs: what it costs to type `e` where `é` belonged, or `u` where
 /// `ü` did, instead of treating the two spellings as unrelated characters.
 ///
-/// The relation and its costs are declared in DictusCore (`AccentRelation`) and installed
+/// The relation and its costs are declared in SyllivraKernel (`AccentRelation`) and installed
 /// here as flat pairs. WHY the split: the table is data, built once per dictionary load,
-/// and DictusCore is the only place in this repo a test can execute. WHY *pairs* rather
+/// and SyllivraKernel is the only place in this repo a test can execute. WHY *pairs* rather
 /// than the accented-to-base map this replaced: re-deriving the pairs here would put the
 /// precedence rules (base-to-accent 0.15, accent-to-accent 0.20) in two languages, free
 /// to drift. This class holds no rules of its own.

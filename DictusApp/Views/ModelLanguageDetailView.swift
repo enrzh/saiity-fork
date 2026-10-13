@@ -1,7 +1,7 @@
 // DictusApp/Views/ModelLanguageDetailView.swift
 // Per-model supported-languages detail sheet (issue #240).
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Curated language-support detail for one model, presented as a sheet from
 /// the ⓘ affordance on a model card.

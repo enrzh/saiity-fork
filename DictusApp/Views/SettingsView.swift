@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase

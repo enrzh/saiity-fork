@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 extension UIView {
     /// One passive pulse on the existing plate; it never becomes a touch owner.

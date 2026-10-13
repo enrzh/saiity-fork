@@ -18,7 +18,7 @@
 
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// One hosted material layer, with independent plates drawn at the grid's
 /// resolved rectangles. The UIKit grid remains the only touch owner.

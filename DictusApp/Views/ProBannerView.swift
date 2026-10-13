@@ -1,7 +1,7 @@
 // DictusApp/Views/ProBannerView.swift
 // Compact native list row for HomeView, hidden when Pro is active.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Compact Pro action at the bottom of HomeView.
 ///

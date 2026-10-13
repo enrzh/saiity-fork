@@ -4,7 +4,7 @@
 // transcribe(audioArray:) which accepts any [Float] 16kHz mono array.
 import Foundation
 @preconcurrency import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 extension Notification.Name {
     static let dictusDictationSessionEnded = Notification.Name("DictusDictationSessionEnded")

@@ -2,7 +2,7 @@
 // Stable-layout recording screen: waveform + mic button always in place, text appears below.
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Determines the context in which RecordingView is shown.
 ///
@@ -67,7 +67,7 @@ struct RecordingView: View {
     /// the phone is doing within the same second.
     @State private var displayedStatus: DictationStatus = .idle
 
-    /// The rule. Pure and tested in DictusCore; the timer below is this surface's.
+    /// The rule. Pure and tested in SyllivraKernel; the timer below is this surface's.
     @State private var hold = TranscribingStageHold()
 
     /// Fires when a held stage becomes drawable. At most one is ever in flight.
@@ -310,7 +310,7 @@ struct RecordingView: View {
 
     /// Move `displayedStatus` toward `status`, honouring the transcription floor.
     ///
-    /// The decision is `TranscribingStageHold`'s, in DictusCore, where it is tested.
+    /// The decision is `TranscribingStageHold`'s, in SyllivraKernel, where it is tested.
     /// What lives here is only this screen's timer — a `Task` rather than a `Timer`,
     /// because it has to be cancelled from the view and cancellation is what keeps a
     /// terminal status from ever waiting behind a stage that no longer matters.

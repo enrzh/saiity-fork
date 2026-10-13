@@ -36,7 +36,7 @@
         _loaded = NO;
         _ngramEngine = new dictus::NgramEngine();
         // Both tables are members with a stable address, so the scorer is wired to them
-        // once here. Until DictusCore installs their contents they are neutral: every
+        // once here. Until SyllivraKernel installs their contents they are neutral: every
         // substitution costs 1.0 and no accent pair is related, which degrades to plain
         // edit distance rather than to wrong scores.
         _scorer.setProximityMap(&_proximityMap);

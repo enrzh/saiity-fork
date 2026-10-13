@@ -1,5 +1,5 @@
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 struct OnboardingSuccessView: View {
     let onComplete: () -> Void

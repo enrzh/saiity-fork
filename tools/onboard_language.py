@@ -28,7 +28,7 @@ should report "already present" rather than break):
         DictusKeyboard target's resource build phase.
 
     verify <code>
-        Runs the DictusCore tests on the host Mac and a DictusApp build on
+        Runs the SyllivraKernel tests on the host Mac and a DictusApp build on
         the iPhone 17 Pro simulator to make sure the keyboard appex still
         links.
 
@@ -52,8 +52,8 @@ from pathlib import Path
 
 # All paths anchored at repo root regardless of cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DICTUS_CORE = REPO_ROOT / "DictusCore" / "Sources" / "DictusCore"
-DICTUS_TESTS = REPO_ROOT / "DictusCore" / "Tests" / "DictusCoreTests"
+DICTUS_CORE = REPO_ROOT / "SyllivraKernel" / "Sources" / "SyllivraKernel"
+DICTUS_TESTS = REPO_ROOT / "SyllivraKernel" / "Tests" / "SyllivraKernelTests"
 KEYBOARD_RES = REPO_ROOT / "DictusKeyboard" / "Resources"
 PBXPROJ = REPO_ROOT / "Dictus.xcodeproj" / "project.pbxproj"
 SCRIPTS = REPO_ROOT / "scripts"
@@ -61,7 +61,7 @@ TOOLS = REPO_ROOT / "tools"
 
 # Verified during German onboarding 2026-05-05; keep in sync with
 # Pierre's local sim setup (see memory: "iPhone 17 Pro simulator").
-# Used by the DictusApp build only — the DictusCore suite runs on the host
+# Used by the DictusApp build only — the SyllivraKernel suite runs on the host
 # Mac via `swift test` (#301).
 SIMULATOR_DESTINATION = "platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2"
 
@@ -89,7 +89,7 @@ def _enum_case(code: str, display_name: str) -> str:
 # ---------- scaffold ----------
 
 PROFILE_TEMPLATE = '''\
-// DictusCore/Sources/DictusCore/Languages/{Lang}.swift
+// SyllivraKernel/Sources/SyllivraKernel/Languages/{Lang}.swift
 // {DisplayName} language profile. Onboarded via tools/onboard_language.py.
 // Per ADR 0001, overrides and seed bigrams ship empty on first launch when
 // the maintainer is non-native; populated post-launch from real feedback.
@@ -114,10 +114,10 @@ public let {lang}Profile = LanguageProfile(
 '''
 
 TESTS_TEMPLATE = '''\
-// DictusCore/Tests/DictusCoreTests/Languages/{Lang}LanguageTests.swift
+// SyllivraKernel/Tests/SyllivraKernelTests/Languages/{Lang}LanguageTests.swift
 // Per-language test file (locked decision #10 of #110 grilling).
 import XCTest
-@testable import DictusCore
+@testable import SyllivraKernel
 
 final class {Lang}LanguageTests: XCTestCase {{
 
@@ -372,14 +372,14 @@ def cmd_wire_xcode(args: argparse.Namespace) -> int:
 # ---------- verify ----------
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    """Runs DictusCore tests + a DictusApp Debug build."""
-    print(f"=== swift test (DictusCore) ===")
+    """Runs SyllivraKernel tests + a DictusApp Debug build."""
+    print(f"=== swift test (SyllivraKernel) ===")
     rc = subprocess.call(
         ["swift", "test"],
-        cwd=REPO_ROOT / "DictusCore",
+        cwd=REPO_ROOT / "SyllivraKernel",
     )
     if rc != 0:
-        print(f"[fail] DictusCoreTests failed (exit {rc})")
+        print(f"[fail] SyllivraKernelTests failed (exit {rc})")
         return rc
 
     print(f"\n=== xcodebuild build (DictusApp) ===")
@@ -425,7 +425,7 @@ def main() -> int:
     p_wire.add_argument("code")
     p_wire.set_defaults(func=cmd_wire_xcode)
 
-    p_verify = sub.add_parser("verify", help="DictusCore tests + DictusApp build")
+    p_verify = sub.add_parser("verify", help="SyllivraKernel tests + DictusApp build")
     p_verify.add_argument("code", nargs="?", default=None,
                           help="(unused but reserved for future per-language checks)")
     p_verify.set_defaults(func=cmd_verify)

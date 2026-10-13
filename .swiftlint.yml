@@ -15,7 +15,7 @@
 included:
   - DictusApp
   - DictusKeyboard
-  - DictusCore/Sources
+  - SyllivraKernel/Sources
   - DictusWidgets
 
 excluded:
@@ -24,7 +24,7 @@ excluded:
   - Library
   - scripts
   - designs
-  - DictusCore/.build
+  - SyllivraKernel/.build
   - DictusKeyboard/Vendored      # vendored giellakbd-ios — keep as-is (see CLAUDE.md)
   - "**/*.generated.swift"
 

@@ -1,5 +1,5 @@
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 struct AddCustomModelView: View {
     @Environment(\.dismiss) private var dismiss

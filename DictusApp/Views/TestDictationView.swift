@@ -1,7 +1,7 @@
 // DictusApp/Views/TestDictationView.swift
 // In-app test screen wrapping the shared RecordingView in standalone mode.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Test dictation screen accessible from HomeView's "Tester la dictee" button.
 ///

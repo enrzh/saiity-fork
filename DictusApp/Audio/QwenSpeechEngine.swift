@@ -3,7 +3,7 @@ import UIKit
 import MLX
 import Qwen3ASR
 import SpeechVAD
-import DictusCore
+import SyllivraKernel
 
 /// Same Qwen3-ASR MLX checkpoints and pause-final behavior as the macOS app.
 /// GPU weights stay in the app, never in the keyboard extension.

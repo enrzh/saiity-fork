@@ -1,6 +1,6 @@
 // DictusKeyboard/Views/FullAccessBanner.swift
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Non-dismissible info banner shown when Full Access is disabled.
 /// Simple centered layout inspired by Super Whisper: keyboard icon + text.

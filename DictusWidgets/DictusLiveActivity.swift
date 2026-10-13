@@ -1,7 +1,7 @@
 import ActivityKit
 import SwiftUI
 import WidgetKit
-import DictusCore
+import SyllivraKernel
 
 struct DictusLiveActivity: Widget {
     var body: some WidgetConfiguration {

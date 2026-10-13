@@ -1,6 +1,6 @@
 // DictusApp/Extensions/ModelInfo+Localized.swift
 // Localized display strings for ModelInfo, resolved via String Catalog.
-import DictusCore
+import SyllivraKernel
 import SwiftUI
 
 extension ModelInfo {

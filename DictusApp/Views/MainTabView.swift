@@ -1,7 +1,7 @@
 // DictusApp/Views/MainTabView.swift
 // Root navigation container with 2 tabs and full-screen recording overlay.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Root view presenting the Home and Settings tab navigation structure.
 ///

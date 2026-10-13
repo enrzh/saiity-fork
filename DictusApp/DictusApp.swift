@@ -2,7 +2,7 @@
 import SwiftUI
 import AVFoundation
 import StoreKit
-import DictusCore
+import SyllivraKernel
 #if canImport(Translation)
 import Translation
 #endif

@@ -29,7 +29,7 @@
 
 import UIKit
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 protocol KeyGridViewDelegate: AnyObject {
     func keyGrid(_ view: KeyGridView, perform action: KeyAction, key: KeyGridKey)

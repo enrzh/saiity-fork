@@ -1,7 +1,7 @@
 // DictusApp/Models/ModelRepoDownloader.swift
 // Downloads model files from a HuggingFace repo with real byte-level progress.
 import Foundation
-import DictusCore
+import SyllivraKernel
 import FluidAudio
 
 /// Downloads a HuggingFace model repo (Parakeet or WhisperKit) into the exact

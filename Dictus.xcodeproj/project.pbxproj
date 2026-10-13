@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        NI000001 /* SyllivraInference in App Frameworks */ = {isa = PBXBuildFile; productRef = NI900001 /* SyllivraInference */; };
         PE000001 /* RecordingReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = PE100001 /* RecordingReplay.swift */; };
         QW000003 /* QwenSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = QW100003; };
         QW000001 /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = QW900001 /* Qwen3ASR */; };
@@ -42,8 +43,8 @@
 		AA000006 /* DictationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000A /* DictationView.swift */; };
 		AA000007 /* KeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000B /* KeyboardState.swift */; };
 		AA000008 /* MicButtonDisabled.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000C /* MicButtonDisabled.swift */; };
-		AA000010 /* DictusCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA900010 /* DictusCore */; };
-		AA000011 /* DictusCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA900011 /* DictusCore */; };
+		AA000010 /* SyllivraKernel in Frameworks */ = {isa = PBXBuildFile; productRef = AA900010 /* SyllivraKernel */; };
+		AA000011 /* SyllivraKernel in Frameworks */ = {isa = PBXBuildFile; productRef = AA900011 /* SyllivraKernel */; };
 		AA000020 /* DictusKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = AA200002 /* DictusKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA000030 /* InputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* InputView.swift */; };
 		AA000035 /* FullAccessBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100035 /* FullAccessBanner.swift */; };
@@ -81,10 +82,6 @@
 		AA0000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C0 /* Assets.xcassets */; };
 		AA0000D0 /* TextPredictionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D0 /* TextPredictionEngine.swift */; };
 		AA0000D1 /* SuggestionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D1 /* SuggestionState.swift */; };
-		AA0000D2 /* fr_frequency.json in Resources */ = {isa = PBXBuildFile; fileRef = AA1000D2 /* fr_frequency.json */; };
-		AA0000D3 /* en_frequency.json in Resources */ = {isa = PBXBuildFile; fileRef = AA1000D3 /* en_frequency.json */; };
-		AA0000D5 /* es_frequency.json in Resources */ = {isa = PBXBuildFile; fileRef = AA1000D5 /* es_frequency.json */; };
-		AA0000D6 /* de_frequency.json in Resources */ = {isa = PBXBuildFile; fileRef = AA1000D6 /* de_frequency.json */; };
 		AA0000E0 /* KeyboardModePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E0 /* KeyboardModePicker.swift */; };
 		AA0000E2 /* GaugeBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E2 /* GaugeBarView.swift */; };
 		AA0000E3 /* ModelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E3 /* ModelCardView.swift */; };
@@ -95,7 +92,6 @@
 		AA0000F1 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F1 /* ParakeetEngine.swift */; };
 		AA0000F2 /* SoundFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F2 /* SoundFeedbackService.swift */; };
 		AA0000F3 /* SoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F3 /* SoundSettingsView.swift */; };
-		AA0000F4 /* Sounds in Resources */ = {isa = PBXBuildFile; fileRef = AA1000F4 /* Sounds */; };
 		AA0000F5 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F5 /* LiveActivityManager.swift */; };
 		AA0000F6 /* StopStandbyIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100005 /* StopStandbyIntent.swift */; };
 		AA0000F7 /* KeyboardLifecycleProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F6 /* KeyboardLifecycleProbe.swift */; };
@@ -123,7 +119,7 @@
 		BB000001 /* DictusWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100001 /* DictusWidgetBundle.swift */; };
 		BB000002 /* DictusLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100002 /* DictusLiveActivity.swift */; };
 		BB000003 /* StopStandbyIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100005 /* StopStandbyIntent.swift */; };
-		BB000010 /* DictusCore in Frameworks */ = {isa = PBXBuildFile; productRef = BB900010 /* DictusCore */; };
+		BB000010 /* SyllivraKernel in Frameworks */ = {isa = PBXBuildFile; productRef = BB900010 /* SyllivraKernel */; };
 		BB000020 /* DictusWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB200001 /* DictusWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		CC000002 /* KeyDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100002 /* KeyDefinition.swift */; };
 		CC000003 /* KeyboardDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100003 /* KeyboardDefinition.swift */; };
@@ -354,8 +350,9 @@
                 QW000002 /* SpeechVAD in Frameworks */,
                 RR000204 /* MLXLMCommon in Frameworks */,
                 RR000208 /* DeviceKit in App Frameworks */,
+                NI000001 /* SyllivraInference in App Frameworks */,
 				4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */,
-				AA000010 /* DictusCore in Frameworks */,
+				AA000010 /* SyllivraKernel in Frameworks */,
 				AA000042 /* WhisperKit in Frameworks */,
 				4647AD302F76AAA5003C3546 /* RecordingView.swift in Frameworks */,
 			);
@@ -365,7 +362,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA000011 /* DictusCore in Frameworks */,
+				AA000011 /* SyllivraKernel in Frameworks */,
 				CC00000F /* DeviceKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -374,7 +371,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BB000010 /* DictusCore in Frameworks */,
+				BB000010 /* SyllivraKernel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,7 +384,7 @@
 				AA400001 /* DictusApp */,
 				AA400002 /* DictusKeyboard */,
 				BB400001 /* DictusWidgets */,
-				AA400003 /* DictusCore (local package) */,
+				AA400003 /* SyllivraKernel (local package) */,
 				AA400004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -460,11 +457,11 @@
 			path = DictusKeyboard;
 			sourceTree = "<group>";
 		};
-		AA400003 /* DictusCore (local package) */ = {
+		AA400003 /* SyllivraKernel (local package) */ = {
 			isa = PBXGroup;
 			children = (
 			);
-			name = "DictusCore (local package)";
+			name = "SyllivraKernel (local package)";
 			sourceTree = "<group>";
 		};
 		AA400004 /* Products */ = {
@@ -771,6 +768,7 @@
 				AA600001 /* Sources */,
 				AA300001 /* Frameworks */,
 				AA600003 /* Resources */,
+				SL060001 /* Prepare lossless feedback sounds */,
 				AA060001 /* Embed App Extensions */,
 				AA060010 /* Generate build info */,
 			);
@@ -787,7 +785,8 @@
                 QW900002 /* SpeechVAD */,
                 RR900202 /* MLXLMCommon */,
                 CC900001 /* DeviceKit */,
-				AA900010 /* DictusCore */,
+                NI900001 /* SyllivraInference */,
+				AA900010 /* SyllivraKernel */,
 				AA900020 /* WhisperKit */,
 				AA900030 /* FluidAudio */,
 			);
@@ -802,6 +801,7 @@
 				AA600002 /* Sources */,
 				AA300002 /* Frameworks */,
 				AA600004 /* Resources */,
+				SL060002 /* Compact frequency resources */,
 				AA060011 /* Generate build info */,
 			);
 			buildRules = (
@@ -810,7 +810,7 @@
 			);
 			name = DictusKeyboard;
 			packageProductDependencies = (
-				AA900011 /* DictusCore */,
+				AA900011 /* SyllivraKernel */,
 				CC900001 /* DeviceKit */,
 			);
 			productName = DictusKeyboard;
@@ -832,7 +832,7 @@
 			);
 			name = DictusWidgets;
 			packageProductDependencies = (
-				BB900010 /* DictusCore */,
+				BB900010 /* SyllivraKernel */,
 			);
 			productName = DictusWidgets;
 			productReference = BB200001 /* DictusWidgets.appex */;
@@ -871,7 +871,7 @@
 			packageReferences = (
                 RR800201 /* mlx-swift-lm */,
                 QW800001 /* QwenASRRuntime */,
-				AA800001 /* XCLocalSwiftPackageReference "DictusCore" */,
+				AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */,
 				AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				CC800001 /* XCRemoteSwiftPackageReference "DeviceKit" */,
@@ -896,7 +896,6 @@
                 RR000206 /* KeyboardSetupGuide.mp4 in Resources */,
                 RR000207 /* OpenSourceNotices.json in Resources */,
 				AA0000C0 /* Assets.xcassets in Resources */,
-				AA0000F4 /* Sounds in Resources */,
 				AA000P10 /* PrivacyInfo.xcprivacy in Resources */,
 				AA0000L1 /* Localizable.xcstrings in Resources */,
 			);
@@ -906,10 +905,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA0000D2 /* fr_frequency.json in Resources */,
-				AA0000D3 /* en_frequency.json in Resources */,
-				AA0000D5 /* es_frequency.json in Resources */,
-				AA0000D6 /* de_frequency.json in Resources */,
 				AA000P20 /* PrivacyInfo.xcprivacy in Resources */,
 				AA0000L2 /* Localizable.xcstrings in Resources */,
 				EE000006 /* fr_spellcheck.dict in Resources */,
@@ -934,6 +929,44 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		SL060001 /* Prepare lossless feedback sounds */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/scripts/slim-app-resources.py",
+				"$(SRCROOT)/Dictus/Sounds",
+			);
+			name = "Prepare lossless feedback sounds";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Sounds",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n/usr/bin/python3 \"$SRCROOT/scripts/slim-app-resources.py\" --kind app --source \"$SRCROOT/Dictus/Sounds\" --bundle \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n";
+		};
+		SL060002 /* Compact frequency resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/scripts/slim-app-resources.py",
+				"$(SRCROOT)/DictusKeyboard/Resources",
+				"$(SRCROOT)/SyllivraKernel/Sources/SyllivraKernel/FrequencyDictionary.swift",
+			);
+			name = "Compact frequency resources";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/de_frequency.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/en_frequency.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/es_frequency.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/fr_frequency.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n/usr/bin/python3 \"$SRCROOT/scripts/slim-app-resources.py\" --kind keyboard --source \"$SRCROOT/DictusKeyboard/Resources\" --bundle \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n";
+		};
 		AA060010 /* Generate build info */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1236,6 +1269,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEPLOYMENT_LOCATION = NO;
+				DEPLOYMENT_POSTPROCESSING = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -1250,6 +1285,8 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_STYLE = "non-global";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				VALIDATE_PRODUCT = YES;
@@ -1444,9 +1481,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		AA800001 /* XCLocalSwiftPackageReference "DictusCore" */ = {
+		AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = DictusCore;
+			relativePath = SyllivraKernel;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -1487,19 +1524,20 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+        NI900001 /* SyllivraInference */ = {isa = XCSwiftPackageProductDependency; package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */; productName = SyllivraInference; };
         QW900001 /* Qwen3ASR */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = Qwen3ASR; };
         QW900002 /* SpeechVAD */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = SpeechVAD; };
         RR900201 /* MLXLLM */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLLM; };
         RR900202 /* MLXLMCommon */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLMCommon; };
-		AA900010 /* DictusCore */ = {
+		AA900010 /* SyllivraKernel */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AA800001 /* XCLocalSwiftPackageReference "DictusCore" */;
-			productName = DictusCore;
+			package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */;
+			productName = SyllivraKernel;
 		};
-		AA900011 /* DictusCore */ = {
+		AA900011 /* SyllivraKernel */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AA800001 /* XCLocalSwiftPackageReference "DictusCore" */;
-			productName = DictusCore;
+			package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */;
+			productName = SyllivraKernel;
 		};
 		AA900020 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1511,10 +1549,10 @@
 			package = AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
 		};
-		BB900010 /* DictusCore */ = {
+		BB900010 /* SyllivraKernel */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AA800001 /* XCLocalSwiftPackageReference "DictusCore" */;
-			productName = DictusCore;
+			package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */;
+			productName = SyllivraKernel;
 		};
 		CC900001 /* DeviceKit */ = {
 			isa = XCSwiftPackageProductDependency;

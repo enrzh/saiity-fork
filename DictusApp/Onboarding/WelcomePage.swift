@@ -1,5 +1,5 @@
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 struct WelcomePage: View {
     let onNext: () -> Void

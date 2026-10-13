@@ -4,7 +4,7 @@ import Foundation
 import Combine
 import AVFoundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 import WhisperKit
 import FluidAudio
 import NaturalLanguage
@@ -1133,16 +1133,18 @@ class DictationCoordinator: ObservableObject {
         if #available(iOS 26.0, *) {
             let hint = regions.count == 1 ? regions.first?.validatedLanguage : nil
             let spans = PolishSpanDetector.translationSpans(in: transcript, sourceHint: hint)
+            let deadline = PolishDeadline()
             var outcomes: [TranslationOutcome] = []
             for span in spans {
                 guard !Task.isCancelled, sessions.mayReport(from: generation ?? sessions.current,
                     request: request, currentRequest: currentLanguageRequest) else {
                     return .fallback(transcript, reason: .cancelled)
                 }
+                guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
                 let text = span.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { outcomes.append(.original(span.text)); continue }
                 let outcome = await translationOutcome(text, target: target, sourceHint: span.languageCode,
-                    request: request, generation: generation ?? sessions.current)
+                    request: request, generation: generation ?? sessions.current, deadline: deadline)
                 guard outcome.fallbackReason == nil else { return .fallback(transcript, reason: outcome.fallbackReason ?? .rejectedOutput) }
                 let leading = String(span.text.prefix(while: \.isWhitespace))
                 let trailing = String(span.text.reversed().prefix(while: \.isWhitespace).reversed())
@@ -1152,6 +1154,7 @@ class DictationCoordinator: ObservableObject {
                 request: request, currentRequest: currentLanguageRequest) else {
                 return .fallback(transcript, reason: .cancelled)
             }
+            guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
             return TranslationOutcome.combined(original: transcript, clauses: spans.map(\.text), outcomes: outcomes, target: target)
         }
 #endif
@@ -1225,13 +1228,16 @@ class DictationCoordinator: ObservableObject {
         target: TranslationLanguage,
         sourceHint: String? = nil,
         request: DictationLanguageRequest,
-        generation: Int
+        generation: Int,
+        deadline: PolishDeadline
     ) async -> TranslationOutcome {
-        guard sessions.mayReport(
+        guard !Task.isCancelled, sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
         }
+
+        guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
 
         let source = SpeechLanguageEvidence.sourceLanguage(in: transcript, hint: sourceHint ?? translationSource(for: request))
         if target.alreadyContains(transcript, sourceHint: source) {
@@ -1257,17 +1263,16 @@ class DictationCoordinator: ObservableObject {
                 status = try await availability.status(for: transcript, to: targetLocale)
             }
         } catch {
-            return .fallback(transcript, reason: .unavailable)
+            return .fallback(transcript, reason: Task.isCancelled ? .cancelled : .unavailable)
         }
 
-        guard status != .unsupported else {
-            return .fallback(transcript, reason: .unavailable)
-        }
-
-        guard sessions.mayReport(
+        guard !Task.isCancelled, sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
+        }
+        guard deadline.instant > .now, status != .unsupported else {
+            return .fallback(transcript, reason: .unavailable)
         }
 
         if let source, status == .installed {
@@ -1276,7 +1281,8 @@ class DictationCoordinator: ObservableObject {
                 source: source,
                 target: target,
                 request: request,
-                generation: generation
+                generation: generation,
+                deadline: deadline
             )
             if case .translated = installed {
                 return installed
@@ -1288,7 +1294,8 @@ class DictationCoordinator: ObservableObject {
             source: source,
             target: target,
             request: request,
-            generation: generation
+            generation: generation,
+            deadline: deadline
         )
     }
 
@@ -1303,8 +1310,12 @@ class DictationCoordinator: ObservableObject {
         source: String?,
         target: TranslationLanguage,
         request: DictationLanguageRequest,
-        generation: Int
+        generation: Int,
+        deadline: PolishDeadline
     ) async -> TranslationOutcome {
+        guard !Task.isCancelled, sessions.mayReport(from: generation, request: request,
+            currentRequest: currentLanguageRequest) else { return .fallback(transcript, reason: .cancelled) }
+        guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
         let id = UUID()
         return await withTaskGroup(of: TranslationOutcome.self) { group in
             group.addTask { @MainActor in
@@ -1318,7 +1329,7 @@ class DictationCoordinator: ObservableObject {
                 )
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                try? await ContinuousClock().sleep(until: deadline.instant)
                 return .fallback(transcript, reason: .unavailable)
             }
             let first = await group.next() ?? .fallback(transcript, reason: .unavailable)
@@ -1350,28 +1361,39 @@ class DictationCoordinator: ObservableObject {
         source: String,
         target: TranslationLanguage,
         request: DictationLanguageRequest,
-        generation: Int
+        generation: Int,
+        deadline: PolishDeadline
     ) async -> TranslationOutcome {
-        guard sessions.mayReport(
+        guard !Task.isCancelled, sessions.mayReport(
             from: generation, request: request, currentRequest: currentLanguageRequest
         ) else {
             return .fallback(transcript, reason: .cancelled)
         }
+        guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
         let clientIdentifier = request.clientIdentifier ?? UUID().uuidString
         let session = TranslationSession(
             installedSource: Locale.Language(identifier: source),
             target: target.localeLanguage
         )
+        let timeout = Task { @MainActor in
+            do {
+                try await ContinuousClock().sleep(until: deadline.instant)
+                session.cancel()
+            } catch { /* The call finished or was cancelled. */ }
+        }
+        defer { timeout.cancel() }
         do {
-            let responses = try await session.translations(from: [
-                TranslationSession.Request(
-                    sourceText: transcript,
-                    clientIdentifier: clientIdentifier
-                )
-            ])
+            let responses = try await withTaskCancellationHandler {
+                try await session.translations(from: [
+                    TranslationSession.Request(sourceText: transcript, clientIdentifier: clientIdentifier)
+                ])
+            } onCancel: {
+                Task { @MainActor in session.cancel() }
+            }
             let response = responses.first
             guard !Task.isCancelled, sessions.mayReport(from: generation, request: request,
                 currentRequest: currentLanguageRequest) else { return .fallback(transcript, reason: .cancelled) }
+            guard deadline.instant > .now else { return .fallback(transcript, reason: .unavailable) }
             return TranslationOutcome.resolved(
                 original: transcript,
                 translated: response?.targetText,
@@ -1379,7 +1401,7 @@ class DictationCoordinator: ObservableObject {
                 target: target, source: source
             )
         } catch {
-            return .fallback(transcript, reason: .unavailable)
+            return .fallback(transcript, reason: Task.isCancelled ? .cancelled : .unavailable)
         }
     }
 
@@ -2298,7 +2320,6 @@ private extension DictationCoordinator {
                 do { try self.requireSessionModel(modelName) }
                 catch { await prepared.releaseLoadedModelAndWait(); throw error }
                 self.whisperKit = kit
-                if let kit { self.transcriptionService.prepare(whisperKit: kit) }
                 self.transcriptionService.prepare(engine: prepared)
                 self.currentModelName = modelName
             }

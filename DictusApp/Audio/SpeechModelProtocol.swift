@@ -2,7 +2,7 @@
 // Protocol abstraction for multi-engine speech-to-text.
 import Foundation
 import WhisperKit
-import DictusCore
+import SyllivraKernel
 
 /// Common interface for all speech-to-text engines (WhisperKit, Parakeet, etc.).
 ///
@@ -203,8 +203,8 @@ class WhisperKitEngine: SpeechModelProtocol {
     }
 }
 
-/// Shared WhisperKit decode policy used by the active engine and compatibility
-/// fallback. Auto mode is segmented only when the detector finds multiple
+/// WhisperKit decode policy used by the active engine.
+/// Auto mode is segmented only when the detector finds multiple
 /// regions; ordinary recordings retain the original full-recording request.
 enum WhisperKitTranscriptionSupport {
     private static let segmenter = SpeechRegionSegmenter()
@@ -253,7 +253,7 @@ enum WhisperKitTranscriptionSupport {
             : whisperKit.tokenizer.map { Array($0.encode(text: DictationVocabulary.recognitionPrompt).prefix(96)) }
         let options = decodingOptions(language: language, promptTokens: hintTokens)
         let audioQuality = SpeechAudioQuality.analyze(audioSamples)
-        let gain = SpeechAudioGain.gain(for: audioSamples)
+        let gain = audioQuality.recommendedGain
         let regions = segmenter.regions(in: audioSamples)
         logCoverage(regions: regions, sampleCount: audioSamples.count, component: logComponent)
         PersistentLog.log(.diagnosticProbe(

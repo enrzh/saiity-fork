@@ -1,7 +1,7 @@
 // DictusApp/Views/GaugeBarView.swift
 // Reusable 5-segment gauge bar for model accuracy/speed display.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// A 5-segment gauge bar that fills segments based on a 0.0-1.0 value.
 ///

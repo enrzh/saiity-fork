@@ -11,7 +11,7 @@ let pressEnd = source.range(of: "\n}", range: pressStart..<source.endIndex)!.upp
 // The real geometry, not a hand-written stand-in: the point of this probe is that
 // the published tiles and the owner's hit testing agree.
 let geometrySource = try String(
-    contentsOfFile: "DictusCore/Sources/DictusCore/AdaptiveTouchRouting.swift",
+    contentsOfFile: "SyllivraKernel/Sources/SyllivraKernel/AdaptiveTouchRouting.swift",
     encoding: .utf8)
 let geometryStart = geometrySource.range(of: "public struct NextCharacterProbabilities")!.lowerBound
 let geometry = String(geometrySource[geometryStart...])

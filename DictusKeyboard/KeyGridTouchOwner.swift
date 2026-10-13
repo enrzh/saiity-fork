@@ -1,7 +1,7 @@
 import UIKit
 import SwiftUI
 import CoreGraphics
-import DictusCore
+import SyllivraKernel
 
 /// Key identity is geometry; interaction identity belongs to one finger only.
 struct KeyGridPress {

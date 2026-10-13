@@ -1,6 +1,6 @@
 import Foundation
 import MetricKit
-import DictusCore
+import SyllivraKernel
 
 /// Registers MetricKit once per app process and records aggregated performance data.
 ///

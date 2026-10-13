@@ -18,7 +18,7 @@ Voir PRD.md pour les specs complètes et DEVELOPMENT.md pour le guide de dévelo
 
 - **DictusApp** — App principale (onboarding, settings, model manager)
 - **DictusKeyboard** — Keyboard Extension (clavier custom + dictation)
-- **DictusCore** — Framework partagé (App Group, modèles, préférences)
+- **SyllivraKernel** — Framework partagé (App Group, modèles, préférences)
 
 ## Conventions
 
@@ -47,8 +47,8 @@ Voir PRD.md pour les specs complètes et DEVELOPMENT.md pour le guide de dévelo
 
 ## Build, test, lint
 
-- Trois targets à construire : `DictusApp`, `DictusKeyboard`, `DictusCore`.
-- Tests : `cd DictusCore && swift test`. C'est la seule suite du dépôt et elle tourne sur le Mac, sans simulateur. Depuis #301 la destination iOS Simulator passe elle aussi, mais elle exécute exactement les mêmes tests — aucun n'est réservé à iOS — en payant le boot du simulateur. Il n'y a donc jamais de raison de la préférer.
+- Trois targets à construire : `DictusApp`, `DictusKeyboard`, `SyllivraKernel`.
+- Tests : `cd SyllivraKernel && swift test`. C'est la seule suite du dépôt et elle tourne sur le Mac, sans simulateur. Depuis #301 la destination iOS Simulator passe elle aussi, mais elle exécute exactement les mêmes tests — aucun n'est réservé à iOS — en payant le boot du simulateur. Il n'y a donc jamais de raison de la préférer.
 - Un worktree neuf — comme tout "Reset Package Caches" — résout les packages de zéro et exige `./scripts/patch-fluidaudio-swift5.sh` avant le premier build, sinon il échoue. Le script prend le chemin de derived data du build à venir : `./scripts/patch-fluidaudio-swift5.sh build/DerivedData` pour un build en ligne de commande avec `-derivedDataPath`, sans argument pour un build Xcode. Sans argument il ne patche que la derived data partagée d'Xcode, ce qui ne dit rien du checkout d'un worktree (#285). Il sort en erreur quand il ne trouve aucun checkout sous le chemin demandé.
 - Lint : `swiftlint lint --strict`. Pas de baseline ni de fichier d'exemptions (la baseline a été supprimée en #146), donc toute violation introduite se corrige ou porte un `swiftlint:disable` avec sa raison écrite.
 - Xcode régénère `Localizable.xcstrings` au build (état d'extraction `stale`, newline finale perdue). C'est du bruit de build : le jeter, jamais le committer.
@@ -58,7 +58,7 @@ Voir PRD.md pour les specs complètes et DEVELOPMENT.md pour le guide de dévelo
 Pierre travaille sur cette machine : toute fenêtre qui s'ouvre lui vole le focus.
 
 - `xcrun simctl boot <udid>` est headless, donc autorisé.
-- La suite de tests n'a besoin d'aucun simulateur (`cd DictusCore && swift test`). Seuls les builds d'app en demandent un.
+- La suite de tests n'a besoin d'aucun simulateur (`cd SyllivraKernel && swift test`). Seuls les builds d'app en demandent un.
 - Ne jamais mettre une fenêtre Simulator au premier plan : `open -a Simulator` est interdit. `open -g -a Simulator` ne l'est pas, et il est requis pour piloter l'UI (`axe` ne peut taper que si Simulator.app est attaché au device booté). Mesuré : `-g` ne change pas l'app au premier plan.
 - Un agent ne peut pas valider sur device physique : ce qui l'exige part dans la liste de validation manuelle, avec les étapes exactes.
 - Le simulateur se pilote au tap, au clavier et par l'arbre d'accessibilité avec `axe`. Le clavier Dictus **peut** y être activé (via Réglages, au tap) ; ce qui reste non résolu, c'est son rendu à l'écran. La recette complète est dans `docs/agents/simulator.md`, qui fait autorité sur ce que le simulateur sait faire.

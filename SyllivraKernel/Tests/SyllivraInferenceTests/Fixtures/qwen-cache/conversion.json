@@ -1,0 +1,11 @@
+{
+  "recipe": "qwen-step-v1",
+  "coremltools": "8.3.0",
+  "torch": "2.5.1",
+  "transformers": "4.51.3",
+  "context": 16,
+  "weightsAndActivations": "float32",
+  "kvCache": "float16",
+  "sourceWeightSHA256": null,
+  "pretrained": false
+}

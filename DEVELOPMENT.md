@@ -288,7 +288,7 @@ Claude Code peut opérer directement sur les fichiers de ton repo local. Le work
 claude  # Lancer Claude Code
 
 # Exemples de prompts efficaces
-"Crée le fichier DictusCore/ModelRoutingConfig.swift avec 
+"Crée le fichier SyllivraKernel/ModelRoutingConfig.swift avec
  la struct ModelRoutingConfig selon les specs du PRD"
 
 "Dans DictusKeyboard/TranscriptionEngine.swift, implémente 
@@ -301,7 +301,7 @@ claude  # Lancer Claude Code
 
 - Générer des fichiers Swift complets à partir des specs du PRD
 - Implémenter des protocoles et extensions boilerplate
-- Écrire les tests unitaires pour DictusCore
+- Écrire les tests unitaires pour SyllivraKernel
 - Refactorer du code existant que tu lui fournis
 - Débugger à partir des messages d'erreur Xcode
 
@@ -351,7 +351,7 @@ Dictus — iOS keyboard extension pour dictation vocale offline (WhisperKit)
 - Toutes les données partagées passent par App Group
 
 ## Fichiers clés
-- DictusCore/ModelRoutingConfig.swift → config Smart Model Routing
+- SyllivraKernel/ModelRoutingConfig.swift → config Smart Model Routing
 - DictusKeyboard/TranscriptionEngine.swift → intégration WhisperKit
 - DictusKeyboard/TextInserter.swift → textDocumentProxy
 ```

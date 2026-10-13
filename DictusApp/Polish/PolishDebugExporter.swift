@@ -1,7 +1,7 @@
 // DictusApp/Polish/PolishDebugExporter.swift
 import Foundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Wire format for Polish debug exports. Stable schema — when iterating on the
 /// Light/Repair prompts, this is what gets shared from the device for analysis.

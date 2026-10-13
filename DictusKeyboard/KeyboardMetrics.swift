@@ -5,7 +5,7 @@
 import SwiftUI
 import UIKit
 import AudioToolbox
-import DictusCore
+import SyllivraKernel
 
 // MARK: - Device Class (from old KeyButton.swift)
 
@@ -56,7 +56,7 @@ enum KeyMetrics {
 
 /// 3-category system sounds for key feedback.
 /// These sound IDs are the same as giellakbd-ios Audio class and respect silent switch.
-/// The identifiers themselves live in DictusCore's `KeySoundCategory` so they have one
+/// The identifiers themselves live in SyllivraKernel's `KeySoundCategory` so they have one
 /// source of truth and can be unit-tested; these are the shorthand the keyboard uses.
 enum KeySound {
     static let letter: SystemSoundID = KeySoundCategory.letter.systemSoundID

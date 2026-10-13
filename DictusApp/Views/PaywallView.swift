@@ -2,7 +2,7 @@
 // Full-screen paywall presented in a native navigation container.
 import SwiftUI
 import StoreKit
-import DictusCore
+import SyllivraKernel
 
 struct PaywallView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -431,9 +431,9 @@ struct PaywallView: View {
         }
     }
 
-    /// Maps StoreKit's period unit onto the one DictusCore reasons about.
+    /// Maps StoreKit's period unit onto the one SyllivraKernel reasons about.
     ///
-    /// WHY the indirection: the keyboard extension links DictusCore and must
+    /// WHY the indirection: the keyboard extension links SyllivraKernel and must
     /// not link StoreKit, so the rule deciding the suffix cannot name
     /// StoreKit's types. This mapping is the only place the two meet.
     private static func planUnit(for unit: Product.SubscriptionPeriod.Unit) -> ProSubscriptionUnit {

@@ -1,7 +1,7 @@
 // DictusApp/Audio/ParakeetEngine.swift
 // FluidAudio-based Parakeet STT engine, iOS 17+ only.
 import Foundation
-import DictusCore
+import SyllivraKernel
 import FluidAudio
 
 /// Parakeet TDT speech-to-text engine using FluidAudio SDK.

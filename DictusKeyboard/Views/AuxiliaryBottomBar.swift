@@ -1,7 +1,7 @@
 // DictusKeyboard/Views/AuxiliaryBottomBar.swift
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 enum KeyHitTarget {
     /// Visual plates are independent from this persistent control.

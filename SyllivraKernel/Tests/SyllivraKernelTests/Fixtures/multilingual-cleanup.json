@@ -1,0 +1,86 @@
+[
+  {
+    "id": "de-appointment-noise",
+    "raw": "(snow crunching) So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.",
+    "languages": ["de"],
+    "expectPolishable": true,
+    "floor": "So grundsätzlich habe ich jetzt einen Termin 15 Uhr. und heute dich dafür einladen.",
+    "mustContain": ["Termin 15 Uhr", "einladen"],
+    "mustNotContain": ["snow crunching"],
+    "acceptable": [
+      "Ich habe jetzt einen Termin um 15 Uhr. Und heute lade ich dich dafür ein."
+    ]
+  },
+  {
+    "id": "de-en-cjk-mixed",
+    "raw": "Ich schicke dir the invoice tomorrow und 我晚上再确认。",
+    "languages": ["de", "en", "zh"],
+    "expectPolishable": false,
+    "floor": "Ich schicke dir the invoice tomorrow und 我晚上再确认。",
+    "mustContain": ["Ich schicke dir", "the invoice tomorrow", "我晚上再确认"],
+    "mustNotContain": ["I will confirm"],
+    "acceptable": []
+  },
+  {
+    "id": "en-zh-inline",
+    "raw": "你好，can you send me die Rechnung bitte?",
+    "languages": ["zh", "en", "de"],
+    "expectPolishable": false,
+    "floor": "你好，can you send me die Rechnung bitte?",
+    "mustContain": ["你好", "can you send me", "die Rechnung bitte"],
+    "mustNotContain": ["Hello"],
+    "acceptable": []
+  },
+  {
+    "id": "en-fillers",
+    "raw": "uh i i think we should ship it",
+    "languages": ["en"],
+    "expectPolishable": true,
+    "floor": "I think we should ship it",
+    "mustContain": ["think we should ship it"],
+    "mustNotContain": ["uh"],
+    "acceptable": ["I think we should ship it."]
+  },
+  {
+    "id": "en-sound-tag",
+    "raw": "hello (singing)~ there",
+    "languages": ["en"],
+    "expectPolishable": false,
+    "floor": "Hello there",
+    "mustContain": ["Hello there"],
+    "mustNotContain": ["singing"],
+    "acceptable": ["Hello there."]
+  },
+  {
+    "id": "de-en-sentences",
+    "raw": "Der Termin ist morgen. Please send me the address.",
+    "languages": ["de", "en"],
+    "expectPolishable": true,
+    "floor": "Der Termin ist morgen. Please send me the address.",
+    "mustContain": ["Der Termin ist morgen", "Please send me the address"],
+    "mustNotContain": ["The appointment"],
+    "acceptable": []
+  },
+  {
+    "id": "en-time-restate",
+    "raw": "Hey Jack I got like a appointment at 2am, oh sorry, it's 4am Um, yeah. So basically I got a poem at 4 a. m. Can you come by please?",
+    "languages": ["en"],
+    "expectPolishable": true,
+    "floor": "Hey Jack I got an appointment at 4am. I got a poem at 4am. Can you come by please?",
+    "mustContain": ["appointment at 4am", "poem at 4am", "Can you come by please"],
+    "mustNotContain": ["2am", "like a appointment"],
+    "acceptable": [
+      "Hey Jack, I got an appointment at 4am. I got a poem at 4am. Can you come by please?"
+    ]
+  },
+  {
+    "id": "de-en-latin-inline",
+    "raw": "Ich schicke dir the invoice tomorrow.",
+    "languages": ["de", "en"],
+    "expectPolishable": true,
+    "floor": "Ich schicke dir the invoice tomorrow.",
+    "mustContain": ["Ich schicke dir", "the invoice tomorrow"],
+    "mustNotContain": ["I will send"],
+    "acceptable": []
+  }
+]

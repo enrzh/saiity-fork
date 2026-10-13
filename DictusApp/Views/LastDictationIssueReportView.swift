@@ -1,5 +1,5 @@
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 import UIKit
 
 /// Opt-in last-dictation issue report. The user previews the exact export,

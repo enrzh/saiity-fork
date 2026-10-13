@@ -1,7 +1,7 @@
 // DictusKeyboard/TextPrediction/SuggestionState.swift
 // Observable state for the suggestion bar UI, bridging TextPredictionEngine to SwiftUI.
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// The current mode of the suggestion bar.
 ///
@@ -317,35 +317,34 @@ class SuggestionState: ObservableObject {
 
         let requestToken = beginSuggestionRequest()
 
+        weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
 
             // Detection may have refined the previous request to another
             // language. Re-anchor every new context to the selected keyboard
             // language before allowing a confident refinement.
             self.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
 
+            guard !work.isCancelled else { return }
             guard !self.engine.shouldAbstainFromPrediction(for: context) else {
-                DispatchQueue.main.async { [weak self] in self?.clear() }
+                DispatchQueue.main.async { [weak self] in self?.clear(ifCurrent: requestToken) }
                 return
             }
             self.engine.setLanguage(forRecentText: context)
+            guard !work.isCancelled else { return }
 
             let partial = self.extractLastWord(from: context)
             guard !partial.isEmpty else {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
-                    self.clear()
+                    self?.clear(ifCurrent: requestToken)
                 }
                 return
             }
 
             if self.engine.shouldSkipTokenPrediction(for: partial) {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
-                    self.clear()
+                    self?.clear(ifCurrent: requestToken)
                 }
                 return
             }
@@ -382,6 +381,7 @@ class SuggestionState: ObservableObject {
                 spellResult = nil
             }
 
+            guard !work.isCancelled else { return }
             // Compute completions as fallback
             let completions = self.engine.suggestions(for: partial)
 
@@ -428,6 +428,7 @@ class SuggestionState: ObservableObject {
             }
         }
 
+        cancellableWork = work
         currentSuggestionWork = work
         suggestionQueue.async(execute: work)
     }
@@ -594,6 +595,11 @@ class SuggestionState: ObservableObject {
         suggestionQueue.async { [weak self] in
             self?.engine.resetTypedLanguageDetection()
         }
+    }
+
+    private func clear(ifCurrent token: SuggestionRequestGate.Token) {
+        guard suggestionRequestGate.isCurrent(token) else { return }
+        clear()
     }
 
     /// Re-read preference-backed behavior after the app changes a setting while
@@ -801,27 +807,28 @@ class SuggestionState: ObservableObject {
             return
         }
 
+        weak var cancellableWork: DispatchWorkItem?
         let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+            guard let self, let work = cancellableWork, !work.isCancelled else { return }
 
             // Keep the n-gram path consistent with partial-word suggestions:
             // a previous field's detected language must not become this field's
             // silent default.
             self.engine.setSelectedLanguage(SupportedLanguage.active.rawValue)
 
+            guard !work.isCancelled else { return }
             guard !self.engine.shouldAbstainFromPrediction(for: context) else {
-                DispatchQueue.main.async { [weak self] in self?.clear() }
+                DispatchQueue.main.async { [weak self] in self?.clear(ifCurrent: requestToken) }
                 return
             }
             self.engine.setLanguage(forRecentText: context)
+            guard !work.isCancelled else { return }
 
             // Extract last 1-2 complete words from context
             let words = self.extractLastWords(from: context, count: 2)
             guard !words.isEmpty else {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self,
-                          self.suggestionRequestGate.isCurrent(requestToken) else { return }
-                    self.clear()
+                    self?.clear(ifCurrent: requestToken)
                 }
                 return
             }
@@ -846,6 +853,7 @@ class SuggestionState: ObservableObject {
             }
         }
 
+        cancellableWork = work
         currentSuggestionWork = work
         suggestionQueue.async(execute: work)
     }

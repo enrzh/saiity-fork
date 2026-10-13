@@ -1,5 +1,5 @@
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Single native owner for every cell in the permanently visible category rail.
 final class EmojiCategoryControl: UIControl {

@@ -2,7 +2,7 @@
 // Stage 4: real keyboard switch and first dictation.
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 struct GlobeKeyTutorialPage: View {
     let onComplete: () -> Void

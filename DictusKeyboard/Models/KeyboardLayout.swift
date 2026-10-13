@@ -1,6 +1,6 @@
 // DictusKeyboard/Models/KeyboardLayout.swift
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 /// Defines keyboard layouts (AZERTY and QWERTY) matching iOS native French keyboard.
 ///
@@ -49,7 +49,7 @@ enum KeyboardLayout {
 
     // MARK: - QWERTY Letters layer (when user selects QWERTY in settings)
 
-    /// QWERTY layout converted from DictusCore's QWERTYLayout string arrays to KeyDefinitions.
+    /// QWERTY layout converted from SyllivraKernel's QWERTYLayout string arrays to KeyDefinitions.
     /// Row 4 has no mic key -- the mic button lives in the toolbar (Plan 03-02).
     /// The mic key's width is redistributed to the space bar for a wider touch target.
     static let qwertyLettersRows: [[KeyDefinition]] = [

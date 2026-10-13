@@ -1,8 +1,7 @@
 // DictusApp/Audio/TranscriptionService.swift
 // Encapsulates speech-to-text transcription with multi-engine routing.
 import Foundation
-import WhisperKit
-import DictusCore
+import SyllivraKernel
 
 /// Errors that can occur during transcription.
 enum TranscriptionError: Error, LocalizedError {
@@ -30,13 +29,7 @@ enum TranscriptionError: Error, LocalizedError {
 /// WHY this is a separate class from UnifiedAudioEngine:
 /// Single Responsibility — UnifiedAudioEngine handles recording, TranscriptionService handles
 /// transcription. This also makes it easy to swap or test each independently.
-///
-/// Phase 10.3 additions:
-/// - SpeechModelProtocol-based engine routing (WhisperKit or Parakeet)
-/// - Backward-compatible: existing prepare(whisperKit:) still works
 class TranscriptionService {
-    private var whisperKit: WhisperKit?
-
     /// The active STT engine, set via prepare(engine:).
     /// WHY a protocol reference:
     /// DictationCoordinator creates the appropriate engine (WhisperKitEngine or
@@ -47,39 +40,17 @@ class TranscriptionService {
     func releaseLoadedModelAndWait() async {
         let engine = activeEngine
         activeEngine = nil
-        whisperKit = nil
-        loadedModelFolder = nil
         await engine?.releaseLoadedModelAndWait()
     }
     @available(iOS 18.0, *)
     var qwenEngine: QwenSpeechEngine? { activeEngine as? QwenSpeechEngine }
 
-    /// The folder path of the currently loaded model, used to detect when
-    /// we need to reinitialize WhisperKit for a different model.
-    private var loadedModelFolder: String?
-
-    /// Whether a model object is retained by either the compatibility path or
-    /// the active engine path.
+    /// Whether the active engine retains a ready model.
     var hasLoadedModel: Bool {
-        whisperKit != nil || activeEngine?.isReady == true
+        activeEngine?.isReady == true
     }
 
-    /// Inject or re-use a WhisperKit instance (backward-compatible path).
-    ///
-    /// WHY keep this method:
-    /// DictationCoordinator injects the WhisperKit instance for the transcription path.
-    /// UnifiedAudioEngine doesn't need WhisperKit — it uses native AVAudioEngine.
-    func prepare(whisperKit: WhisperKit) {
-        self.whisperKit = whisperKit
-    }
-
-    /// Set the active engine for protocol-based transcription routing.
-    ///
-    /// WHY a separate method from prepare(whisperKit:):
-    /// The engine abstraction is layered on top of the existing WhisperKit path.
-    /// When activeEngine is set, transcribe() delegates to it instead of using
-    /// the raw WhisperKit instance. This allows both paths to coexist during
-    /// the transition to multi-engine support.
+    /// Use the engine prepared by DictationCoordinator.
     func prepare(engine: SpeechModelProtocol) {
         self.activeEngine = engine
     }
@@ -89,44 +60,11 @@ class TranscriptionService {
     func releaseLoadedModel() {
         activeEngine?.releaseLoadedModel()
         activeEngine = nil
-        whisperKit = nil
-        loadedModelFolder = nil
-    }
-
-    /// Prepare TranscriptionService with a specific model at a given path.
-    ///
-    /// WHY a separate prepare method for model paths:
-    /// When the user switches models, we need to reinitialize WhisperKit with
-    /// the new model. This method handles that switch transparently.
-    func prepare(modelPath: String) async throws {
-        // Skip reinitialization if same model is already loaded
-        if loadedModelFolder == modelPath, whisperKit != nil {
-            return
-        }
-
-        let config = WhisperKitConfig(
-            modelFolder: modelPath,
-            // Issue #370: A12/A13 need the audio encoder off the Neural Engine.
-            computeOptions: WhisperComputeOptions.current(),
-            verbose: false,
-            prewarm: true,
-            load: true,
-            download: false
-        )
-
-        let kit = try await WhisperKit(config)
-        self.whisperKit = kit
-        self.loadedModelFolder = modelPath
     }
 
     /// Transcribe audio samples to text.
     ///
-    /// Routes to the active SpeechModelProtocol engine if set,
-    /// otherwise falls back to the direct WhisperKit path.
-    ///
-    /// WHY the fallback:
-    /// During transition to multi-engine, the prepare(whisperKit:) path is still used.
-    /// The fallback ensures zero regressions while new engine routing is added.
+    /// Routes to the active SpeechModelProtocol engine.
     ///
     /// WHY `languagePolicy` is a parameter instead of reading App Group here (#226):
     /// The STT language is decoupled from the keyboard language, and the whole
@@ -170,66 +108,32 @@ class TranscriptionService {
         ))
 
         // Route to active engine if set (multi-engine path)
-        if let activeEngine {
-            do {
-                let result = try await activeEngine.transcribeDetailed(
-                    audioSamples: audioSamples,
-                    language: language
-                )
-                let durationMs = DictationRuntimeMetrics.elapsedMilliseconds(since: transcriptionStart)
-                let wordCount = result.text.split(separator: " ").count
-                PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
-                logPerformance(
-                    modelName: modelName,
-                    audioSamples: audioSamples,
-                    transcriptionDurationMs: durationMs,
-                    firstRegionReadyAfterSeconds: result.firstRegionReadyAfterSeconds
-                )
-                return result
-            } catch {
-                PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
-                throw error
-            }
-        }
-
-        // Fallback: direct WhisperKit path (backward compatibility)
-        guard let whisperKit else {
+        guard let activeEngine else {
             throw TranscriptionError.notReady
         }
-
-        guard !audioSamples.isEmpty else {
-            throw TranscriptionError.emptyAudio
-        }
-
         do {
-            let output = try await WhisperKitTranscriptionSupport.transcribeDetailed(
-                whisperKit: whisperKit,
+            let result = try await activeEngine.transcribeDetailed(
                 audioSamples: audioSamples,
-                language: language,
-                logComponent: "TranscriptionService"
+                language: language
             )
             let durationMs = DictationRuntimeMetrics.elapsedMilliseconds(since: transcriptionStart)
-            let wordCount = output.text.split(separator: " ").count
+            let wordCount = result.text.split(separator: " ").count
             PersistentLog.log(.transcriptionCompleted(durationMs: durationMs, wordCount: wordCount))
             logPerformance(
                 modelName: modelName,
                 audioSamples: audioSamples,
                 transcriptionDurationMs: durationMs,
-                firstRegionReadyAfterSeconds: output.firstRegionReadyAfterSeconds
+                firstRegionReadyAfterSeconds: result.firstRegionReadyAfterSeconds
             )
-            return output
-        } catch let error as TranscriptionError {
-            PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
-            throw error
+            return result
         } catch {
             PersistentLog.log(.transcriptionFailed(error: PolishFailureReason.other(error).slug))
-            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
+            throw error
         }
     }
 
     /// Phase 37 instrumentation: emits `transcriptionPerformance` alongside the existing
-    /// `transcriptionCompleted` event. Kept as a small helper so both the multi-engine
-    /// path and the legacy WhisperKit path log identical schema.
+    /// `transcriptionCompleted` event for every engine.
     ///
     /// `peakMemoryMB` here is a point-in-time reading of remaining jetsam headroom right
     /// after transcription, not a true peak. Paired with the prewarm delta in

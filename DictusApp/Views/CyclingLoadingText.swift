@@ -3,7 +3,7 @@
 // transition. Used by ModelLoadingOverlay (issue #144) to reassure the user
 // during long model download / compile / RAM-load operations.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Cycles through a list of phrases on a fixed interval with a soft fade
 /// transition between each phrase. Inspired by Claude Code's loading copy.

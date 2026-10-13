@@ -3,7 +3,7 @@
 // Stripped: import Sentry, SentrySDK.capture calls
 
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 typealias KeyboardHeight = (portrait: CGFloat, landscape: CGFloat)
 

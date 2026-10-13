@@ -13,7 +13,7 @@ let program = """
 import UIKit
 import SwiftUI
 import ObjectiveC
-import DictusCore
+import SyllivraKernel
 @testable import DictusKeyboard
 
 final class VocabularyProxy: UITextView, UITextDocumentProxy {

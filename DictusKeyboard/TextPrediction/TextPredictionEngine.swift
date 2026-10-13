@@ -2,7 +2,7 @@
 // Core prediction logic: word completions, spell-checking, and accent suggestions.
 import UIKit
 import NaturalLanguage
-import DictusCore
+import SyllivraKernel
 
 /// Provides word completions, spell-checking, and accent suggestions for the keyboard.
 ///

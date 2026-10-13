@@ -1,7 +1,7 @@
 // DictusApp/Polish/PolishDebugView.swift
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Optional local diagnostics, reached from Settings → Troubleshooting.
 struct PolishDebugView: View {

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 extension KeyboardRootView {
     @ViewBuilder

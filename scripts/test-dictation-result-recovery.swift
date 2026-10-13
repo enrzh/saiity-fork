@@ -6,7 +6,7 @@ let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 let program = #"""
 import UIKit
-import DictusCore
+import SyllivraKernel
 @testable import DictusKeyboard
 
 @MainActor final class Proxy: NSObject, UITextDocumentProxy {

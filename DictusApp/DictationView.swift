@@ -1,6 +1,6 @@
 // DictusApp/DictationView.swift
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Shows the current dictation status with icon and label.
 struct DictationStatusView: View {

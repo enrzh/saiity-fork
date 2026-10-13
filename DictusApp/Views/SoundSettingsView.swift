@@ -1,7 +1,7 @@
 // DictusApp/Views/SoundSettingsView.swift
 // Sound feedback settings sub-page: global toggle + volume slider + 3 NavigationLink pickers.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Settings sub-page for configuring recording sound feedback.
 ///

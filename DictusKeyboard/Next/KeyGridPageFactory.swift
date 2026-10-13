@@ -13,7 +13,7 @@
 // old and new keyboards cannot drift apart in what they offer.
 
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 enum KeyGridPageFactory {
 

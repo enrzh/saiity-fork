@@ -18,7 +18,7 @@ Voir PRD.md pour les specs complètes et DEVELOPMENT.md pour le guide de dévelo
 
 - **DictusApp** — App principale (onboarding, settings, model manager)
 - **DictusKeyboard** — Keyboard Extension (clavier custom + dictation)
-- **DictusCore** — Framework partagé (App Group, modèles, préférences)
+- **SyllivraKernel** — Framework partagé (App Group, modèles, préférences)
 
 ## Conventions
 

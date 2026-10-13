@@ -3,7 +3,7 @@
 // Stripped: Bundle.top reference replaced with Bundle.main for image loading
 
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 protocol LongPressCursorMovementDelegate: AnyObject {
     func longpress(movedCursor step: KeyboardCursorStep)

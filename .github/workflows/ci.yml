@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test:
-    name: DictusCore tests
+    name: SyllivraKernel tests
     runs-on: macos-26
     timeout-minutes: 15
     steps:
@@ -27,7 +27,7 @@ jobs:
             xcode-select -p
           fi
       - name: Run core behavior and contract tests
-        run: swift test --package-path DictusCore
+        run: swift test --package-path SyllivraKernel
 
   lint:
     name: SwiftLint
@@ -76,7 +76,7 @@ jobs:
           path: |
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
             ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-${{ hashFiles('Dictus.xcodeproj/project.pbxproj', 'DictusCore/Package.swift', 'scripts/patch-fluidaudio-swift5.sh') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Dictus.xcodeproj/project.pbxproj', 'SyllivraKernel/Package.swift', 'scripts/patch-fluidaudio-swift5.sh') }}
           restore-keys: |
             spm-${{ runner.os }}-
 

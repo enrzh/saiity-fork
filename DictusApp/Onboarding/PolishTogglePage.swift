@@ -1,7 +1,7 @@
 // DictusApp/Onboarding/PolishTogglePage.swift
 // Onboarding step: toggle for automatic local transcription cleanup.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Onboarding page introducing automatic dictation cleanup (#141).
 ///

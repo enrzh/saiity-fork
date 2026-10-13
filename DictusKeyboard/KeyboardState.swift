@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 import UniformTypeIdentifiers
 import Combine
-import DictusCore
+import SyllivraKernel
 
 /// Observes cross-process state changes from DictusApp via Darwin notifications.
 /// Reads actual data from App Group UserDefaults after each notification.
@@ -140,7 +140,7 @@ class KeyboardState: ObservableObject {
     @Published private(set) var displayedDictationStatus: DictationStatus = .idle
     @Published private(set) var keyboardPreferenceRevision: UInt = 0
 
-    /// The rule behind the property above. Pure and tested in DictusCore.
+    /// The rule behind the property above. Pure and tested in SyllivraKernel.
     private var transcribingHold = TranscribingStageHold()
 
     /// Fires when a held stage becomes drawable. At most one is ever in flight.
@@ -224,7 +224,7 @@ class KeyboardState: ObservableObject {
 
     /// Which message currently holds the toolbar, so a clear scheduled three seconds
     /// ago can only take down the message it was scheduled for (#342). Advanced by the
-    /// observer above; read by `presentStatusMessage`. The rule is tested in DictusCore.
+    /// observer above; read by `presentStatusMessage`. The rule is tested in SyllivraKernel.
     private var messageLifetime = StatusMessageLifetime()
 
     /// How many live views have reported putting the current message on screen.

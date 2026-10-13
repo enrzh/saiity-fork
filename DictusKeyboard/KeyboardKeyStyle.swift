@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Shared visual role used by both Solid and Liquid Glass keyboard faces.
 enum KeyboardChromeRole {

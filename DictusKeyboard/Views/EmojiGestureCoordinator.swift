@@ -1,5 +1,5 @@
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Long-press owner for emoji variants.
 ///

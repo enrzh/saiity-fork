@@ -2,7 +2,7 @@
 import SwiftUI
 import AudioToolbox
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 
 typealias EmojiKeyboardSurface = EmojiPickerView

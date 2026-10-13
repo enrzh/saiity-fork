@@ -3,7 +3,7 @@
 import ActivityKit
 import Foundation
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Manages Live Activity lifecycle for Dynamic Island and Lock Screen display.
 ///
@@ -44,7 +44,7 @@ class LiveActivityManager {
     /// WHY: Without validation, concurrent Activity.update() calls arrive out of order
     /// and autoDismissTask from previous recordings can fire mid-recording (#42).
     private func validateTransition(to target: LiveActivityPhase) -> Bool {
-        // Delegate validation to the extracted state machine in DictusCore.
+        // Delegate validation to the extracted state machine in SyllivraKernel.
         // WHY keep both: The state machine provides unit-testable validation logic.
         // The private enum stays as the canonical internal state. We map to the
         // shared Phase type for validation, then sync if accepted.
@@ -124,9 +124,9 @@ class LiveActivityManager {
     /// validation to prevent DI desync after chaining recordings (#42).
     private var currentPhase: LiveActivityPhase = .idle
 
-    /// Extracted state machine for transition validation (lives in DictusCore for unit testing).
+    /// Extracted state machine for transition validation (lives in SyllivraKernel for unit testing).
     /// WHY a separate struct: The transition rules are pure logic with no ActivityKit dependency.
-    /// Keeping them in DictusCore enables unit testing all valid/invalid paths.
+    /// Keeping them in SyllivraKernel enables unit testing all valid/invalid paths.
     private var stateMachine = LiveActivityStateMachine()
 
     /// Post-recording watchdog: forces DI back to standby if stuck on .recording.

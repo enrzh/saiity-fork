@@ -3,7 +3,7 @@
 // Supports French, English, Spanish and German with language-aware labels.
 
 import UIKit
-import DictusCore
+import SyllivraKernel
 
 /// Constructs KeyboardDefinition objects for all supported layouts.
 ///
@@ -72,7 +72,7 @@ enum KeyboardLayouts {
     /// running on an iPad in compatibility mode.
     ///
     /// WHY the orientation half is here and not in `NumberRowPreference`: `DeviceContext`
-    /// lives in this target (it depends on DeviceKit and UIScreen); DictusCore cannot see it.
+    /// lives in this target (it depends on DeviceKit and UIScreen); SyllivraKernel cannot see it.
     static var drawsDigitRow: Bool {
         let device = DeviceContext.current
         return NumberRowPreference.isEnabled && !device.isLandscape && !device.isPad
@@ -166,7 +166,7 @@ enum KeyboardLayouts {
     /// Rows 1 and 2 carry 11 keys where the other two layouts carry 10: ü closes the top
     /// row, ö and ä close the home row. That is the layout iOS ships as its default German
     /// keyboard and the one the AOSP-derived keyboards build. The row data itself lives in
-    /// `DictusCore.QWERTZLayout` so it can be covered by tests — the keyboard target has no
+    /// `SyllivraKernel.QWERTZLayout` so it can be covered by tests — the keyboard target has no
     /// test bundle.
     static func qwertz(lang: SupportedLanguage = .active, standard: Bool = false) -> KeyboardDefinition {
         return KeyboardDefinition(

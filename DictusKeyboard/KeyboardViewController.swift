@@ -2,7 +2,7 @@
 import UIKit
 import SwiftUI
 import Combine
-import DictusCore
+import SyllivraKernel
 
 /// Keyboard action controls use a small hit slop because the accessory lane sits
 /// against the host keyboard's edge. The visual frame remains unchanged.

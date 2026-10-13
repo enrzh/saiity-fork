@@ -1,7 +1,7 @@
 // DictusApp/Onboarding/ModelDownloadPage.swift
 // Step 4 of onboarding: download the initial voice model.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Downloads the recommended model with visible progress.
 ///

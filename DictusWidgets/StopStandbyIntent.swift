@@ -14,7 +14,7 @@
 import AppIntents
 import ActivityKit
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 struct StopStandbyIntent: LiveActivityIntent {
     @Parameter(title: "Toggle dictation") var toggleDetection: Bool

@@ -2,7 +2,7 @@
 // Home dashboard showing real model readiness, dictation, and recent output.
 import SwiftUI
 import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 struct HomeView: View {
     @ObservedObject var modelManager: ModelManager
@@ -15,6 +15,7 @@ struct HomeView: View {
     @ObservedObject private var replay = RecordingReplay.shared
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @State private var recentDictationItems: [RecentDictation] = []
+    @AppStorage(SharedKeys.recentDictations, store: AppGroup.defaults) private var recentDictationData = Data()
     @AppStorage(SharedKeys.historyEnabled, store: AppGroup.defaults) private var historyEnabled = true
     @AppStorage(SharedKeys.serviceEnabled, store: AppGroup.defaults) private var serviceEnabled = true
     @AppStorage(SharedKeys.modelLoadState, store: AppGroup.defaults) private var modelLoadStateRaw = ModelLoadState.idle.rawValue
@@ -149,7 +150,7 @@ struct HomeView: View {
                 reloadRecentDictations()
             }
         }
-        .onChange(of: coordinator.status) { _, _ in reloadRecentDictations() }
+        .onChange(of: recentDictationData) { _, _ in reloadRecentDictations() }
     }
 
     private var readinessPanel: some View {
@@ -243,7 +244,6 @@ struct HomeView: View {
                         RecentDictations.update(RecentDictation(id: item.id, text: replacement, createdAt: item.createdAt,
                             originalText: item.originalText, feedback: replacement == item.text ? item.feedback : .needsEditing),
                             in: AppGroup.defaults)
-                        reloadRecentDictations()
                     })
                 }
                 .padding(.vertical, 8)
@@ -253,7 +253,6 @@ struct HomeView: View {
                 NavigationLink {
                     DictationHistoryEditView(item: item) { edited in
                         RecentDictations.update(edited, in: AppGroup.defaults)
-                        reloadRecentDictations()
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 5) {
@@ -270,17 +269,19 @@ struct HomeView: View {
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
                 .accessibilityHint("Opens the full dictation")
-                Menu {
-                    Button { copy(item.text) } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    ShareLink(item: item.text) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                Button { copy(item.text) } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Dictation actions")
+                .buttonStyle(.plain)
+                ShareLink(item: item.text) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
             }
             .frame(minHeight: 44)
             .padding(.vertical, 8)

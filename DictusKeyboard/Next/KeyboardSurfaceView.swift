@@ -1,6 +1,6 @@
 import UIKit
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// The shared bottom bar and complete Emoji board use ordinary UIKit hit testing.
 /// SwiftUI supplies non-interactive chrome; other native siblings own the grid.

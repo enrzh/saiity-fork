@@ -1,7 +1,7 @@
 // DictusApp/Views/ModelManagerView.swift
 // Native model management UI backed by the real model catalog and manager state.
 import SwiftUI
-import DictusCore
+import SyllivraKernel
 
 /// Displays Tiny, Base, Medium, Large v3, and Turbo Whisper downloads plus any already-installed models.
 struct ModelManagerView: View {

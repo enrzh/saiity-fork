@@ -3,7 +3,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
-import DictusCore
+import SyllivraKernel
 
 /// Requests microphone permission with clear explanation of privacy.
 ///

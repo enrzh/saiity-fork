@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 import Foundation
-import DictusCore
+import SyllivraKernel
 
 /// Root SwiftUI view for the voice-only keyboard surface.
 struct KeyboardRootView: View {

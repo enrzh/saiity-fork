@@ -1,7 +1,7 @@
 // DictusApp/Polish/PolishCoordinator.swift
 import Foundation
 import NaturalLanguage
-import DictusCore
+import SyllivraKernel
 
 /// Orchestrates the polish layer:
 /// 1. Honour the global toggle (`SharedKeys.polishEnabled`).
