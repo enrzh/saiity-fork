@@ -69,9 +69,11 @@ final class NextKeyGridGeometryTests: XCTestCase {
         func row(_ count: Int) -> [KeyGridKey] {
             (0..<count).map { KeyGridKey(id: "key-\($0)", action: .insert("a")) }
         }
-        for surfaceHeight in [269.0, 300.0] {
+        for (width, surfaceHeight) in [320.0, 375, 402, 420, 440].flatMap({ width in
+            [269.0, 300.0].map { (width, $0) }
+        }) {
             let layout = VoiceOnlyKeyboardPolicy.layout(
-                for: 402, surfaceHeight: surfaceHeight,
+                for: width, surfaceHeight: surfaceHeight,
                 topAccessoryHeight: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
             )
             let lane = KeyGridPlacement.bottomBarLaneHeight
@@ -90,8 +92,10 @@ final class NextKeyGridGeometryTests: XCTestCase {
                 XCTAssertLessThanOrEqual(solved.rows.last?.last?.plate.maxY ?? .infinity,
                                          gridSize.height)
                 if let first = solved.rows.last?.first, let last = solved.rows.last?.last {
-                    let leading = CommandKeyStyle.visualPlate(for: first.plate, surfaceWidth: gridSize.width)
-                    let trailing = CommandKeyStyle.visualPlate(for: last.plate, surfaceWidth: gridSize.width)
+                    let leading = CommandKeyStyle.visualPlate(for: first.plate, surfaceWidth: gridSize.width,
+                                                              neighborGap: KeyGridPlacement.keySpacing)
+                    let trailing = CommandKeyStyle.visualPlate(for: last.plate, surfaceWidth: gridSize.width,
+                                                               neighborGap: KeyGridPlacement.keySpacing)
                     let deleteSize = layout.commandKeyVisualSize
                     XCTAssertEqual(leading.size, deleteSize)
                     XCTAssertEqual(trailing.size, deleteSize)
@@ -99,7 +103,9 @@ final class NextKeyGridGeometryTests: XCTestCase {
                                    layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.horizontalPadding,
                                    accuracy: 0.001)
                     XCTAssertEqual(layout.surfaceFrame.minX + trailing.midX,
-                                   layout.boardDeleteFrame.midX, accuracy: 0.001)
+                                   layout.commandKeyVisualFrame.midX, accuracy: 0.001)
+                    XCTAssertTrue(layout.boardDeleteFrame.contains(layout.commandKeyVisualFrame))
+                    XCTAssertEqual(layout.commandKeyVisualFrame.maxX, layout.boardDeleteFrame.maxX)
                 }
             }
         }
@@ -145,15 +151,14 @@ final class NextKeyGridGeometryTests: XCTestCase {
         let page = KeyGridPage(id: "letters", rows: [letters, bottom], pinnedLastRow: true)
         let layout = KeyGridPlacement.solve(page, in: CGSize(width: width, height: 130))
         let pinned = layout.rows[1]
-        let leading = CommandKeyStyle.visualPlate(for: pinned[0].plate, surfaceWidth: width)
-        let trailing = CommandKeyStyle.visualPlate(for: pinned[8].plate, surfaceWidth: width)
+        let leading = CommandKeyStyle.visualPlate(for: pinned[0].plate, surfaceWidth: width,
+                                                  neighborGap: KeyGridPlacement.keySpacing)
+        let trailing = CommandKeyStyle.visualPlate(for: pinned[8].plate, surfaceWidth: width,
+                                                   neighborGap: KeyGridPlacement.keySpacing)
         let emojiDeleteInset = CGFloat(VoiceOnlyKeyboardPolicy.horizontalPadding)
         XCTAssertEqual(leading.minX, emojiDeleteInset, accuracy: 0.01)
         XCTAssertEqual(width - trailing.maxX, emojiDeleteInset, accuracy: 0.01)
-        let emojiFace = VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: CGSize(
-            width: (width - VoiceOnlyKeyboardPolicy.horizontalPadding * 2) * 0.15,
-            height: VoiceOnlyKeyboardPolicy.bottomActionHitHeight
-        ))
+        let emojiFace = VoiceOnlyKeyboardPolicy.layout(for: Double(width), surfaceHeight: 269).commandKeyVisualSize
         XCTAssertEqual(leading.size, emojiFace)
         XCTAssertEqual(trailing.size, emojiFace)
         XCTAssertTrue(pinned[0].target.contains(leading))

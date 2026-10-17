@@ -811,28 +811,11 @@ final class VoiceOnlyKeyboardPolicyTests: XCTestCase {
             XCTAssertEqual(layout.languageFrame.minX, layout.surfaceFrame.minX + VoiceOnlyKeyboardPolicy.visibleControlGap, "width=\(width)")
             XCTAssertFalse(layout.dictationServiceToggleFrame.isEmpty, "width=\(width)")
             XCTAssertFalse(layout.dictationServiceToggleFrame.intersects(layout.dictateFrame), "width=\(width)")
-            XCTAssertEqual(
-                layout.dictationServiceToggleFrame.minX,
-                layout.surfaceFrame.minX
-                    + VoiceOnlyKeyboardPolicy.visibleControlGap,
-                "width=\(width)"
-            )
-            // The toggle is a bare UISwitch, so its frame is its visual. Other
-            // board controls sit their glass face a further commandVisualInset
-            // inside the hit inset; the switch must land on the same visual edge
-            // or it reads as too close to the corner.
-            XCTAssertEqual(
-                layout.dictationServiceToggleFrame.minX,
-                layout.surfaceFrame.minX
-                    + VoiceOnlyKeyboardPolicy.visibleControlGap,
-                "the dictation toggle must align with the other board visuals, width=\(width)"
-            )
-            XCTAssertEqual(
-                layout.dictationServiceToggleFrame.minY,
-                layout.surfaceFrame.minY
-                    + VoiceOnlyKeyboardPolicy.visibleControlGap,
-                "the dictation toggle must align with the other board visuals, width=\(width)"
-            )
+            XCTAssertEqual(layout.dictationServiceToggleFrame.maxX,
+                width - layout.dictationMoreFrame.minX, "Power must sit top-right, width=\(width)")
+            XCTAssertEqual(layout.dictationServiceToggleFrame.minY, layout.dictationMoreFrame.minY)
+            XCTAssertFalse(layout.dictationServiceToggleFrame.intersects(layout.dictationMoreFrame),
+                           "Power must clear the top-left menu target, width=\(width)")
             XCTAssertEqual(layout.languageFrame.minY, VoiceOnlyKeyboardPolicy.verticalPadding + VoiceOnlyKeyboardPolicy.topInset, "width=\(width)")
             XCTAssertEqual(layout.leftUtilityFrames.at, left.at, "width=\(width)")
             XCTAssertEqual(layout.leftUtilityFrames.emoji, left.emoji, "width=\(width)")

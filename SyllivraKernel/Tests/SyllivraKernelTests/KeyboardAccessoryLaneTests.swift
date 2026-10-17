@@ -2,6 +2,39 @@ import XCTest
 @testable import SyllivraKernel
 
 final class KeyboardAccessoryLaneTests: XCTestCase {
+    func testHiddenBarMoreStaysTopLeftWithAnUnclippedTargetClearOfBoardControls() {
+        for size in [CGSize(width: 320, height: 216), CGSize(width: 375, height: 228),
+                     CGSize(width: 402, height: 269), CGSize(width: 420, height: 269), CGSize(width: 440, height: 300),
+                     CGSize(width: 667, height: 158), CGSize(width: 852, height: 158), CGSize(width: 912, height: 158)] {
+            for top in [0.0, VoiceOnlyKeyboardPolicy.suggestionLaneHeight] {
+                let layout = VoiceOnlyKeyboardPolicy.layout(for: size.width, surfaceHeight: size.height,
+                    topAccessoryHeight: top, compactChrome: true)
+                let more = layout.dictationMoreFrame
+                XCTAssertTrue(CGRect(origin: .zero, size: size).contains(more), "size=\(size), more=\(more)")
+                XCTAssertEqual(more.minX, layout.accessoryMoreFrame.minX, accuracy: 0.001)
+                XCTAssertGreaterThanOrEqual(more.minY, 0)
+                XCTAssertLessThanOrEqual(more.minY, 6, "More must stay at the top of the board")
+                XCTAssertGreaterThanOrEqual(more.height, 44)
+                XCTAssertGreaterThanOrEqual(more.width, 44)
+                for other in [layout.dictationServiceToggleFrame, layout.dictateFrame,
+                              layout.boardDeleteFrame, layout.spaceFrame, layout.chromeNumbersFrame,
+                              layout.chromeLettersFrame, layout.chromeEmojiFrame] {
+                    XCTAssertFalse(more.intersects(other), "size=\(size), more=\(more), other=\(other)")
+                }
+                XCTAssertFalse(layout.dictationServiceToggleFrame.isEmpty)
+                XCTAssertFalse(layout.dictationServiceToggleFrame.intersects(layout.chromeNumbersFrame))
+                let power = layout.dictationServiceToggleFrame
+                XCTAssertEqual(power.maxX, size.width - more.minX, accuracy: 0.001)
+                XCTAssertEqual(power.minY, more.minY, accuracy: 0.001)
+                XCTAssertEqual(power.size, more.size)
+                XCTAssertTrue(CGRect(origin: .zero, size: size).contains(power))
+                for other in [layout.dictateFrame, layout.boardDeleteFrame, layout.chromeReturnFrame] {
+                    XCTAssertFalse(power.intersects(other), "size=\(size), power=\(power), other=\(other)")
+                }
+            }
+        }
+    }
+
     func testNativeTargetsFollowBottomAnchoredHostedSurface() {
         let layout = VoiceOnlyKeyboardPolicy.layout(
             for: 402, surfaceHeight: 269,
@@ -165,7 +198,7 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             XCTAssertEqual(frames.last?.size, CGSize(width: layout.boardDeleteFrame.width, height: layout.boardDeleteFrame.height))
             XCTAssertEqual(
                 VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: frames.last?.size ?? .zero),
-                layout.commandKeyVisualSize
+                layout.boardDeleteFrame.size
             )
         }
     }
@@ -212,7 +245,8 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
             let tall = VoiceOnlyKeyboardPolicy.layout(for: width, surfaceHeight: 340, topAccessoryHeight: 44)
             XCTAssertEqual(short.commandKeyVisualSize, tall.commandKeyVisualSize)
             XCTAssertEqual(tall.commandKeyVisualSize.height, VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
-            XCTAssertEqual(tall.commandKeyVisualSize.width, tall.boardDeleteFrame.width, accuracy: 0.001)
+            XCTAssertEqual(tall.commandKeyVisualSize.width,
+                           tall.boardDeleteFrame.width - KeyGridPlacement.keySpacing, accuracy: 0.001)
             XCTAssertEqual(
                 Double(tall.boardDeleteFrame.maxX),
                 tall.surfaceFrame.maxX - VoiceOnlyKeyboardPolicy.visibleControlGap,

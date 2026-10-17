@@ -175,7 +175,7 @@ final class AuxiliarySurfaceContractTests: XCTestCase {
     func testEmojiMotionUsesUIKitHighlightFeedbackWithoutSwiftUIScaleAnimation() throws {
         let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
 
-        XCTAssertTrue(picker.contains("applyEmojiFont(.systemFont(ofSize: 22))"))
+        XCTAssertTrue(picker.contains("private let glyph = UILabel()"))
         XCTAssertTrue(picker.contains("override var isHighlighted: Bool"))
         XCTAssertFalse(picker.contains(".scaleEffect("))
         XCTAssertFalse(picker.contains(".snappy(duration: 0.16)"))

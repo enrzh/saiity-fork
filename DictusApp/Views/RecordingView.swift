@@ -1,5 +1,5 @@
 // DictusApp/Views/RecordingView.swift
-// Stable-layout recording screen: waveform + mic button always in place, text appears below.
+// Native recording screen with status, transcript and system toolbar actions.
 import SwiftUI
 import UIKit
 import SyllivraKernel
@@ -28,17 +28,18 @@ enum RecordingMode {
     case standalone
 }
 
-/// Stable-layout recording screen with always-visible waveform and fixed mic button.
+/// Native recording screen with a persistent primary action.
 ///
 /// WHY stable layout instead of state-driven visibility:
 /// Elements appearing/disappearing causes jarring layout shifts. The waveform and mic
 /// button stay in place across all states — only their visual appearance changes:
-/// - Idle: flat waveform, blue mic
-/// - Recording: animated waveform, red stop button
-/// - Transcribing: sinusoidal waveform, disabled shimmer mic
-/// - Result: flat waveform, blue mic (ready for new recording), text below
+/// - Idle: ready status and Start dictation
+/// - Recording: duration and native red Finish dictation button
+/// - Transcribing: native progress and an enabled cancellation action
+/// - Result: selectable text, original recovery and Dictate again
 ///
-/// Transcription text appears BELOW the fixed elements, so nothing moves.
+/// Transcription text sits above the system toolbar. At accessibility sizes or
+/// compact height, the action joins the native list so all content can scroll.
 struct RecordingView: View {
     let mode: RecordingMode
     var onComplete: (() -> Void)?
@@ -46,6 +47,8 @@ struct RecordingView: View {
     @EnvironmentObject var coordinator: DictationCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @State private var transcriptionResult: String?
     @State private var showResult = false
@@ -79,39 +82,17 @@ struct RecordingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                HStack(spacing: 8) {
-                    DictusLogo(height: 22, foregroundOnly: true).accessibilityHidden(true)
-                    Text("Syllivra").font(.headline)
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent("Status", value: statusTitle)
+                    if displayedStatus == .recording {
+                        LabeledContent("Duration") { Text(formattedTime).monospacedDigit() }
+                    } else if displayedStatus == .requested || displayedStatus == .transcribing || displayedStatus == .processing {
+                        ProgressView()
+                    }
                 }
-                Spacer()
-                    Button(action: dismissRecording) {
-                        Image(systemName: "xmark").frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.bordered).buttonBorderShape(.circle)
-                    .accessibilityLabel("Close dictation")
-            }
-            .padding(.horizontal, 24).padding(.top, 12)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if replay.available && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
-                        Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay recording") { replay.toggle() }
-                            .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("dictation.replay")
-                        if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text(showResult ? "Transcript" : statusTitle)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if displayedStatus == .recording {
-                                Text(formattedTime).font(.subheadline.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                Section(showResult ? "Transcript" : "Your words") {
                         if showResult, let result = transcriptionResult {
                             DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
                                 onRestore: { transcriptionResult = $0 },
@@ -121,6 +102,12 @@ struct RecordingView: View {
                             Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
                                 .font(.headline)
                             Text(userFacingError(error)).foregroundStyle(.secondary)
+                            if error.contains("outside your selected spoken languages"),
+                               let original = coordinator.lastOriginalResult, !original.isEmpty {
+                                DisclosureGroup("Unverified recognition") {
+                                    DictationTranscriptResult(result: original, original: nil)
+                                }
+                            }
                             if DictationProblem(error).action != .retry {
                                 Button("Try dictation again", action: retryRecording).buttonStyle(.bordered)
                                     .disabled(!coordinator.canChangeSpeechRuntime)
@@ -128,39 +115,40 @@ struct RecordingView: View {
                         } else {
                             Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
                                  displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
-                                .font(.title2).foregroundStyle(.secondary)
+                                .font(.title2).lineSpacing(4)
+                                .foregroundStyle(coordinator.realtimeTranscript.isEmpty ? Color.secondary : .primary)
                                 .fixedSize(horizontal: false, vertical: true)
                             if !coordinator.realtimeTranscript.isEmpty {
                                 Text("Live preview. Your final text appears when you finish.")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                }
+                if replay.available && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
+                    Section {
+                        Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay recording") { replay.toggle() }
+                            .accessibilityIdentifier("dictation.replay")
+                        if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
                 }
-                .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-
-            VStack(spacing: 16) {
-                if showResult {
-                    Image(systemName: "checkmark").foregroundStyle(Color.saiityAction)
-                        .frame(height: 28).accessibilityHidden(true)
-                } else {
-                    SaiityVoiceSignal(level: displayedStatus == .recording ? coordinator.bufferEnergy.max() ?? 0 : nil)
-                        .frame(height: 28)
-                }
-                if mode == .onboarding && showResult {
-                    Button("Continue", action: completeOnboarding)
-                        .buttonStyle(SaiityPrimaryActionStyle())
-                } else {
-                    micOrStopButton
+                if scrollsControls {
+                    Section { recorderControls }
                 }
             }
-            .padding(24).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            .background(Color(.systemBackground))
+            .listStyle(.insetGrouped)
+            .textCase(nil)
+            .navigationTitle("Dictation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: dismissRecording) { Label("Close", systemImage: "xmark").labelStyle(.iconOnly) }
+                        .accessibilityLabel("Close dictation")
+                }
+                if !scrollsControls {
+                    ToolbarItem(placement: .bottomBar) { recorderControls }
+                }
+            }
         }
-        .background(Color(.systemBackground).ignoresSafeArea())
         .sheet(isPresented: $showRecoveryModels) {
             RecordingModelRecoveryView()
         }
@@ -206,7 +194,22 @@ struct RecordingView: View {
         }
         .accessibilityAddTraits(.isModal)
         .accessibilityElement(children: .contain)
-        .navigationBarHidden(true)
+    }
+
+    private var scrollsControls: Bool {
+        typeSize.isAccessibilitySize || verticalSizeClass == .compact
+    }
+
+    private var recorderControls: some View {
+        Group {
+            if mode == .onboarding && showResult {
+                Button("Continue", action: completeOnboarding)
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            } else {
+                micOrStopButton
+            }
+        }
+        .accessibilityIdentifier("dictation.recorder")
     }
 
     private var isCancellationStage: Bool {
@@ -224,7 +227,9 @@ struct RecordingView: View {
     }
 
     private var micOrStopButton: some View {
-        Button {
+        let title = LocalizedStringKey(showError ? recoveryTitle : isCancellationStage ? cancellationTitle :
+            coordinator.status == .recording ? "Finish dictation" : showResult ? "Dictate again" : "Start dictation")
+        return Button {
             if showError, let errorMessage {
                 switch DictationProblem(errorMessage).action {
                 case .openSettings:
@@ -243,12 +248,10 @@ struct RecordingView: View {
                 startRecording()
             }
         } label: {
-            SaiityVoiceActionLabel(
-                LocalizedStringKey(showError ? recoveryTitle : isCancellationStage ? cancellationTitle :
-                    coordinator.status == .recording ? "Finish dictation" : showResult ? "Dictate again" : "Start dictation"),
-                systemImage: isCancellationStage ? "xmark" : coordinator.status == .recording ? "stop.fill" : nil)
+            Label(title, systemImage: isCancellationStage ? "xmark" : coordinator.status == .recording ? "stop.fill" : "mic.fill")
         }
-        .buttonStyle(SaiityPrimaryActionStyle())
+        .buttonStyle(.borderedProminent).controlSize(.large)
+        .tint(coordinator.status == .recording ? Color.dictusRecording : .accentColor)
         .accessibilityIdentifier(isCancellationStage ? "dictation.cancel" : "dictation.start")
     }
 

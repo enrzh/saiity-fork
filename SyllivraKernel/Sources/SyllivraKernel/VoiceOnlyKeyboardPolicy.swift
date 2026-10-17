@@ -498,6 +498,11 @@ public enum VoiceOnlyKeyboardPolicy {
                    height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
         }
 
+        public var accessoryMoreFrame: CGRect {
+            CGRect(x: accessoryEdgeInset, y: 0, width: languageVisualWidth,
+                   height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight)
+        }
+
         public var accessoryDismissFrame: CGRect {
             CGRect(
                 x: max(0, surfaceWidth - accessoryEdgeInset - accessoryControlSize),
@@ -572,10 +577,15 @@ public enum VoiceOnlyKeyboardPolicy {
 
         public var boardReturnFrame: CGRect { dismissFrame }
 
-        /// All large command keys share the bottom bar's full-width face,
-        /// independent of the height available to the surrounding character row.
+        /// Delete shares the grid renderer's inner gap and fixed outer edge.
+        public var commandKeyVisualFrame: CGRect {
+            let hit = boardDeleteFrame
+            let width = max(0, hit.width - KeyGridPlacement.keySpacing)
+            return CGRect(x: hit.maxX - width, y: hit.minY, width: width, height: hit.height)
+        }
+
         public var commandKeyVisualSize: CGSize {
-            VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: boardDeleteFrame.size)
+            commandKeyVisualFrame.size
         }
 
         public var boardDeleteFrame: CGRect {
@@ -851,21 +861,28 @@ public enum VoiceOnlyKeyboardPolicy {
             )
         }
 
-        /// Top-left of the dictation board, clear of the microphone capsule.
-        ///
-        /// The toggle is a bare `UISwitch`, so its frame *is* its visual. Every
-        /// other board control keeps a hit frame at `visibleControlGap` and puts
-        /// its glass face a further `commandVisualInset` inside that. Matching
-        /// only the hit inset left the switch sitting visibly closer to the edge
-        /// than its neighbours, so both insets are applied here.
+        /// Power mirrors More in the top-right corner with a full touch target.
         public var dictationServiceToggleFrame: CGRect {
+            let more = dictationMoreFrame
             let frame = CGRect(
-                x: surfaceFrame.minX + visibleControlGap,
-                y: surfaceFrame.minY + visibleControlGap,
-                width: boardDeleteFrame.width,
-                height: bottomActionHitHeight
+                x: surfaceWidth - accessoryEdgeInset - more.width,
+                y: more.minY,
+                width: more.width,
+                height: more.height
             )
-            guard surfaceFrame.contains(frame), !frame.intersects(dictateFrame) else { return .zero }
+            guard CGRect(x: 0, y: 0, width: surfaceWidth, height: surfaceHeight).contains(frame),
+                  !frame.intersects(dictateFrame), !frame.intersects(boardDeleteFrame),
+                  !frame.intersects(chromeReturnFrame) else { return .zero }
+            return frame
+        }
+
+        /// Keep More top-left with its whole tap target inside the input view.
+        public var dictationMoreFrame: CGRect {
+            let frame = CGRect(x: accessoryEdgeInset, y: verticalPadding,
+                               width: languageVisualWidth, height: 44)
+            guard CGRect(x: 0, y: 0, width: surfaceWidth, height: surfaceHeight).contains(frame),
+                  !frame.intersects(dictateFrame),
+                  !frame.intersects(boardDeleteFrame) else { return accessoryMoreFrame }
             return frame
         }
 

@@ -5,7 +5,6 @@ import SyllivraKernel
 
 struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var textSize
     @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
     @AppStorage(SharedKeys.transcriptionOutputMode, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
     @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
@@ -20,50 +19,40 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            Section("Preferences") {
+            Section {
                 NavigationLink { dictationSettings } label: {
-                    settingsLabel("Dictation", systemImage: "waveform")
+                    Label("Dictation", systemImage: "mic.fill")
                 }
-                .accessibilityIdentifier("settings.dictation")
+                    .accessibilityIdentifier("settings.dictation")
                 NavigationLink { keyboardSettings } label: {
-                    settingsLabel("Keyboard", systemImage: "keyboard")
+                    Label("Keyboard", systemImage: "keyboard")
                 }
-                .accessibilityIdentifier("settings.keyboard")
-                NavigationLink {
-                    ModelManagerView(modelManager: modelManager)
-                } label: {
-                    settingsLabel("Models", systemImage: "square.stack.3d.up")
+                    .accessibilityIdentifier("settings.keyboard")
+                NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
+                    Label("Models & downloads", systemImage: "arrow.down.circle")
                 }
-                .accessibilityIdentifier("settings.models")
+                    .accessibilityIdentifier("settings.models")
             }
-
-            Section("Your words") {
-                NavigationLink { wordsSettings } label: {
-                    settingsLabel("Words & shortcuts", systemImage: "character.book.closed")
+            Section {
+                NavigationLink { DictationHistoryView() } label: {
+                    Label("History", systemImage: "clock.arrow.circlepath")
                 }
-                .accessibilityIdentifier("settings.words")
-                NavigationLink {
-                    DictationHistoryView()
-                } label: {
-                    settingsLabel("Dictation history", systemImage: "clock.arrow.circlepath")
-                }
-                .accessibilityIdentifier("settings.history")
-            }
-
-            Section("Help") {
+                    .accessibilityIdentifier("settings.history")
                 NavigationLink { helpSettings } label: {
-                    settingsLabel("Setup & help", systemImage: "questionmark.circle")
+                    Label("Help", systemImage: "questionmark.circle")
                 }
-                .accessibilityIdentifier("settings.help")
+                    .accessibilityIdentifier("settings.help")
                 NavigationLink { aboutSettings } label: {
-                    settingsLabel("About", systemImage: "info.circle")
+                    Label("About", systemImage: "info.circle")
                 }
-                .accessibilityIdentifier("settings.about")
+                    .accessibilityIdentifier("settings.about")
             }
         }
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .labelStyle(.titleAndIcon)
+        .symbolRenderingMode(.hierarchical)
+        .textCase(nil)
+        .contentMargins(.bottom, 88, for: .scrollContent)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -82,19 +71,12 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder private func settingsLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
-        if textSize.isAccessibilitySize { Text(title) }
-        else { Label(title, systemImage: systemImage) }
-    }
-
     private func settingsPage<Content: View>(
         _ title: LocalizedStringKey, @ViewBuilder content: () -> Content
     ) -> some View {
-        List { content() }
-            .listStyle(.insetGrouped)
+        Form { content() }
+            .textCase(nil)
             .contentMargins(.bottom, 88, for: .scrollContent)
-            .scrollContentBackground(.hidden)
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
     }
@@ -137,8 +119,10 @@ struct SettingsView: View {
                 Toggle("Keep last recording briefly", isOn: $replayEnabled)
                     .accessibilityIdentifier("dictation.replayPreference")
                     .onChange(of: replayEnabled) { _, enabled in if !enabled { RecordingReplay.shared.clear() } }
-                Text("Off by default. Keeps up to the last 60 seconds in memory for five minutes, until your next dictation, or until you leave the app. Audio is never saved or shared.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                DisclosureGroup("About replay") {
+                    Text("Off by default. Keeps up to the last 60 seconds in memory for five minutes, until your next dictation, or until you leave the app. Audio is never saved or shared.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 DisclosureGroup("Models and Live Activity") {
                     CleanupModelPicker(manager: modelManager)
                     DictationPresencePicker()
@@ -174,6 +158,10 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("keyboard-haptics-setting")
                 .accessibilityHint("Choose Off, the default key vibration, or the stronger Snappy vibration.")
+            }
+            Section {
+                NavigationLink("Words & shortcuts") { wordsSettings }
+                    .accessibilityIdentifier("settings.words")
             }
             Section("Press and hold") {
                 NavigationLink("Emoji & key variants") { KeyboardHoldOptionsView() }

@@ -34,15 +34,14 @@ struct ModelLanguageDetailView: View {
             List {
                 // Coverage summary
                 Section {
-                    SaiityPageHeader(title: "Supported languages",
-                                     subtitle: "Language coverage depends on the model. Try your own phrases before choosing.")
-                    Label {
-                        Text(support.coverage.localizedSummary)
-                            .font(.headline)
-                    } icon: {
-                        Image(systemName: "globe")
-                            .foregroundStyle(.tint)
-                    }
+                    Text(model.localizedDescription)
+                    LabeledContent("Download size", value: model.sizeLabel)
+                    Text(support.coverage.localizedSummary)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("About this model")
+                } footer: {
+                    Text("Language coverage depends on the model. Try your own phrases before choosing.")
                 }
 
                 // Keep the most useful languages at the top, with notes in the
@@ -96,6 +95,7 @@ struct ModelLanguageDetailView: View {
                     }
                 }
             }
+            .listStyle(.plain)
             .navigationTitle(model.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityAddTraits(.isModal)

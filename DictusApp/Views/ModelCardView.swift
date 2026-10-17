@@ -31,6 +31,10 @@ struct ModelCardView: View {
         modelManager.activeModel == model.identifier
     }
 
+    private var isKeyboardModel: Bool {
+        modelManager.keyboardModel == model.identifier
+    }
+
     private var isLoading: Bool {
         isActive && modelManager.modelLoadState == .loading
     }
@@ -42,11 +46,10 @@ struct ModelCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             modelSummary
-                .frame(maxWidth: .infinity, alignment: .leading)
             actionContent
-                .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
+        .labelStyle(.titleAndIcon)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
         .accessibilityHint(incompatibilityReason.map { Text($0.localizedText) } ?? Text(""))
@@ -60,7 +63,9 @@ struct ModelCardView: View {
     private var modelSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
             ModelCardHeading(name: model.displayName, size: model.sizeLabel,
-                             active: isActive, recommended: modelManager.isRecommended(model.identifier))
+                             active: isActive || isKeyboardModel,
+                             activeLabel: isActive ? (isKeyboardModel ? "App & keyboard" : "In app") : "Keyboard",
+                             recommended: modelManager.isRecommended(model.identifier))
 
             Text(model.localizedDescription)
                 .font(.subheadline)
@@ -68,8 +73,9 @@ struct ModelCardView: View {
                 .lineLimit(typeSize.isAccessibilitySize || model.engine == .qwenASR ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(model.languageSupport.coverage.localizedSummary)
+            Label(model.languageSupport.coverage.localizedSummary, systemImage: "globe")
                 .font(.caption).foregroundStyle(model.engine == .qwenASR ? Color.primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if model.isExperimental {
                 Label("Preview · validate on your iPhone", systemImage: "flask")
                     .font(.caption).foregroundStyle(.primary)
@@ -130,10 +136,8 @@ struct ModelCardView: View {
                 .foregroundStyle(.tint)
         } else {
             switch state {
-            case .notDownloaded:
-                Label("Not installed", systemImage: "arrow.down.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            case .notDownloaded, .ready:
+                EmptyView()
             case .downloading:
                 Label("Downloading", systemImage: "arrow.down.circle")
                     .font(.caption)
@@ -142,14 +146,6 @@ struct ModelCardView: View {
                 Label("Preparing", systemImage: "gearshape")
                     .font(.caption)
                     .foregroundStyle(.tint)
-            case .ready:
-                if isActive {
-                    EmptyView()
-                } else {
-                    Label("Installed", systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             case .error(let message):
                 Label("Failed", systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -168,26 +164,24 @@ struct ModelCardView: View {
         actionLayout {
             primaryAction
             if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-            Button {
-                showsLanguageInfo = true
-            } label: {
-                Label("Info", systemImage: "info.circle")
-                    .frame(minWidth: 44, minHeight: 44)
-            }
-            .labelStyle(.titleAndIcon)
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .accessibilityLabel("Supported languages")
+            modelMenu
+        }
+        .buttonStyle(.borderless)
+        .font(.subheadline.weight(.semibold))
+    }
 
-            if state == .ready || isFailed {
-                deleteButton
+    private var modelMenu: some View {
+        Menu {
+            Button { showsLanguageInfo = true } label: {
+                Label("Model details", systemImage: "info.circle")
             }
+            if state == .ready || isFailed { deleteButton }
+        } label: {
+            Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
         }
-        if state == .ready && !canDeleteModel {
-            Text(isActive ? "Choose another model before deleting this one." : "Keep at least one voice model installed.")
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        .foregroundStyle(.secondary).buttonStyle(.borderless)
+        .accessibilityLabel("Actions for \(model.displayName)")
+        .accessibilityIdentifier("model.actions.\(model.identifier)")
     }
 
     @ViewBuilder
@@ -207,10 +201,7 @@ struct ModelCardView: View {
                     Label("Download", systemImage: "arrow.down.circle")
                         .frame(minHeight: 44)
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color.saiityOnAction)
-                .controlSize(.small)
+                .accessibilityLabel("Download \(model.displayName)")
                 .accessibilityHint("Downloads this model")
             case .downloading:
                 Button {
@@ -219,9 +210,7 @@ struct ModelCardView: View {
                     Label("Cancel", systemImage: "xmark.circle")
                         .frame(minHeight: 44)
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .accessibilityLabel("Cancel download of \(model.displayName)")
             case .prewarming:
                 EmptyView()
             case .ready:
@@ -229,26 +218,20 @@ struct ModelCardView: View {
                     Button {
                         modelManager.selectModel(model.identifier)
                     } label: {
-                        Label("Select", systemImage: "checkmark.circle")
+                        Label("Use in app", systemImage: "checkmark.circle")
                             .frame(minHeight: 44)
                     }
-                    .labelStyle(.titleAndIcon)
-                    .buttonStyle(.borderedProminent)
-                    .foregroundStyle(Color.saiityOnAction)
-                    .controlSize(.small)
+                    .accessibilityLabel("Use \(model.displayName) in app")
                     .accessibilityHint("Uses this model for transcription")
                 }
             case .error(let message):
                 Button {
                     startDownload()
                 } label: {
-                    Label(DictationProblem(message, downloading: true).action == .repairDownload ? "Repair download" : "Retry", systemImage: "arrow.clockwise.circle")
+                    Label(DictationProblem(message, downloading: true).action == .repairDownload ? "Repair download" : "Retry",
+                          systemImage: "arrow.clockwise")
                         .frame(minHeight: 44)
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .foregroundStyle(Color.saiityOnAction)
                 .help(DictationProblem(message, downloading: true).message)
             }
         }
@@ -268,11 +251,7 @@ struct ModelCardView: View {
             }
         } label: {
             Label("Delete", systemImage: "trash")
-                .frame(minHeight: 44)
         }
-        .labelStyle(.titleAndIcon)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
         .disabled(!isFailed && !canDeleteModel)
         .accessibilityHint(isFailed ? "Removes partial download files." : canDeleteModel ? "Removes this model from the device." : "At least one installed model must remain active.")
     }
@@ -287,25 +266,32 @@ struct ModelCardHeading: View {
     let name: String
     let size: String
     var active = false
+    var activeLabel = "Selected"
     var recommended = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        let headingLayout = typeSize.isAccessibilitySize
+        let titleLayout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
-        headingLayout {
-            Text(name).font(.headline).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                .fixedSize(horizontal: false, vertical: true)
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+        VStack(alignment: .leading, spacing: 6) {
+            titleLayout {
+                Text(name).font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !size.isEmpty {
+                    Text(size).font(.footnote).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: !typeSize.isAccessibilitySize, vertical: true)
+                }
+            }
             if active {
-                Text("Active").font(.caption.weight(.semibold)).foregroundStyle(.primary)
+                Label(activeLabel, systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.medium)).foregroundStyle(.tint)
                     .fixedSize(horizontal: false, vertical: true)
             } else if recommended {
-                Text("Recommended").font(.caption.weight(.semibold)).foregroundStyle(.primary)
+                Text("Recommended").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-            Text(size).font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -321,17 +307,23 @@ struct CleanupModelCardView: View {
     private var active: Bool { manager.cleanupBackend == .local(model) }
     private var downloading: Bool { cleanup.preparing == model }
     private var size: String {
-        cleanup.installedBytes[model].map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "4-bit"
+        cleanup.installedBytes[model].map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? ""
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ModelCardHeading(name: model.displayName, size: size, active: active)
-            Text(model.explanation).font(.subheadline).foregroundStyle(.primary)
-            Label(downloading ? "Preparing" : cleanup.installedBytes[model] != nil ? "Downloaded" : "Not installed",
-                  systemImage: downloading ? "arrow.down.circle" : "sparkles")
-                .font(.caption).foregroundStyle(.secondary)
-            if downloading { ProgressView(value: cleanup.progress) }
+            Text(model.explanation).font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !active || downloading {
+                Label(downloading ? "Preparing" : cleanup.installedBytes[model] != nil ? "Installed" : "Not installed",
+                      systemImage: downloading ? "arrow.down.circle" : cleanup.installedBytes[model] != nil ? "checkmark.circle" : "arrow.down.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if downloading {
+                ProgressView(value: cleanup.progress)
+                    .accessibilityValue("\(Int(cleanup.progress * 100)) percent")
+            }
             if let error = cleanup.error, cleanup.failedModel == model {
                 Text(error).font(.footnote).foregroundStyle(.primary)
             }
@@ -342,29 +334,27 @@ struct CleanupModelCardView: View {
                 if downloading {
                     Button { cleanup.cancel() } label: {
                         Label("Cancel", systemImage: "xmark.circle").frame(minHeight: 44)
-                    }.buttonStyle(.bordered)
+                    }
                 } else if !active {
                     Button {
                         cleanup.select(model, manager: manager)
                     } label: {
-                        Label(cleanup.installedBytes[model] != nil ? "Select" : "Download", systemImage: "arrow.down.circle")
+                        Label(cleanup.installedBytes[model] != nil ? "Use for processing" : "Download & use",
+                              systemImage: cleanup.installedBytes[model] != nil ? "checkmark.circle" : "arrow.down.circle")
                             .frame(minHeight: 44)
-                    }.buttonStyle(.borderedProminent).foregroundStyle(Color.saiityOnAction)
-                        .disabled(cleanup.preparing != nil)
+                    }
+                    .disabled(cleanup.preparing != nil)
+                    .accessibilityLabel(cleanup.installedBytes[model] != nil ? "Use \(model.displayName) for processing" : "Download and use \(model.displayName) for processing")
+                    .accessibilityHint("Downloads this model if needed, then selects it for processing")
                 }
                 if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-                Button { showInfo = true } label: {
-                    Label("Info", systemImage: "info.circle").frame(minWidth: 44, minHeight: 44)
-                }.buttonStyle(.bordered)
-                if cleanup.installedBytes[model] != nil && !active {
-                    Button(role: .destructive) { confirmDelete = true } label: {
-                        Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
-                    }
-                        .accessibilityLabel("Delete \(model.displayName)").disabled(cleanup.preparing != nil)
-                }
-            }.controlSize(.small)
+                processingMenu
+            }
+            .buttonStyle(.borderless)
+            .font(.subheadline.weight(.semibold))
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
+        .labelStyle(.titleAndIcon)
         .onAppear { cleanup.refreshArtifacts() }
         .sheet(isPresented: $showInfo) {
             NavigationStack {
@@ -387,6 +377,7 @@ struct CleanupModelCardView: View {
                         Section { Link("Model card, languages and license", destination: source) }
                     }
                 }
+                .listStyle(.insetGrouped)
                 .navigationTitle(model.displayName)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showInfo = false } } }
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
@@ -401,6 +392,21 @@ struct CleanupModelCardView: View {
             Button("OK") { deleteError = nil }
         } message: { Text(deleteError ?? "") }
     }
+
+    private var processingMenu: some View {
+        Menu {
+            Button { showInfo = true } label: { Label("Model details", systemImage: "info.circle") }
+            if cleanup.installedBytes[model] != nil {
+                Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
+                    .disabled(active || cleanup.preparing != nil)
+                    .accessibilityHint(active ? "Choose another processing model before deleting this one." : "Removes this model from the device.")
+            }
+        } label: {
+            Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
+        }
+        .foregroundStyle(.secondary).buttonStyle(.borderless)
+        .accessibilityLabel("Actions for \(model.displayName)")
+    }
 }
 
 #Preview {
@@ -411,5 +417,5 @@ struct CleanupModelCardView: View {
             onDownloadError: { _ in }
         )
     }
-    .listStyle(.insetGrouped)
+    .listStyle(.plain)
 }

@@ -1,4 +1,4 @@
-// swift scripts/render-native-keyboard.swift <QA simulator> <derived-data> <output-directory> [--large] [--emoji]
+// swift scripts/render-native-keyboard.swift <QA simulator> <derived-data> <output-directory> [--large] [--emoji] [--compile-only]
 // Production keyboard views, inert text proxy, no touch actions, audio or model loads.
 import Foundation
 
@@ -136,6 +136,91 @@ final class FixtureController: KeyboardViewController {
                             state.dictationStatus = renderedStatus
                             controller.viewDidLayoutSubviews()
                             controller.view.layoutIfNeeded()
+                            if page == "board" || page == "ready-board" {
+                                func control(_ identifier: String, in view: UIView) -> UIControl? {
+                                    guard !view.isHidden else { return nil }
+                                    if let control = view as? UIControl, control.accessibilityIdentifier == identifier { return control }
+                                    return view.subviews.lazy.compactMap { control(identifier, in: $0) }.first
+                                }
+                                guard let more = control("keyboard-more", in: controller.view) as? UIButton,
+                                      let letters = control("letter-mode", in: controller.view),
+                                      let emoji = control("emoji-picker", in: controller.view),
+                                      let space = control("space-key", in: controller.view) else {
+                                    fatalError("Dictation board lost a native action")
+                                }
+                                precondition(more.buttonType == .system && more.showsMenuAsPrimaryAction
+                                             && more.menu != nil && more.contextMenuInteraction != nil
+                                             && more.configuration?.image != nil,
+                                             "More lost its native dropdown or native image")
+                                for point in [CGPoint(x: more.bounds.midX, y: more.bounds.midY),
+                                              CGPoint(x: 1, y: 1),
+                                              CGPoint(x: more.bounds.maxX - 1, y: more.bounds.maxY - 1)] {
+                                    precondition(window.hitTest(more.convert(point, to: window), with: nil) === more,
+                                                 "Board More lost its native touch recipient")
+                                }
+                                let emojiFrame = emoji.convert(emoji.bounds, to: controller.view)
+                                let lettersFrame = letters.convert(letters.bounds, to: controller.view)
+                                let spaceFrame = space.convert(space.bounds, to: controller.view)
+                                precondition(emojiFrame.maxX < spaceFrame.minX && lettersFrame.minX > spaceFrame.maxX,
+                                             "Board Emoji/ABC did not swap around Space")
+                                if !TOPBAR {
+                                    precondition(more.bounds.height >= 44 && more.bounds.width >= 44
+                                                 && more.frame.minX <= 8 && more.frame.minY >= 0 && more.frame.minY <= 6,
+                                                 "Hidden-bar More lost its full-size top-left target")
+                                }
+                                guard let power = control("dictation-service-toggle", in: controller.view) else {
+                                    fatalError("Dictation board lost power")
+                                }
+                                precondition(abs(power.frame.maxX - (size.width - more.frame.minX)) < 0.5
+                                             && abs(power.frame.minY - more.frame.minY) < 0.5
+                                             && !power.frame.intersects(more.frame),
+                                             "Board power must mirror More at the top right")
+                                for point in [CGPoint(x: power.bounds.midX, y: power.bounds.midY),
+                                              CGPoint(x: 1, y: 1), CGPoint(x: power.bounds.maxX - 1, y: power.bounds.maxY - 1)] {
+                                    precondition(window.hitTest(power.convert(point, to: window), with: nil) === power,
+                                                 "Board power lost its native touch recipient")
+                                }
+                            }
+                            if page == "emoji" {
+                                func emojiPager(in view: UIView) -> EmojiPagerView? {
+                                    guard !view.isHidden else { return nil }
+                                    if let pager = view as? EmojiPagerView { return pager }
+                                    return view.subviews.lazy.compactMap { emojiPager(in: $0) }.first
+                                }
+                                guard let pager = emojiPager(in: controller.view) else {
+                                    fatalError("Emoji lost its native canvas")
+                                }
+                                // Use a full public category so a partly filled
+                                // Recents page cannot hide the last row.
+                                pager.selectCategory(at: 1)
+                                RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+                                pager.layoutIfNeeded()
+                                var glyphFrames: [CGRect] = []
+                                var glyphSizes: [CGFloat] = []
+                                func inspectGlyphs(_ view: UIView) {
+                                    if let label = view as? UILabel, let text = label.text, !text.isEmpty {
+                                        glyphFrames.append(label.convert(label.bounds, to: pager))
+                                        glyphSizes.append(label.font.pointSize)
+                                    }
+                                    view.subviews.forEach(inspectGlyphs)
+                                }
+                                pager.visibleCells.forEach(inspectGlyphs)
+                                precondition(Set(glyphFrames.map { Int($0.midY.rounded()) }).count == 4,
+                                             "Emoji must keep four visible rows")
+                                let top = glyphFrames.map(\.minY).min() ?? .infinity
+                                let bottom = glyphFrames.map(\.maxY).max() ?? -.infinity
+                                precondition(top >= pager.bounds.minY && bottom <= pager.bounds.maxY + 0.5,
+                                             "Emoji glyphs overflow their native canvas")
+                                if !landscape {
+                                    precondition(top - pager.bounds.minY <= 8.5
+                                                 && pager.bounds.maxY - bottom <= 8.5,
+                                                 "Emoji rows leave unused height above or below the grid")
+                                    if pager.bounds.height >= 146 {
+                                        precondition(glyphSizes.allSatisfy { $0 > 22 && $0 <= 26 },
+                                                     "Emoji must be larger when portrait height allows it")
+                                    }
+                                }
+                            }
                             let name = "\(page)-\(Int(width))-\(landscape ? "landscape" : "portrait")-\(glass ? "glass" : "solid")-\(dark ? "dark" : "light")"
                             let pixels = UIGraphicsImageRenderer(size: window.bounds.size).image { context in
                                 root.view.layer.render(in: context.cgContext)
@@ -195,8 +280,12 @@ func run(_ args: [String], capture: Bool = false) throws -> String {
     return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
 }
 let sdk = try run(["--sdk", "iphonesimulator", "--show-sdk-path"], capture: true)
-_ = try run(["swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator",
+_ = try run(["--sdk", "iphonesimulator", "swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator",
              "-I", products, "-I", derived + "/Build/Intermediates.noindex/Dictus.build/Debug-iphonesimulator/DictusKeyboard.build/Objects-normal/arm64",
              "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", source.path,
              extensionPath + "/DictusKeyboard.debug.dylib", "-Xlinker", "-rpath", "-Xlinker", extensionPath, "-o", binary.path])
-_ = try run(["simctl", "spawn", simulator, binary.path])
+if CommandLine.arguments.contains("--compile-only") {
+    print("COMPILED: native keyboard fixture; rendering was not run")
+} else {
+    _ = try run(["simctl", "spawn", simulator, binary.path])
+}

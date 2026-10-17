@@ -170,6 +170,14 @@ class KeyboardViewController: UIInputViewController,
             // is still switching to the letter surface. Restore the contract
             // `super` would have applied.
             guard !isHidden, isUserInteractionEnabled, alpha > 0.01 else { return nil }
+            // A visible menu must win over the microphone's expanded hit area.
+            if let more = subviews.first(where: { $0.accessibilityIdentifier == "keyboard-more" }),
+               !more.isHidden, more.isUserInteractionEnabled, more.alpha > 0.01 {
+                let localPoint = more.convert(point, from: self)
+                if more.bounds.contains(localPoint) {
+                    return more.hitTest(localPoint, with: event) ?? more
+                }
+            }
             let mic = subviews.first(where: { $0.accessibilityIdentifier == "dictate-button" })
             // The recovery mic is the visible primary action on the dictation
             // board. Route it before forwarding misses into SwiftUI so a stale
@@ -1578,18 +1586,24 @@ class KeyboardViewController: UIInputViewController,
             let state = KeyboardState.shared
             state.setKeyboardDictationEnabled(!state.keyboardDictationEnabled)
         }
-        let more = KeyboardActionButton(type: .custom)
+        let more = UIButton(type: .system)
         more.accessibilityIdentifier = "keyboard-more"
         more.accessibilityLabel = "More keyboard actions"
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "ellipsis")
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
+        configuration.baseForegroundColor = .label
+        configuration.contentInsets = .zero
+        more.configuration = configuration
         more.showsMenuAsPrimaryAction = true
         more.changesSelectionAsPrimaryAction = false
-        more.backgroundColor = .clear
         more.isExclusiveTouch = false
         more.menu = UIMenu(children: [
             UIDeferredMenuElement.uncached { [weak self] completion in
                 completion(self?.keyboardMoreMenuItems() ?? [])
             }
         ])
+        more.addAction(UIAction { _ in HapticFeedback.playInputClick() }, for: .touchDown)
         moreButton = more
         let boardDelete = KeyboardDeleteRepeatControl()
         boardDelete.onDelete = { [weak self] in self?.routeProxyCommand(.delete) }
@@ -1606,7 +1620,8 @@ class KeyboardViewController: UIInputViewController,
         setVoiceActionControlsHidden(true)
     }
 
-    /// Rebuilt when the native menu opens so field-specific actions stay current.
+
+    /// Rebuilt when More opens so field-specific actions stay current.
     func keyboardMoreMenuItems() -> [UIMenuElement] {
         let state = KeyboardState.shared
         let paste = UIAction(title: state.isOneTimeCodeField ? "Insert one-time code" : "Paste",
@@ -1809,8 +1824,8 @@ class KeyboardViewController: UIInputViewController,
                 $0.isEnabled = !$0.isHidden
                 $0.isUserInteractionEnabled = !$0.isHidden
             }
-        keyboardModeButton?.frame = inputFrame(layout.chromeLettersFrame)
-        emojiButton?.frame = inputFrame(layout.chromeEmojiFrame)
+        keyboardModeButton?.frame = inputFrame(layout.chromeEmojiFrame)
+        emojiButton?.frame = inputFrame(layout.chromeLettersFrame)
         numberButton?.frame = inputFrame(layout.chromeNumbersFrame)
         numberButton?.holdDuration = KeyboardDeletion.holdRecognitionDuration
         micButton?.accessibilityValue = NSLocalizedString(KeyboardState.shared.dictationStatus.recordingLabel, comment: "Dictation progress")
@@ -1822,14 +1837,11 @@ class KeyboardViewController: UIInputViewController,
         spaceButton?.frame = inputFrame(layout.spaceFrame)
         returnButton?.frame = inputFrame(layout.chromeReturnFrame)
         voiceBoardButton?.frame = inputFrame(layout.accessoryDictationBoardFrame)
-        moreButton?.frame = inputFrame(CGRect(
-            x: VoiceOnlyKeyboardPolicy.accessoryEdgeInset,
-            y: 0,
-            width: VoiceOnlyKeyboardPolicy.languageVisualWidth,
-            height: VoiceOnlyKeyboardPolicy.suggestionLaneHeight
-        ))
+        moreButton?.frame = inputFrame(voiceBoardMode
+            ? layout.dictationMoreFrame : layout.accessoryMoreFrame)
         if let serviceToggle {
             serviceToggle.frame = inputFrame(serviceToggleFrame)
+            (serviceToggle as? KeyboardActionButton)?.hitExpansion = voiceBoardMode ? 0 : 8
             serviceToggle.accessibilityLabel = KeyboardState.shared.keyboardDictationEnabled
                 ? "Disable keyboard dictation" : "Enable keyboard dictation"
             serviceToggle.accessibilityValue = KeyboardState.shared.keyboardDictationEnabled ? "On" : "Off"
@@ -1845,7 +1857,7 @@ class KeyboardViewController: UIInputViewController,
             .forEach { $0.layer.cornerRadius = $0.bounds.height / 2 }
         spaceButton?.layer.cornerRadius = (spaceButton?.bounds.height ?? 0) / 2
         micButton?.layer.cornerRadius = (micButton?.bounds.height ?? 0) / 2
-        updateNativeControlFaces()
+        updateNativeControlFaces(layout: layout)
         inputView.bringSubviewToFront(controls)
         if let surface = keyboardSurfaceView, !surface.isHidden {
             inputView.bringSubviewToFront(surface)
@@ -1950,7 +1962,7 @@ class KeyboardViewController: UIInputViewController,
         layoutVoiceActionControls()
     }
 
-    private func updateNativeControlFaces() {
+    private func updateNativeControlFaces(layout: VoiceOnlyKeyboardPolicy.Layout) {
         let hasResult = KeyboardState.shared.dictationUndoAvailable
         moreButton?.accessibilityValue = hasResult ? "Last dictation available" : nil
         let state = KeyboardState.shared
@@ -1961,8 +1973,7 @@ class KeyboardViewController: UIInputViewController,
             (emojiButton, nil, "face.smiling"),
             (returnButton, fieldKeys.returnTitle == "return" ? nil : fieldKeys.returnTitle,
              fieldKeys.returnTitle == "return" ? "return" : nil),
-            (voiceBoardButton, nil, "mic.fill"),
-            (moreButton, nil, "ellipsis")
+            (voiceBoardButton, nil, "mic.fill")
         ] as [(UIControl?, String?, String?)] {
             guard let button, !button.isHidden else { continue }
             let compactCommand = button === keyboardModeButton || button === numberButton || button === emojiButton
@@ -1970,7 +1981,7 @@ class KeyboardViewController: UIInputViewController,
                 ? CGSize(width: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight, height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
                 : button === returnButton ? VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: button.bounds.size)
                 : VoiceOnlyKeyboardPolicy.commandVisualSize(for: button.bounds.size)
-            let accessory = button === voiceBoardButton || button === moreButton
+            let accessory = button === voiceBoardButton
             let submit = button === returnButton && fieldKeys.returnTitle != "return"
             button.keyboardFace.configure(text: text, symbol: symbol, visualSize: size,
                 radius: accessory ? size.height / 2 : CommandKeyStyle.cornerRadius,
@@ -1987,7 +1998,10 @@ class KeyboardViewController: UIInputViewController,
         }
         if let boardDeleteButton, !boardDeleteButton.isHidden {
             boardDeleteButton.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName,
-                visualSize: VoiceOnlyKeyboardPolicy.bottomBarVisualSize(for: boardDeleteButton.bounds.size))
+                visualSize: layout.commandKeyVisualSize)
+            boardDeleteButton.keyboardFace.autoresizingMask = []
+            boardDeleteButton.keyboardFace.frame = layout.commandKeyVisualFrame.offsetBy(
+                dx: -layout.boardDeleteFrame.minX, dy: -layout.boardDeleteFrame.minY)
         }
         if let serviceToggle, !serviceToggle.isHidden {
             let enabled = state.keyboardDictationEnabled

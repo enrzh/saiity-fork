@@ -16,6 +16,9 @@ struct ModelManagerView: View {
     @State private var failedDownloadModelID: String?
     @State private var customModelToDelete: CustomModel?
     @State private var searchText = ""
+    @State private var showsProcessingModels = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @EnvironmentObject private var coordinator: DictationCoordinator
 
     private let deviceCapabilities = DeviceCapabilities.current()
 
@@ -135,37 +138,95 @@ struct ModelManagerView: View {
     private var configuredModelList: some View {
         modelList
             .listStyle(.insetGrouped)
+            .textCase(nil)
             .contentMargins(.bottom, 88, for: .scrollContent)
-            .navigationTitle("Models")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Model, engine or language")
-            .scrollContentBackground(.hidden)
-            .background(Color(.systemGroupedBackground))
+        .navigationTitle("Models")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: showsProcessingModels ? "Processing model" : "Voice model or language")
+    }
+
+    private var modelTypePicker: some View {
+        Picker("Model type", selection: $showsProcessingModels) {
+            Text("Voice").tag(false)
+            Text("Processing").tag(true)
+        }
     }
 
     @ViewBuilder
     private var modelList: some View {
         List {
             Section {
-                NavigationLink {
-                    VoiceOptionsView(modelManager: modelManager)
-                } label: {
-                    Label("Voice options", systemImage: "slider.horizontal.3")
+                if typeSize.isAccessibilitySize {
+                    modelTypePicker.pickerStyle(.menu)
+                } else {
+                    modelTypePicker.pickerStyle(.segmented)
                 }
-            } footer: {
-                Text("Choose app and keyboard models in Voice options. Manage downloads here.")
             }
-            installedSection
-            availableSection
-            dictationCleanupSection
+            if showsProcessingModels {
+                dictationCleanupSection
+            } else {
+                Section {
+                    currentModelRow("In app", keyboard: false)
+                    currentModelRow("Keyboard", keyboard: true)
+                    NavigationLink {
+                        VoiceOptionsView(modelManager: modelManager)
+                    } label: {
+                        Text("Voice options")
+                    }
+                } header: {
+                    Text("In use")
+                } footer: {
+                    Text("Choose from installed models. App and keyboard choices are independent.")
+                    if !coordinator.canChangeSpeechRuntime {
+                        Text("Finish this dictation before changing voice settings.")
+                    }
+                }
+                installedSection
+                availableSection
+            }
         }
+    }
+
+    @ViewBuilder
+    private func currentModelRow(_ title: LocalizedStringKey, keyboard: Bool) -> some View {
+        let identifier = keyboard
+            ? AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic"
+            : modelManager.activeModel ?? "unavailable"
+        let choices = ModelInfo.installedRows(from: ModelInfo.allIncludingDeprecated).filter {
+            isInstalled($0) && (!keyboard || $0.engine != .qwenASR)
+                && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                         capabilities: deviceCapabilities)
+        }.sorted { $0.sizeBytes < $1.sizeBytes }
+        Picker(title, selection: Binding(
+            get: { identifier },
+            set: { selected in
+                if keyboard { modelManager.chooseKeyboardModel(selected) }
+                else { modelManager.selectModel(selected) }
+            }
+        )) {
+            if keyboard {
+                Text(modelManager.keyboardModel.flatMap(ModelInfo.forIdentifier).map {
+                    "Automatic (\($0.displayName))"
+                } ?? "Automatic").tag("automatic")
+            }
+            if identifier != "automatic" && !choices.contains(where: { $0.identifier == identifier }) {
+                Text(ModelInfo.forIdentifier(identifier)?.displayName ?? String(localized: "No compatible model"))
+                    .tag(identifier).disabled(true)
+            }
+            ForEach(choices) { model in
+                Text(model.displayName).tag(model.identifier)
+            }
+        }
+        .pickerStyle(.menu)
+        .disabled(!coordinator.canChangeSpeechRuntime || (!keyboard && choices.isEmpty))
+        .accessibilityIdentifier(keyboard ? "models.keyboardModel" : "models.appModel")
     }
 
     @ViewBuilder
     private var installedSection: some View {
         Section {
             if installedModels.isEmpty {
-                Text("No models installed")
+                Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No models installed. Download a voice model below." : "No matching installed models")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(installedModels) { model in
@@ -173,18 +234,15 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            modelSectionHeader("Installed", systemImage: "tray.full.fill")
-        } footer: {
-            modelEngineFooter(for: installedModels)
+            Text("Installed")
         }
-        .listSectionSeparator(.hidden)
     }
 
     @ViewBuilder
     private var availableSection: some View {
         Section {
             if availableModels.isEmpty {
-                Text(searchText.isEmpty ? "All available models are installed" : "No matching downloads")
+                Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "All available models are installed" : "No matching downloads")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(availableModels) { model in
@@ -195,14 +253,10 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            modelSectionHeader("Downloads", systemImage: "arrow.down.circle")
+            Text("Downloads")
         } footer: {
-            VStack(alignment: .leading, spacing: 6) {
-                modelEngineFooter(for: availableModels)
-                Text("Recommendations reflect compatibility and editorial guidance, not measured accuracy on your iPhone.")
-            }
+            Text("Voice models run on this iPhone. Recommendations reflect compatibility, not measured accuracy or speed on your device.")
         }
-        .listSectionSeparator(.hidden)
     }
 
     private func modelRow(
@@ -225,7 +279,6 @@ struct ModelManagerView: View {
                 showPartialDeleteAlert = true
             }
         )
-        .listRowSeparator(.hidden)
     }
 
     private func requestDelete(_ model: ModelInfo) {
@@ -235,23 +288,30 @@ struct ModelManagerView: View {
 
     @ViewBuilder
     private var dictationCleanupSection: some View {
-        let cleanupModels = modelManager.customModels.filter { $0.role == .cleanup }
+        let localModels = LocalCleanupModel.allCases.filter { matchesProcessingFilter($0.displayName + " " + $0.explanation) }
+        let cleanupModels = modelManager.customModels.filter { $0.role == .cleanup && matchesProcessingFilter($0.name) }
+        let showsApple = matchesProcessingFilter("Apple Intelligence")
         Section {
-            CleanupModelPicker(manager: modelManager)
-            appleIntelligenceCleanupRow
-            ForEach(LocalCleanupModel.allCases, id: \.self) { model in
+            if showsApple { appleIntelligenceCleanupRow }
+            ForEach(localModels, id: \.self) { model in
                 CleanupModelCardView(model: model, manager: modelManager)
             }
             ForEach(cleanupModels) { model in
                 customCleanupRow(model)
             }
+            if !showsApple && localModels.isEmpty && cleanupModels.isEmpty {
+                Text("No matching processing models").foregroundStyle(.secondary)
+            }
         } header: {
-            modelSectionHeader("Dictation cleanup", systemImage: "sparkles")
+            Text("Text processing")
         } footer: {
-            Text("Speech recognition and text processing use separate models. Apple supports background processing; downloaded local processing models require Syllivra to stay open.")
-                .font(.caption)
+            Text("One processing model handles punctuation, cleanup and grammar. Apple supports background processing; downloaded local models need Syllivra to stay open.")
         }
-        .listSectionSeparator(.hidden)
+    }
+
+    private func matchesProcessingFilter(_ text: String) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || text.localizedCaseInsensitiveContains(query)
     }
 
     private var isAppleIntelligenceCleanupActive: Bool {
@@ -259,94 +319,65 @@ struct ModelManagerView: View {
     }
 
     private var appleIntelligenceCleanupRow: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("Apple Intelligence")
-                    if isAppleIntelligenceCleanupActive {
-                        Text("Active")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
-                }
-                Text("On-device Foundation Models")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            ModelCardHeading(name: "Apple Intelligence", size: "", active: isAppleIntelligenceCleanupActive)
+            Text("Included on supported iPhones. Works in the background.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if PolishAvailability.state != .available {
                 Text(PolishAvailability.guidance(for: PolishAvailability.state))
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
             if !isAppleIntelligenceCleanupActive {
                 Button {
                     modelManager.selectCleanupBackend(.appleIntelligence)
                 } label: {
-                    Label("Select", systemImage: "checkmark.circle")
+                    Label("Use for processing", systemImage: "checkmark.circle").frame(minHeight: 44)
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color.saiityOnAction)
-                .controlSize(.small)
+                .buttonStyle(.borderless)
+                .font(.subheadline.weight(.semibold))
                 .accessibilityHint("Uses Apple Intelligence for dictation cleanup")
             }
         }
-        .padding(.vertical, 6)
-        .listRowSeparator(.hidden)
+        .padding(.vertical, 8)
+        .labelStyle(.titleAndIcon)
     }
 
     private func customCleanupRow(_ model: CustomModel) -> some View {
         let isActive = modelManager.cleanupBackend == .ollama(model.id)
-        return HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(model.name)
-                    if isActive {
-                        Text("Active")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
-                }
-                Text("\(model.source.displayName) · \(model.role.displayName)")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(customModelStatus(model)).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            HStack(spacing: 8) {
+        let actionLayout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return VStack(alignment: .leading, spacing: 4) {
+            ModelCardHeading(name: model.name, size: model.source.displayName, active: isActive)
+            Text(customModelStatus(model)).font(.footnote).foregroundStyle(.secondary)
+            Text("Dictated text is sent to \(URL(string: model.repositoryURL)?.host ?? "your configured server"). Choose a server you trust.")
+                .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            actionLayout {
                 if model.validationError == nil && !isActive {
                     Button {
                         modelManager.selectCleanupBackend(.ollama(model.id))
                     } label: {
-                        Label("Select", systemImage: "checkmark.circle")
+                        Label("Use for processing", systemImage: "checkmark.circle").frame(minHeight: 44)
                     }
-                    .labelStyle(.titleAndIcon)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                     .accessibilityHint("Uses this Ollama model for dictation cleanup")
                 }
-                Button(role: .destructive) { customModelToDelete = model } label: {
-                    Image(systemName: "trash")
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                Menu {
+                    Button("Delete configuration", role: .destructive) { customModelToDelete = model }
+                } label: {
+                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Delete \(model.name)")
+                .accessibilityLabel("Actions for \(model.name)")
+                .foregroundStyle(.secondary)
             }
+            .buttonStyle(.borderless)
+            .font(.subheadline.weight(.semibold))
         }
-        .padding(.vertical, 6)
-        .listRowSeparator(.hidden)
-    }
-
-    private func modelSectionHeader(_ title: String, systemImage: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(.tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .textCase(nil)
-        }
-        .padding(.bottom, 4)
+        .padding(.vertical, 8)
+        .labelStyle(.titleAndIcon)
     }
 
     private func customModelStatus(_ model: CustomModel) -> String {
@@ -371,18 +402,6 @@ struct ModelManagerView: View {
         showErrorAlert = true
     }
 
-    @ViewBuilder
-    private func modelEngineFooter(for models: [ModelInfo]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if models.contains(where: { $0.engine == .whisperKit }) {
-                Text("WhisperKit runs speech recognition locally on Apple silicon.")
-            }
-            if models.contains(where: { $0.engine == .parakeet }) {
-                Text("NVIDIA on-device ASR is Parakeet v2/v3. Nemotron speech checkpoints are not in the current FluidAudio runtime, so they are not one-tap downloads.")
-            }
-        }
-        .font(.caption)
-    }
 }
 
 #Preview {

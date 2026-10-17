@@ -259,14 +259,15 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                        "alternate pages must not grow for the removed accessory row")
     }
 
-    func testMainTabsKeepSpeakAndSettingsAndOpenModelsFromSpeak() throws {
+    func testMainTabsKeepSpeakAndSettingsWithModelsInsideSettings() throws {
         let mainTabs = try source("DictusApp/Views/MainTabView.swift")
         let settings = try source("DictusApp/Views/SettingsView.swift")
         let home = try source("DictusApp/Views/HomeView.swift")
 
-        XCTAssertFalse(mainTabs.contains("Label(\"Models\", systemImage:"),
-                       "Models is a Speak destination, not a root tab")
-        XCTAssertTrue(settings.contains("ModelManagerView(modelManager:"), "Models must also be reachable from Settings")
+        XCTAssertFalse(mainTabs.contains("Label(\"Models\", systemImage:"), "Models must not be a root tab")
+        XCTAssertTrue(settings.contains("settings.models"))
+        XCTAssertTrue(settings.contains("ModelManagerView(modelManager: modelManager)"),
+                      "Models must reuse the existing root model owner")
         XCTAssertTrue(home.contains("ModelManagerView(modelManager: modelManager)"),
                        "Models opens from Speak")
     }
@@ -1343,6 +1344,43 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("identifier: \"dictate-button\", label: \"Hold to dictate\""))
         XCTAssertTrue(controller.contains("moreButton?.isHidden = !showsTopBar"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".accessibilityHidden(true)"))
+    }
+
+    func testHiddenTopBarUsesTheSharedFullSizeMoreTarget() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        XCTAssertTrue(controller.contains("layout.dictationMoreFrame"),
+                      "The hidden-bar board must use the full-size top-left menu target")
+        XCTAssertFalse(controller.contains("moreButton?.frame = inputFrame(CGRect("),
+                       "An unconditional y=0 target leaves the hidden-bar menu on the keyboard boundary")
+    }
+
+    func testMoreUsesNativeDropdownWithItsOwnNativeImage() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let start = try XCTUnwrap(controller.range(of: "\n        let more ="))
+        let end = try XCTUnwrap(controller.range(of: "moreButton = more", range: start.lowerBound..<controller.endIndex))
+        let setup = controller[start.lowerBound..<end.upperBound]
+        XCTAssertTrue(setup.contains("UIButton(type: .system)"))
+        XCTAssertTrue(setup.contains("showsMenuAsPrimaryAction = true"))
+        XCTAssertTrue(setup.contains("configuration.image = UIImage(systemName: \"ellipsis\")"))
+        XCTAssertTrue(setup.contains("UIDeferredMenuElement.uncached"), "Field-aware actions must be fresh when opened")
+        XCTAssertTrue(setup.contains("keyboardMoreMenuItems()"))
+        XCTAssertFalse(controller.contains("moreActionsView"))
+        XCTAssertFalse(controller.contains("showKeyboardMoreActions"))
+        XCTAssertTrue(controller.contains("hitExpansion = voiceBoardMode ? 0 : 8"),
+                      "Top-right power must not expand into the adjacent Delete key")
+    }
+
+    func testDictationBoardSwapsEmojiAndLettersWithoutMovingOtherPages() throws {
+        let controller = try source("DictusKeyboard/KeyboardViewController.swift")
+        let root = try source("DictusKeyboard/KeyboardRootView.swift")
+        XCTAssertTrue(controller.contains("keyboardModeButton?.frame = inputFrame(layout.chromeEmojiFrame)"))
+        XCTAssertTrue(controller.contains("emojiButton?.frame = inputFrame(layout.chromeLettersFrame)"))
+        let lettersStart = try XCTUnwrap(root.range(of: "voiceBoardChrome(text: \"ABC\""))
+        let lettersEnd = try XCTUnwrap(root.range(of: ".zIndex(4)", range: lettersStart.lowerBound..<root.endIndex))
+        XCTAssertTrue(root[lettersStart.lowerBound..<lettersEnd.lowerBound].contains("layout.chromeEmojiFrame"))
+        let emojiStart = try XCTUnwrap(root.range(of: "systemName: \"face.smiling\""))
+        let emojiEnd = try XCTUnwrap(root.range(of: ".zIndex(4)", range: emojiStart.lowerBound..<root.endIndex))
+        XCTAssertTrue(root[emojiStart.lowerBound..<emojiEnd.lowerBound].contains("layout.chromeLettersFrame"))
     }
 
     func testSwiftUIVoiceOwnershipDoesNotDependOnMaterial() throws {

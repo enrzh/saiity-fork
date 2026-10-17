@@ -1,12 +1,12 @@
 // DictusApp/Views/MainTabView.swift
-// Root navigation container with 2 tabs and full-screen recording overlay.
+// Root navigation container with native tabs and full-screen recording overlay.
 import SwiftUI
 import SyllivraKernel
 
-/// Root view presenting the Home and Settings tab navigation structure.
+/// Root view presenting Speak and Settings with one shared model owner.
 ///
 /// WHY TabView instead of NavigationStack:
-/// The app's Home and Settings sections are the root tabs. A TabView provides standard
+/// The app's Speak and Settings sections are the root tabs. A TabView provides standard
 /// iOS navigation for this pattern.
 /// Each tab wraps its content in its own NavigationStack so push navigation works
 /// independently per tab.
@@ -103,7 +103,7 @@ struct MainTabView: View {
                         SettingsView(modelManager: modelManager)
                     }
                     .tabItem {
-                        Label("Settings", systemImage: "slider.horizontal.3")
+                        Label("Settings", systemImage: "gearshape.fill")
                     }
                     .tag(1)
                 }

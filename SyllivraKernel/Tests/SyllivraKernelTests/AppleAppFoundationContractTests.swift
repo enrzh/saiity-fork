@@ -122,7 +122,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(mainTabView.contains("Label(\"Settings\", systemImage: \"slider.horizontal.3\")\n                    }\n                    .tag(2)"))
     }
 
-    func testModelsAreAccessibleFromSpeakWithoutDuplicateSettingsEntry() throws {
+    func testModelsRemainAccessibleInSettingsAndVoiceOptions() throws {
         let mainTabView = try source("DictusApp/Views/MainTabView.swift")
         let home = try source("DictusApp/Views/HomeView.swift")
         let settings = try source("DictusApp/Views/SettingsView.swift")
@@ -132,7 +132,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(home.contains("onModelsRequested"))
         XCTAssertFalse(home.contains("Open Models"))
         XCTAssertTrue(settings.contains("DefaultKeyboardModePicker()"))
-        XCTAssertFalse(settings.contains("NavigationLink { ModelManagerView"))
+        XCTAssertTrue(settings.contains("ModelManagerView(modelManager: modelManager)"))
         XCTAssertTrue(settings.contains("DictationHistoryView()"))
     }
 
@@ -140,13 +140,14 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let home = try String(contentsOf: repository.appending(path: "DictusApp/Views/HomeView.swift"), encoding: .utf8)
 
         let workspace = String(home.components(separatedBy: "#Preview").first ?? "")
-        XCTAssertTrue(workspace.contains("ScrollView {"))
-        XCTAssertFalse(workspace.contains("List {"))
-        XCTAssertTrue(workspace.contains(".safeAreaInset(edge: .bottom"))
+        XCTAssertTrue(workspace.contains("List {"))
+        XCTAssertTrue(workspace.contains(".listStyle(.insetGrouped)"))
+        XCTAssertFalse(workspace.contains(".safeAreaInset(edge: .bottom"),
+                       "The recorder and keyboard power must scroll on short screens")
         XCTAssertTrue(workspace.contains("home.voiceOptions"))
         XCTAssertFalse(workspace.contains("DictationModelQuickPicker("), "Engine configuration belongs in Voice options")
         XCTAssertTrue(home.contains("readinessPanel"))
-        XCTAssertTrue(home.contains("readiness.action == .start ? \"New dictation\" : readiness.title"))
+        XCTAssertTrue(home.contains("Text(readiness.title)"), "Readiness and recovery titles must come from the shared policy")
         XCTAssertFalse(home.contains("Text(\"Ready when you are\")"))
         XCTAssertTrue(home.contains("Label(\"Start dictation\""))
         XCTAssertTrue(home.contains("copy(item.text)"))
@@ -165,8 +166,10 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let overlay = try source("DictusApp/Views/SwipeBackOverlayView.swift")
         XCTAssertTrue(overlay.contains("Ready to dictate"))
         XCTAssertFalse(overlay.contains("Ready when you are"))
-        XCTAssertTrue(home.contains("Date(timeIntervalSince1970: item.createdAt), style: .relative"),
-                      "recent rows should show compact relative metadata")
+        XCTAssertFalse(home.contains("style: .relative"),
+                       "Saved dictation timestamps must not tick or shift every second")
+        XCTAssertTrue(home.contains("Date(timeIntervalSince1970: item.createdAt).formatted(date: .abbreviated, time: .shortened)"),
+                      "Recent rows should show the saved date and time")
         XCTAssertFalse(home.contains("SaiityDashboardCard"))
         XCTAssertFalse(home.contains("background(.regularMaterial"))
     }
@@ -177,8 +180,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         let activity = try source("DictusWidgets/DictusLiveActivity.swift")
         let intent = try source("DictusWidgets/StopStandbyIntent.swift")
 
-        XCTAssertTrue(home.contains("coordinator.setKeyboardDictationEnabled(!serviceEnabled)"))
-        XCTAssertTrue(home.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(home.contains("coordinator.setKeyboardDictationEnabled(enabled)"))
+        XCTAssertTrue(home.contains("Toggle(\"Keyboard dictation\""))
         XCTAssertTrue(home.contains("home.keyboardDictationToggle"))
         XCTAssertTrue(intent.contains("KeyboardDictationService.setEnabled"))
         XCTAssertTrue(attributes.contains("serviceEnabled"))
@@ -241,6 +244,22 @@ final class AppleAppFoundationContractTests: XCTestCase {
 
         XCTAssertTrue(body.contains("PolishCoordinator.shared.cancelInflight()"))
         XCTAssertTrue(body.contains("dictationTask?.cancel()"))
+    }
+
+    func testEveryRecognizerAndProcessingPathKeepsTheSelectedLanguageSnapshot() throws {
+        let coordinator = try source("DictusApp/DictationCoordinator.swift")
+        let service = try source("DictusApp/Audio/TranscriptionService.swift")
+        let qwen = try source("DictusApp/Audio/QwenSpeechEngine.swift")
+        XCTAssertTrue(service.contains("$recognitionLanguages.withValue(languagePolicy.spokenLanguages)"))
+        XCTAssertTrue(coordinator.contains("$recognitionLanguages.withValue(languagePolicy.spokenLanguages)"))
+        XCTAssertTrue(coordinator.contains("$recognitionLanguages.withValue(spokenLanguages)"))
+        XCTAssertTrue(coordinator.contains("spokenLanguages: currentLanguagePolicy.spokenLanguages"))
+        XCTAssertTrue(qwen.contains("options.allowedLanguages = SpokenLanguagePreferences.recognitionLanguages"))
+        let guardPosition = try XCTUnwrap(coordinator.range(of: "unexpectedLanguage(in: rawText"))
+        let deliveryPosition = try XCTUnwrap(coordinator.range(of: "let decision = DictationFinalizationDecision.make("))
+        XCTAssertLessThan(guardPosition.lowerBound, deliveryPosition.lowerBound)
+        XCTAssertTrue(coordinator.contains("cleaned = translatedRawText"))
+        XCTAssertTrue(try source("DictusApp/Views/RecordingView.swift").contains("Unverified recognition"))
     }
 
     func testDictationStatusViewUsesTheSameSemanticStateLanguage() throws {
@@ -418,7 +437,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("moreGroup("))
         XCTAssertFalse(settings.contains("settingsExternalRow"))
         XCTAssertFalse(settings.contains("font(.footnote.weight(.medium))"))
-        XCTAssertFalse(settings.contains("NavigationLink { ModelManagerView"))
+        XCTAssertTrue(settings.contains("ModelManagerView(modelManager: modelManager)"))
         XCTAssertFalse(settings.contains("NavigationLink { SoundSettingsView()"))
         XCTAssertTrue(settings.contains("NavigationLink { troubleshootingView }"))
         XCTAssertTrue(settings.contains("NavigationLink(\"Debug Logs\") { DebugLogView() }"))
@@ -482,7 +501,25 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains("NavigationStack"))
     }
 
-    func testModelsUseCompactRowsWithReadableMetadataAndActions() throws {
+    func testShippedNoticesPreserveInheritedSourceLicensesAndApacheNotices() throws {
+        let data = try Data(contentsOf: repository.appending(path: "DictusApp/Resources/OpenSourceNotices.json"))
+        let notices = try JSONDecoder().decode([[String: String]].self, from: data)
+        XCTAssertEqual(Set(notices.compactMap { $0["name"] }).count, notices.count)
+        for (name, path) in [
+            ("Dictus", "LICENSE"),
+            ("giellakbd-ios", "DictusKeyboard/Vendored/LICENSE-MIT"),
+            ("Qwen3 Speech Swift", "Vendor/QwenASRRuntime/LICENSE")
+        ] {
+            let notice = try XCTUnwrap(notices.first { $0["name"] == name })
+            XCTAssertEqual(notice["text"], try source(path), "Preserve the source license for \(name)")
+        }
+        let crypto = try XCTUnwrap(notices.first { $0["name"] == "Swift Crypto" }?["text"])
+        XCTAssertTrue(crypto.contains("Copyright 2019 The SwiftCrypto Project"))
+        let asn1 = try XCTUnwrap(notices.first { $0["name"] == "Swift ASN.1" }?["text"])
+        XCTAssertTrue(asn1.contains("Copyright 2022 The SwiftASN1 Project"))
+    }
+
+    func testModelsUseNativeSectionsWithReadableMetadataAndActions() throws {
         let manager = try source("DictusApp/Views/ModelManagerView.swift")
         let card = try source("DictusApp/Views/ModelCardView.swift")
 
@@ -492,21 +529,17 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(manager.contains("showAddModel"))
         XCTAssertFalse(manager.contains("AddCustomModelView"))
         XCTAssertFalse(manager.contains(".swipeActions"))
-        XCTAssertFalse(manager.contains(".listRowSeparator(.visible)"))
-        XCTAssertTrue(manager.contains(".listRowSeparator(.hidden)"))
-        XCTAssertEqual(
-            manager.components(separatedBy: ".listSectionSeparator(.hidden)").count - 1,
-            3,
-            "Installed, Downloads, and Dictation cleanup should not render section rules"
-        )
-        XCTAssertTrue(manager.contains("Dictation cleanup"))
+        XCTAssertFalse(manager.contains("modelSectionHeader"))
+        XCTAssertFalse(manager.contains(".listRowSeparator(.hidden)"))
+        XCTAssertTrue(manager.contains("Text processing"))
         XCTAssertTrue(manager.contains("Apple Intelligence"))
         XCTAssertTrue(manager.contains("selectCleanupBackend(.appleIntelligence)"))
-        XCTAssertTrue(manager.contains("On-device Foundation Models"))
+        XCTAssertTrue(manager.contains("PolishAvailability.guidance"))
+        XCTAssertTrue(manager.contains("Dictated text is sent to"), "Remote cleanup must disclose where dictated text goes")
         XCTAssertFalse(card.contains("actionColumnWidth"))
         XCTAssertTrue(card.contains("languageSupport.coverage.localizedSummary"))
         XCTAssertTrue(card.contains("cancelCatalogDownload(model.identifier)"))
-        XCTAssertTrue(card.contains(".buttonStyle(.borderedProminent)"))
+        XCTAssertTrue(card.contains(".buttonStyle(.borderless)"))
         XCTAssertTrue(card.contains(".font(.subheadline)"))
         XCTAssertFalse(card.contains("GaugeBarView("), "Catalog estimates must not appear as measured scores")
         XCTAssertFalse(manager.contains("DictationSettingsAdvisor(modelManager: modelManager)"))
@@ -521,7 +554,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testModelRowsKeepEveryStateAndDeterminateProgressReadable() throws {
         let card = try source("DictusApp/Views/ModelCardView.swift")
 
-        for label in ["Not installed", "Downloading", "Preparing", "Active", "Installed", "Failed", "Unavailable"] {
+        for label in ["Not installed", "Downloading", "Preparing", "In app", "Keyboard", "App & keyboard", "Installed", "Failed", "Unavailable"] {
             XCTAssertTrue(card.contains("\"\(label)"), "Missing model state label: \(label)")
         }
         XCTAssertTrue(card.contains("downloadProgressLabel"))
@@ -534,17 +567,19 @@ final class AppleAppFoundationContractTests: XCTestCase {
 
         XCTAssertFalse(settings.contains(".safeAreaInset"))
         XCTAssertTrue(settings.contains(".listStyle(.insetGrouped)"))
-        XCTAssertTrue(settings.contains(".scrollContentBackground(.hidden)"))
+        XCTAssertTrue(settings.contains(".contentMargins(.bottom, 88, for: .scrollContent)"))
         XCTAssertFalse(settings.contains(".padding(.bottom, 110)"))
     }
 
-    func testModelDeletionIsVisibleAndStillUsesParentConfirmation() throws {
+    func testModelDeletionStillUsesParentConfirmationAndGuards() throws {
         let manager = try source("DictusApp/Views/ModelManagerView.swift")
         let card = try source("DictusApp/Views/ModelCardView.swift")
 
         XCTAssertTrue(card.contains("Label(\"Delete\", systemImage: \"trash\")"))
-        XCTAssertFalse(card.contains("private var deletionMenu"))
         XCTAssertTrue(card.contains("onDeleteRequest?()"))
+        XCTAssertTrue(card.contains("onDeletePartialRequest?()"))
+        XCTAssertTrue(card.contains("!isActive && modelManager.downloadedModels.count > 1"))
+        XCTAssertTrue(card.contains(".disabled(!isFailed && !canDeleteModel)"))
         XCTAssertTrue(manager.contains("Delete \\(model.displayName)?"))
         XCTAssertTrue(manager.contains("Button(\"Delete\", role: .destructive)"))
     }

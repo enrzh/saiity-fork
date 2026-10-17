@@ -213,6 +213,7 @@ struct KeyboardSetupCard: View {
     @FocusState private var checkingKeyboard: Bool
 
     var body: some View {
+        GroupBox {
         VStack(alignment: .leading, spacing: 16) {
             status("Syllivra keyboard", done: setup.keyboardInstalled, detail: "Add it in iPhone Settings")
             status("Full Access", done: setup.fullAccessVerified,
@@ -242,8 +243,7 @@ struct KeyboardSetupCard: View {
             Text("Permission is confirmed by the actual keyboard. No recording is needed for this check.")
                 .font(.footnote).foregroundStyle(.secondary)
         }
-        .padding(20)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+        }
         .onAppear { setup.beginVerification(); setup.refresh() }
         .onDisappear { guide.stopUnlessInPictureInPicture() }
         .onChange(of: scenePhase) { _, phase in

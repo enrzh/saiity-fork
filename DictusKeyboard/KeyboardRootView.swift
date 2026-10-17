@@ -54,7 +54,7 @@ struct KeyboardRootView: View {
                         voiceBoardChrome(text: "ABC", label: "Open letter keyboard") {
                             state.presentArea(.letters)
                         }
-                            .position(x: CGFloat(layout.chromeLettersFrame.midX), y: CGFloat(layout.chromeLettersFrame.midY))
+                            .position(x: CGFloat(layout.chromeEmojiFrame.midX), y: CGFloat(layout.chromeEmojiFrame.midY))
                             .zIndex(4)
                         voiceBoardChrome(
                             systemName: "face.smiling",
@@ -75,7 +75,7 @@ struct KeyboardRootView: View {
                         ) {
                             state.presentArea(.emoji)
                         }
-                            .position(x: CGFloat(layout.chromeEmojiFrame.midX), y: CGFloat(layout.chromeEmojiFrame.midY))
+                            .position(x: CGFloat(layout.chromeLettersFrame.midX), y: CGFloat(layout.chromeLettersFrame.midY))
                             .zIndex(4)
                     }
 

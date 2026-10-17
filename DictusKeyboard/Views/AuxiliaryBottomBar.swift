@@ -814,7 +814,7 @@ struct KeyboardDeleteButton: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .trailing) {
             CommandKeyFace(
                 systemName: CommandKeyStyle.deleteSymbolName,
                 plateWidth: visualWidth,

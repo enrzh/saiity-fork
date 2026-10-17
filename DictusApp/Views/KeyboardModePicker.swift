@@ -200,7 +200,7 @@ struct SpokenLanguagesPicker: View {
             List {
                 Section {
                     Button("Broad language support") { update([]) }
-                    Text("Choose every language you speak, including mixed-language dictation. This guides model recommendations without forcing recognition into one language.")
+                    Text("Choose every language you speak, including mixed-language dictation. Recognition uses these choices, and model recommendations must cover them all. Broad language support allows automatic detection without a language limit.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Spoken languages") {
@@ -368,10 +368,10 @@ struct KeyboardHoldOptionsView: View {
                             } label: {
                                 Text(key).font(.system(size: page == 3 ? 23 : 18))
                                     .frame(maxWidth: .infinity, minHeight: 44)
-                                    .background(selectedKey == key ? Color.accentColor.opacity(0.2) : Color(.tertiarySystemFill),
-                                                in: RoundedRectangle(cornerRadius: 8))
-                                    .overlay(alignment: .bottom) { if hasOptions { Circle().fill(Color.accentColor).frame(width: 3, height: 3).padding(3) } }
-                            }.buttonStyle(.plain).disabled(!hasOptions)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(selectedKey == key ? Color.accentColor : .secondary)
+                            .disabled(!hasOptions)
                         }
                     }
                 }

@@ -36,13 +36,13 @@ struct MicPermissionPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if permissionGranted == nil {
                 Button("Allow microphone", action: requestPermission)
-                    .buttonStyle(SaiityPrimaryActionStyle()).disabled(isRequesting)
+                    .buttonStyle(.borderedProminent).controlSize(.large).disabled(isRequesting)
             } else if permissionGranted == true {
                 Button("Continue", action: onNext)
-                    .buttonStyle(SaiityPrimaryActionStyle())
+                    .buttonStyle(.borderedProminent).controlSize(.large)
             } else {
                 Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
-                    .buttonStyle(SaiityPrimaryActionStyle())
+                    .buttonStyle(.borderedProminent).controlSize(.large)
                 Button("Continue without microphone", action: onNext)
                     .buttonStyle(.bordered).controlSize(.large)
             }

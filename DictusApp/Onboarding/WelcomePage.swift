@@ -6,8 +6,7 @@ struct WelcomePage: View {
     var onKeyboardSetup: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            DictusLogo(height: 40, foregroundOnly: true)
+        VStack(alignment: .leading, spacing: 28) {
             SaiityPageHeader(title: "Write with your voice",
                              subtitle: "Speak here, or use Syllivra wherever you type.")
             VStack(alignment: .leading, spacing: 16) {
@@ -16,10 +15,8 @@ struct WelcomePage: View {
                 benefit("On your iPhone", detail: "Download once for offline voice recognition.", icon: "iphone")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: onNext) {
-                SaiityVoiceActionLabel("Speak here", systemImage: "arrow.right")
-            }
-            .buttonStyle(SaiityPrimaryActionStyle())
+            Button(action: onNext) { Label("Speak here", systemImage: "mic.fill") }
+                .buttonStyle(.borderedProminent).controlSize(.large)
             if let onKeyboardSetup {
                 Button("Use in other apps", action: onKeyboardSetup)
                     .buttonStyle(.bordered).controlSize(.large)
@@ -29,12 +26,11 @@ struct WelcomePage: View {
     }
 
     private func benefit(_ title: LocalizedStringKey, detail: LocalizedStringKey, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: icon).font(.title3).foregroundStyle(.tint).frame(width: 28)
+        Label {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.headline)
                 Text(detail).font(.subheadline).foregroundStyle(.secondary)
             }
-        }
+        } icon: { Image(systemName: icon) }
     }
 }

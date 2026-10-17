@@ -48,7 +48,8 @@ final class KeyboardSurfaceView: UIView {
         emojiDelete.isHidden = emoji.isHidden
         emojiChrome?.view.isHidden = emoji.isHidden
         if next == .emoji {
-            updateEmojiChrome(visualSize: layout.commandKeyVisualSize)
+            updateEmojiChrome(visualFrame: layout.commandKeyVisualFrame.offsetBy(
+                dx: -layout.boardDeleteFrame.minX, dy: -layout.boardDeleteFrame.minY))
             if previous != .emoji { emoji.present() }
         } else {
             emoji.dismiss()
@@ -76,8 +77,10 @@ final class KeyboardSurfaceView: UIView {
         return nil
     }
 
-    private func updateEmojiChrome(visualSize: CGSize) {
-        emojiDelete.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName, visualSize: visualSize)
+    private func updateEmojiChrome(visualFrame: CGRect) {
+        emojiDelete.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName, visualSize: visualFrame.size)
+        emojiDelete.keyboardFace.autoresizingMask = []
+        emojiDelete.keyboardFace.frame = visualFrame
         let chrome = KeyboardEmojiCategoryFace(liquidGlassEnabled: KeyboardInteractionPreferences.liquidGlassEnabled)
         if let emojiChrome {
             if emojiChrome.rootView.liquidGlassEnabled != chrome.liquidGlassEnabled {

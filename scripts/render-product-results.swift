@@ -7,7 +7,8 @@ guard CommandLine.arguments.count == 3 || (CommandLine.arguments.count == 4 && C
 }
 let udid = CommandLine.arguments[1], derived = CommandLine.arguments[2]
 let products = derived + "/Build/Products/Debug-iphonesimulator"
-let resultDirectory = URL(fileURLWithPath: derived).appendingPathComponent("multilingual-result-renders")
+let resultDirectory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CODEX_TASK_ARTIFACTS"] ?? derived)
+    .appendingPathComponent("multilingual-result-renders")
 try FileManager.default.createDirectory(at: resultDirectory, withIntermediateDirectories: true)
 let componentFile = try String(contentsOfFile: "DictusApp/Views/HomeView.swift", encoding: .utf8)
 guard let start = componentFile.range(of: "struct DictationTranscriptResult: View {"),
@@ -27,7 +28,7 @@ let recentsStorage = homeLines(start: "@AppStorage(SharedKeys.recentDictations",
 let recentsChange = homeLines(start: ".onChange(of: recentDictationData)", end: "\n")
 let recentsReload = homeLines(start: "    private func reloadRecentDictations()", end: "    @ViewBuilder")
     .replacingOccurrences(of: "AppGroup.defaults", with: "qaHistoryDefaults")
-let recentRow = homeLines(start: "            HStack(alignment: .top, spacing: 12) {", end: "            .frame(minHeight: 44)")
+let recentRow = homeLines(start: "    @ViewBuilder\n    private func recentActivity", end: "    private func copy")
     .replacingOccurrences(of: "AppGroup.defaults", with: "qaHistoryDefaults")
 let program = #"""
 import SwiftUI
@@ -53,12 +54,13 @@ struct HistoryRefreshProbe: View {
     // PRODUCTION_RECENTS_RELOAD
 }
 struct RecentRowProbe: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var showCopiedFeedback = false
     let item = RecentDictation(text: "明日の予定を確認します。 Café — API_242\nשלום — يرجى تأكيد الفاتورة.")
     func reloadRecentDictations() { }
     func copy(_ text: String) { }
-    var body: some View {
-        // PRODUCTION_RECENT_ROW
-    }
+    var body: some View { recentActivity(items: [item]) }
+    // PRODUCTION_RECENT_ROW
 }
 private struct DictationHistoryEditView: View {
     let item: RecentDictation
@@ -144,7 +146,8 @@ private struct DictationHistoryEditView: View {
         of: "recentDictationItems = Array(RecentDictations.load(from: qaHistoryDefaults).prefix(3))",
         with: "recentDictationItems = Array(RecentDictations.load(from: qaHistoryDefaults).prefix(3)); observed.reloads += 1; observed.words = recentDictationItems.map(\\.text)"))
     .replacingOccurrences(of: "RESULT_DIRECTORY", with: String(reflecting: resultDirectory.path))
-let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-product-render-" + UUID().uuidString)
+let directory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CODEX_TASK_TMP"] ?? FileManager.default.temporaryDirectory.path)
+    .appendingPathComponent("saiity-product-render-" + UUID().uuidString)
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 let source = directory.appendingPathComponent("main.swift"), binary = directory.appendingPathComponent("render")
 try program.write(to: source, atomically: true, encoding: .utf8)
@@ -162,6 +165,7 @@ func run(_ args: [String], capture: Bool = false) throws -> String {
 }
 let sdk = try run(["--sdk", "iphonesimulator", "--show-sdk-path"], capture: true)
 _ = try run(["--sdk", "iphonesimulator", "swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator",
+             "-module-cache-path", directory.appendingPathComponent("module-cache").path,
              "-I", products, source.path, products + "/DictusApp.app/PlugIns/DictusKeyboard.appex/DictusKeyboard.debug.dylib",
              "-Xlinker", "-rpath", "-Xlinker", products + "/DictusApp.app/PlugIns/DictusKeyboard.appex", "-o", binary.path])
 if CommandLine.arguments.contains("--compile-only") {

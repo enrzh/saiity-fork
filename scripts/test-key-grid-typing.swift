@@ -1,8 +1,8 @@
-// Run after a simulator build: swift scripts/test-key-grid-typing.swift <udid> <derived-data> [--baseline]
+// Run after a simulator build: swift scripts/test-key-grid-typing.swift <udid> <derived-data> [--baseline] [--compile-only]
 import Foundation
 
 guard CommandLine.arguments.count >= 3 else {
-    fatalError("Usage: test-key-grid-typing.swift <simulator-udid> <derived-data> [--baseline]")
+    fatalError("Usage: test-key-grid-typing.swift <simulator-udid> <derived-data> [--baseline] [--compile-only]")
 }
 let udid = CommandLine.arguments[1]
 let derived = CommandLine.arguments[2]
@@ -682,6 +682,20 @@ if !\(baseline) {
         KeyboardState.shared.presentArea(savedArea)
         controller.viewWillDisappear(false)
     }
+    // Exercise native menu ownership through the full window/input hierarchy.
+    let touchWindow = UIWindow(frame: controller.view.frame)
+    let parent = UIViewController()
+    touchWindow.rootViewController = parent
+    parent.addChild(controller)
+    parent.view.addSubview(controller.view)
+    controller.didMove(toParent: parent)
+    touchWindow.makeKeyAndVisible()
+    defer {
+        controller.willMove(toParent: nil)
+        controller.view.removeFromSuperview()
+        controller.removeFromParent()
+        touchWindow.isHidden = true
+    }
     for glass in [true, false] {
         defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
         KeyboardState.shared.presentArea(.keys)
@@ -706,25 +720,13 @@ if !\(baseline) {
             let point = CGPoint(x: toggle.bounds.midX, y: toggle.bounds.midY)
             precondition(toggle.hitTest(point, with: nil) != nil, "Visible power control lost its native hit target")
             let more = namedControl("keyboard-more", in: controller.view) as! UIButton
-            precondition(more.showsMenuAsPrimaryAction && more.menu != nil && !more.isHidden)
+            precondition(more.buttonType == .system && more.showsMenuAsPrimaryAction && more.menu != nil
+                         && more.contextMenuInteraction != nil && more.configuration?.image != nil && !more.isHidden)
+            precondition(touchWindow.hitTest(more.convert(CGPoint(x: more.bounds.midX, y: more.bounds.midY), to: touchWindow), with: nil) === more)
             precondition(namedControl("paste-clipboard", in: controller.view) == nil
                          && namedControl("dismiss-keyboard", in: controller.view) == nil,
                          "Minimal accessory row kept separate secondary controls")
         }
-    }
-    // Exercise the full window/input hierarchy, not only the isolated pager.
-    let touchWindow = UIWindow(frame: controller.view.frame)
-    let parent = UIViewController()
-    touchWindow.rootViewController = parent
-    parent.addChild(controller)
-    parent.view.addSubview(controller.view)
-    controller.didMove(toParent: parent)
-    touchWindow.makeKeyAndVisible()
-    defer {
-        controller.willMove(toParent: nil)
-        controller.view.removeFromSuperview()
-        controller.removeFromParent()
-        touchWindow.isHidden = true
     }
     func findSurface(in view: UIView) -> KeyboardSurfaceView? {
         if let surface = view as? KeyboardSurfaceView { return surface }
@@ -1184,4 +1186,8 @@ try run(["swiftc", "-sdk", sdkPath, "-target", "arm64-apple-ios17.0-simulator",
          "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", input.path,
          extensionPath + "/DictusKeyboard.debug.dylib", "-Xlinker", "-rpath", "-Xlinker", extensionPath,
          "-o", binary.path])
-try run(["simctl", "spawn", udid, binary.path])
+if CommandLine.arguments.contains("--compile-only") {
+    print("COMPILED: native input/action checks; execution was not run")
+} else {
+    try run(["simctl", "spawn", udid, binary.path])
+}

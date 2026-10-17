@@ -1187,7 +1187,10 @@ private final class EmojiPageCell: UICollectionViewCell {
                 let index = column * 4 + row
                 if page.items.indices.contains(index) {
                     let button = EmojiKeyButton(item: page.items[index], reduceMotion: reduceMotion)
-                    button.applyEmojiFont(.systemFont(ofSize: min(22, max(16, rowHeight * 0.62))))
+                    button.applyEmojiFont(
+                        .systemFont(ofSize: min(26, max(16, rowHeight * 0.72))),
+                        verticalBias: CGFloat(row) / 3 - 0.5, rowHeight: rowHeight
+                    )
                     button.onTap = onTap
                     horizontal.addArrangedSubview(button)
                 } else {
@@ -1225,6 +1228,7 @@ private final class EmojiKeyButton: UIButton {
     let reduceMotion: Bool
     var onTap: ((String) -> Void)?
     private let glyph = UILabel()
+    private lazy var glyphCenterY = glyph.centerYAnchor.constraint(equalTo: centerYAnchor)
     private var suppressNextTap = false
 
     init(item: EmojiGridItem, reduceMotion: Bool) {
@@ -1245,10 +1249,11 @@ private final class EmojiKeyButton: UIButton {
         NSLayoutConstraint.activate([
             glyph.leadingAnchor.constraint(equalTo: leadingAnchor),
             glyph.trailingAnchor.constraint(equalTo: trailingAnchor),
-            glyph.topAnchor.constraint(equalTo: topAnchor),
-            glyph.bottomAnchor.constraint(equalTo: bottomAnchor)
+            glyph.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+            glyph.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            glyphCenterY
         ])
-        applyEmojiFont(.systemFont(ofSize: 22))
+        applyEmojiFont(.systemFont(ofSize: 26))
         backgroundColor = .clear
         isMultipleTouchEnabled = true
         isExclusiveTouch = false
@@ -1265,10 +1270,13 @@ private final class EmojiKeyButton: UIButton {
 
     required init?(coder: NSCoder) { nil }
 
-    func applyEmojiFont(_ font: UIFont) {
+    func applyEmojiFont(_ font: UIFont, verticalBias: CGFloat = 0, rowHeight: CGFloat = 0) {
         glyph.font = font
         glyph.adjustsFontSizeToFitWidth = true
         glyph.minimumScaleFactor = 0.5
+        // Spread the visible rows through the canvas while keeping each native
+        // hit target intact and leaving 2pt inside its upper/lower edge.
+        glyphCenterY.constant = verticalBias * max(0, rowHeight - font.lineHeight - 4)
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

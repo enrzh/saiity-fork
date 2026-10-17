@@ -11,9 +11,9 @@ struct OnboardingSuccessView: View {
             Text("Your keyboard is connected. You’re ready to write with your voice.")
                 .foregroundStyle(.secondary)
             Button(action: onComplete) {
-                SaiityVoiceActionLabel("Finish setup", systemImage: "checkmark")
+                Label("Finish setup", systemImage: "checkmark")
             }
-            .buttonStyle(SaiityPrimaryActionStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
         }
         .padding(.vertical, 24)
     }

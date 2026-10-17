@@ -18,16 +18,17 @@ struct SwipeBackOverlayView: View {
                         Text(DictationErrorChannel.current ?? String(localized: "The dictation failed."))
                             .foregroundStyle(.secondary)
                         Button("Try again") { coordinator.resetStatus(); coordinator.startDictation() }
-                            .buttonStyle(SaiityPrimaryActionStyle())
+                            .buttonStyle(.borderedProminent).controlSize(.large)
                     } else if coordinator.status == .recording {
                         Text("The microphone is listening. Stop when you have finished.").foregroundStyle(.secondary)
                         Button { coordinator.stopDictation() } label: {
                             Label("Finish recording", systemImage: "stop.fill").frame(maxWidth: .infinity)
-                        }.buttonStyle(SaiityPrimaryActionStyle())
+                        }.buttonStyle(.borderedProminent).controlSize(.large)
                     } else if coordinator.status == .ready, let result = coordinator.lastResult {
                         Text(result).textSelection(.enabled)
                     } else if coordinator.status == .idle {
-                        Button("Start dictation") { coordinator.startDictation() }.buttonStyle(SaiityPrimaryActionStyle())
+                        Button("Start dictation") { coordinator.startDictation() }
+                            .buttonStyle(.borderedProminent).controlSize(.large)
                     } else {
                         ProgressView("Working on your device")
                     }

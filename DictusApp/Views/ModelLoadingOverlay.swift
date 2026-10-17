@@ -64,25 +64,24 @@ struct ModelLoadingOverlay: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                DictusLogo(height: 52)
+        List {
+            Section {
                 SaiityPageHeader(title: "Preparing your voice model",
                                  subtitle: "Keep Syllivra open until preparation finishes.")
                 modelTitleHeader
-                VStack(alignment: .leading, spacing: 24) {
-                    phaseRow("Download", detail: "Save the voice model on this iPhone.", phase: .downloading, index: 0)
-                    phaseRow("Prepare", detail: "Optimize it for your device.", phase: .compiling, index: 1)
-                    phaseRow("Activate", detail: "Load the model for dictation.", phase: .loading, index: 2)
-                }
-                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 28))
+            }
+            Section("Preparation") {
+                phaseRow("Download", detail: "Save the voice model on this iPhone.", phase: .downloading, index: 0)
+                phaseRow("Prepare", detail: "Optimize it for your device.", phase: .compiling, index: 1)
+                phaseRow("Activate", detail: "Load the model for dictation.", phase: .loading, index: 2)
+            }
+            Section {
                 if showCompletion { completionView } else { activeView }
                 stayOnPageNotice
             }
-            .padding(24).frame(maxWidth: 620).frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .listStyle(.insetGrouped)
+        .textCase(nil)
         .accessibilityAddTraits(.isModal)
         .interactiveDismissDisabled(true)
         .onReceive(NotificationCenter.default.publisher(for: .dictusModelLoadStateChanged)) { _ in
@@ -136,19 +135,14 @@ struct ModelLoadingOverlay: View {
     }
 
     private func phaseRow(_ title: LocalizedStringKey, detail: LocalizedStringKey, phase: Phase, index: Int) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            ZStack {
-                Circle().fill(Color.accentColor.opacity(index <= phaseIndex ? 0.15 : 0.04))
-                if index < phaseIndex {
-                    Image(systemName: "checkmark").foregroundStyle(.tint)
-                } else {
-                    Text("\(index + 1)").font(.headline).foregroundStyle(index == phaseIndex ? Color.accentColor : .secondary)
-                }
-            }.frame(width: 36, height: 36)
+        Label {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.headline)
                 Text(detail).font(.subheadline).foregroundStyle(.secondary)
             }
+        } icon: {
+            Image(systemName: index < phaseIndex ? "checkmark.circle.fill" : index == phaseIndex ? "circle.inset.filled" : "circle")
+                .foregroundStyle(index <= phaseIndex ? Color.accentColor : .secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue(index < phaseIndex ? "Complete" : index == phaseIndex ? "In progress" : "Waiting")

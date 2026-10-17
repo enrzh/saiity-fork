@@ -1,43 +1,6 @@
 #if os(iOS)
 import SwiftUI
 
-/// Shared app action geometry; the keyboard keeps its own resolved hit frames.
-public struct SaiityPrimaryActionStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    public init() {}
-
-    public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.headline)
-            .foregroundStyle(Color.saiityOnAction)
-            .padding(.horizontal, 20).padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .background(Color.saiityAction, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-    }
-}
-
-public struct SaiityVoiceActionLabel: View {
-    public let title: LocalizedStringKey
-    public var systemImage: String?
-
-    public init(_ title: LocalizedStringKey, systemImage: String? = nil) {
-        self.title = title
-        self.systemImage = systemImage
-    }
-
-    public var body: some View {
-        HStack(spacing: 10) {
-            if let systemImage { Image(systemName: systemImage).accessibilityHidden(true) }
-            else { DictusLogo(height: 22, foregroundOnly: true, tint: .saiityOnAction).accessibilityHidden(true) }
-            Text(title).fixedSize(horizontal: false, vertical: true)
-        }.frame(maxWidth: .infinity)
-    }
-}
-
 /// Real input energy changes only the passive mark, never the action's frame.
 public struct SaiityVoiceSignal: View {
     public var level: Float?

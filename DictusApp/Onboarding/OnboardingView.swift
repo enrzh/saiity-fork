@@ -22,7 +22,7 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemGroupedBackground).ignoresSafeArea()
+                Color(.systemBackground).ignoresSafeArea()
                 ScrollView {
                     stageContent.frame(maxWidth: 560).frame(maxWidth: .infinity)
                         .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 24)
@@ -69,7 +69,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     SaiityPageHeader(title: "Try a dictation", subtitle: "Speak here, then copy or share your words. You can add the keyboard later in Settings.")
                     Button("Try a dictation") { showAppTry = true }
-                        .buttonStyle(SaiityPrimaryActionStyle())
+                        .buttonStyle(.borderedProminent).controlSize(.large)
                     Button("Finish setup without dictating", action: finishOnboarding).buttonStyle(.bordered)
                 }
             } else {
@@ -173,7 +173,8 @@ struct AvailabilityPage: View {
             Text(polishEnabled ? "Cleanup runs after dictation. Turn it off to pass through the raw transcription." : "Cleanup is off, so dictation passes through as transcribed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button(usesKeyboard ? "Continue to keyboard verification" : "Try speaking here", action: onNext).buttonStyle(SaiityPrimaryActionStyle())
+            Button(usesKeyboard ? "Continue to keyboard verification" : "Try speaking here", action: onNext)
+                .buttonStyle(.borderedProminent).controlSize(.large)
                 .disabled(!canContinue).accessibilityHint(usesKeyboard
                     ? "Add the keyboard and install a voice model, then switch to it to verify Full Access."
                     : "Install a local voice model to try dictation here. Keyboard installation is optional.")
@@ -202,8 +203,7 @@ struct AvailabilityPage: View {
                 Spacer()
                 if !done { Image(systemName: "arrow.up.right").foregroundStyle(.tertiary) }
             }
-            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+            .padding(.vertical, 16).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityValue(done ? "Complete" : detail)
     }
