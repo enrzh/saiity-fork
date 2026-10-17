@@ -17,7 +17,13 @@ public struct DictationProblem: Equatable, Sendable {
     public init(_ detail: String, downloading: Bool = false) {
         // ponytail: classify the existing string-only channel; use typed codes if that channel changes.
         let text = detail.lowercased()
-        if text.contains("microphone permission not yet requested") {
+        if text.contains("outside your selected spoken languages") {
+            message = detail
+            action = .retry
+        } else if text.contains("does not cover your selected spoken languages") {
+            message = "Choose a voice model that covers every selected spoken language in Models & downloads."
+            action = .models
+        } else if text.contains("microphone permission not yet requested") {
             message = "Microphone access hasn’t been requested yet. Try dictation again to allow it."
             action = .retry
         } else if text.contains("microphone permission") || text.contains("microphone access") {

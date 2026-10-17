@@ -58,4 +58,16 @@ final class SyllivraKernelTests: XCTestCase {
         XCTAssertEqual(result.appGroupID, AppGroup.identifier)
         // containerExists may be false in test environment — that's OK
     }
+
+    func testAppGroupDiagnosticLeavesAnotherProcessesProbeValueAlone() {
+        let defaults = AppGroup.defaults
+        let previous = defaults.object(forKey: "diagnostic.test")
+        defer {
+            if let previous { defaults.set(previous, forKey: "diagnostic.test") }
+            else { defaults.removeObject(forKey: "diagnostic.test") }
+        }
+        defaults.set("another-process-probe", forKey: "diagnostic.test")
+        _ = AppGroupDiagnostic.run()
+        XCTAssertEqual(defaults.string(forKey: "diagnostic.test"), "another-process-probe")
+    }
 }

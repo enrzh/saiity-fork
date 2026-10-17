@@ -792,7 +792,8 @@ class DictationCoordinator: ObservableObject {
             clientIdentifier: "app-\(UUID().uuidString)"
         )
         let requestedModelIdentifier = DictationModelPreferences.requestedModel(for: request, in: defaults)
-        let modelIdentifier = resolveRuntimeModelIdentifier(requestedModelIdentifier)
+        let spokenLanguages = SpokenLanguagePreferences.load(from: defaults)
+        let modelIdentifier = resolveRuntimeModelIdentifier(requestedModelIdentifier, languages: spokenLanguages)
         let capability = ASRCapability.forModelIdentifier(
             modelIdentifier, mode: mode, keyboardLanguage: SupportedLanguage.active, outputMode: outputMode)
         currentLanguageRequest = request.withResolvedSourceLanguage(capability.sourceLanguage)
@@ -801,7 +802,8 @@ class DictationCoordinator: ObservableObject {
             mode: mode, keyboardLanguage: SupportedLanguage.active,
             engine: ModelInfo.forIdentifier(modelIdentifier)?.engine ?? .whisperKit,
             modelIdentifier: modelIdentifier,
-            outputMode: outputMode
+            outputMode: outputMode,
+            spokenLanguages: spokenLanguages
         )
         if #available(iOS 26.0, *) { refreshTranslationReadiness(for: currentLanguageRequest) }
     }
@@ -956,8 +958,10 @@ class DictationCoordinator: ObservableObject {
                     if let capturedRealtimeTask { try await capturedRealtimeTask.value }
                     guard mayReport(session, "realtime finalization") else { return }
                     transcriptionOutput = try await DictationVocabulary.$currentHints.withValue(cleanupSettings.vocabulary) {
-                        try await qwen.finishRealtime(samples: samples, session: UInt64(session),
-                                                      language: languagePolicy.sttLanguageCode)
+                        try await SpokenLanguagePreferences.$recognitionLanguages.withValue(languagePolicy.spokenLanguages) {
+                            try await qwen.finishRealtime(samples: samples, session: UInt64(session),
+                                                          language: languagePolicy.sttLanguageCode)
+                        }
                     }
                 } else {
                     transcriptionOutput = try await DictationVocabulary.$currentHints.withValue(cleanupSettings.vocabulary) {
@@ -976,6 +980,12 @@ class DictationCoordinator: ObservableObject {
                 let rawText = transcriptionOutput.text
                 guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     handleError("No speech detected")
+                    return
+                }
+                if let unexpected = SpokenLanguagePreferences.unexpectedLanguage(in: rawText, languages: languagePolicy.spokenLanguages) {
+                    lastOriginalResult = rawText
+                    issueRawText = rawText
+                    handleError(TranscriptionError.unexpectedLanguage(unexpected).localizedDescription)
                     return
                 }
                 // Translate before cleanup so the language-agnostic Auto cleanup
@@ -1004,7 +1014,7 @@ class DictationCoordinator: ObservableObject {
                 // label and a new animation for a single frame. `onEngineWillRun`
                 // fires only once an engine worth waiting for is about to run.
                 let polishStarted = DispatchTime.now().uptimeNanoseconds
-                let cleaned = translation.fallbackReason != nil ? translatedRawText : await CleanupPipeline.clean(
+                var cleaned = translation.fallbackReason != nil ? translatedRawText : await CleanupPipeline.clean(
                     raw: translatedRawText,
                     languagePolicy: languagePolicy,
                     recordingDuration: audioDuration,
@@ -1026,6 +1036,10 @@ class DictationCoordinator: ObservableObject {
                 )
                 try Task.checkCancellation()
                 guard mayReport(session, "cleanup complete") else { return }
+                if effectiveTarget == nil,
+                   SpokenLanguagePreferences.unexpectedLanguage(in: cleaned, languages: languagePolicy.spokenLanguages) != nil {
+                    cleaned = translatedRawText
+                }
                 issuePolishMs = DictationRuntimeMetrics.elapsedMilliseconds(since: polishStarted)
                 runtimeMetrics.mark("cleanup")
                 issueRawText = translatedRawText
@@ -2284,6 +2298,12 @@ private extension DictationCoordinator {
         }
 
         let modelInfo = ModelInfo.forIdentifier(modelName)
+        let spokenLanguages = DictationSessionLivenessPolicy.isActive(status)
+            ? currentLanguagePolicy.spokenLanguages : SpokenLanguagePreferences.load(from: defaults)
+        if !spokenLanguages.isEmpty, let modelInfo,
+           !SpokenLanguagePreferences.accepts(modelInfo, languages: spokenLanguages) {
+            throw TranscriptionError.unsupportedLanguages
+        }
         let engine = modelInfo?.engine ?? .whisperKit
 
         do {
@@ -2358,7 +2378,8 @@ private extension DictationCoordinator {
             keyboardLanguage: currentLanguagePolicy.keyboardLanguage,
             engine: .whisperKit,
             modelIdentifier: model,
-            outputMode: currentLanguagePolicy.outputMode
+            outputMode: currentLanguagePolicy.outputMode,
+            spokenLanguages: currentLanguagePolicy.spokenLanguages
         )
     }
 
@@ -2411,13 +2432,14 @@ private extension DictationCoordinator {
     /// Resolve a selected catalog row to a locally installed model that this
     /// device and OS can load. The selected row remains persisted; the fallback
     /// is a runtime decision and can be retried after the user installs the row.
-    func resolveRuntimeModelIdentifier(_ requestedIdentifier: String) -> String {
+    func resolveRuntimeModelIdentifier(_ requestedIdentifier: String, languages: [String]? = nil) -> String {
         let resolution = ModelInfo.runtimeResolution(
             for: requestedIdentifier,
             installedIdentifiers: Set(readDownloadedModels()),
             osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
             capabilities: DeviceCapabilities.current(),
-            fallbackLanguages: SpokenLanguagePreferences.load(from: defaults)
+            fallbackLanguages: languages ?? (DictationSessionLivenessPolicy.isActive(status)
+                ? currentLanguagePolicy.spokenLanguages : SpokenLanguagePreferences.load(from: defaults))
         )
         return resolution.resolvedIdentifier ?? requestedIdentifier
     }
@@ -2578,9 +2600,11 @@ private extension DictationCoordinator {
               let engine = transcriptionService.qwenEngine else { return }
         realtimeGeneration = generation
         let language = currentLanguagePolicy.sttLanguageCode
+        let spokenLanguages = currentLanguagePolicy.spokenLanguages
         let hints = DictationVocabulary.hints(in: defaults)
         realtimeTask = Task {
             do {
+              try await SpokenLanguagePreferences.$recognitionLanguages.withValue(spokenLanguages) {
               try await DictationVocabulary.$currentHints.withValue(hints) {
                 try await engine.beginRealtime(session: UInt64(generation))
                 var consumed = 0
@@ -2590,11 +2614,15 @@ private extension DictationCoordinator {
                         let text = try await engine.appendRealtime(capture.samples, session: UInt64(generation), language: language)
                         consumed += capture.samples.count
                         guard self.sessions.mayReport(from: generation) else { throw CancellationError() }
-                        if let text, text != self.realtimeTranscript { self.realtimeTranscript = text }
+                        if let text, text != self.realtimeTranscript,
+                           SpokenLanguagePreferences.unexpectedLanguage(in: text, languages: spokenLanguages) == nil {
+                            self.realtimeTranscript = text
+                        }
                         if consumed < capture.totalSampleCount { continue }
                     }
                     try await Task.sleep(for: .milliseconds(200))
                 }
+              }
               }
             } catch {
                 if !(error is CancellationError), self.sessions.mayReport(from: generation), self.status == .recording {

@@ -2,6 +2,32 @@ import XCTest
 @testable import SyllivraKernel
 
 final class ProductCompletionTests: XCTestCase {
+    func testGermanChineseEnglishChoicesRejectFrenchWithoutBlockingMixedSpeechAndNames() {
+        let languages = ["de", "zh-Hant", "EN_us"]
+        XCTAssertEqual(SpokenLanguagePreferences.bestLanguage(scores: ["fr": 10, "de": 2, "en": 1, "zh": 0], among: languages), "de")
+        XCTAssertNil(SpokenLanguagePreferences.bestLanguage(scores: ["fr": 10], among: languages))
+        XCTAssertNil(SpokenLanguagePreferences.bestLanguage(scores: ["de": .nan], among: languages))
+        XCTAssertEqual(SpokenLanguagePreferences.unexpectedLanguage(in: "Bonjour, je voudrais réserver une table pour demain soir.", languages: languages), "fr")
+        XCTAssertNil(SpokenLanguagePreferences.unexpectedLanguage(in: "Bitte schick mir die Rechnung morgen. Please send the invoice tomorrow. 我们明天需要确认这个付款计划。", languages: languages))
+        XCTAssertNil(SpokenLanguagePreferences.unexpectedLanguage(in: "Please send François the café address at https://bonjour.fr.", languages: languages))
+        XCTAssertNil(SpokenLanguagePreferences.unexpectedLanguage(in: "Bonjour", languages: languages))
+        XCTAssertNil(SpokenLanguagePreferences.unexpectedLanguage(in: "François Dupont", languages: languages))
+        XCTAssertNil(SpokenLanguagePreferences.unexpectedLanguage(in: "Bonjour, je voudrais réserver une table pour demain soir.", languages: []))
+        XCTAssertEqual(languages.map(SpokenLanguagePreferences.recognitionName), ["German", "Chinese", "English"])
+        XCTAssertEqual(DictationProblem("Recognition returned French outside your selected spoken languages. Try again.").message,
+                       "Recognition returned French outside your selected spoken languages. Try again.")
+        XCTAssertEqual(DictationProblem("This voice model does not cover your selected spoken languages.").action, .models)
+    }
+
+    func testRecognitionChoicesAreTaskLocalAndCannotLeakIntoTheNextDictation() async {
+        XCTAssertTrue(SpokenLanguagePreferences.recognitionLanguages.isEmpty)
+        await SpokenLanguagePreferences.$recognitionLanguages.withValue(["de", "en", "zh"]) {
+            let inherited = await Task { SpokenLanguagePreferences.recognitionLanguages }.value
+            XCTAssertEqual(inherited, ["de", "en", "zh"])
+        }
+        XCTAssertTrue(SpokenLanguagePreferences.recognitionLanguages.isEmpty)
+    }
+
     private let phone = DeviceCapabilities(physicalMemoryGB: 8, availableMemoryMB: 3000,
         deviceModelIdentifier: "iPhone18,4", thermalState: .nominal)
 
@@ -71,7 +97,11 @@ final class ProductCompletionTests: XCTestCase {
         XCTAssertEqual(fallback.fallbackReason, .notInstalled)
         let manual = ModelInfo.runtimeResolution(for: "parakeet-tdt-0.6b-v3", installedIdentifiers: ["parakeet-tdt-0.6b-v3"],
             osMajor: 27, capabilities: phone, fallbackLanguages: ["zh"])
-        XCTAssertEqual(manual.resolvedIdentifier, "parakeet-tdt-0.6b-v3")
+        XCTAssertNil(manual.resolvedIdentifier, "A manual model cannot ignore a selected language it does not support")
+        let compatible = ModelInfo.runtimeResolution(for: "parakeet-tdt-0.6b-v3",
+            installedIdentifiers: ["parakeet-tdt-0.6b-v3", "openai_whisper-small"],
+            osMajor: 27, capabilities: phone, fallbackLanguages: ["de", "zh", "en"])
+        XCTAssertEqual(compatible.resolvedIdentifier, "openai_whisper-small")
     }
 
     func testAppOnlySetupDoesNotRequireKeyboardAndLegacySetupKeepsItsGate() throws {

@@ -24,6 +24,7 @@ public enum ModelRuntimeFallbackReason: String, Equatable, Sendable {
     case unavailableOnOS
     case incompatibleDevice
     case notInstalled
+    case unsupportedLanguages
 }
 
 /// The result of resolving a requested catalog row to a locally runnable row.
@@ -117,6 +118,9 @@ extension ModelInfo {
                 requestedReason = .incompatibleDevice
             } else if !installedIdentifiers.contains(requestedIdentifier) {
                 requestedReason = .notInstalled
+            } else if let languages = fallbackLanguages, !languages.isEmpty,
+                      !SpokenLanguagePreferences.accepts(requestedModel, languages: languages) {
+                requestedReason = .unsupportedLanguages
             } else {
                 return ModelRuntimeResolution(
                     requestedIdentifier: requestedIdentifier,
@@ -151,7 +155,7 @@ extension ModelInfo {
         }.map(\.element)
         candidates = ranked
 
-        if requestedModel?.engine == .qwenASR {
+        if requestedModel?.engine == .qwenASR && requestedReason != .unsupportedLanguages {
             return ModelRuntimeResolution(requestedIdentifier: requestedIdentifier,
                 resolvedIdentifier: nil, fallbackReason: requestedReason)
         }

@@ -181,8 +181,10 @@ private actor QwenInference {
         for slice in buffer.append(samples, events: boundaries, flush: flush) {
             try control.check()
             let started = DispatchTime.now().uptimeNanoseconds
-            var options = Qwen3DecodingOptions(maxTokens: 448, language: language,
+            var options = Qwen3DecodingOptions(maxTokens: 448,
+                                               language: language.map(SpokenLanguagePreferences.recognitionName),
                                                context: DictationVocabulary.recognitionPrompt)
+            options.allowedLanguages = SpokenLanguagePreferences.recognitionLanguages.map(SpokenLanguagePreferences.recognitionName)
             options.shouldCancel = { control.isCancelled || Task.isCancelled }
             let text = try model.transcribeCancellable(audio: slice.samples, sampleRate: 16_000, options: options)
             try control.check()

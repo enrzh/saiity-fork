@@ -224,6 +224,15 @@ final class DictationSessionLivenessTests: XCTestCase {
         XCTAssertEqual(evaluate(.recording, heartbeat: 0), .unproven)
     }
 
+    func testNonfiniteSharedTimestampsCannotProveSessionLiveness() {
+        for invalid in [TimeInterval.nan, .infinity, -.infinity] {
+            XCTAssertEqual(DictationSessionLivenessPolicy.evaluate(status: .recording, heartbeat: invalid, now: now), .unproven)
+            XCTAssertEqual(DictationSessionLivenessPolicy.evaluate(status: .recording, heartbeat: now - 1, now: invalid), .unproven)
+            XCTAssertEqual(DictationSessionLivenessPolicy.evaluate(status: .recording, heartbeat: now - 1,
+                                                                  localSessionStartedAt: invalid, now: now), .unproven)
+        }
+    }
+
     // MARK: - Local and stored state disagreeing, exhaustively
 
     func testLocalAndStoredDisagreementMatrix() {

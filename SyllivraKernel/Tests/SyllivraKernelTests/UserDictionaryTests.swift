@@ -25,6 +25,35 @@ final class UserDictionaryTests: XCTestCase {
         XCTAssertEqual(UserDictionary.shared.count, words.count)
     }
 
+    func testMalformedPersistedCountDoesNotEraseOtherWords() {
+        let defaults = AppGroup.defaults
+        defaults.set(["personalword": 3, "anotherword": 1, "invalid": "not-an-integer"],
+                     forKey: UserDictionary.storageKey)
+        defaults.set(["personalword": 1, "invalid": "not-an-integer"], forKey: UserDictionary.pendingKey)
+        UserDictionary.shared.reload()
+
+        XCTAssertEqual(UserDictionary.shared.allLearnedWords["personalword"], 3)
+        XCTAssertEqual(UserDictionary.shared.allLearnedWords["anotherword"], 1)
+        XCTAssertFalse(UserDictionary.shared.isLearned("invalid"))
+        XCTAssertTrue(UserDictionary.shared.learn("newword"))
+        UserDictionary.shared.reload()
+        XCTAssertTrue(UserDictionary.shared.isLearned("personalword"))
+        XCTAssertTrue(UserDictionary.shared.isLearned("anotherword"))
+    }
+
+    func testImportedCountersSaturateInsteadOfOverflowing() {
+        let defaults = AppGroup.defaults
+        defaults.set(["personalword": Int.max], forKey: UserDictionary.storageKey)
+        defaults.set(["pendingword": Int.max], forKey: UserDictionary.pendingKey)
+        UserDictionary.shared.reload()
+
+        XCTAssertFalse(UserDictionary.shared.recordUsage("personalword"))
+        XCTAssertFalse(UserDictionary.shared.learn("personalword"))
+        XCTAssertEqual(UserDictionary.shared.allLearnedWords["personalword"], Int.max)
+        XCTAssertTrue(UserDictionary.shared.recordUsage("pendingword"))
+        XCTAssertEqual(UserDictionary.shared.allLearnedWords["pendingword"], Int.max)
+    }
+
     /// WHY reset in setUp as well as tearDown: the singleton reads App Group
     /// UserDefaults, which outlive the test process. A run that crashes or is
     /// interrupted before tearDown leaves entries behind, and the next run's

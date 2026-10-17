@@ -26,6 +26,8 @@ struct GlobeKeyTutorialPage: View {
     private var fullAccessVerified: Bool { setup.fullAccessVerified }
     @State private var dictationFailed = false
     @State private var fullAccessRequired = false
+    @State private var transcriptionObserver: UInt?
+    @State private var statusObserver: UInt?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -33,10 +35,10 @@ struct GlobeKeyTutorialPage: View {
                              subtitle: "Try the real keyboard below. We’ll confirm when your dictation arrives.")
             Text(dictusKeyboardActive ? "Tap the microphone in the Syllivra keyboard. Your words should appear below." : "Tap and hold the globe key, then choose Syllivra.")
                 .font(.body).foregroundStyle(.secondary)
-            KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
-                .frame(minHeight: 150, maxHeight: 260)
-                .padding(20)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+            GroupBox {
+                KeyboardDetectingTextField(text: $textFieldContent, placeholder: "Your dictated text will appear here", autoFocus: true, onKeyboardChange: handleKeyboardChange)
+                    .frame(minHeight: 150, maxHeight: 260)
+            }
                 .accessibilityLabel("Dictation result")
             if firstDictationVerified {
                 OnboardingSuccessView(onComplete: finishOnboarding)
@@ -71,8 +73,14 @@ struct GlobeKeyTutorialPage: View {
             if phase == .active { refreshFullAccess() }
         }
         .onDisappear {
-            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady)
-            DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged)
+            if let token = transcriptionObserver {
+                DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.transcriptionReady, token: token)
+                transcriptionObserver = nil
+            }
+            if let token = statusObserver {
+                DarwinNotificationCenter.removeObserver(for: DarwinNotificationName.statusChanged, token: token)
+                statusObserver = nil
+            }
         }
         .onChange(of: textFieldContent) { _, newValue in
             guard awaitingInsertion,
@@ -114,7 +122,8 @@ struct GlobeKeyTutorialPage: View {
     }
 
     private func observeTranscriptionReady() {
-        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.transcriptionReady) {
+        guard transcriptionObserver == nil, statusObserver == nil else { return }
+        transcriptionObserver = DarwinNotificationCenter.addObserver(for: DarwinNotificationName.transcriptionReady) {
             DispatchQueue.main.async {
                 guard dictusKeyboardActive else { return }
                 refreshFullAccess()
@@ -130,7 +139,7 @@ struct GlobeKeyTutorialPage: View {
                 UIAccessibility.post(notification: .announcement, argument: accessibilityAnnouncement)
             }
         }
-        DarwinNotificationCenter.addObserver(for: DarwinNotificationName.statusChanged) {
+        statusObserver = DarwinNotificationCenter.addObserver(for: DarwinNotificationName.statusChanged) {
             DispatchQueue.main.async {
                 guard AppGroup.defaults.string(forKey: SharedKeys.dictationStatus) == DictationStatus.failed.rawValue else { return }
                 dictationFailed = true

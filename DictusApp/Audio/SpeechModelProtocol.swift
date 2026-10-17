@@ -1,6 +1,7 @@
 // DictusApp/Audio/SpeechModelProtocol.swift
 // Protocol abstraction for multi-engine speech-to-text.
 import Foundation
+import CoreML
 import WhisperKit
 import SyllivraKernel
 
@@ -350,10 +351,8 @@ enum WhisperKitTranscriptionSupport {
             ? audioSamples
             : SpeechAudioGain.applying(gain, to: audioSamples[...])
         let decodeStartedAt = Date()
-        let results: [TranscriptionResult] = try await whisperKit.transcribe(
-            audioArray: preparedSamples,
-            decodeOptions: options
-        )
+        let decoded = try await decode(whisperKit: whisperKit, audioSamples: preparedSamples, options: options)
+        let results = decoded.results
         let decodeDuration = Date().timeIntervalSince(decodeStartedAt)
 
         if language == nil {
@@ -423,12 +422,58 @@ enum WhisperKitTranscriptionSupport {
         let averageLogProbability = logProbabilities.isEmpty
             ? nil
             : logProbabilities.reduce(0, +) / Double(logProbabilities.count)
-        return DecodedRegion(
+        let decoded = DecodedRegion(
             results: results,
             text: text,
             detectedLanguage: results.first?.language,
             averageLogProbability: averageLogProbability
         )
+        let languages = SpokenLanguagePreferences.recognitionLanguages
+        let detected = SpokenLanguagePreferences.normalized([decoded.detectedLanguage ?? ""]).first ?? ""
+        if options.language == nil, !languages.isEmpty,
+           !languages.contains(detected) || SpokenLanguagePreferences.unexpectedLanguage(in: text, languages: languages) != nil {
+            // shortcut: an extra encoder pass only repairs out-of-selection detection; profile before caching it.
+            let selected = try await selectedLanguage(whisperKit: whisperKit, samples: audioSamples, languages: languages)
+            var restricted = options
+            restricted.language = selected
+            restricted.detectLanguage = false
+            restricted.usePrefillCache = false
+            return try await decode(whisperKit: whisperKit, audioSamples: audioSamples, options: restricted)
+        }
+        return decoded
+    }
+
+    private static func selectedLanguage(whisperKit: WhisperKit, samples: [Float], languages: [String]) async throws -> String {
+        try Task.checkCancellation()
+        guard let tokenizer = whisperKit.tokenizer,
+              let padded = whisperKit.audioProcessor.padOrTrim(fromArray: samples, startAt: 0,
+                  toLength: whisperKit.featureExtractor.windowSamples ?? 480_000),
+              let mel = try await whisperKit.featureExtractor.logMelSpectrogram(fromAudio: padded),
+              let encoded = try await whisperKit.audioEncoder.encodeFeatures(mel) as? MLMultiArray,
+              let inputs = try whisperKit.textDecoder.prepareDecoderInputs(
+                  withPrompt: [tokenizer.specialTokens.startOfTranscriptToken]) as? DecodingInputs else {
+            throw TranscriptionError.unsupportedLanguages
+        }
+        inputs.inputIds[0] = NSNumber(value: tokenizer.specialTokens.startOfTranscriptToken)
+        let output = try await whisperKit.textDecoder.predictLogits(TextDecoderMLMultiArrayInputType(
+            inputIds: inputs.inputIds, cacheLength: inputs.cacheLength, keyCache: inputs.keyCache,
+            valueCache: inputs.valueCache, kvCacheUpdateMask: inputs.kvCacheUpdateMask,
+            encoderOutputEmbeds: encoded, decoderKeyPaddingMask: inputs.decoderKeyPaddingMask))
+        try Task.checkCancellation()
+        guard let logits = (output as? TextDecoderMLMultiArrayOutputType)?.logits else {
+            throw TranscriptionError.unsupportedLanguages
+        }
+        var scores: [String: Double] = [:]
+        for code in languages {
+            let whisperCode = code == "jv" ? "jw" : code
+            if let token = tokenizer.convertTokenToId("<|\(whisperCode)|>"), tokenizer.allLanguageTokens.contains(token) {
+                scores[code] = logits[[0, 0, NSNumber(value: token)]].doubleValue
+            }
+        }
+        guard let selected = SpokenLanguagePreferences.bestLanguage(scores: scores, among: languages) else {
+            throw TranscriptionError.unsupportedLanguages
+        }
+        return selected == "jv" ? "jw" : selected
     }
 
     private static func isBetter(_ candidate: DecodedRegion, than baseline: DecodedRegion) -> Bool {

@@ -219,12 +219,14 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// Whether Auto transcription preserves spoken language switches or uses
     /// one forced source language.
     public let outputMode: TranscriptionOutputMode
+    public let spokenLanguages: [String]
 
     public init(mode: TranscriptionLanguageMode,
                 keyboardLanguage: SupportedLanguage,
                 engine: SpeechEngine,
                 modelIdentifier: String,
-                outputMode: TranscriptionOutputMode? = nil) {
+                outputMode: TranscriptionOutputMode? = nil,
+                spokenLanguages: [String] = []) {
         self.mode = mode
         self.keyboardLanguage = keyboardLanguage
         self.engine = engine
@@ -232,6 +234,7 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
         // Preserve legacy explicit/follow callers while new Auto snapshots use
         // the multilingual product default.
         self.outputMode = outputMode ?? (mode == .autoDetect ? .multilingual : .singleLanguage)
+        self.spokenLanguages = SpokenLanguagePreferences.normalized(spokenLanguages)
     }
 
     /// Capture the current App Group state. Call once per dictation, at
@@ -246,7 +249,8 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
             keyboardLanguage: SupportedLanguage.active,
             engine: ModelInfo.forIdentifier(modelIdentifier)?.engine ?? .whisperKit,
             modelIdentifier: modelIdentifier,
-            outputMode: TranscriptionOutputMode.active(from: defaults)
+            outputMode: TranscriptionOutputMode.active(from: defaults),
+            spokenLanguages: SpokenLanguagePreferences.load(from: defaults)
         )
     }
 
@@ -269,7 +273,9 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
             // and expose the limitation through `sttLanguageIsEffective`.
             return keyboardLanguage.rawValue
         }
-        guard outputMode == .singleLanguage else { return nil }
+        guard outputMode == .singleLanguage else {
+            return spokenLanguages.count == 1 ? spokenLanguages.first : nil
+        }
         // Auto + single-language mode means "one language, chosen by the
         // current keyboard". The mode itself intentionally resolves to nil
         // because nil is the correct value for multilingual Auto.

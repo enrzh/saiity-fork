@@ -23,6 +23,8 @@ public struct Qwen3DecodingOptions: Sendable {
 
     /// Optional language hint ("en", "zh", …). `nil` = auto-detect.
     public var language: String?
+    /// Candidate language names for automatic detection; empty keeps broad Auto.
+    public var allowedLanguages: [String] = []
 
     /// Context hint prepended to the decoder prompt.
     public var context: String?
@@ -67,6 +69,11 @@ public struct Qwen3ASRTokens: Sendable {
     public static let imStartTokenId = 151644      // <|im_start|>
     public static let imEndTokenId = 151645        // <|im_end|>
     public static let timestampTokenId = 151705    // <|timestamp|>
+
+    public static func nextLanguageTokens(prefixes: [[Int32]], after tokens: [Int32]) -> [Int32] {
+        Array(Set(prefixes.filter { $0.count > tokens.count && $0.starts(with: tokens) }
+            .map { $0[tokens.count] })).sorted()
+    }
 }
 
 /// Main Qwen3-ASR model for speech recognition.
@@ -245,12 +252,18 @@ public class Qwen3ASRModel {
         // Add language hint if specified, then always add <|asr_text|> marker.
         // Without <|asr_text|>, the model doesn't know it should transcribe.
         // Without language hint, the model auto-detects and prepends "language XX" to output.
-        if let lang = language, let tokenizer = tokenizer {
+        var languagePrefixes: [[Int32]] = []
+        if language == nil && !decodingOptions.allowedLanguages.isEmpty {
+            guard let tokenizer else { return "" }
+            languagePrefixes = decodingOptions.allowedLanguages.map {
+                tokenizer.encode("language \($0)").map { Int32($0) } + [Int32(asrTextId)]
+            }
+        } else if let lang = language, let tokenizer = tokenizer {
             let langPrefix = "language \(lang)"
             let langTokens = tokenizer.encode(langPrefix)
             inputIds.append(contentsOf: langTokens.map { Int32($0) })
         }
-        inputIds.append(Int32(asrTextId))
+        if languagePrefixes.isEmpty { inputIds.append(Int32(asrTextId)) }
 
         // Get text embeddings for all tokens
         let inputIdsTensor = MLXArray(inputIds).expandedDimensions(axis: 0)
@@ -273,7 +286,23 @@ public class Qwen3ASRModel {
         // Get logits from the last position using embedding as LM head (tied weights)
         let seqLen = hiddenStates.dim(1)
         let lastHidden = hiddenStates[0..., (seqLen-1)..<seqLen, 0...]
-        let logits = textDecoder.embedTokens.asLinear(lastHidden)
+        var logits = textDecoder.embedTokens.asLinear(lastHidden)
+        if !languagePrefixes.isEmpty {
+            var header: [Int32] = []
+            while true {
+                guard !decodingOptions.shouldCancel() else { return "" }
+                let allowed = Qwen3ASRTokens.nextLanguageTokens(prefixes: languagePrefixes, after: header)
+                if allowed.isEmpty { break }
+                let candidates = take(logits.squeezed(), MLXArray(allowed), axis: 0)
+                let token = allowed[argMax(candidates).item(Int.self)]
+                header.append(token)
+                let (nextHidden, nextCache) = textDecoder(
+                    inputIds: MLXArray([token]).expandedDimensions(axis: 0), cache: cache)
+                cache = nextCache
+                let last = nextHidden.dim(1) - 1
+                logits = textDecoder.embedTokens.asLinear(nextHidden[0..., last..<(last + 1), 0...])
+            }
+        }
 
         // Greedy fast path uses a double-buffered asyncEval decode loop that
         // overlaps the GPU forward pass for token N+1 with the host-side

@@ -172,6 +172,35 @@ final class TranscriptionLanguageModeTests: XCTestCase {
 /// keyboard as a last resort (#332) — and Auto mode uses the auto prompt for
 /// BOTH engines (#239 scope amendment).
 final class TranscriptionLanguagePolicyTests: XCTestCase {
+    func testOneSelectedSpokenLanguageReachesWhisperAndQwenSnapshots() {
+        let defaults = AppGroup.defaults
+        let keys = [SharedKeys.spokenLanguages, SharedKeys.activeModel, SharedKeys.language,
+                    SharedKeys.transcriptionLanguage, SharedKeys.transcriptionOutputMode]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, saved) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+        defaults.set(["de-DE"], forKey: SharedKeys.spokenLanguages)
+        defaults.set("fr", forKey: SharedKeys.language)
+        defaults.set("multilingual", forKey: SharedKeys.transcriptionOutputMode)
+        for model in ["openai_whisper-small", QwenASRModel.small.rawValue] {
+            defaults.set(model, forKey: SharedKeys.activeModel)
+            XCTAssertEqual(TranscriptionLanguagePolicy.snapshot().sttLanguageCode, "de")
+        }
+    }
+
+    func testMultipleSpokenLanguagesStayCapturedWithoutForcingOneLanguage() {
+        let choices = ["zh-Hant", "de-DE", "EN_us"]
+        for engine in [SpeechEngine.whisperKit, .qwenASR, .parakeet] {
+            let captured = TranscriptionLanguagePolicy(mode: .autoDetect, keyboardLanguage: .french,
+                engine: engine, modelIdentifier: "test", spokenLanguages: choices)
+            XCTAssertEqual(captured.spokenLanguages, ["de", "en", "zh"])
+            if engine != .parakeet { XCTAssertNil(captured.sttLanguageCode) }
+        }
+    }
+
 
     private func policy(_ mode: TranscriptionLanguageMode,
                         keyboard: SupportedLanguage,

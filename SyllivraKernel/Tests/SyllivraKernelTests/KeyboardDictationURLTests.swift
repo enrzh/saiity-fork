@@ -68,4 +68,18 @@ final class KeyboardDictationURLTests: XCTestCase {
         let url = URL(string: "SAIITY://Dictate?source=keyboard")!
         XCTAssertEqual(KeyboardDictationURL.intent(from: url), .record)
     }
+
+    func testConflictingSourcesCannotMasqueradeAsAKeyboardRequest() throws {
+        for query in ["source=keyboard&source=widget", "source=widget&source=keyboard", "source=keyboard&source"] {
+            let url = try XCTUnwrap(URL(string: "saiity://dictate?" + query))
+            XCTAssertNil(KeyboardDictationURL.intent(from: url))
+        }
+    }
+
+    func testKeyboardRequestsCannotCarryCredentialsOrAPort() throws {
+        for authority in ["user@dictate", "user:password@dictate", "dictate:1234"] {
+            let url = try XCTUnwrap(URL(string: "saiity://" + authority + "?source=keyboard"))
+            XCTAssertNil(KeyboardDictationURL.intent(from: url))
+        }
+    }
 }

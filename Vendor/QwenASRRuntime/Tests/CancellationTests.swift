@@ -3,6 +3,18 @@ import MLX
 @testable import Qwen3ASR
 
 final class CancellationTests: XCTestCase {
+    func testLanguagePrefixCanSelectOnlyChosenLanguagesAndStopsAtText() {
+        let prefixes: [[Int32]] = [[1, 2, 10, 99], [1, 2, 20, 99], [1, 2, 30, 31, 99]]
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: []), [1])
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 2]), [10, 20, 30])
+        XCTAssertFalse(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 2]).contains(40))
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 2, 30]), [31])
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 2, 30, 31]), [99])
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 2, 10, 99]), [])
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: prefixes, after: [1, 40]), [])
+        XCTAssertEqual(Qwen3ASRTokens.nextLanguageTokens(prefixes: [], after: []), [])
+    }
+
     private final class StopAfter: @unchecked Sendable {
         private let lock = NSLock()
         private var checks = 0
