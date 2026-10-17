@@ -151,6 +151,8 @@ claim follows from those results.
 
 ## Remaining gates and limits
 
+The October 13 selected-language follow-up below supersedes the earlier recommendation-only behavior of Spoken languages. Earlier evidence remains historical; the follow-up is local and uncommitted.
+
 These guards are conservative text heuristics, not semantic equivalence or
 measured multilingual accuracy. NaturalLanguage can return confidently wrong
 shared-script readings. Names, locale-specific number/currency/date formats,
@@ -175,3 +177,38 @@ The completion heartbeat was updated to this checkpoint, including the new QA
 document, current local evidence and remaining gates. It remains active because
 the accepted physical/model/release-verification gates are still open, and must
 stay quiet on unchanged state rather than repeat passed checks.
+
+## October 13: selected spoken languages across recognizers
+
+The user reported French in dictation with German, Chinese and English selected, then requested a fix across every model. Source inspection confirmed that Spoken languages only constrained recommendations; the per-dictation policy, batch recognition and Qwen streaming paths did not capture those choices. This pass changes the shared language path rather than requiring the user to identify one model.
+
+`TranscriptionLanguagePolicy` now captures normalized spoken-language choices when a dictation is accepted. The snapshot survives engine fallback and scopes recognition through the existing task-local pattern. A single selected language reaches Whisper and Qwen as the source hint. Multiple selections preserve multilingual recognition; an empty selection keeps broad Auto.
+
+Whisper keeps its ordinary decode when detection stays within the choices. An out-of-selection detection or confident outside-language clause gets one repair: an acoustic language-token prediction is ranked only among the selected candidates, followed by a fresh transcription prompt for that source. Regions remain independent. The repair adds an encoder pass only on this exceptional path; latency has not been measured on real recordings.
+
+Qwen's existing decoder now selects its language prefix from the allowed language names before the text marker, using the same audio embeddings and cache. Prefix choices cannot generate an unselected header token path. The transcript still uses its existing greedy fast path and cooperative cancellation. Explicit source codes are converted to the model's English language names. Both batch and pause-based streaming use the captured selection.
+
+Every model also shares the final recognition check before cleanup, translation and delivery. A confident unselected-language clause stops automatic delivery and retains the unverified recognition for manual review in the app. Short Latin fragments, names such as “François Dupont”, identifiers and uncertain evidence remain conservative; this is a text heuristic, not a claim that every foreign word can be identified. If cleanup introduces a confidently detected unselected language, the pipeline keeps the original recognized text. Explicit translation targets remain independent of spoken input languages.
+
+Manual model selection can no longer bypass selected-language coverage at runtime. The existing resolver uses a compatible installed Whisper fallback where available, including for Qwen coverage mismatch. Without one, the existing recovery flow asks for a compatible model. No download starts from recognition or automated verification. Model selection preferences are preserved. Parakeet's source-language parameter remains ineffective; unsupported choices and confident unselected output are handled through these shared checks rather than inventing a language-forcing capability.
+
+Evidence directory: `/tmp/saiity-selected-languages.CCNNf6`.
+
+- `language-red.log`: two regressions failed with four assertions against the old behavior: a manual Parakeet model could ignore selected Chinese, and a single German selection never reached the Whisper/Qwen snapshot.
+- `kernel-final.log`: 1,970 kernel tests and 41 inference tests passed, with one existing ASR-capture skip and zero failures. This includes selected-language isolation, continuous selected-language text, names, French clause rejection, compatible fallback, shared delivery-path ownership, cancellation and original recovery safeguards.
+- `qwen-final.log`: all five native decoder tests passed, covering allowed prefix progression through multi-token names, termination at the text marker, exclusion of an unselected path, and existing cancellation checks. These use synthetic token/model data and do not evaluate Qwen speech accuracy.
+- `simulator-build.log` and `device-build.log`: Debug simulator and signed Release iOS app/keyboard/widget builds succeeded with the existing pinned app dependencies. `simulator-signatures.log` and `device-verify.log` independently verify strict signatures. Device metadata remains 1.0.0 (243), Apple Development, team `H8FW6W6K2D`, and `group.de.aiity.saiity.ios.beta` on all three bundles.
+- `app-fixture.log`: production app view bodies compiled and linked with inert dependencies, including the unverified-recognition disclosure. Rendering was not run.
+- `git diff --check` and main-agent caller/source review passed. Prior app/Models/keyboard changes and Git recovery metadata are preserved. No commit, push, upload, release change, room audio, private-transcript access, model download or permission change occurred.
+
+At this selected-language checkpoint, the signed development app was ready at `/tmp/saiity-kernel.2JRaLK/device/Build/Products/Release-iphoneos/DictusApp.app`. `phone-final.log` reported the paired iPhone Air unavailable, so the follow-up was not installed then. Earlier build-243 installations contained the preceding UI and keyboard work only. Existing same-bundle installation authorization remained available when the phone reconnected.
+
+Real Whisper/Parakeet/Qwen speech accuracy, same-utterance language switches, full selected-language metadata, false-positive rates of the text guard, cleanup meaning preservation and latency still require licensed or expressly consented recordings and native-language review. Physical microphone/background delivery, Qwen memory/foreground loss, PiP/Live Activity and VoiceOver acceptance remain separate gates. Three other project simulators remain booted; the dedicated sAiity simulator was not booted or substituted, and no other project's simulator was operated.
+
+### October 13 installation with the in-app rework
+
+The phone reconnected during the subsequent in-app UI pass. The combined selected-language and UI source was rebuilt in Debug simulator and signed Release iOS configurations, verified for app/keyboard/widget signatures and version/team/App Group parity, and installed on the iPhone Air under the existing same-bundle authorization. Build number remains 1.0.0 (243); source remains local and uncommitted at baseline `4c2f6c8a`.
+
+Evidence is in `/tmp/saiity-ui-rework.mH0fKP`. `install-result.json`, `installed-after.json` and `installation-identity-check.log` confirm the new installed bundle matches the installer receipt and the App Group container is unchanged. The application data-container path changed; private contents and migration were not inspected. The installed app was not launched for QA. See `docs/qa/2026-10-13-ui-refinement.md` for the UI scope and 230 passing focused checks. The unaffected full recognition/inference and Qwen decoder suites were not repeated; installation does not verify real speech accuracy or close the remaining physical/model gates above.
+
+On October 14, the subsequent recorder/library redesign and explicit in-keyboard More action list were built and installed with the same selected-language source. Retained Release/build evidence is under `/private/tmp/codex-task.5naz10dj/artifacts` and independent installation evidence under `/private/tmp/codex-task.c4szcjd4/artifacts`. The new installed bundle matches its installer receipt and the App Group container is unchanged. This pass did not change recognition or processing owners or rerun the unaffected full speech suites. See the October 14 checkpoint in `docs/qa/2026-10-13-ui-refinement.md`; real speech and physical runtime gates remain unverified.
