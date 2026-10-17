@@ -35,8 +35,8 @@ struct AutocorrectState {
 /// user override. This stays in memory only; the final word is persisted through
 /// UserDictionary after a stable boundary is observed.
 private struct PendingAutocorrection {
-    let originalWord: String
     let correctedWord: String
+    let documentIdentifier: UUID?
     let prefixContext: String
     let expectedContext: String
     let afterContext: String
@@ -124,7 +124,6 @@ class SuggestionState: ObservableObject {
     /// Correction prepared on the suggestion queue for the word currently
     /// being typed. Space reads it instead of waiting on a dictionary load.
     private var spaceCommit: SpaceCommit?
-    private var suppressNextAutocorrectionBoundary = false
     private var adaptiveTouchWork: DispatchWorkItem?
     private var adaptiveTouchRequestGate = SuggestionRequestGate()
     private var lastAutocorrectEnabled = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled) as? Bool ?? true
@@ -149,7 +148,8 @@ class SuggestionState: ObservableObject {
     func handleSpace(proxy: UITextDocumentProxy) {
         hostPolicy = HostInputTraits.policy(for: proxy)
         let context = proxy.documentContextBeforeInput ?? ""
-        reconcilePendingAutocorrection(context: context, boundary: true)
+        reconcilePendingAutocorrection(context: context, boundary: true,
+                                      documentIdentifier: HostInputTraits.documentIdentifier(for: proxy))
 
         if context.isEmpty {
             proxy.insertText(" ")
@@ -190,6 +190,7 @@ class SuggestionState: ObservableObject {
            !word.isEmpty,
            !word.unicodeScalars.contains(where: { CharacterSet.decimalDigits.contains($0) }),
            !engine.shouldSkipTokenPrediction(for: word),
+           !UserDictionary.shared.isLearned(word),
            !rejectedWords.contains(word.lowercased()) {
             let correction: String?
             if let prepared, snapshotMatches {
@@ -204,8 +205,8 @@ class SuggestionState: ObservableObject {
                 corrected = true
                 let prefix = prefixBeforeWord(in: context, word: word)
                 let pending = PendingAutocorrection(
-                    originalWord: word,
                     correctedWord: correction,
+                    documentIdentifier: HostInputTraits.documentIdentifier(for: proxy),
                     prefixContext: prefix,
                     expectedContext: prefix + correction + " ",
                     afterContext: proxy.documentContextAfterInput ?? ""
@@ -213,7 +214,6 @@ class SuggestionState: ObservableObject {
                 for _ in 0..<deleteCount { proxy.deleteBackward() }
                 proxy.insertText(correction)
                 pendingAutocorrection = pending
-                suppressNextAutocorrectionBoundary = true
             }
         } else {
             pendingUndo = nil
@@ -622,7 +622,6 @@ class SuggestionState: ObservableObject {
         guard !enabled else { return }
         pendingUndo = nil
         pendingAutocorrection = nil
-        suppressNextAutocorrectionBoundary = false
         if mode == .corrections || mode == .undoAvailable {
             suggestions = []
             mode = .idle
@@ -644,11 +643,21 @@ class SuggestionState: ObservableObject {
     /// learnable while still failing closed for a genuine caret move.
     func noteSelectionChanged(proxy: UITextDocumentProxy) {
         guard let pending = pendingAutocorrection else { return }
+        guard let identifier = pending.documentIdentifier,
+              identifier == HostInputTraits.documentIdentifier(for: proxy) else {
+            pendingAutocorrection = nil
+            return
+        }
         guard let after = proxy.documentContextAfterInput else {
             pendingAutocorrection = nil
             return
         }
-        guard after == pending.afterContext else {
+        let before = proxy.documentContextBeforeInput ?? ""
+        let editsCurrentWord = after == " " + pending.afterContext
+            && (before == pending.prefixContext || lastWordRange(in: before).map {
+                String(before[..<$0.lowerBound]) == pending.prefixContext
+            } == true)
+        guard after == pending.afterContext || editsCurrentWord else {
             pendingAutocorrection = nil
             return
         }
@@ -658,13 +667,15 @@ class SuggestionState: ObservableObject {
     /// intentionally separate from `handleSpace`, which evaluates the pending
     /// word before it inserts the new boundary itself.
     func reconcilePendingAutocorrection(proxy: UITextDocumentProxy) {
+        hostPolicy = HostInputTraits.policy(for: proxy)
         let context = proxy.documentContextBeforeInput ?? ""
         let boundary = context.last.map {
             $0.isWhitespace || $0.isNewline || $0.unicodeScalars.allSatisfy {
                 CharacterSet.punctuationCharacters.contains($0)
             }
         } ?? false
-        reconcilePendingAutocorrection(context: context, boundary: boundary)
+        reconcilePendingAutocorrection(context: context, boundary: boundary,
+                                      documentIdentifier: HostInputTraits.documentIdentifier(for: proxy))
     }
 
     /// Learns only a final word that replaced the applied correction at the same
@@ -672,23 +683,20 @@ class SuggestionState: ObservableObject {
     /// without a boundary remain pending until the next one.
     private func reconcilePendingAutocorrection(
         context: String,
-        boundary: Bool
+        boundary: Bool,
+        documentIdentifier: UUID?
     ) {
         guard let pending = pendingAutocorrection else { return }
-
-        if context == pending.expectedContext {
-            if boundary, suppressNextAutocorrectionBoundary {
-                suppressNextAutocorrectionBoundary = false
-                return
-            }
-            if boundary { pendingAutocorrection = nil }
+        guard hostPolicy.suggestionsAllowed, let identifier = pending.documentIdentifier,
+              identifier == documentIdentifier else {
+            pendingAutocorrection = nil
             return
         }
-
-        suppressNextAutocorrectionBoundary = false
+        // Repeated host callbacks and an emptied correction are still the same edit.
+        if context == pending.expectedContext || context == pending.prefixContext { return }
 
         guard let wordRange = lastWordRange(in: context),
-              context[..<wordRange.lowerBound].hasSuffix(pending.prefixContext) else {
+              String(context[..<wordRange.lowerBound]) == pending.prefixContext else {
             pendingAutocorrection = nil
             return
         }
@@ -699,7 +707,7 @@ class SuggestionState: ObservableObject {
             pendingAutocorrection = nil
             return
         }
-        if isSafeUserOverride(word), word.caseInsensitiveCompare(pending.originalWord) != .orderedSame {
+        if isSafeUserOverride(word) {
             _ = UserDictionary.shared.learn(word)
         }
         pendingAutocorrection = nil
