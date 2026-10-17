@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Each shipped dependency gets its own native card and original license text.
+/// Shipped libraries and inherited source retain their original license text.
 struct LicensesView: View {
     private struct Notice: Decodable, Identifiable {
         let name: String
         let source: String
         let text: String
+        let note: String?
         var id: String { name }
     }
     private static let notices: [Notice] = {
@@ -25,7 +26,9 @@ struct LicensesView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .labelStyle(.titleAndIcon)
         .navigationTitle("Licenses")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private struct NoticeCard: View {
@@ -35,6 +38,9 @@ struct LicensesView: View {
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
                 Label(notice.name, systemImage: "doc.text").font(.headline)
+                if let note = notice.note {
+                    Text(note).font(.subheadline).foregroundStyle(.secondary)
+                }
                 if let url = URL(string: notice.source) {
                     Link("Project website", destination: url).font(.subheadline)
                 }
