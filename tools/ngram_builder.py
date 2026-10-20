@@ -29,10 +29,13 @@ import urllib.error
 from collections import defaultdict
 from typing import Optional
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ngram_pack  # noqa: E402
+
 
 # --- Constants ---
 NGRM_MAGIC = b"NGRM"
-NGRM_VERSION = 1
+NGRM_VERSION = 1  # Intermediate layout; ngram_pack.py writes the shipped v2
 NGRM_HEADER_SIZE = 32
 NGRM_MAX_RESULTS = 16  # Must match C++ dictus_ngram_format.h exactly
 
@@ -813,15 +816,12 @@ def serialize_ngrm(
     header.extend(struct.pack("<I", len(string_table)))
     assert len(header) == NGRM_HEADER_SIZE, f"Header is {len(header)} bytes, expected {NGRM_HEADER_SIZE}"
 
-    # Write file
+    # The keyboard reads the compact v2 layout; v1 above is its lossless source.
+    packed = ngram_pack.convert(bytes(header) + bigram_bytes + trigram_bytes + string_table)
     with open(output_path, "wb") as f:
-        f.write(header)
-        f.write(bigram_bytes)
-        f.write(trigram_bytes)
-        f.write(string_table)
+        f.write(packed)
 
-    file_size = NGRM_HEADER_SIZE + len(bigram_bytes) + len(trigram_bytes) + len(string_table)
-    return bigram_count, trigram_count, file_size
+    return bigram_count, trigram_count, len(packed)
 
 
 # --- Main pipeline ---

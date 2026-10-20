@@ -57,18 +57,22 @@ private:
     size_t dataSize_;
     bool loaded_;
 
-    /// Index entry for fast binary search on entries.
-    struct IndexEntry {
-        uint32_t keyHash;
-        const uint8_t* ptr;
-    };
+    /// Tables inside the mapped file (see dictus_ngram_format.h).
+    uint32_t bigramCount_ = 0;
+    uint32_t trigramCount_ = 0;
+    const uint8_t* keys_ = nullptr;
+    const uint8_t* starts_ = nullptr;
+    const uint8_t* results_ = nullptr;
+    uint32_t resultCount_ = 0;
+    const uint8_t* words_ = nullptr;
+    uint32_t wordCount_ = 0;
+    const uint8_t* scores_ = nullptr;
+    uint32_t scoreCount_ = 0;
+    uint16_t scoreBits_ = 0;
+    const char* strings_ = nullptr;
+    uint32_t stringsSize_ = 0;
 
-    /// Pre-built indices for bigram and trigram sections.
-    std::vector<IndexEntry> bigramIndex_;
-    std::vector<IndexEntry> trigramIndex_;
-
-    /// Build index vectors by walking the bigram/trigram sections after mmap.
-    void buildIndex(const uint8_t* section, uint32_t count, std::vector<IndexEntry>& index);
+    static constexpr int64_t kNoEntry = -1;
 
     /// FNV-1a 32-bit hash (must match Python implementation exactly).
     static uint32_t fnv1a(const uint8_t* bytes, size_t len);
@@ -76,15 +80,21 @@ private:
     /// Lowercase a C string into a stack buffer. Returns length.
     static size_t toLower(const char* input, char* output, size_t maxLen);
 
-    /// Binary search for a key_hash in a pre-built index.
-    /// Returns pointer to the entry if found, nullptr otherwise.
-    const uint8_t* findEntry(uint32_t keyHash, const std::vector<IndexEntry>& index) const;
+    /// Binary search for a key hash among `count` entries starting at `first`.
+    /// Returns the entry index, or kNoEntry.
+    int64_t findEntry(uint32_t keyHash, uint32_t first, uint32_t count) const;
 
-    /// Parse results from an entry pointer into NgramResult vector.
-    std::vector<NgramResult> parseResults(const uint8_t* entry, size_t maxResults) const;
+    /// Stored results of an entry (capped at NGRM_MAX_RESULTS) and the first one's index.
+    size_t resultCount(int64_t entry, uint32_t* firstResult) const;
 
-    /// Get string from string table at given offset.
-    const char* getString(uint32_t offset) const;
+    /// Word and score of one stored result. Returns false for an invalid result.
+    bool resultAt(uint32_t resultIndex, const char** word, uint16_t* score) const;
+
+    /// Parse results of an entry into NgramResult vector.
+    std::vector<NgramResult> parseResults(int64_t entry, size_t maxResults) const;
+
+    /// Score of `word` among an entry's results, or 0.
+    uint16_t scoreInEntry(int64_t entry, const char* word) const;
 };
 
 } // namespace dictus

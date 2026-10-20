@@ -9,63 +9,55 @@ namespace dictus {
 /// Magic bytes identifying an NGRM binary file.
 static constexpr char NGRM_MAGIC[4] = {'N', 'G', 'R', 'M'};
 
-/// Current format version.
-static constexpr uint16_t NGRM_VERSION = 1;
+/// Current format version. Version 1 files are converted with tools/ngram_pack.py.
+static constexpr uint16_t NGRM_VERSION = 2;
 
 /// Maximum number of prediction results stored per n-gram key.
 /// Increased from 8 to 16 to accommodate both formal Wikipedia pairs and
 /// colloquial seed bigrams (e.g., "pas" has ~8 formal pairs from Wikipedia
 /// plus ~13 colloquial seeds — "pas mal", "pas du", etc. — that need to
 /// survive the cap to unlock split validation in the keyboard).
-/// File size grows ~50% per key (from max 8×6=48 bytes to max 16×6=96 bytes
-/// per entry), but overall .dict files remain under 6 MiB per language.
 static constexpr uint8_t NGRM_MAX_RESULTS = 16;
 
 /// Header size in bytes.
-static constexpr uint32_t NGRM_HEADER_SIZE = 32;
+static constexpr uint32_t NGRM_HEADER_SIZE = 64;
 
-/// NGRM binary file header (32 bytes).
+/// NGRM v2 file header (64 bytes, little endian).
 ///
-/// Layout:
-///   [0..3]   magic:              "NGRM"
-///   [4..5]   version:            uint16 LE (currently 1)
-///   [6..7]   flags:              uint16 LE (reserved, 0)
-///   [8..11]  bigram_count:       uint32 LE (number of bigram entries)
-///   [12..15] trigram_count:      uint32 LE (number of trigram entries)
-///   [16..19] bigram_offset:      uint32 LE (absolute byte offset to bigram section)
-///   [20..23] trigram_offset:     uint32 LE (absolute byte offset to trigram section)
-///   [24..27] string_table_offset:uint32 LE (absolute byte offset to string table)
-///   [28..31] string_table_size:  uint32 LE (total bytes in string table)
-///
-/// Bigram/trigram section entries (variable-length, sorted by key_hash ascending):
-///   key_hash:     uint32 LE  (FNV-1a 32-bit hash of key)
-///   result_count: uint8      (1..NGRM_MAX_RESULTS)
-///   results[result_count]:
-///     word_offset: uint32 LE (byte offset into string table)
-///     score:       uint16 LE (log-scaled 0..65535)
+/// Every table is mmap-ready, so loading builds no index:
+///   key table:    uint32 FNV-1a key hash per entry — bigram entries first, then
+///                 trigram entries; each section sorted by hash ascending
+///   start table:  uint32 index of each entry's first result, plus one end sentinel
+///   result table: uint32 per prediction = word_index << score_bits | score_index,
+///                 in descending score order within an entry
+///   word table:   uint32 string-table offset per distinct predicted word
+///   score table:  uint16 per distinct score (log-scaled 0..65535)
+///   string table: packed null-terminated UTF-8 words
 ///
 /// Bigram key = lowercase previous word (UTF-8 bytes).
 /// Trigram key = "word1\0word2" (null-separated, both lowercase, UTF-8 bytes).
-///
-/// String table: packed null-terminated UTF-8 strings (all predicted words).
 #pragma pack(push, 1)
 struct NgramHeader {
-    char magic[4];              // "NGRM"
-    uint16_t version;           // 1
-    uint16_t flags;             // reserved (0)
-    uint32_t bigram_count;      // number of bigram entries
-    uint32_t trigram_count;     // number of trigram entries
-    uint32_t bigram_offset;     // absolute byte offset to bigram section
-    uint32_t trigram_offset;    // absolute byte offset to trigram section
-    uint32_t string_table_offset; // absolute byte offset to string table
-    uint32_t string_table_size;   // total bytes in string table
+    char magic[4];                // "NGRM"
+    uint16_t version;             // 2
+    uint16_t score_bits;          // low bits of a result holding its score index
+    uint32_t bigram_count;
+    uint32_t trigram_count;
+    uint32_t key_table_offset;
+    uint32_t start_table_offset;
+    uint32_t result_table_offset;
+    uint32_t result_count;
+    uint32_t word_table_offset;
+    uint32_t word_count;
+    uint32_t score_table_offset;
+    uint32_t score_count;
+    uint32_t string_table_offset;
+    uint32_t string_table_size;
+    uint8_t reserved[8];
 };
 #pragma pack(pop)
 
-static_assert(sizeof(NgramHeader) == 32, "NgramHeader must be exactly 32 bytes");
-
-/// Size of a single result entry: word_offset (4) + score (2) = 6 bytes.
-static constexpr uint32_t NGRM_RESULT_ENTRY_SIZE = 6;
+static_assert(sizeof(NgramHeader) == NGRM_HEADER_SIZE, "NgramHeader must be exactly 64 bytes");
 
 } // namespace dictus
 

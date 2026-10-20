@@ -12,6 +12,26 @@
 
 namespace dictus {
 
+namespace {
+
+uint32_t read32(const uint8_t* table, uint32_t index) {
+    uint32_t value;
+    std::memcpy(&value, table + static_cast<size_t>(index) * 4, 4);
+    return value;
+}
+
+uint16_t read16(const uint8_t* table, uint32_t index) {
+    uint16_t value;
+    std::memcpy(&value, table + static_cast<size_t>(index) * 2, 2);
+    return value;
+}
+
+bool fits(uint64_t offset, uint64_t length, uint64_t fileSize) {
+    return offset <= fileSize && length <= fileSize - offset;
+}
+
+} // namespace
+
 // --- Constructor / Destructor ---
 
 NgramEngine::NgramEngine() : data_(nullptr), dataSize_(0), loaded_(false) {}
@@ -53,74 +73,68 @@ bool NgramEngine::load(const char* path) {
     dataSize_ = fileSize;
 
     // Validate header
-    const auto* hdr = reinterpret_cast<const NgramHeader*>(data_);
-    if (std::memcmp(hdr->magic, NGRM_MAGIC, 4) != 0) {
-        unload();
-        return false;
-    }
-    if (hdr->version != NGRM_VERSION) {
-        unload();
-        return false;
-    }
-
-    // Validate offsets are within file bounds
-    if (hdr->bigram_offset > dataSize_ || hdr->trigram_offset > dataSize_ ||
-        hdr->string_table_offset > dataSize_) {
+    NgramHeader hdr;
+    std::memcpy(&hdr, data_, sizeof(hdr));
+    if (std::memcmp(hdr.magic, NGRM_MAGIC, 4) != 0 || hdr.version != NGRM_VERSION ||
+        hdr.score_bits == 0 || hdr.score_bits > 31) {
         unload();
         return false;
     }
 
-    // Build lookup indices
-    if (hdr->bigram_count > 0 && hdr->bigram_offset < dataSize_) {
-        buildIndex(data_ + hdr->bigram_offset, hdr->bigram_count, bigramIndex_);
+    // Validate that every table lies within the file
+    uint64_t entries = static_cast<uint64_t>(hdr.bigram_count) + hdr.trigram_count;
+    if (!fits(hdr.key_table_offset, entries * 4, fileSize) ||
+        !fits(hdr.start_table_offset, (entries + 1) * 4, fileSize) ||
+        !fits(hdr.result_table_offset, static_cast<uint64_t>(hdr.result_count) * 4, fileSize) ||
+        !fits(hdr.word_table_offset, static_cast<uint64_t>(hdr.word_count) * 4, fileSize) ||
+        !fits(hdr.score_table_offset, static_cast<uint64_t>(hdr.score_count) * 2, fileSize) ||
+        !fits(hdr.string_table_offset, hdr.string_table_size, fileSize)) {
+        unload();
+        return false;
     }
-    if (hdr->trigram_count > 0 && hdr->trigram_offset < dataSize_) {
-        buildIndex(data_ + hdr->trigram_offset, hdr->trigram_count, trigramIndex_);
+
+    // Every word must be terminated inside the string table
+    if (hdr.string_table_size > 0 &&
+        data_[hdr.string_table_offset + hdr.string_table_size - 1] != '\0') {
+        unload();
+        return false;
     }
+
+    bigramCount_ = hdr.bigram_count;
+    trigramCount_ = hdr.trigram_count;
+    keys_ = data_ + hdr.key_table_offset;
+    starts_ = data_ + hdr.start_table_offset;
+    results_ = data_ + hdr.result_table_offset;
+    resultCount_ = hdr.result_count;
+    words_ = data_ + hdr.word_table_offset;
+    wordCount_ = hdr.word_count;
+    scores_ = data_ + hdr.score_table_offset;
+    scoreCount_ = hdr.score_count;
+    scoreBits_ = hdr.score_bits;
+    strings_ = reinterpret_cast<const char*>(data_ + hdr.string_table_offset);
+    stringsSize_ = hdr.string_table_size;
 
     loaded_ = true;
     return true;
 }
 
 void NgramEngine::unload() {
-    bigramIndex_.clear();
-    trigramIndex_.clear();
-
     if (data_) {
         munmap(data_, dataSize_);
         data_ = nullptr;
     }
     dataSize_ = 0;
+    bigramCount_ = 0;
+    trigramCount_ = 0;
+    keys_ = starts_ = results_ = words_ = scores_ = nullptr;
+    resultCount_ = wordCount_ = scoreCount_ = stringsSize_ = 0;
+    scoreBits_ = 0;
+    strings_ = nullptr;
     loaded_ = false;
 }
 
 bool NgramEngine::isLoaded() const {
     return loaded_;
-}
-
-// --- Index building ---
-
-void NgramEngine::buildIndex(const uint8_t* section, uint32_t count,
-                             std::vector<IndexEntry>& index) {
-    index.clear();
-    index.reserve(count);
-
-    const uint8_t* p = section;
-    const uint8_t* end = data_ + dataSize_;
-
-    for (uint32_t i = 0; i < count; i++) {
-        if (p + 5 > end) break;  // minimum: key_hash(4) + result_count(1)
-
-        IndexEntry entry;
-        std::memcpy(&entry.keyHash, p, 4);
-        entry.ptr = p;
-        index.push_back(entry);
-
-        // Advance past this entry: key_hash(4) + result_count(1) + results
-        uint8_t resultCount = p[4];
-        size_t entrySize = 4 + 1 + static_cast<size_t>(resultCount) * NGRM_RESULT_ENTRY_SIZE;
-        p += entrySize;
-    }
 }
 
 // --- FNV-1a hash ---
@@ -154,58 +168,65 @@ size_t NgramEngine::toLower(const char* input, char* output, size_t maxLen) {
 
 // --- Binary search ---
 
-const uint8_t* NgramEngine::findEntry(uint32_t keyHash,
-                                      const std::vector<IndexEntry>& index) const {
-    if (index.empty()) return nullptr;
-
-    // Binary search on sorted key_hash values
+int64_t NgramEngine::findEntry(uint32_t keyHash, uint32_t first, uint32_t count) const {
+    // Binary search on sorted key hashes
     size_t lo = 0;
-    size_t hi = index.size();
+    size_t hi = count;
 
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
-        if (index[mid].keyHash < keyHash) {
+        uint32_t midHash = read32(keys_, first + static_cast<uint32_t>(mid));
+        if (midHash < keyHash) {
             lo = mid + 1;
-        } else if (index[mid].keyHash > keyHash) {
+        } else if (midHash > keyHash) {
             hi = mid;
         } else {
-            return index[mid].ptr;
+            return static_cast<int64_t>(first) + static_cast<int64_t>(mid);
         }
     }
-    return nullptr;
+    return kNoEntry;
 }
 
-// --- Parse results ---
+// --- Results ---
 
-std::vector<NgramResult> NgramEngine::parseResults(const uint8_t* entry,
-                                                    size_t maxResults) const {
+size_t NgramEngine::resultCount(int64_t entry, uint32_t* firstResult) const {
+    if (entry == kNoEntry) return 0;
+
+    uint32_t start = read32(starts_, static_cast<uint32_t>(entry));
+    uint32_t end = read32(starts_, static_cast<uint32_t>(entry) + 1);
+    if (start > end || end > resultCount_) return 0;
+
+    *firstResult = start;
+    return std::min(static_cast<size_t>(end - start), static_cast<size_t>(NGRM_MAX_RESULTS));
+}
+
+bool NgramEngine::resultAt(uint32_t resultIndex, const char** word, uint16_t* score) const {
+    uint32_t packed = read32(results_, resultIndex);
+    uint32_t wordIndex = packed >> scoreBits_;
+    uint32_t scoreIndex = packed & ((1u << scoreBits_) - 1);
+    if (wordIndex >= wordCount_ || scoreIndex >= scoreCount_) return false;
+
+    uint32_t offset = read32(words_, wordIndex);
+    if (offset >= stringsSize_) return false;
+
+    *word = strings_ + offset;
+    *score = read16(scores_, scoreIndex);
+    return true;
+}
+
+std::vector<NgramResult> NgramEngine::parseResults(int64_t entry, size_t maxResults) const {
     std::vector<NgramResult> results;
-    if (!entry) return results;
+    uint32_t first = 0;
+    size_t count = resultCount(entry, &first);
 
-    // Entry layout: key_hash(4) + result_count(1) + results[](word_offset(4) + score(2))
-    uint8_t resultCount = entry[4];
-    if (resultCount > NGRM_MAX_RESULTS) resultCount = NGRM_MAX_RESULTS;
-
-    const uint8_t* p = entry + 5;  // skip key_hash + result_count
-    const uint8_t* end = data_ + dataSize_;
-
-    size_t limit = std::min(static_cast<size_t>(resultCount), maxResults);
+    size_t limit = std::min(count, maxResults);
     results.reserve(limit);
 
     for (size_t i = 0; i < limit; i++) {
-        if (p + NGRM_RESULT_ENTRY_SIZE > end) break;
-
-        uint32_t wordOffset;
-        uint16_t score;
-        std::memcpy(&wordOffset, p, 4);
-        std::memcpy(&score, p + 4, 2);
-        p += NGRM_RESULT_ENTRY_SIZE;
-
-        const char* str = getString(wordOffset);
-        if (str) {
-            NgramResult r;
-            r.word = str;
-            r.score = score;
+        NgramResult r;
+        const char* word;
+        if (resultAt(first + static_cast<uint32_t>(i), &word, &r.score)) {
+            r.word = word;
             results.push_back(std::move(r));
         }
     }
@@ -213,26 +234,20 @@ std::vector<NgramResult> NgramEngine::parseResults(const uint8_t* entry,
     return results;
 }
 
-// --- String table access ---
+uint16_t NgramEngine::scoreInEntry(int64_t entry, const char* word) const {
+    uint32_t first = 0;
+    size_t count = resultCount(entry, &first);
 
-const char* NgramEngine::getString(uint32_t offset) const {
-    if (!data_) return nullptr;
+    for (size_t i = 0; i < count; i++) {
+        const char* candidate;
+        uint16_t score;
+        if (resultAt(first + static_cast<uint32_t>(i), &candidate, &score) &&
+            std::strcmp(candidate, word) == 0) {
+            return score;
+        }
+    }
 
-    const auto* hdr = reinterpret_cast<const NgramHeader*>(data_);
-    uint32_t absOffset = hdr->string_table_offset + offset;
-
-    if (absOffset >= dataSize_) return nullptr;
-
-    // Ensure string is null-terminated within bounds
-    const char* str = reinterpret_cast<const char*>(data_ + absOffset);
-    const char* end = reinterpret_cast<const char*>(data_ + dataSize_);
-
-    // Quick bounds check: verify there's a null terminator before end of file
-    const char* p = str;
-    while (p < end && *p != '\0') p++;
-    if (p >= end) return nullptr;
-
-    return str;
+    return 0;
 }
 
 // --- Prediction API ---
@@ -246,11 +261,9 @@ std::vector<NgramResult> NgramEngine::predictAfterWord(const char* word,
     size_t len = toLower(word, lowBuf, sizeof(lowBuf));
     if (len == 0) return {};
 
-    // Hash and look up in bigram index
+    // Hash and look up among bigram entries
     uint32_t keyHash = fnv1a(reinterpret_cast<const uint8_t*>(lowBuf), len);
-    const uint8_t* entry = findEntry(keyHash, bigramIndex_);
-
-    return parseResults(entry, maxResults);
+    return parseResults(findEntry(keyHash, 0, bigramCount_), maxResults);
 }
 
 std::vector<NgramResult> NgramEngine::predictAfterWords(const char* word1,
@@ -273,13 +286,13 @@ std::vector<NgramResult> NgramEngine::predictAfterWords(const char* word1,
     size_t trigramKeyLen = len1 + 1 + len2;
 
     uint32_t trigramHash = fnv1a(reinterpret_cast<const uint8_t*>(trigramKey), trigramKeyLen);
-    const uint8_t* trigramEntry = findEntry(trigramHash, trigramIndex_);
+    int64_t trigramEntry = findEntry(trigramHash, bigramCount_, trigramCount_);
 
     // Try bigram for word2 as well (for Stupid Backoff)
     uint32_t bigramHash = fnv1a(reinterpret_cast<const uint8_t*>(low2), len2);
-    const uint8_t* bigramEntry = findEntry(bigramHash, bigramIndex_);
+    int64_t bigramEntry = findEntry(bigramHash, 0, bigramCount_);
 
-    if (trigramEntry && bigramEntry) {
+    if (trigramEntry != kNoEntry && bigramEntry != kNoEntry) {
         // Both found: merge trigram results with discounted bigram results
         auto trigramResults = parseResults(trigramEntry, NGRM_MAX_RESULTS);
         auto bigramResults = parseResults(bigramEntry, NGRM_MAX_RESULTS);
@@ -320,11 +333,11 @@ std::vector<NgramResult> NgramEngine::predictAfterWords(const char* word1,
         }
         return merged;
 
-    } else if (trigramEntry) {
+    } else if (trigramEntry != kNoEntry) {
         // Only trigram found
         return parseResults(trigramEntry, maxResults);
 
-    } else if (bigramEntry) {
+    } else if (bigramEntry != kNoEntry) {
         // Fallback to bigram with Stupid Backoff discount
         auto results = parseResults(bigramEntry, maxResults);
         for (auto& r : results) {
@@ -347,36 +360,13 @@ uint16_t NgramEngine::bigramScore(const char* prevWord, const char* word) const 
     if (prevLen == 0) return 0;
 
     uint32_t keyHash = fnv1a(reinterpret_cast<const uint8_t*>(lowPrev), prevLen);
-    const uint8_t* entry = findEntry(keyHash, bigramIndex_);
-    if (!entry) return 0;
+    int64_t entry = findEntry(keyHash, 0, bigramCount_);
+    if (entry == kNoEntry) return 0;
 
     // Lowercase target word for comparison
     char lowWord[256];
     toLower(word, lowWord, sizeof(lowWord));
-
-    // Scan results for matching word
-    uint8_t resultCount = entry[4];
-    if (resultCount > NGRM_MAX_RESULTS) resultCount = NGRM_MAX_RESULTS;
-
-    const uint8_t* p = entry + 5;
-    const uint8_t* end = data_ + dataSize_;
-
-    for (uint8_t i = 0; i < resultCount; i++) {
-        if (p + NGRM_RESULT_ENTRY_SIZE > end) break;
-
-        uint32_t wordOffset;
-        uint16_t score;
-        std::memcpy(&wordOffset, p, 4);
-        std::memcpy(&score, p + 4, 2);
-        p += NGRM_RESULT_ENTRY_SIZE;
-
-        const char* str = getString(wordOffset);
-        if (str && std::strcmp(str, lowWord) == 0) {
-            return score;
-        }
-    }
-
-    return 0;
+    return scoreInEntry(entry, lowWord);
 }
 
 uint16_t NgramEngine::trigramScore(const char* word1, const char* word2,
@@ -397,36 +387,13 @@ uint16_t NgramEngine::trigramScore(const char* word1, const char* word2,
     size_t trigramKeyLen = len1 + 1 + len2;
 
     uint32_t keyHash = fnv1a(reinterpret_cast<const uint8_t*>(trigramKey), trigramKeyLen);
-    const uint8_t* entry = findEntry(keyHash, trigramIndex_);
-    if (!entry) return 0;
+    int64_t entry = findEntry(keyHash, bigramCount_, trigramCount_);
+    if (entry == kNoEntry) return 0;
 
     // Lowercase target word
     char lowWord[256];
     toLower(word, lowWord, sizeof(lowWord));
-
-    // Scan results
-    uint8_t resultCount = entry[4];
-    if (resultCount > NGRM_MAX_RESULTS) resultCount = NGRM_MAX_RESULTS;
-
-    const uint8_t* p = entry + 5;
-    const uint8_t* end = data_ + dataSize_;
-
-    for (uint8_t i = 0; i < resultCount; i++) {
-        if (p + NGRM_RESULT_ENTRY_SIZE > end) break;
-
-        uint32_t wordOffset;
-        uint16_t score;
-        std::memcpy(&wordOffset, p, 4);
-        std::memcpy(&score, p + 4, 2);
-        p += NGRM_RESULT_ENTRY_SIZE;
-
-        const char* str = getString(wordOffset);
-        if (str && std::strcmp(str, lowWord) == 0) {
-            return score;
-        }
-    }
-
-    return 0;
+    return scoreInEntry(entry, lowWord);
 }
 
 } // namespace dictus
