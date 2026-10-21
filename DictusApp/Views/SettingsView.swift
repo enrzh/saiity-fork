@@ -82,6 +82,7 @@ struct KeyboardSettingsView: View {
     @AppStorage(SharedKeys.hapticIntensity, store: AppGroup.defaults) private var hapticIntensityRaw = HapticIntensity.default.rawValue
     @AppStorage(SharedKeys.autocorrectEnabled, store: AppGroup.defaults) private var autocorrectEnabled = true
     @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults) private var topBarEnabled = false
+    @State private var hasSavedSnippets = false
 
     var body: some View {
         Form {
@@ -111,12 +112,17 @@ struct KeyboardSettingsView: View {
             Section {
                 NavigationLink("Vocabulary") { VocabularyView() }
                     .accessibilityIdentifier("settings.words")
-                NavigationLink("Text Replacements") { TextSnippetsView() }
+                if hasSavedSnippets {
+                    NavigationLink("Syllivra Replacements") { TextSnippetsView() }
+                }
+            } footer: {
+                Text("Text replacements from iPhone Settings, under General › Keyboard › Text Replacement, work in Syllivra.")
             }
         }
         .navigationTitle("Keyboard")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            hasSavedSnippets = !SnippetStore.load(from: AppGroup.defaults).isEmpty
             let intensity = HapticIntensity.load(from: AppGroup.defaults)
             hapticIntensityRaw = intensity.rawValue
             intensity.persist()
@@ -364,63 +370,36 @@ struct VocabularyView: View {
     }
 }
 
+/// Replacements saved by earlier versions, which still expand on Space.
+/// New ones are made in iPhone Settings, so this list only deletes.
 struct TextSnippetsView: View {
-    @State private var shortcut = ""
-    @State private var expansion = ""
     @State private var snippets: [TextSnippet] = []
 
     var body: some View {
         List {
             Section {
-                TextField("Shortcut", text: $shortcut)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextField("Expanded text", text: $expansion, axis: .vertical)
-                    .lineLimit(2...5)
-                Button("Add Replacement", action: addSnippet)
-                    .disabled(shortcut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                              || expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            } footer: {
-                Text("Type the shortcut and press Space. The expansion is inserted locally before the space.")
-            }
-
-            Section("Your Replacements") {
-                if snippets.isEmpty {
-                    Text("No text replacements yet")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(snippets) { snippet in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(snippet.shortcut)
-                                .font(.body.weight(.semibold))
-                            Text(snippet.expansion)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                        }
+                ForEach(snippets) { snippet in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(snippet.shortcut)
+                            .font(.body.weight(.semibold))
+                        Text(snippet.expansion)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
                     }
-                    .onDelete(perform: deleteSnippets)
                 }
+                .onDelete(perform: deleteSnippets)
+            } footer: {
+                Text("Saved in an earlier version of Syllivra. Add new replacements in iPhone Settings.")
             }
         }
-        .navigationTitle("Text Replacements")
+        .navigationTitle("Syllivra Replacements")
         .toolbar { EditButton() }
         .onAppear(perform: reload)
     }
 
     private func reload() {
         snippets = SnippetStore.load(from: AppGroup.defaults)
-    }
-
-    private func addSnippet() {
-        guard SnippetStore.upsert(
-            shortcut: shortcut,
-            expansion: expansion,
-            in: AppGroup.defaults
-        ) != nil else { return }
-        shortcut = ""
-        expansion = ""
-        reload()
     }
 
     private func deleteSnippets(at offsets: IndexSet) {

@@ -120,6 +120,8 @@ class SuggestionState: ObservableObject {
         let spokenLanguages: [String]
     }
 
+    /// iOS Text Replacements, refreshed each time the keyboard appears.
+    var systemReplacements = SystemTextReplacements()
     private var pendingAutocorrection: PendingAutocorrection?
     /// Correction prepared on the suggestion queue for the word currently
     /// being typed. Space reads it instead of waiting on a dictionary load.
@@ -173,7 +175,8 @@ class SuggestionState: ObservableObject {
             && prepared?.selectedLanguage == SupportedLanguage.active.rawValue
             && prepared?.spokenLanguages == SpokenLanguagePreferences.load(from: AppGroup.defaults)
         let canLearn = snapshotMatches ? prepared?.isUnknownWord : nil
-        if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults),
+        if let expansion = SnippetStore.expansion(for: word, from: AppGroup.defaults)
+            ?? systemReplacements.expansion(for: word),
            case .ok(let deleteCount) = AutocorrectReplacement.check(context: proxy.documentContextBeforeInput, word: word) {
             for _ in 0..<deleteCount { proxy.deleteBackward() }
             proxy.insertText(expansion)

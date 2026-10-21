@@ -42,6 +42,7 @@ enum SupportedLanguage { static var active: Self { .english }; case english; var
 enum AppGroup { static let defaults = UserDefaults(suiteName: "unused-autocorrect-fixture")! }
 enum SpokenLanguagePreferences { static func load(from: UserDefaults) -> [String] { [] } }
 enum SnippetStore { static func expansion(for word: String, from: UserDefaults) -> String? { nil } }
+struct SystemTextReplacements { func expansion(for word: String) -> String? { nil } }
 enum TypingCommit { static func accepts(typed: String, correction: String) -> Bool { typed != correction } }
 enum DictationVocabulary { static let maxTermCharacters = 64 }
 enum HapticFeedback { static func playInputClick() {} }

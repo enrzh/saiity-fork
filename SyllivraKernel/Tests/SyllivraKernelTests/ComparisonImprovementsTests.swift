@@ -57,6 +57,20 @@ final class ComparisonImprovementsTests: XCTestCase {
         XCTAssertNil(SnippetStore.expansion(for: "two words", from: defaults))
     }
 
+    func testSystemReplacementsSkipContactNamesAndMatchCaseInsensitively() {
+        let replacements = SystemTextReplacements(entries: [
+            (userInput: "omw", documentText: "On my way!"),
+            (userInput: "Anna", documentText: "Anna"),
+            (userInput: "two words", documentText: "x"),
+            (userInput: "OMW", documentText: "second definition"),
+            (userInput: "", documentText: "empty"),
+        ])
+        XCTAssertEqual(replacements.count, 1)
+        XCTAssertEqual(replacements.expansion(for: "OMW"), "On my way!")
+        XCTAssertNil(replacements.expansion(for: "Anna"))
+        XCTAssertNil(SystemTextReplacements().expansion(for: "omw"))
+    }
+
     func testWritingStyleHasDistinctPromptInstructionsAndPersists() {
         let defaults = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: defaultsName) }

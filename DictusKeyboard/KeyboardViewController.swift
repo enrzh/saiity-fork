@@ -572,6 +572,12 @@ class KeyboardViewController: UIInputViewController,
         KeyboardState.shared.refreshFromDefaults()
         HapticFeedback.refreshEnabledState()
         HapticFeedback.warmUp()
+        // Picks up replacements edited in iPhone Settings since the last appearance.
+        requestSupplementaryLexicon { lexicon in
+            let replacements = SystemTextReplacements(
+                entries: lexicon.entries.map { ($0.userInput, $0.documentText) })
+            DispatchQueue.main.async { SuggestionState.shared.systemReplacements = replacements }
+        }
         hasAppeared = true
         isAttached = true
 

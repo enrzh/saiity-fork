@@ -311,6 +311,8 @@ xcrun simctl shutdown <udid>
 
 **Never leave a touch down.** An `axe touch --down` without a matching `--up` blocks every later tap, swipe and Home press without an error. Shutting the device down and booting it again cleared it.
 
+**Do not hold Delete with `axe touch --down --up --delay`.** Twice on 2026-10-21 a 3-second hold on the keyboard's Delete left the same silent block even though the command released, and relaunching the app did not clear it; a reboot did. Holding letter keys for up to 2 seconds (press popup, accent row) was fine. To clear a field, tap Delete repeatedly.
+
 **Tapping and typing are no longer on this list.** They were, until 2026-08-22, on the grounds that `simctl` has no touch injection. That is still true of `simctl` and was never true of the machine: see section 5. Do not re-derive the old limit from the `simctl` man page.
 
 **The Dictus keyboard CAN be enabled in a simulator.** This file said the opposite until 2026-08-23. It was wrong. Enabling it takes taps, and section 5 taps: Settings → Général → Clavier → Claviers → Ajouter un clavier → Dictus. Read each screen with `describe-ui` and tap the row centre from the reported `AXFrame` — these rows carry labels but no identifiers, so coordinates are what work.

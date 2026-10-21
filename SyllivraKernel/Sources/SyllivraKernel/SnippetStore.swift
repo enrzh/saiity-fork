@@ -13,7 +13,8 @@ public struct TextSnippet: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// Small bounded store for user-created text replacements.
+/// Small bounded store for text replacements created in earlier versions of the app.
+/// New replacements come from iOS; these keep working until the user deletes them.
 public enum SnippetStore {
     public static let retentionLimit = 100
     public static let maxShortcutCharacters = 64
@@ -70,7 +71,33 @@ public enum SnippetStore {
         return TextSnippet(id: snippet.id, shortcut: shortcut, expansion: expansion)
     }
 
-    private static func canonical(_ shortcut: String) -> String {
+    static func canonical(_ shortcut: String) -> String {
         shortcut.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+/// The user's iOS Text Replacements, as the keyboard's supplementary lexicon lists them.
+public struct SystemTextReplacements: Equatable, Sendable {
+    private var expansions: [String: String] = [:]
+
+    public init() {}
+
+    /// The lexicon also lists contact names, whose input and text are identical;
+    /// only entries that change the typed text are replacements.
+    public init(entries: [(userInput: String, documentText: String)]) {
+        for entry in entries {
+            let shortcut = entry.userInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !shortcut.isEmpty, !entry.documentText.isEmpty,
+                  shortcut != entry.documentText,
+                  !shortcut.contains(where: { $0.isWhitespace || $0.isNewline }) else { continue }
+            let key = SnippetStore.canonical(shortcut)
+            if expansions[key] == nil { expansions[key] = entry.documentText }
+        }
+    }
+
+    public var count: Int { expansions.count }
+
+    public func expansion(for word: String) -> String? {
+        expansions[SnippetStore.canonical(word)]
     }
 }
