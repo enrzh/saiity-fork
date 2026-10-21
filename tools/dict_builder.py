@@ -6,7 +6,10 @@ Reads a frequency JSON file ({"word": count, ...}) and generates a binary .dict
 file with the DTRI format: 32-byte header + depth-first pre-order patricia trie nodes.
 
 Usage:
-    python3 tools/dict_builder.py INPUT.json OUTPUT.dict
+    python3 tools/dict_builder.py INPUT.json OUTPUT.dict [--exclude LIST.tsv]
+
+--exclude leaves out the words in the first column of LIST.tsv: web typos found
+by tools/typo_finder.swift, which the keyboard would otherwise accept as correct.
 
 The binary format is designed for mmap-based read-only access from C++ on iOS,
 with no dynamic allocation needed for traversal.
@@ -231,19 +234,26 @@ def serialize_trie(root: TrieNode, max_freq: int) -> tuple[bytes, int, int]:
     return bytes(buf), node_count, word_count
 
 
-def build_dict(input_path: str, output_path: str) -> None:
+def read_exclusions(path: str) -> set[str]:
+    """First column of a typo list; blank lines are ignored."""
+    with open(path, "r", encoding="utf-8") as f:
+        return {line.split("\t")[0].strip().lower() for line in f if line.strip()}
+
+
+def build_dict(input_path: str, output_path: str, exclude_path: Optional[str] = None) -> None:
     """Build binary dictionary from frequency JSON."""
     print(f"Reading {input_path}...")
     with open(input_path, "r", encoding="utf-8") as f:
         freq_data: dict[str, int] = json.load(f)
 
     print(f"  Loaded {len(freq_data)} words")
+    excluded = read_exclusions(exclude_path) if exclude_path else set()
 
     # Filter: lowercase, no spaces/hyphens, non-empty
     filtered = {}
     for word, count in freq_data.items():
         w = word.lower().strip()
-        if not w or " " in w or "-" in w or count <= 0:
+        if not w or " " in w or "-" in w or count <= 0 or w in excluded:
             continue
         filtered[w] = max(filtered.get(w, 0), count)
 
@@ -282,14 +292,23 @@ def build_dict(input_path: str, output_path: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
-        print("Usage: python3 dict_builder.py INPUT.json OUTPUT.dict")
+    args = sys.argv[1:]
+    exclude_path = None
+    if "--exclude" in args:
+        index = args.index("--exclude")
+        if index + 1 >= len(args):
+            print("--exclude needs a file")
+            sys.exit(1)
+        exclude_path = args[index + 1]
+        del args[index:index + 2]
+    if len(args) != 2:
+        print("Usage: python3 dict_builder.py INPUT.json OUTPUT.dict [--exclude LIST.tsv]")
         print()
         print("Builds a compressed patricia trie binary dictionary from a")
         print("frequency JSON file (format: {\"word\": count, ...}).")
         sys.exit(1)
 
-    build_dict(sys.argv[1], sys.argv[2])
+    build_dict(args[0], args[1], exclude_path)
 
 
 if __name__ == "__main__":

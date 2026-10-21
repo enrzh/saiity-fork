@@ -124,9 +124,18 @@ static float substitutionCost(uint16_t from, uint16_t to, const CostModel& costs
     return 1.0f;
 }
 
+// No pending swap: any trie character may follow.
+static const int32_t NO_SWAP = -1;
+
 // Recursive search: explore all edit operations at each trie node.
 // This function processes one trie node's characters against input,
 // then recurses into children.
+//
+// `swapNext` is the second half of a transposition already paid for: the next
+// trie character must be this one and consumes no input. Carrying it lets a
+// swap span two patricia nodes; checking only within one node missed most
+// swaps ("hte", "goign", "wrok"), because the two letters usually sit on
+// either side of a branch.
 static void searchRecursive(const Trie& trie,
                             const TrieNode& node,
                             const uint16_t* input, int inputLen, int inputPos,
@@ -134,7 +143,7 @@ static void searchRecursive(const Trie& trie,
                             float cost, float maxEditDist,
                             std::vector<Candidate>& results, int maxResults,
                             const CostModel& costs,
-                            int nodeCharPos) {
+                            int nodeCharPos, int32_t swapNext) {
     if (cost > maxEditDist) return;
 
     // We process characters of this node one at a time (nodeCharPos tracks position).
@@ -144,12 +153,21 @@ static void searchRecursive(const Trie& trie,
         uint16_t trieChar;
         std::memcpy(&trieChar, node.chars + nodeCharPos * 2, 2);
 
+        if (swapNext != NO_SWAP) {
+            if (trieChar != swapNext) return;
+            wordBuf[wordLen] = trieChar;
+            searchRecursive(trie, node, input, inputLen, inputPos,
+                            wordBuf, wordLen + 1, cost, maxEditDist,
+                            results, maxResults, costs, nodeCharPos + 1, NO_SWAP);
+            return;
+        }
+
         // 1. MATCH: input char == trie char
         if (inputPos < inputLen && input[inputPos] == trieChar) {
             wordBuf[wordLen] = trieChar;
             searchRecursive(trie, node, input, inputLen, inputPos + 1,
                             wordBuf, wordLen + 1, cost, maxEditDist,
-                            results, maxResults, costs, nodeCharPos + 1);
+                            results, maxResults, costs, nodeCharPos + 1, NO_SWAP);
         }
 
         // 2. SUBSTITUTION: input char != trie char
@@ -159,7 +177,7 @@ static void searchRecursive(const Trie& trie,
                 wordBuf[wordLen] = trieChar;
                 searchRecursive(trie, node, input, inputLen, inputPos + 1,
                                 wordBuf, wordLen + 1, cost + sc, maxEditDist,
-                                results, maxResults, costs, nodeCharPos + 1);
+                                results, maxResults, costs, nodeCharPos + 1, NO_SWAP);
             }
         }
 
@@ -169,7 +187,7 @@ static void searchRecursive(const Trie& trie,
             if (cost + ic <= maxEditDist) {
                 searchRecursive(trie, node, input, inputLen, inputPos + 1,
                                 wordBuf, wordLen, cost + ic, maxEditDist,
-                                results, maxResults, costs, nodeCharPos);
+                                results, maxResults, costs, nodeCharPos, NO_SWAP);
             }
         }
 
@@ -180,23 +198,20 @@ static void searchRecursive(const Trie& trie,
                 wordBuf[wordLen] = trieChar;
                 searchRecursive(trie, node, input, inputLen, inputPos,
                                 wordBuf, wordLen + 1, cost + dc, maxEditDist,
-                                results, maxResults, costs, nodeCharPos + 1);
+                                results, maxResults, costs, nodeCharPos + 1, NO_SWAP);
             }
         }
 
-        // 5. TRANSPOSITION: swap of adjacent chars in input
-        if (inputPos + 1 < inputLen && nodeCharPos + 1 < node.charCount) {
-            uint16_t nextTrieChar;
-            std::memcpy(&nextTrieChar, node.chars + (nodeCharPos + 1) * 2, 2);
-            if (input[inputPos] == nextTrieChar && input[inputPos + 1] == trieChar) {
-                float tc = 0.7f;
-                if (cost + tc <= maxEditDist) {
-                    wordBuf[wordLen] = trieChar;
-                    wordBuf[wordLen + 1] = nextTrieChar;
-                    searchRecursive(trie, node, input, inputLen, inputPos + 2,
-                                    wordBuf, wordLen + 2, cost + tc, maxEditDist,
-                                    results, maxResults, costs, nodeCharPos + 2);
-                }
+        // 5. TRANSPOSITION: swap of adjacent chars in input. The trie must
+        // continue with input[inputPos], in this node or the next one.
+        if (inputPos + 1 < inputLen && input[inputPos + 1] == trieChar
+            && input[inputPos] != trieChar) {
+            float tc = 0.7f;
+            if (cost + tc <= maxEditDist) {
+                wordBuf[wordLen] = trieChar;
+                searchRecursive(trie, node, input, inputLen, inputPos + 2,
+                                wordBuf, wordLen + 1, cost + tc, maxEditDist,
+                                results, maxResults, costs, nodeCharPos + 1, input[inputPos]);
             }
         }
 
@@ -204,8 +219,9 @@ static void searchRecursive(const Trie& trie,
     }
 
     // All characters of this node have been consumed.
-    // If terminal, compute score and possibly record candidate.
-    if (node.flags & FLAG_TERMINAL) {
+    // If terminal, compute score and possibly record candidate. A word cannot
+    // end in the middle of a swap.
+    if ((node.flags & FLAG_TERMINAL) && swapNext == NO_SWAP) {
         // Remaining input chars would need to be inserted (extra chars)
         float remainCost = cost + static_cast<float>(inputLen - inputPos) * 1.0f;
         if (remainCost <= maxEditDist) {
@@ -232,7 +248,7 @@ static void searchRecursive(const Trie& trie,
 
             searchRecursive(trie, child, input, inputLen, inputPos,
                             wordBuf, wordLen, cost, maxEditDist,
-                            results, maxResults, costs, 0);
+                            results, maxResults, costs, 0, swapNext);
 
             childOff += computeNodeSize(child);
         }
@@ -258,7 +274,7 @@ std::vector<Candidate> Scorer::correct(const Trie& trie,
 
         searchRecursive(trie, node, input, inputLen, 0,
                         wordBuf, 0, 0.0f, maxEditDist,
-                        results, maxResults, costs, 0);
+                        results, maxResults, costs, 0, NO_SWAP);
 
         offset += computeNodeSize(node);
     }

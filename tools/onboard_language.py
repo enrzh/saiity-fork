@@ -254,10 +254,11 @@ def cmd_build_dicts(args: argparse.Namespace) -> int:
         return rc
 
     print(f"\n=== dict_builder.py ===")
-    rc = subprocess.call(
-        ["python3", str(TOOLS / "dict_builder.py"), str(freq_json), str(spellcheck)],
-        cwd=REPO_ROOT,
-    )
+    builder = ["python3", str(TOOLS / "dict_builder.py"), str(freq_json), str(spellcheck)]
+    typos = TOOLS / "typos" / f"{code}.tsv"
+    if typos.exists():
+        builder += ["--exclude", str(typos)]
+    rc = subprocess.call(builder, cwd=REPO_ROOT)
     if rc != 0:
         return rc
 

@@ -111,6 +111,16 @@ defaults.set([], forKey: SharedKeys.spokenLanguages)
 engine.setSelectedLanguage("en")
 settle(engine)
 precondition(engine.enabledDictionaryLanguages == ["en"], "Removed dictionaries survived preference changes")
+for word in ["the", "going", "work", "that", "because", "receive", "separate"] { UserDictionary.shared.forget(word) }
+// Swaps across a trie branch ("h|t", "n|g") and web typos the word list used to accept.
+for (typo, fix) in [("hte", "the"), ("goign", "going"), ("wrok", "work"), ("taht", "that"),
+                    ("teh", "the"), ("becuase", "because"), ("recieve", "receive"), ("seperate", "separate")] {
+    precondition(engine.spellCheck(typo)?.correction == fix, "\(typo) was not corrected to \(fix)")
+}
+for word in ["tyres", "practise", "colour", "gonna", "okay", "lol"] {
+    precondition(engine.spellCheck(word) == nil, "A valid spelling was rewritten: \(word)")
+}
+print("PASS: swapped letters across trie nodes and excluded web typos, regional spellings kept")
 
 defaults.set(["en"], forKey: SharedKeys.spokenLanguages)
 engine.setSelectedLanguage("fr")
