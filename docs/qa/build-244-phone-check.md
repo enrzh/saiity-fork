@@ -7,11 +7,12 @@ Status: **not run; every box below is unverified**. This is a manual acceptance 
 The owner performs these checks on their own iPhone. Use only new disposable Notes and an unsent Messages draft; do not share private history or send a message. Speak the fixed test sentences yourself, or use an expressly consented/licensed recording. No agent records the room.
 
 - Install the intended candidate only under separate explicit direction. Record the actual installed version/build and source revision; an older installed build cannot validate these commits.
-- Have a compatible keyboard model and Qwen model already downloaded. Downloads and initial installation are outside the 15-minute budget. If Qwen is unavailable or unsupported, leave its check blocked rather than substitute simulator evidence.
+- Have two Whisper models already downloaded (for example Base and Small). Downloads and initial installation are outside the 15-minute budget.
+- Confirm iPhone Settings > General > Keyboard > Text Replacement has at least one entry (English iPhones include `omw` → `On my way!`) and note its shortcut.
 - Prepare Notes and an unsent Messages conversation. Confirm Syllivra is enabled under iPhone Settings > General > Keyboard > Keyboards, and record the original Full Access/microphone permissions.
-- Record current model choices, spoken/output languages, writing style, Show top bar, haptics and presence settings so they can be restored. Set English as a typing/spoken language for the fixed English phrase. Use a compatible already-installed non-Qwen model for the initial keyboard tests.
-- Set Syllivra > Settings > Keyboard > Show top bar to Off. Enable Autocorrection there. Have the iOS VoiceOver shortcut ready.
-- Fill in: phone/OS ___; installed version/build ___; source revision ___; keyboard model ___; Qwen model ___; tester/date ___.
+- Record current model choices, spoken/output languages, writing style, Show top bar, haptics and presence settings so they can be restored. Set English as a typing/spoken language for the fixed English phrase.
+- Set Syllivra > Keyboard > Show Top Bar to Off. Enable Autocorrection there. Have the iOS VoiceOver shortcut ready.
+- Fill in: phone/OS ___; installed version/build ___; source revision ___; voice models ___; tester/date ___.
 
 For every item, record Pass, Fail or Blocked, the observed result and elapsed time. Mark a box only after the physical steps succeed. A missing control, unsupported feature or timeout is not a pass.
 
@@ -25,7 +26,7 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 ### 01:00–03:00 — Emoji, skin tones and Delete
 
 - [ ] Tap Emoji. Swipe through two categories, then tap a category icon and insert one emoji from each of the four rows. Long-press 👍, slide to a skin tone and release; then begin another hold and switch to Home with a second finger before releasing. Reopen Notes, check that the cancelled hold inserted nothing, then reopen Emoji and tap the same base emoji. Compare Delete's size with ABC and 123 pages; delete one inserted emoji.
-- **Expected:** four rows use the available height, larger glyphs remain unclipped, and category taps/swipes work. A successful hold inserts exactly one chosen variant, never an additional base emoji. Cancellation inserts nothing; the next tap remains usable. The chosen preference is retained where configured. Delete retains the shared command-key dimensions and removes one complete emoji without corrupting nearby text. Record any emoji obscured by its overlay.
+- **Expected:** four rows use the available height, larger glyphs remain unclipped, and category taps/swipes work. A successful hold inserts exactly one chosen variant, never an additional base emoji. Cancellation inserts nothing; the next tap remains usable. Delete retains the shared command-key dimensions and removes one complete emoji without corrupting nearby text. Record any emoji obscured by its overlay.
 
 ### 03:00–04:00 — Landscape and ordinary typing
 
@@ -48,35 +49,37 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 - [ ] With microphone access already granted and keyboard haptics at Default, begin two short dictations in Notes, one by tap and one by hold. Observe the recording state and feel when the mic becomes active. Cancel one before insertion. Turn Keyboard haptics Off, repeat a start, then restore the original setting.
 - **Expected:** feedback corresponds to actual microphone activation, with no premature or duplicated mic-on pulse. Hold/release and cancel finish cleanly; cancellation produces no late insertion. The app's Off setting suppresses app-generated haptics. Record OS/hardware haptic settings if feedback is absent.
 
-### 08:00–10:00 — System Live Activity and setup-video PiP
+### 08:00–09:00 — System Live Activity
 
-- [ ] Set Syllivra > Settings > Dictation > Advanced > Models and Live Activity > Dictation presence to Live Activity. Enable keyboard dictation, background the app and inspect Lock Screen/Dynamic Island where supported. Run a brief dictation, stop it and observe that recording state ends. Set presence to Off.
-- [ ] Open Syllivra > Settings > Help > Keyboard setup. Enable Show video over Settings, tap Play guide, then Open Keyboard Settings. Interact with the floating system video, return to Syllivra and close it.
-- **Expected:** the real system activity reflects standby/recording/finishing accurately, never remains stuck as Recording, and ends when presence/service is disabled. On supported devices, the setup guide uses genuine system PiP and Settings still opens; closing/returning works without orphaned video or audio. If PiP is unsupported or refused, record the visible fallback and leave system-PiP verification blocked. This checks tutorial PiP, not a nonexistent PiP dictation-presence mode.
+- [ ] Turn on Syllivra > Dictation > Live Activity. Enable keyboard dictation, background the app and inspect Lock Screen/Dynamic Island where supported. Run a brief dictation, stop it and observe that recording state ends. Turn Live Activity off again.
+- **Expected:** the real system activity reflects standby/recording/finishing accurately, never remains stuck as Recording, and ends when the setting or the service is turned off.
 
-### 10:00–12:00 — Qwen load, inference and foreground loss
+### 09:00–10:00 — Text replacements and autocorrect
 
-- [ ] Open Syllivra > Settings > Models & downloads. In the app-model selector choose the preinstalled Qwen row; leave the keyboard-model selector on a compatible non-Qwen model. Measure time from selection to Ready. In Speak, start dictation and say the fixed “Tomorrow at ten…” sentence; record first-result and final-result delays. Start another Qwen request, cancel/close before completion, then start again. During the last request, briefly background and reopen Syllivra.
-- **Expected:** model loading reaches Ready or shows an actionable failure, without a crash, endless spinner or false keyboard-model selection. Output keeps the sentence's meaning. Cancellation never delivers an old result into the next session. Foreground loss stops/recovers truthfully rather than silently continuing an unsupported session. Record actual timings; no speed or memory claim follows from this short check. If load exceeds the slot, mark it blocked and schedule the longer check.
+- [ ] In a new Notes paragraph, type the iOS text replacement shortcut noted before the timer, then Space. Type `teh`, `goign` and `becuase`, each followed by Space.
+- **Expected:** the shortcut expands to its phrase followed by one space. The three words become `the`, `going` and `because`. If Syllivra Replacements appears under Syllivra > Keyboard (snippets from an earlier version), one of those shortcuts also expands.
+
+### 10:00–12:00 — Voice model switch and foreground loss
+
+- [ ] Open Syllivra > Models and pick the second downloaded Whisper model in Voice Model. Measure time from selection to Ready. Tap New Dictation and say the fixed “Tomorrow at ten…” sentence; record first-result and final-result delays. Start another dictation, cancel before completion, then start again. During the last request, briefly background and reopen Syllivra. Set Voice Model back to its recorded choice.
+- **Expected:** the model reaches Ready or shows an actionable failure, without a crash or endless spinner, and the keyboard keeps working. Output keeps the sentence's meaning. Cancellation never delivers an old result into the next session. Foreground loss stops or recovers truthfully. Record actual timings; no speed or memory claim follows from this short check.
 
 ### 12:00–15:00 — Intentional spelling overrides and restoration
 
 - [ ] In a new Notes paragraph, type an unfamiliar spelling followed by Space. Try `bonjor`; if it is not corrected, choose another token that visibly autocorrects and record the typed/replacement pair. Backspace away the inserted space and correction, retype the original spelling at the same caret position, and press Space. Repeat the original spelling three times, dismiss/reopen the keyboard and type it once more.
-- [ ] Repeat one override in the unsent Messages draft. Move the caret to an earlier word and make a normal edit; confirm it does not unexpectedly rewrite trailing text. Check Syllivra > Settings > Keyboard > Words & shortcuts if the override appears as a learned word. Restore the initial model, permissions, language/style, top-bar, haptic and presence choices; leave no recording running.
+- [ ] Repeat one override in the unsent Messages draft. Move the caret to an earlier word and make a normal edit; confirm it does not unexpectedly rewrite trailing text. Check Syllivra > Keyboard > Vocabulary if the override appears as a learned word. Restore the initial model, permissions, language/style, top-bar, haptic and presence choices; leave no recording running.
 - **Expected:** deliberate restoration is respected immediately and is not repeatedly changed back by a cached correction. The chosen spelling remains protected after reopening and in the other app where learning applies. Unrelated text/caret edits remain intact. If no token autocorrected, the override path was not exercised: mark it blocked, not passed. Do not clear the entire dictionary to make this test work.
 
 ## Follow-up gates this smoke check cannot close
 
 Keep these separate and unchecked; 15 minutes cannot establish full release readiness:
 
-- [ ] Repeat More/emoji/landscape with top bar On, Solid/Liquid Glass, inset on/off, large text, other screen sizes and additional host apps.
+- [ ] Repeat More/emoji/landscape with top bar On, light and dark, large text, other screen sizes and additional host apps.
 - [ ] Exercise URL/search, numeric, secure and one-time-code fields; secure fields may correctly use the system keyboard. Confirm field-aware actions, default writing style and all denied/restored permission paths.
 - [ ] Use licensed/consented multilingual files and independent native-language review for English/German/Chinese switches, cleanup, translation meaning, Apple Translation pair availability and out-of-selection language handling. Text guards are not semantic proof.
-- [ ] Measure repeated cold/warm Qwen load, inference, sustained latency, memory/thermal pressure, interruption and foreground-loss recovery on the phone, including long recordings and cancellation during loading.
+- [ ] Measure repeated cold/warm loads of the larger Whisper models, inference, sustained latency, memory/thermal pressure, interruption and foreground-loss recovery on the phone, including long recordings and cancellation during loading.
 - [ ] Check long background/Lock Screen sessions, interruption recovery, delivery/undo and Live Activity cleanup beyond the timed smoke check.
 
-## Local verification and proposed integration
+## Local verification
 
-The pre-commit source passed `cd SyllivraKernel && swift test` with task-local scratch: 1,983 kernel tests plus 41 inference tests, one existing skip, zero failures. A single serial arm64 Debug simulator build of `DictusApp` also passed; it includes the keyboard and widgets. Logs and the build result bundle are retained in `/private/tmp/codex-task.eoienxvn/artifacts`. SwiftLint is unavailable on this machine, so strict lint was not run. These are Mac/compile results, not physical acceptance.
-
-Proposed only: after the three review documents are approved, required phone gates are recorded and the worktree is ready, recheck ancestry and fast-forward `saiity-fork` to `cursor/keyboard-surface-fixes-a66e` using `git merge --ff-only cursor/keyboard-surface-fixes-a66e` while on `saiity-fork`. This preserves the existing 84 commits and the new local commits. If `saiity-fork` has diverged, stop and review an explicit merge instead of rebasing or resetting either branch. No branch switch, integration, remote push or TestFlight cut is performed by this task.
+On 22 Oct 2026, branch `claude/slim-native` (4d39fcd2): 1,811 kernel tests passed; `scripts/test-key-grid-typing.swift`, `scripts/test-multilingual-autocorrect.swift` and `scripts/test-autocorrect-overrides.swift` passed on the iOS 26.5 simulator; `scripts/test-aosp-trie-concurrency.mm` passed under ASan/UBSan and TSan. See `2026-10-21-slim-native.md`. These are Mac and simulator results, not physical acceptance.
