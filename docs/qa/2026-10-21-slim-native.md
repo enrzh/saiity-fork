@@ -1,46 +1,63 @@
-# Slimmer, more native app and keyboard (21 Oct 2026)
+# Slimmer, more native app and keyboard (21–22 Oct 2026)
 
-Branch `claude/slim-native`, commits 59e130bc, ee38b5fd and 5b0b85bd on top of 6fc3b8ab. Build number unchanged (243). No phone install, TestFlight, push or release.
+Branch `claude/slim-native`, nine commits on top of 6fc3b8ab (59e130bc to 4d39fcd2). Build number unchanged (243). No phone install, TestFlight, push or release.
 
 ## Size
 
-Unsigned Release device builds of the same tree before and after, measured with `du -sk`:
+Unsigned Release device builds, measured with `du -sk`:
 
-| Part | Before | After |
-| --- | ---: | ---: |
-| Whole app | 67,968 KiB | 58,000 KiB |
-| Keyboard extension | 31,272 KiB | 25,220 KiB |
-| Widget extension | 2,784 KiB | 1,664 KiB |
-| Sounds | 1,216 KiB | 100 KiB |
+| Part | 6fc3b8ab | After 5b0b85bd | Now (4d39fcd2) |
+| --- | ---: | ---: | ---: |
+| Whole app | 67,968 KiB | 58,000 KiB | 36,716 KiB |
+| Keyboard extension | 31,272 KiB | 25,220 KiB | 24,952 KiB |
+| Widget extension | 2,784 KiB | 1,664 KiB | 1,472 KiB |
 
 Where it came from:
 
 - Next-word dictionaries use the NGRM v2 layout (`tools/ngram_pack.py`): 25.7 MB to 20.6 MB. Each prediction is one 32-bit word/score index; keys and entry starts are tables read straight from the mapped file, so loading builds no index and a loaded language no longer holds 1,280 KiB of heap.
-- The brand PNG only the hidden paywall used was copied into the app, keyboard and widget bundles (about 1.1 MB each). It, the paywall and the kernel's resource bundle are gone; the logo is the existing vector everywhere.
-- Sound feedback is off by default and nothing in the app could turn it on or pick a sound. The three default sounds remain; a different saved name falls back to its default.
-- The keyboard setup video (old "sAiity" branding, picture in picture) is replaced by written steps.
+- The MLX engine (Qwen3-ASR and local cleanup), Parakeet (FluidAudio) and custom/Ollama models are gone; the app binary fell from about 22 MB to 5,240 KiB. Dictation is Whisper; cleanup is Apple Intelligence or none. Downloaded files of the removed engines are deleted on launch.
+- The hidden paywall and subscription code, sound feedback and its sounds, the brand PNG every target copied, the setup video and about 1,900 lines of unreachable keyboard code are gone.
 
-## Dictionary equivalence
+## What changed for the user
+
+- The app is one native list: readiness, Keyboard Dictation, recent dictations, then Dictation, Keyboard, Models, Help and About. Models has one Voice Model picker (Automatic or a specific model).
+- Keyboard settings are Layout, Default Keyboard, Autocorrection, Show Top Bar, Haptics and Vocabulary. Material, Background, Key Containers, Key Popups, Hold Speed, Adaptive Touch and the per-key Tap and Hold editor are gone; everyone gets the former defaults (glass board, key plates, popup previews, every accent and skin tone, default hold timing, adaptive key targets).
+- Key popups and the accent row are opaque like the keys. As glass they rendered light grey, so a dark-mode popup showed a white letter on near-white.
+- The keyboard expands the text replacements from iPhone Settings › General › Keyboard › Text Replacement. Syllivra no longer has its own editor; snippets saved earlier still expand, win over iOS's for the same shortcut, and can be deleted under Keyboard › Syllivra Replacements, which appears only while any exist.
+- Autocorrect fixes swapped letters ("hte", "goign", "wrok", "taht", and in German "nciht", "acuh", "eigentlcih") and common English web typos ("teh", "adn", "becuase", "recieve", "definately", "seperate"). See "Autocorrect" below.
+- Replay, the "usable without editing?" buttons and the separate Cleanup Diagnostics screen are gone; cleanup events are under Help › Diagnostics.
+
+## Autocorrect
+
+Two faults, both older than this branch:
+
+1. The trie search tried a swap only when both letters sat in the same compressed node. They usually sit on either side of a branch, so swaps were scored as two key substitutions ("goign" → "gough"). The search now carries the second half of a swap into the next node.
+2. `en_spellcheck.dict` is built from Norvig's web counts, which contain web typos; a listed word counts as correct. `tools/typo_finder.swift` lists words macOS's US and British dictionaries reject (capitalized too, so names stay) and would autocorrect to a word of the list at least five times as frequent and at most two edits away. `tools/dict_builder.py --exclude tools/typos/en.tsv` leaves those 2,496 entries out (37,504 remain). British spellings ("tyres", "practise", "colour") and chat words ("gonna", "lol", "okay") stay. German, French and Spanish are unchanged: their candidate lists held colloquial words ("ähm", "kämst", "roller").
+
+Checks: the multilingual harness (`scripts/test-multilingual-autocorrect.swift`) gained these cases and passes; `scripts/test-aosp-trie-concurrency.mm` passes under ASan/UBSan and TSan; the builder still reproduces the German, French and Spanish dictionaries byte for byte. In Messages on the simulator, "i am goign home becuase teh weather is nice adn warm" now types as "i am going home because the weather is nice and warm" (before: unchanged).
+
+## Dictionary equivalence (NGRM v2)
 
 - `tools/ngram_pack.py` decodes every v2 entry and compares it with the v1 entry before writing.
-- The old reader (from 6fc3b8ab) and the new reader were compiled side by side and given the same queries: every word in each language's string table and frequency list as a bigram key (results capped at 3 and 16), bigram scores, every predicted follower as a trigram pair, trigram scores and capitalized variants. 38 million queries across de/en/es/fr, zero differences.
-- `scripts/test-aosp-trie-concurrency.mm` passes under ASan/UBSan and under TSan. 3,000 truncated or corrupted files loaded under ASan without a crash.
-- On the simulator, an identical 52-character typing run produced the same text and the same 27 autocorrect log decisions with the old build (v1 file, 6,154,536 bytes loaded) and the new build (v2, 4,802,112 bytes).
+- Old and new readers were given the same 38 million queries across de/en/es/fr with zero differences. 3,000 truncated or corrupted files loaded under ASan without a crash.
+
+## Tests
+
+- 1,811 kernel tests pass.
+- `scripts/test-key-grid-typing.swift` passes end to end. Two of its checks had gone stale before this branch (the emoji grid stops before Delete; Delete uses the narrowed command face) and failed the same way on the pre-branch build; they now check the current layout.
+- `scripts/test-autocorrect-overrides.swift` and `scripts/render-native-keyboard.swift --compile-only` pass.
 
 ## Seen on screen (simulator "sAiity Product QA", iOS 26.5, light and dark)
 
-Taps reach the keyboard extension on this simulator, so these were exercised, not inferred:
-
-- More with the top bar off and on opens the native menu; Output language opens its submenu.
-- Emoji: categories switch, a tap inserts the emoji, Delete removes one whole emoji, the grid stops before Delete, and hold-then-slide inserts exactly one skin-tone variant.
-- Letters type correctly at about one tap per second.
-- The app: home, Dictation, Keyboard, Models, Help, About, history, setup steps, dark mode and the largest accessibility text size.
+- More with the top bar off and on, Output language, emoji (categories, insert, Delete, skin-tone hold-slide), letters, press popup and accent row in light and dark.
+- The app: home, Dictation, Keyboard, Models, Help, About, Diagnostics, history, setup steps, dark mode and the largest text size.
+- iOS's "vlg" replacement expanded to "Viele liebe Grüße!"; a saved Syllivra snippet for the same shortcut won; deleting it hid the row.
 
 ## Observations, not changed
 
-- Space did not correct "teh", "adn" or "goign" in either build. The English trie contains "becuase" (frequency 36,213), so it is treated as a word.
-- Faster tapping (about 0.35 s apart) occasionally dropped the first letter after a space. It did not happen at one tap per second; whether a phone shows it is unknown.
+- Faster tapping (about 0.35 s apart) occasionally dropped the first letter after a space in the simulator. It did not happen at one tap per second.
+- A lowercase "i" is not capitalized to "I".
 
 ## Still needs a phone
 
-Haptics and typing feel, real dictation from the keyboard and in the app, Live Activity, autocorrect in other apps, and memory with a large model loaded. See `build-244-phone-check.md`.
+Haptics and typing feel, real dictation from the keyboard and in the app, Live Activity, autocorrect and text replacements in other apps, and memory with a large model loaded. See `build-244-phone-check.md`.
