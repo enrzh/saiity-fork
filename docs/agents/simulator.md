@@ -316,6 +316,10 @@ xcrun simctl shutdown <udid>
 
 ## 8. What the simulator cannot show
 
+**Update 2026-10-21 (Xcode 27, iOS 26.5 runtime, `sAiity Product QA`): taps do reach the keyboard extension.** `axe tap --tap-style physical` opened More, its Output language submenu, the emoji board and the letters page; emoji, Delete and letters reached the host field, and `axe touch --down` then `axe swipe` chose a skin tone. The 2026-09-24 measurement below is kept as history. Read the extension's frames from a screenshot (pixels ÷ 3 on this device) because its controls are absent from `describe-ui`.
+
+**Never leave a touch down.** An `axe touch --down` without a matching `--up` blocks every later tap, swipe and Home press without an error. Shutting the device down and booting it again cleared it.
+
 **Tapping and typing are no longer on this list.** They were, until 2026-08-22, on the grounds that `simctl` has no touch injection. That is still true of `simctl` and was never true of the machine: see section 5. Do not re-derive the old limit from the `simctl` man page.
 
 **The Dictus keyboard CAN be enabled in a simulator.** This file said the opposite until 2026-08-23. It was wrong. Enabling it takes taps, and section 5 taps: Settings → Général → Clavier → Claviers → Ajouter un clavier → Dictus. Read each screen with `describe-ui` and tap the row centre from the reported `AXFrame` — these rows carry labels but no identifiers, so coordinates are what work.
