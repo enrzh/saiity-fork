@@ -49,8 +49,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct DictusApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var coordinator = DictationCoordinator.shared
-    @StateObject private var proStatus: ProStatusManager
-    @StateObject private var subscriptionManager: SubscriptionManager
 
     /// Onboarding completion state shared through the App Group.
     /// It is read once into local `@State` during app initialization, then persisted
@@ -133,15 +131,6 @@ struct DictusApp: App {
             defaults?.set(true, forKey: SharedKeys.polishEnabled)
         }
 
-        // Initialize Pro subscription management.
-        // WHY explicit _proStatus / _subscriptionManager initialization:
-        // SubscriptionManager depends on ProStatusManager (it writes Pro status
-        // to App Group). We need to create proStatus first, pass it to
-        // SubscriptionManager, then wrap both in StateObject.
-        let proStatus = ProStatusManager()
-        _proStatus = StateObject(wrappedValue: proStatus)
-        _subscriptionManager = StateObject(wrappedValue: SubscriptionManager(proStatus: proStatus))
-
         // Warm up the polish engine for the current target language (#141).
         // No-op when the toggle is off or when the engine has nothing to warm.
         PolishCoordinator.shared.prewarm()
@@ -153,8 +142,6 @@ struct DictusApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(coordinator)
-                .environmentObject(proStatus)
-                .environmentObject(subscriptionManager)
             .overlay {
                     if #available(iOS 26.0, *) {
                         TranslationHost(coordinator: coordinator)
@@ -219,14 +206,11 @@ struct DictusApp: App {
 
                     switch phase {
                     case .active:
-                        RecordingReplay.shared.refreshAvailability()
                         PersistentLog.log(.appDidBecomeActive)
                     case .inactive:
-                        RecordingReplay.shared.clear()
                         coordinator.stopForegroundOnlyRecognitionIfNeeded()
                         PersistentLog.log(.appWillResignActive)
                     case .background:
-                        RecordingReplay.shared.clear()
                         PersistentLog.log(.appDidEnterBackground)
 
                         // A configured-but-idle audio session keeps the microphone
@@ -302,8 +286,6 @@ struct DictusApp: App {
                 )) {
                     OnboardingView(isComplete: $hasCompletedOnboarding)
                         .environmentObject(coordinator)
-                        .environmentObject(proStatus)
-                        .environmentObject(subscriptionManager)
                 }
         }
     }

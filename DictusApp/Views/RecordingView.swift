@@ -58,7 +58,6 @@ struct RecordingView: View {
     @State private var showCopiedFeedback = false
     /// Two-step dismissal: animate out first, then reset coordinator status.
     @State private var isDismissing = false
-    @ObservedObject private var replay = RecordingReplay.shared
     @State private var showRecoveryModels = false
 
     /// The stage this screen draws, which trails `coordinator.status` by up to
@@ -96,7 +95,6 @@ struct RecordingView: View {
                         if showResult, let result = transcriptionResult {
                             DictationTranscriptResult(result: result, original: coordinator.lastOriginalResult,
                                 onRestore: { transcriptionResult = $0 },
-                                onFeedback: savedResultFeedback(for: result),
                                 translationFallback: coordinator.lastTranslationFallbackReason != nil)
                         } else if showError, let error = errorMessage {
                             Label("Something interrupted dictation", systemImage: "exclamationmark.triangle")
@@ -123,13 +121,6 @@ struct RecordingView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                }
-                if replay.available && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
-                    Section {
-                        Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay recording") { replay.toggle() }
-                            .accessibilityIdentifier("dictation.replay")
-                        if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                    }
                 }
                 if scrollsControls {
                     Section { recorderControls }
@@ -176,7 +167,6 @@ struct RecordingView: View {
             advanceDisplayedStatus(to: coordinator.status)
         }
         .onDisappear {
-            replay.stop()
             holdTask?.cancel()
             holdTask = nil
             // Reset, not merely cancel: `.onAppear` re-adopts the stage in flight, and
@@ -339,13 +329,6 @@ struct RecordingView: View {
 
     // MARK: - Status Handling
 
-    private func savedResultFeedback(for result: String) -> ((RecentDictation.Feedback) -> Void)? {
-        guard AppGroup.defaults.object(forKey: SharedKeys.historyEnabled) as? Bool ?? true else { return nil }
-        guard let item = RecentDictations.load(from: AppGroup.defaults).first(where: {
-            $0.text == String(result.trimmingCharacters(in: .whitespacesAndNewlines).prefix(RecentDictations.maxTextCharacters))
-        }) else { return nil }
-        return { RecentDictations.recordFeedback($0, for: item.id, in: AppGroup.defaults) }
-    }
 
     private func handleStatusChange(_ newStatus: DictationStatus) {
         UIAccessibility.post(notification: .announcement, argument: statusAnnouncement(for: newStatus))

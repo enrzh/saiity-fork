@@ -6,17 +6,13 @@ public struct RecentDictation: Codable, Equatable, Identifiable, Sendable {
     public var text: String
     public var createdAt: TimeInterval
     public var originalText: String?
-    public var feedback: Feedback?
-
-    public enum Feedback: String, Codable, Sendable { case accepted, needsEditing }
 
     public init(id: UUID = UUID(), text: String, createdAt: TimeInterval = Date().timeIntervalSince1970,
-                originalText: String? = nil, feedback: Feedback? = nil) {
+                originalText: String? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
         self.originalText = originalText
-        self.feedback = feedback
     }
 }
 
@@ -75,18 +71,11 @@ public enum RecentDictations {
             id: item.id,
             text: String(text.prefix(maxTextCharacters)),
             createdAt: item.createdAt,
-            originalText: items[index].originalText,
-            feedback: text == items[index].text ? item.feedback ?? items[index].feedback : .needsEditing
+            originalText: items[index].originalText
         )
         store(items, in: defaults)
     }
 
-    public static func recordFeedback(_ feedback: RecentDictation.Feedback, for id: UUID, in defaults: UserDefaults) {
-        var items = load(from: defaults)
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].feedback = feedback
-        store(items, in: defaults)
-    }
 
     private static func store(_ items: [RecentDictation], in defaults: UserDefaults) {
         defaults.set(try? JSONEncoder().encode(items), forKey: SharedKeys.recentDictations)

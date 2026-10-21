@@ -9,7 +9,6 @@ struct HomeView: View {
     @EnvironmentObject var coordinator: DictationCoordinator
     @AppStorage(SharedKeys.appDictationModelReady, store: AppGroup.defaults) private var modelReady = false
 
-    @ObservedObject private var replay = RecordingReplay.shared
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @State private var recentDictationItems: [RecentDictation] = []
     @AppStorage(SharedKeys.recentDictations, store: AppGroup.defaults) private var recentDictationData = Data()
@@ -32,13 +31,6 @@ struct HomeView: View {
                 .accessibilityIdentifier("home.keyboardDictationToggle")
             } footer: {
                 Text(LocalizedStringKey(keyboardFooter))
-            }
-            if replay.available && coordinator.canChangeSpeechRuntime {
-                Section {
-                    Button(replay.playing ? "Stop Replay" : replay.trimmed ? "Replay Last 60 Seconds" : "Replay Last Recording") { replay.toggle() }
-                } footer: {
-                    if let message = replay.message { Text(message) }
-                }
             }
             if historyEnabled && !recentDictationItems.isEmpty {
                 Section("Recent") {
@@ -77,9 +69,7 @@ struct HomeView: View {
                 .accessibilityIdentifier("home.newDictation")
             }
         }
-        .onDisappear { replay.stop() }
         .onAppear {
-            replay.refreshAvailability()
             refreshMicrophonePermission()
             reloadRecentDictations()
         }
@@ -343,12 +333,10 @@ struct DictationTranscriptResult: View {
     let result: String
     let original: String?
     var onRestore: ((String) -> Void)?
-    var onFeedback: ((RecentDictation.Feedback) -> Void)?
     var translationFallback = false
     @State private var showOriginal = false
     @State private var copied = false
     @State private var restoreBackup: String?
-    @State private var rated = false
     @State private var isEditing = false
     @State private var editingText = ""
 
@@ -385,9 +373,6 @@ struct DictationTranscriptResult: View {
                     onRestore(replacement)
                 }.buttonStyle(.bordered).accessibilityIdentifier("dictation.restoreOriginal")
                     .accessibilityLabel(restoreBackup == nil ? "Use original transcript" : "Restore previous result")
-            }
-            if rated {
-                Text("Feedback saved on this device.").font(.caption).foregroundStyle(.secondary)
             }
         }
         .sheet(isPresented: $isEditing) {
@@ -427,12 +412,6 @@ struct DictationTranscriptResult: View {
                 .accessibilityValue(showOriginal ? "Original" : "Result")
             }
             shareButton
-            if onFeedback != nil && !rated {
-                Section("Could you use the delivered result without editing?") {
-                    feedbackButton(.accepted, "Usable unchanged", "hand.thumbsup")
-                    feedbackButton(.needsEditing, "Needs editing", "pencil")
-                }
-            }
         } label: {
             Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
         }.foregroundStyle(.primary).accessibilityLabel("More transcript actions")
@@ -450,11 +429,6 @@ struct DictationTranscriptResult: View {
     }
     private var shareButton: some View {
         ShareLink(item: displayed) { Label("Share", systemImage: "square.and.arrow.up") }
-    }
-    private func feedbackButton(_ feedback: RecentDictation.Feedback, _ label: String, _ icon: String) -> some View {
-        let title = typeSize.isAccessibilitySize ? (feedback == .accepted ? "Usable" : "Edit") : label
-        return Button { onFeedback?(feedback); rated = true } label: { Label(title, systemImage: icon) }
-            .accessibilityLabel(label)
     }
 }
 
@@ -476,10 +450,7 @@ private struct DictationHistoryEditView: View {
                 Text(Date(timeIntervalSince1970: item.createdAt).formatted(date: .abbreviated, time: .shortened))
                     .font(.footnote).foregroundStyle(.secondary)
                 DictationTranscriptResult(result: text, original: item.originalText,
-                    onRestore: { text = $0 }, onFeedback: {
-                        RecentDictations.recordFeedback(text == item.text ? $0 : .needsEditing,
-                            for: item.id, in: AppGroup.defaults)
-                    })
+                    onRestore: { text = $0 })
             }
             .frame(maxWidth: 640, alignment: .leading).frame(maxWidth: .infinity)
             .padding(24)
@@ -495,7 +466,7 @@ private struct DictationHistoryEditView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     onSave(RecentDictation(id: item.id, text: text, createdAt: item.createdAt,
-                        originalText: item.originalText, feedback: text == item.text ? item.feedback : .needsEditing))
+                        originalText: item.originalText))
                     dismiss()
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

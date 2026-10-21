@@ -119,7 +119,6 @@ public enum SharedKeys {
     public static let modelSelectionProfile = "dictus.modelSelectionProfile"
     public static let spokenLanguages = "dictus.spokenLanguages"
     public static let onboardingUsage = "dictus.onboardingUsage"
-    public static let recordingReplayEnabled = "dictus.recordingReplayEnabled"
     public static let dictationRecognizer = "dictus.dictationRecognizer"
     public static let dictationStreamingModel = "dictus.dictationStreamingModel"
     public static let dictationWhisperModel = "dictus.dictationWhisperModel"
@@ -245,44 +244,13 @@ public enum SharedKeys {
     /// String: the last Live Activity identifier published by DictusApp, for logs.
     public static let liveActivityID = "dictus.liveActivityID"
 
-    // MARK: - Sound Feedback
-    /// Whether sound feedback is enabled for recording events, default true
-    public static let soundFeedbackEnabled = "dictus.soundFeedbackEnabled"
-    /// Name of the WAV file (without extension) to play when recording starts
-    public static let recordStartSoundName = "dictus.recordStartSoundName"
-    /// Name of the WAV file (without extension) to play when recording stops
-    public static let recordStopSoundName = "dictus.recordStopSoundName"
-    /// Name of the WAV file (without extension) to play when recording is cancelled
-    public static let recordCancelSoundName = "dictus.recordCancelSoundName"
-    /// Sound volume from 0.0 to 1.0, default 0.5
-    public static let soundVolume = "dictus.soundVolume"
-
-    // MARK: - Pro / Subscription
-    /// Bool: true when the user has an active Pro subscription.
-    /// Written by SubscriptionManager (DictusApp), read by the keyboard extension.
-    public static let proActive = "dictus.proActive"
-    /// Bool: per-feature toggle for Smart Mode, default true (registered by ProStatusManager)
-    public static let smartModeEnabled = "dictus.smartModeEnabled"
-    /// Bool: per-feature toggle for History, default true (registered by ProStatusManager)
+    // MARK: - History and vocabulary
+    /// Bool: save finished dictations; absent means on.
     public static let historyEnabled = "dictus.historyEnabled"
     /// Explicit consent for transcript-bearing cleanup diagnostics; off by default.
     public static let polishDebugTranscriptsEnabled = "dictus.debug.polishTranscriptsEnabled"
-    /// Bool: per-feature toggle for Vocabulary, default true (registered by ProStatusManager)
+    /// Bool: use approved vocabulary hints; absent means on.
     public static let vocabularyEnabled = "dictus.vocabularyEnabled"
     /// Case-preserving spellings explicitly approved for ASR and cleanup hints.
     public static let dictationVocabulary = "dictus.dictationVocabulary"
-
-    // MARK: - #357 spike (throwaway)
-    /// Bool: arms exactly ONE Apple Foundation Models probe run inside the
-    /// keyboard extension. Written by the hidden polish debug screen, read and
-    /// immediately cleared by `AppleFMExtensionProbe` in DictusKeyboard.
-    ///
-    /// WHY it lives here rather than next to the probe: the two processes that
-    /// have to agree on this string cannot see each other's targets, and a
-    /// literal duplicated across a process boundary is the kind of typo that
-    /// costs a device session to find. Absent — which is the shipped state —
-    /// it reads false and the probe never runs.
-    ///
-    /// Delete with the spike.
-    public static let appleFMExtensionProbeArmed = "dictus.debug.appleFMExtensionProbeArmed"
 }

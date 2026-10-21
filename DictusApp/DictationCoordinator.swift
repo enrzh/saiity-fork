@@ -92,7 +92,6 @@ class DictationCoordinator: ObservableObject {
         guard UIApplication.shared.applicationState == .active else { return }
         guard canChangeSpeechRuntime else { return }
         guard keyboardSessionTask == nil, !audioEngine.isEngineRunning else { return }
-        RecordingReplay.shared.stop()
         isPreparingKeyboardSession = true
         keyboardSessionTask = Task { [weak self] in
             guard let self else { return }
@@ -571,7 +570,6 @@ class DictationCoordinator: ObservableObject {
         // startDictation directly without going through stopDictation first.
         // The old result must be cleared regardless of entry path so
         // RecordingView never shows a stale transcription card.
-        RecordingReplay.shared.clear()
         lastResult = nil
         lastOriginalResult = nil
         lastTranslationFallbackReason = nil
@@ -657,11 +655,6 @@ class DictationCoordinator: ObservableObject {
         // Cancel any in-flight dictation before starting a new one
         dictationTask?.cancel()
         updateStatus(.requested)
-
-        // Play start sound BEFORE configuring the audio session.
-        // WHY before: Once the audio session is configured with .playAndRecord,
-        // AudioServicesPlaySystemSound may be suppressed.
-        SoundFeedbackService.playRecordStart()
 
         // The session these start paths belong to. `ensureMicrophonePermission` is
         // an await even when permission is already granted, so a cancel queued on
@@ -884,7 +877,6 @@ class DictationCoordinator: ObservableObject {
         var runtimeMetrics = DictationRuntimeMetrics(sessionID: capturedLanguageRequest.sessionID ?? "unbound")
         // Capture ends at Stop, not when a scheduled UI task eventually runs.
         let samples = collectCompletedRecording()
-        RecordingReplay.shared.retain(samples, session: session)
         runtimeMetrics.mark("sampleDrain")
         runtimeMetrics.setContext("cleanupEngine", value: cleanupSettings.engine.identifier)
         runtimeMetrics.setContext("style", value: cleanupSettings.style.rawValue)
@@ -932,7 +924,6 @@ class DictationCoordinator: ObservableObject {
                 // Arm watchdog: if DI fails to leave .recording, force recovery after 10s.
                 // If transitionToTranscribing succeeded, the watchdog's guard exits harmlessly.
                 LiveActivityManager.shared.startRecordingWatchdog()
-                SoundFeedbackService.playRecordStop()
 
                 try await ensureEngineReady(preferredModel: capturedModelIdentifier)
                 guard mayReport(session, "frozen model ready") else { return }
@@ -1574,7 +1565,6 @@ class DictationCoordinator: ObservableObject {
     /// Cancel the current dictation without transcribing.
     /// Called when the keyboard sends a cancel signal via Darwin notification.
     func cancelDictation() {
-        RecordingReplay.shared.clear()
         initTask?.cancel()
         transcriptionService.cancelCurrentInference()
         realtimeTask?.cancel()
@@ -1611,7 +1601,6 @@ class DictationCoordinator: ObservableObject {
         bufferEnergy = []
         bufferSeconds = 0
         cleanupRecordingKeys()
-        SoundFeedbackService.playRecordCancel()
         // Return Dynamic Island to standby (cancel = no transcription, go back to "On")
         Task { await LiveActivityManager.shared.returnToStandby() }
         // `returnToStandby` only comes back from .recording/.ready/.failed, and the
@@ -1697,7 +1686,6 @@ class DictationCoordinator: ObservableObject {
             cancelDictation()
             return
         }
-        RecordingReplay.shared.clear()
         updateStatus(.idle)
         // Keep lastResult so HomeView can display the last transcription card.
     }

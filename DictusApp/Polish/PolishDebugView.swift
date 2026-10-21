@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import SyllivraKernel
 
-/// Optional local diagnostics, reached from Settings → Troubleshooting.
+/// Optional local cleanup events, reached from Help → Diagnostics.
 struct PolishDebugView: View {
 
     @State private var entries: [PolishDebugEntry] = []
@@ -14,9 +14,6 @@ struct PolishDebugView: View {
     @State private var isExporting = false
     @State private var showClearConfirmation = false
     @State private var showExportedFeedback = false
-    /// #357 spike, throwaway. Arms ONE Apple FM probe run inside the keyboard
-    /// extension; see `DictusKeyboard/AppleFMExtensionProbe.swift`.
-    @State private var probeArmed = false
     @AppStorage(SharedKeys.polishDebugTranscriptsEnabled, store: AppGroup.defaults)
     private var retainTranscripts = false
 
@@ -57,28 +54,8 @@ struct PolishDebugView: View {
                     }
                 }
             }
-            #if DEBUG
-            // Internal probe stays out of distribution diagnostics.
-            Section {
-                Toggle("Arm keyboard Apple FM probe", isOn: $probeArmed)
-                    .onChange(of: probeArmed) { _, armed in
-                        AppGroup.defaults.set(armed, forKey: SharedKeys.appleFMExtensionProbeArmed)
-                    }
-            } header: {
-                Text("#357 spike")
-            } footer: {
-                Text("Fires a burst of 10 Apple FM calls inside the keyboard "
-                     + "extension, the next time the keyboard appears, then "
-                     + "disarms itself. Takes about a minute, keyboard open. "
-                     + "Results land in the persistent log as diagnosticProbe / "
-                     + "AppleFMExtensionProbe. Arm this only once the app is "
-                     + "already being refused, otherwise the result proves nothing.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            #endif
         }
-        .navigationTitle("Cleanup Diagnostics")
+        .navigationTitle("Cleanup Events")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -161,10 +138,6 @@ struct PolishDebugView: View {
     private func refresh() async {
         entries = await PolishCoordinator.shared.metricsSnapshot()
         storedCount = await PolishCoordinator.shared.metricsStoredCount()
-        // #357 spike: read the flag back rather than trusting local state. The
-        // extension clears it when it fires, so a toggle that stays on would
-        // claim a run is still pending after it has already happened.
-        probeArmed = AppGroup.defaults.bool(forKey: SharedKeys.appleFMExtensionProbeArmed)
     }
 }
 

@@ -10,7 +10,6 @@ struct DictationSettingsView: View {
     @AppStorage(SharedKeys.polishEnabled, store: AppGroup.defaults) private var polishEnabled = true
     @AppStorage(SharedKeys.transcriptionOutputMode, store: AppGroup.defaults) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
     @AppStorage(SharedKeys.writingStyle, store: AppGroup.defaults) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
-    @AppStorage(SharedKeys.recordingReplayEnabled, store: AppGroup.defaults) private var replayEnabled = false
     @AppStorage(SharedKeys.historyEnabled, store: AppGroup.defaults) private var historyEnabled = true
 
     var body: some View {
@@ -51,11 +50,8 @@ struct DictationSettingsView: View {
             }
             Section {
                 DictationPresencePicker()
-                Toggle("Keep Last Recording", isOn: $replayEnabled)
-                    .accessibilityIdentifier("dictation.replayPreference")
-                    .onChange(of: replayEnabled) { _, enabled in if !enabled { RecordingReplay.shared.clear() } }
             } footer: {
-                Text("Keeps up to the last 60 seconds in memory for five minutes so you can replay it. Audio is never saved or shared.")
+                Text("Shows dictation status on the Lock Screen and in the Dynamic Island.")
             }
             Section {
                 Toggle("Save History", isOn: $historyEnabled)
@@ -175,7 +171,6 @@ struct HelpView: View {
                 NavigationLink("Report Last Dictation") { LastDictationIssueReportView() }
                 NavigationLink("Diagnostics") { DiagnosticDetailView(result: diagnosticResult) }
                 NavigationLink("Debug Logs") { DebugLogView() }
-                NavigationLink("Cleanup Diagnostics") { PolishDebugView() }
             }
             Section("This iPhone") {
                 let device = DeviceCapabilities.current()

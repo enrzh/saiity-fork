@@ -850,17 +850,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "cursor drag must jump to a 2D layout position, not walk the string")
         XCTAssertTrue(controller.contains("let space = SpaceTrackingButton.TrackingControl()"),
                       "dictation and typing must share the same press origin and cursor component")
-        let cursor = try source("DictusKeyboard/Vendored/Controllers/LongPressController.swift")
-        XCTAssertTrue(cursor.contains("KeyboardCursorJoystickSampler"),
-                      "dictation spacebar must use the same finger-following sampler")
-        XCTAssertTrue(cursor.contains("sampler.tick("),
-                      "dictation spacebar must sample finger travel every tick")
-        XCTAssertFalse(cursor.contains("KeyboardCursorJoystick.tickInterval"),
-                       "dictation spacebar must not synthesize movement while still")
-        XCTAssertFalse(cursor.contains("CADisplayLink"),
-                       "dictation spacebar cursor movement must be driven by touch deltas")
-        XCTAssertFalse(cursor.contains("HapticFeedback.trackpadActivated()"),
-                       "dictation spacebar cursor drag must not play activation haptics")
         XCTAssertFalse(controller.contains("spaceButton?.frame = layout.letterSpaceFrame"),
                        "auxiliary pages must not cover the SwiftUI spacebar with UIKit")
     }
@@ -1197,11 +1186,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let systemKeys = try source("DictusKeyboard/Vendored/Models/SystemKeys.swift")
-        let soundPolicy = try source("DictusKeyboard/KeySoundPolicy.swift")
         let controller = try source("DictusKeyboard/KeyboardViewController.swift")
         let inputView = try source("DictusKeyboard/InputView.swift")
         XCTAssertFalse(systemKeys.contains("type: .keyboard,"))
-        XCTAssertFalse(soundPolicy.contains(".keyboard,"))
         XCTAssertFalse(controller.contains("case .keyboard:"))
         // The vendored `KeyView` that used to be searched for "globe" is deleted;
         // a file that no longer exists cannot render one. The live assertion is

@@ -142,15 +142,6 @@ final class PrecisionAndSpeedPolicyTests: XCTestCase {
         XCTAssertEqual(cache.value(for: first), "1")
     }
 
-    func testPredictionCacheReturnsOnlyTheLatestBoundedEntries() {
-        let cache = NextCharacterPredictionCache(capacity: 1)
-        cache.insert(NextCharacterProbabilities(["a": 1]), for: "first")
-        XCTAssertNotNil(cache.value(for: "first"))
-        cache.insert(NextCharacterProbabilities(["b": 1]), for: "second")
-        XCTAssertNil(cache.value(for: "first"))
-        XCTAssertEqual(cache.value(for: "second")?["b"], 1)
-    }
-
     func testWarmLatencyStoreUsesAnExponentialSmoothingSample() {
         let defaults = UserDefaults(suiteName: "PrecisionAndSpeedPolicyTests")!
         defaults.removePersistentDomain(forName: "PrecisionAndSpeedPolicyTests")

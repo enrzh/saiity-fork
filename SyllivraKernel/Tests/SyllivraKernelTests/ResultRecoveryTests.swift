@@ -22,10 +22,12 @@ final class ResultRecoveryTests: XCTestCase {
         var item = try XCTUnwrap(RecentDictations.load(from: defaults).first)
         item.text = "Hello again."
         RecentDictations.update(item, in: defaults)
-        RecentDictations.recordFeedback(.needsEditing, for: item.id, in: defaults)
         let edited = try XCTUnwrap(RecentDictations.load(from: defaults).first)
         XCTAssertEqual(edited.originalText, "uh hello")
-        XCTAssertEqual(edited.feedback, .needsEditing)
+        XCTAssertEqual(edited.text, "Hello again.")
+        let withRetiredFeedback = Data("{\"id\":\"00000000-0000-0000-0000-000000000002\",\"text\":\"Hi\",\"createdAt\":1,\"feedback\":\"accepted\"}".utf8)
+        XCTAssertEqual(try JSONDecoder().decode(RecentDictation.self, from: withRetiredFeedback).text, "Hi",
+                       "entries saved with the retired feedback field still load")
         defaults.set(false, forKey: SharedKeys.historyEnabled)
         RecentDictations.append("Private.", in: defaults, originalText: "private original")
         XCTAssertFalse(RecentDictations.load(from: defaults).contains { $0.text == "Private." })
