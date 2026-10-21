@@ -87,7 +87,7 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
             lastHitPoint = probePoint
             PersistentLog.log(.diagnosticProbe(
                 component: "KeyboardTouchRoute", instanceID: "root", action: "hit",
-                details: "mode=\(mode.rawValue) point=\(Int(point.x)),\(Int(point.y)) winner=\(hit.map { String(describing: type(of: $0)) } ?? "none") event=\(event == nil ? "preflight" : "touch") glass=\(KeyboardInteractionPreferences.liquidGlassEnabled) height=\(Int(bounds.height))"
+                details: "mode=\(mode.rawValue) point=\(Int(point.x)),\(Int(point.y)) winner=\(hit.map { String(describing: type(of: $0)) } ?? "none") event=\(event == nil ? "preflight" : "touch") height=\(Int(bounds.height))"
             ))
         }
         #endif

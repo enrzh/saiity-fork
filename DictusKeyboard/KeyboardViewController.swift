@@ -571,7 +571,6 @@ class KeyboardViewController: UIInputViewController,
         // action so the button does not keep a stale "Open Syllivra" state.
         KeyboardState.shared.refreshFromDefaults()
         HapticFeedback.refreshEnabledState()
-        KeyboardVariantPreferences.reload()
         HapticFeedback.warmUp()
         hasAppeared = true
         isAttached = true
@@ -597,17 +596,12 @@ class KeyboardViewController: UIInputViewController,
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self, self.isAttached, self.isOnScreen else { return }
-                KeyboardVariantPreferences.reload()
                 self.lastLayoutSize = nil
                 self.nextKeyboardHost?.refreshKeyLayout()
                 self.refreshVisibleKeyboardLayoutIfNeeded()
                 self.nextKeyboardHost?.refreshAppearance()
                 self.keyboardSurfaceView?.refreshAppearance()
                 self.layoutVoiceActionControls()
-                self.nextKeyboardHost?.updateHitPrediction(
-                    SuggestionState.shared.adaptiveTouchPrediction,
-                    enabled: KeyboardInteractionPreferences.adaptiveHitPredictionEnabled
-                )
             }
         typingLanguageCancellable = KeyboardState.shared.$typingLanguage
             .dropFirst()
@@ -615,10 +609,7 @@ class KeyboardViewController: UIInputViewController,
         touchPredictionCancellable = SuggestionState.shared.$adaptiveTouchPrediction
             .sink { [weak self] prediction in
                 guard let self, self.isAttached, self.isOnScreen else { return }
-                self.nextKeyboardHost?.updateHitPrediction(
-                    prediction,
-                    enabled: KeyboardInteractionPreferences.adaptiveHitPredictionEnabled
-                )
+                self.nextKeyboardHost?.updateHitPrediction(prediction)
             }
         observeEmojiCategorySelection()
         observeEmojiCategoryJump()
@@ -2079,10 +2070,7 @@ class KeyboardViewController: UIInputViewController,
         host.mount(in: inputView,
                    frame: layout.inputFrame(frame, inputViewHeight: inputView.bounds.height),
                    page: mode, commandRowCenterY: commandRowCenterY)
-        host.updateHitPrediction(
-            SuggestionState.shared.adaptiveTouchPrediction,
-            enabled: KeyboardInteractionPreferences.adaptiveHitPredictionEnabled
-        )
+        host.updateHitPrediction(SuggestionState.shared.adaptiveTouchPrediction)
     }
 
     private func unmountNextKeyboard() {

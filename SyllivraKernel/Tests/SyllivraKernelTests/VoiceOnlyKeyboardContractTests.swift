@@ -40,7 +40,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertFalse(keyboardSection.contains("Control order"))
         XCTAssertTrue(keyboardSection.contains("DefaultKeyboardModePicker()"))
-        XCTAssertTrue(keyboardSection.contains("KeyboardMaterialPicker()"))
+        XCTAssertTrue(keyboardSection.contains("Toggle(\"Show Top Bar\""))
         XCTAssertFalse(keyboardSection.contains("ModelManagerView"))
     }
 
@@ -225,7 +225,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(root.contains("voiceBoardUsesUIKitHits"))
         XCTAssertTrue(root.contains(".allowsHitTesting(!voiceBoardUsesUIKitHits)"),
                       "the SwiftUI mic must yield to the single UIKit voice-board owner")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
         XCTAssertFalse(root.contains("state.startRecording()"))
         XCTAssertFalse(root.contains("state.requestStop()"))
     }

@@ -339,7 +339,7 @@ final class EmojiPagerView: EmojiPagerCollectionView {
     }
 
     private func configure(force: Bool) {
-        layer.cornerRadius = KeyboardInteractionPreferences.keyboardInsetEnabled ? 22 : 0
+        layer.cornerRadius = 22
         guard bounds.width > 1, bounds.height > 1,
               force || configuredSize != bounds.size else { return }
         configuredSize = bounds.size
@@ -884,8 +884,7 @@ class EmojiPagerCollectionView: UICollectionView, UIGestureRecognizerDelegate {
     }
 
     fileprivate func canBeginVariantHold(at point: CGPoint) -> Bool {
-        guard KeyboardInteractionPreferences.accentVariantsEnabled,
-              let button = emojiButton(at: point) else { return false }
+        guard let button = emojiButton(at: point) else { return false }
         return KeyboardVariantPreferences.options(for: button.item.emoji, kind: .emoji).count > 1
     }
 
@@ -914,7 +913,6 @@ class EmojiPagerCollectionView: UICollectionView, UIGestureRecognizerDelegate {
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === hold else { return super.gestureRecognizerShouldBegin(gestureRecognizer) }
         guard !isDecelerating,
-              KeyboardInteractionPreferences.accentVariantsEnabled,
               let button = emojiButton(at: hold.location(in: self)) else {
             hold.state = .failed
             return false
@@ -1221,9 +1219,7 @@ private final class EmojiPageCell: UICollectionViewCell {
 }
 
 private final class EmojiKeyButton: UIButton {
-    var inputEmoji: String {
-        item.categoryID == "recents" ? item.emoji : KeyboardVariantPreferences.preferredEmoji(item.emoji)
-    }
+    var inputEmoji: String { item.emoji }
     let item: EmojiGridItem
     let reduceMotion: Bool
     var onTap: ((String) -> Void)?
@@ -1291,14 +1287,6 @@ private final class EmojiKeyButton: UIButton {
         didSet {
             layer.cornerRadius = VoiceOnlyKeyboardPolicy.emojiHighlightCornerRadius
             layer.masksToBounds = true
-            if KeyboardInteractionPreferences.keyPopupMode == .flash {
-                backgroundColor = .clear
-                layer.borderWidth = 0
-                if isHighlighted && !oldValue {
-                    flashKeyboardKey(in: bounds, cornerRadius: VoiceOnlyKeyboardPolicy.emojiHighlightCornerRadius)
-                }
-                return
-            }
             backgroundColor = isHighlighted ? UIColor.label.withAlphaComponent(0.12) : .clear
             layer.borderWidth = isHighlighted ? 1 : 0
             layer.borderColor = isHighlighted ? UIColor.label.withAlphaComponent(0.16).cgColor : nil

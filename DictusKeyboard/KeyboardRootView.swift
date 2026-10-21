@@ -116,7 +116,6 @@ struct KeyboardRootView: View {
             )
             .background(Color.clear)
         }
-        .environment(\.keyboardLiquidGlassEnabled, KeyboardInteractionPreferences.liquidGlassEnabled)
         .allowsHitTesting(false)
         .onAppear {
             // Keep the SwiftUI URL action available as the fallback when the

@@ -80,9 +80,8 @@ struct DictationSettingsView: View {
 
 struct KeyboardSettingsView: View {
     @AppStorage(SharedKeys.hapticIntensity, store: AppGroup.defaults) private var hapticIntensityRaw = HapticIntensity.default.rawValue
-    @AppStorage(SharedKeys.keyContainersEnabled, store: AppGroup.defaults) private var keyContainersEnabled = true
     @AppStorage(SharedKeys.autocorrectEnabled, store: AppGroup.defaults) private var autocorrectEnabled = true
-    @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: AppGroup.defaults) private var adaptiveHitPredictionEnabled = true
+    @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults) private var topBarEnabled = false
 
     var body: some View {
         Form {
@@ -96,32 +95,23 @@ struct KeyboardSettingsView: View {
                 Text("Autocorrection supports English, German, French and Spanish, and uses your selected keyboard language for mixed sentences. Names, codes and web addresses stay unchanged.")
             }
             Section {
-                KeyboardMaterialPicker()
-                Toggle("Key Containers", isOn: $keyContainersEnabled)
-                    .accessibilityHint("Shows opaque plates behind letters and symbols.")
-                    .onChange(of: keyContainersEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-                KeyPopupPicker()
+                Toggle("Show Top Bar", isOn: $topBarEnabled)
+                    .accessibilityIdentifier("keyboard-top-bar-setting")
+                    .accessibilityHint("Shows More, dictation power and the dictation board shortcut above typing pages.")
+                    .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
                 Picker("Haptics", selection: hapticPresetBinding) {
                     ForEach(HapticIntensity.allCases, id: \.self) { preset in
                         Text(preset.displayName).tag(preset)
                     }
                 }
                 .accessibilityIdentifier("keyboard-haptics-setting")
+            } footer: {
+                Text("Hold 123 or ABC to open the dictation board. On the board, hold 123 to return to letters.")
             }
             Section {
                 NavigationLink("Vocabulary") { VocabularyView() }
                     .accessibilityIdentifier("settings.words")
                 NavigationLink("Text Replacements") { TextSnippetsView() }
-                NavigationLink("Tap and Hold Options") { KeyboardHoldOptionsView() }
-                    .accessibilityIdentifier("settings.keyboard.variants")
-            }
-            Section {
-                KeyboardHoldSpeedPicker()
-                Toggle("Adaptive Touch", isOn: $adaptiveHitPredictionEnabled)
-                    .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter.")
-                    .onChange(of: adaptiveHitPredictionEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-            } footer: {
-                Text("Hold 123 or ABC to open the dictation board. On the board, hold 123 to return to letters.")
             }
         }
         .navigationTitle("Keyboard")

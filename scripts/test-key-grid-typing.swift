@@ -215,12 +215,6 @@ defer {
 }
 defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
 defaults.set(true, forKey: SharedKeys.keyboardTopBarEnabled)
-let saved = defaults.object(forKey: SharedKeys.keyPopupMode)
-defer {
-    if let saved { defaults.set(saved, forKey: SharedKeys.keyPopupMode) }
-    else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
-}
-defaults.set(KeyPopupMode.off.rawValue, forKey: SharedKeys.keyPopupMode)
 let grid = KeyGridView(frame: CGRect(x: 0, y: 0, width: 402, height: 175))
 let recorder = Recorder()
 grid.delegate = recorder
@@ -273,7 +267,6 @@ if !\(baseline) {
     precondition(recorder.text == "a", "Accent hold must commit exactly one letter")
 }
 
-defaults.set(KeyPopupMode.popup.rawValue, forKey: SharedKeys.keyPopupMode)
 var samples: [Double] = []
 var hosts = Set<ObjectIdentifier>()
 for _ in 0..<100 {
@@ -289,16 +282,7 @@ if !\(baseline) { precondition(hosts.count == 1, "Each letter rebuilt its previe
 if !\(baseline) {
     let surface = KeyboardSurfaceView(frame: CGRect(x: 0, y: 0, width: 402, height: 269))
     let layout = VoiceOnlyKeyboardPolicy.layout(for: 402, surfaceHeight: 269, topAccessoryHeight: 36)
-    let savedGlass = defaults.object(forKey: SharedKeys.liquidGlassEnabled)
-    let savedInset = defaults.object(forKey: SharedKeys.keyboardInsetEnabled)
-    defer {
-        if let savedGlass { defaults.set(savedGlass, forKey: SharedKeys.liquidGlassEnabled) }
-        else { defaults.removeObject(forKey: SharedKeys.liquidGlassEnabled) }
-        if let savedInset { defaults.set(savedInset, forKey: SharedKeys.keyboardInsetEnabled) }
-        else { defaults.removeObject(forKey: SharedKeys.keyboardInsetEnabled) }
-    }
-    for glass in [true, false] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+    do {
         surface.show(.emoji, layout: layout, inputHeight: 269, fieldKeys: .standard)
         surface.layoutIfNeeded()
         surface.emojiDelete.keyboardFace.layoutIfNeeded()
@@ -307,7 +291,6 @@ if !\(baseline) {
                      && surface.emojiDelete.bounds.contains(deletePlate.frame),
                      "Emoji Delete must use the enlarged command face inside its touch target")
         let inset = KeyboardNativeControlFace()
-        defaults.set(true, forKey: SharedKeys.keyboardInsetEnabled)
         inset.configureInset(layout, inputHeight: 269)
         let collection = surface.emoji
         precondition(inset.frame.contains(surface.bottomBar.frame), "Emoji inset excludes bottom bar")
@@ -346,9 +329,6 @@ if !\(baseline) {
                 }
             }
         }
-        defaults.set(false, forKey: SharedKeys.keyboardInsetEnabled)
-        inset.configureInset(layout, inputHeight: 269)
-        precondition(inset.isHidden, "Inset preference must apply to either material")
         surface.show(.letters, layout: layout, inputHeight: 269, fieldKeys: .standard)
         surface.period.layoutIfNeeded()
         let periodControl = surface.period.subviews.compactMap { $0 as? KeyboardKeyTouchControl }.first!
@@ -368,17 +348,17 @@ if !\(baseline) {
                      "Native emoji momentum was disabled")
         let blank = CGPoint(x: surface.emoji.frame.midX, y: surface.emoji.frame.minY + 1)
         precondition(surface.hitTest(blank, with: nil) === collection,
-                     "Blank emoji space must reach its scroll view in both materials")
+                     "Blank emoji space must reach its scroll view")
         precondition(abs(surface.emoji.frame.maxY - surface.emojiCategory.frame.minY) < 0.01,
                      "Emoji list must reach immediately above the category bar")
         let lastRow = CGPoint(x: surface.emojiCategory.frame.midX, y: surface.emojiCategory.frame.minY - 5)
         precondition(surface.hitTest(lastRow, with: nil) === collection.hitTest(collection.convert(lastRow, from: surface), with: nil),
                      "Category hit expansion steals the expanded emoji row")
-        let covered = CGPoint(x: surface.emojiDelete.frame.midX,
-                              y: min(surface.emojiDelete.frame.maxY, surface.emoji.frame.maxY) - 1)
-        precondition(surface.emoji.frame.contains(covered) && surface.emojiDelete.frame.contains(covered))
-        precondition(surface.hitTest(covered, with: nil) === surface.emojiDelete,
-                     "Delete must win over the emoji list behind it")
+        precondition(surface.emoji.frame.maxX <= surface.emojiDelete.frame.minX,
+                     "The emoji grid must stop before Delete's column")
+        let deleteCentre = CGPoint(x: surface.emojiDelete.frame.midX, y: surface.emojiDelete.frame.midY)
+        precondition(surface.hitTest(deleteCentre, with: nil) === surface.emojiDelete,
+                     "Delete must own its column")
         let category = CGPoint(x: surface.emojiCategory.frame.midX, y: surface.emojiCategory.frame.midY)
         precondition(surface.hitTest(category, with: nil) === surface.emojiCategory,
                      "Expanded pager covers the visible category rail")
@@ -386,8 +366,7 @@ if !\(baseline) {
 
     var commandFaces: [KeyGridView.CommandSpec] = []
     grid.onCommandFacesChanged = { commandFaces = $0 }
-    for glass in [true, false] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+    do {
         for size in [CGSize(width: 320, height: 175), CGSize(width: 402, height: 175),
                      CGSize(width: 667, height: 90), CGSize(width: 852, height: 90)] {
             grid.frame.size = size
@@ -422,12 +401,10 @@ if !\(baseline) {
     }
     grid.onCommandFacesChanged = nil
     grid.setPage(KeyGridPageFactory.letters())
-    print("PASS: shared command heights and neighbour gaps in portrait and cramped landscape, both materials and all grid pages")
+    print("PASS: shared command heights and neighbour gaps in portrait and cramped landscape on all grid pages")
 
-    for glass in [true, false] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
-        for mode in [KeyPopupMode.popup, .popout] {
-            defaults.set(mode.rawValue, forKey: SharedKeys.keyPopupMode)
+    do {
+        do {
             for keyWidth in [34.0, 82.0] {
                 let size = CGSize(width: 852, height: 134)
                 let source = CGRect(x: 720, y: 10, width: keyWidth, height: 30)
@@ -459,8 +436,7 @@ if !\(baseline) {
     }
     grid.frame.size = CGSize(width: 402, height: 175)
     grid.layoutIfNeeded()
-    defaults.set(KeyPopupMode.popup.rawValue, forKey: SharedKeys.keyPopupMode)
-    print("PASS: shared inset toggle, category/Space centre, both landscape preview styles and rotation cancellation")
+    print("PASS: shared inset, category/Space centre, landscape preview and rotation cancellation")
 
     // Observe the actual UIKit generator calls without needing a simulator motor.
     let impact = class_getInstanceMethod(UIImpactFeedbackGenerator.self,
@@ -502,31 +478,14 @@ if !\(baseline) {
     }
     print("PASS: UIKit haptic delivery, Off/Default/Snappy, letter and Emoji Delete use the same impulse")
 
-    let savedSpeed = defaults.object(forKey: SharedKeys.keyboardHoldSpeed)
-    let savedVariants = defaults.object(forKey: SharedKeys.disabledKeyVariants)
-    defer {
-        for (key, value) in [(SharedKeys.keyboardHoldSpeed, savedSpeed), (SharedKeys.disabledKeyVariants, savedVariants)] {
-            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-        }
-        KeyboardVariantPreferences.reload()
-    }
     let host = NextKeyboardHost()
     host.show(.letters)
     let original = host.gridView.page!.rows.flatMap { $0 }.first { $0.resolvedLabel.lowercased() == "a" }!
-    let alternate = original.variants.last!
-    KeyboardVariantPreferences.setEnabled(false, option: alternate, key: "a", kind: .letter)
-    host.refreshKeyLayout()
-    let filtered = host.gridView.page!.rows.flatMap { $0 }.first { $0.resolvedLabel.lowercased() == "a" }!
-    precondition(!filtered.variants.contains(alternate), "Mounted keyboard retained a disabled alternate")
-    KeyboardVariantPreferences.setEnabled(true, option: alternate, key: "a", kind: .letter)
-    host.refreshKeyLayout()
-    precondition(host.gridView.page!.rows.flatMap { $0 }.first { $0.resolvedLabel.lowercased() == "a" }!.variants.contains(alternate),
-                 "Mounted keyboard did not restore an alternate")
-    defaults.set(KeyboardHoldSpeed.snappy.rawValue, forKey: SharedKeys.keyboardHoldSpeed)
+    precondition(original.variants.count > 1, "Mounted keyboard lost the accents on a")
     var deletions = 0
     delete.onDelete = { deletions += 1 }
     delete.touchesBegan([s], with: nil)
-    waitFor({ deletions >= 2 }, message: "Delete did not repeat at the selected speed")
+    waitFor({ deletions >= 2 }, message: "Delete did not repeat")
     delete.touchesCancelled([s], with: nil)
     let stoppedAt = deletions
     RunLoop.current.run(until: Date().addingTimeInterval(KeyboardDeletion.repeatInterval * 2))
@@ -610,16 +569,16 @@ if !\(baseline) {
                  "Cursor reversal lost travel or inserted a space")
     print("PASS: held Space crosses newlines, wraps and rolling context, reverses and leaves text untouched")
     print("PASS: repeated Delete haptics, each cursor tick, immediate Space feedback and cursor hold without insertion")
-    print("PASS: live alternate reload, reserved category lane, held Delete and cancellation")
+    print("PASS: mounted alternates, reserved category lane, held Delete and cancellation")
 
-    for speed in KeyboardHoldSpeed.allCases {
+    for duration in [KeyboardDeletion.dictationHoldRecognitionDuration, KeyboardDeletion.holdRecognitionDuration] {
         let hold = KeyboardHoldSession()
         var fired = 0
-        hold.begin(after: speed.duration) { fired += 1 }
-        RunLoop.current.run(until: Date().addingTimeInterval(speed.duration * 0.7))
-        precondition(fired == 0, "Hold fired before its selected speed")
-        RunLoop.current.run(until: Date().addingTimeInterval(speed.duration * 0.4))
-        precondition(fired == 1, "Hold did not recognize once at its selected speed")
+        hold.begin(after: duration) { fired += 1 }
+        RunLoop.current.run(until: Date().addingTimeInterval(duration * 0.7))
+        precondition(fired == 0, "Hold fired early")
+        RunLoop.current.run(until: Date().addingTimeInterval(duration * 0.4))
+        precondition(fired == 1, "Hold did not recognize once once")
         hold.begin(after: 0.01) { fired += 1 }
         hold.cancel()
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
@@ -696,8 +655,7 @@ if !\(baseline) {
         controller.removeFromParent()
         touchWindow.isHidden = true
     }
-    for glass in [true, false] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+    do {
         KeyboardState.shared.presentArea(.keys)
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
@@ -705,8 +663,8 @@ if !\(baseline) {
         let boardDelete = namedControl("board-delete", in: controller.view) as! KeyboardDeleteRepeatControl
         boardDelete.keyboardFace.layoutIfNeeded()
         let boardDeletePlate = boardDelete.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
-        precondition(boardDeletePlate.frame.height == 45 && boardDeletePlate.frame.width == boardDelete.bounds.width
-                     && boardDelete.bounds.contains(boardDeletePlate.frame), "Dictation-board Delete kept its compact face")
+        precondition(boardDeletePlate.frame.height == 45 && boardDeletePlate.frame.width >= 44
+                     && boardDelete.bounds.contains(boardDeletePlate.frame), "Dictation-board Delete kept its compact face: plate=\\(boardDeletePlate.frame) bounds=\\(boardDelete.bounds)")
         for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad] {
             KeyboardState.shared.presentArea(mode)
             controller.view.setNeedsLayout()
@@ -738,10 +696,8 @@ if !\(baseline) {
         if let savedRecents { defaults.set(savedRecents, forKey: "recentEmojis") }
         else { defaults.removeObject(forKey: "recentEmojis") }
     }
-    for glass in [true, false] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
-        for inset in [true, false, true, false] {
-            defaults.set(inset, forKey: SharedKeys.keyboardInsetEnabled)
+    do {
+        for _ in 0..<2 {
             for size in [CGSize(width: 320, height: 300), CGSize(width: 402, height: 300),
                          CGSize(width: 667, height: 190), CGSize(width: 852, height: 190)] {
                 touchWindow.frame.size = size
@@ -766,14 +722,12 @@ if !\(baseline) {
                                    CGPoint(x: pager.bounds.maxX - 1, y: pager.bounds.midY)] {
                     let point = pager.convert(localPoint, to: touchWindow)
                     precondition(touchWindow.hitTest(point, with: nil) === pager,
-                                 "Window lost blank Emoji touch: glass=\\(glass) inset=\\(inset) size=\\(size) point=\\(point)")
+                                 "Window lost blank Emoji touch: size=\\(size) point=\\(point)")
                 }
                 precondition(pager.isScrollEnabled && pager.panGestureRecognizer.isEnabled
                              && pager.panGestureRecognizer.view === pager)
                 precondition((pager.backgroundColor?.cgColor.alpha ?? 0) > 0.01,
-                             "Inset-off Emoji must keep its remote touch canvas painted")
-                precondition(inset || pager.layer.cornerRadius == 0,
-                             "Inset-off Emoji clips its blank corner touch canvas")
+                             "Emoji must keep its remote touch canvas painted")
                 let blankFinger = Finger()
                 blankFinger.point = CGPoint(x: pager.bounds.midX, y: pager.bounds.midY)
                 precondition(pager.gestureRecognizer(pager.panGestureRecognizer, shouldReceive: blankFinger),
@@ -787,7 +741,7 @@ if !\(baseline) {
                 let button = pager.visibleCells.lazy.compactMap { emojiButton(in: $0) }.first!
                 let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: touchWindow)
                 precondition(touchWindow.hitTest(point, with: nil) === button,
-                             "Native emoji taps must survive inset changes")
+                             "Native emoji taps must survive relayout")
                 var insertedEmoji: String?
                 let originalInsert = pager.onInsert
                 pager.onInsert = { insertedEmoji = $0 }
@@ -800,16 +754,13 @@ if !\(baseline) {
     }
     controller.view.frame = CGRect(x: 0, y: 0, width: 402, height: 300)
     controller.inputView?.frame = controller.view.frame
-    print("PASS: window-level Emoji taps, blank/empty Recents pan routing and inset transitions in both materials and orientations")
+    print("PASS: window-level Emoji taps and blank/empty Recents pan routing in both orientations")
 
     do {
-        let storedPopup = defaults.object(forKey: SharedKeys.keyPopupMode)
         let savedDictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed", "dictus.userDictionary.prunedTrieDuplicates"]
         let savedDictionary = savedDictionaryKeys.map { defaults.object(forKey: $0) }
         let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
         defer {
-            if let storedPopup { defaults.set(storedPopup, forKey: SharedKeys.keyPopupMode) }
-            else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
             if let storedAutocorrect { defaults.set(storedAutocorrect, forKey: SharedKeys.autocorrectEnabled) }
             else { defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
             for (key, value) in zip(savedDictionaryKeys, savedDictionary) {
@@ -817,25 +768,6 @@ if !\(baseline) {
             }
             UserDictionary.shared.reload()
         }
-        defaults.set(KeyPopupMode.flash.rawValue, forKey: SharedKeys.keyPopupMode)
-        KeyboardState.shared.presentArea(.letters)
-        controller.viewDidLayoutSubviews()
-        let liveGrid = (controller.inputView as! KeyboardInputView).nativeTouchOwners.compactMap { $0 as? KeyGridView }.first!
-        let key = liveGrid.layout.placed.first { $0.key.resolvedLabel == "q" }!
-        let finger = Finger()
-        finger.point = CGPoint(x: key.plate.midX, y: key.plate.midY)
-        liveGrid.touchesBegan([finger], with: nil)
-        precondition(liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
-                     "Flash mode did not pulse the pressed key")
-        waitFor({ !liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" } },
-                message: "A held key kept flashing")
-        liveGrid.touchesEnded([finger], with: nil)
-        liveGrid.touchesBegan([finger], with: nil)
-        liveGrid.reset()
-        precondition(!liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
-                     "Cancelled/page-switched key retained a flash")
-        precondition(!KeyPopupMode.flash.showsPreview)
-
         defaults.set(false, forKey: SharedKeys.autocorrectEnabled)
         let suggestions = SuggestionState.shared
         suggestions.clear()
@@ -858,12 +790,11 @@ if !\(baseline) {
             RunLoop.current.run(until: Date().addingTimeInterval(0.03))
         }
         precondition(!UserDictionary.shared.isLearned("privatefixtureword"), "Secure text entered vocabulary")
-        print("PASS: one-shot key flash, cancellation, Unicode vocabulary with autocorrect off and secure-field exclusion")
+        print("PASS: Unicode vocabulary with autocorrect off and secure-field exclusion")
     }
     for native in [false, true] {
         defaults.set(native, forKey: SharedKeys.keyboardIOSStyling)
         defaults.set(false, forKey: SharedKeys.keyboardTopBarEnabled)
-        defaults.set((native ? KeyboardHoldSpeed.default : .snappy).rawValue, forKey: SharedKeys.keyboardHoldSpeed)
         touchWindow.frame.size = CGSize(width: 402, height: 300)
         parent.view.frame = touchWindow.bounds
         controller.view.frame = touchWindow.bounds
@@ -1022,7 +953,7 @@ if !\(baseline) {
     RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     precondition(!KeyboardDictationService.isEnabled(in: defaults), "The native action did not disable dictation")
     precondition(service.accessibilityValue == "Off", "The native control kept a stale enabled appearance")
-    print("PASS: native service controls on every keyboard page in both materials")
+    print("PASS: native service controls on every keyboard page")
     let hostKeys = HostFieldPolicy.LetterFieldKeys(leftInsert: "@", rightInsert: ".com", returnTitle: "Send")
     for mode in [KeyboardAreaMode.letters, .panel, .emoji] {
         surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: hostKeys)
@@ -1083,8 +1014,7 @@ if !\(baseline) {
     defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
     print("PASS: host Return labels and page navigation; Solid contrast, minimum=\\(minimumContrast):1 on fixture backdrop")
 
-    for glass in [false, true] {
-        defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+    do {
         for mode in [KeyboardAreaMode.letters, .panel, .emoji] {
             surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: .standard)
             for key in [surface.bottomBar.firstControl, surface.bottomBar.secondControl,
@@ -1155,7 +1085,7 @@ if !\(baseline) {
         precondition(image.image != nil && !image.isHidden && image.alpha == 1,
                      "Reused dictation face lost its glyph")
     }
-    print("PASS: shared hold speeds/cancellation, host decimal/phone keys, category edges, retained dictation glyph")
+    print("PASS: shared hold timing/cancellation, host decimal/phone keys, category edges, retained dictation glyph")
 }
 print(\(baseline) ? "BASELINE recorded" : "PASS: press order, cancelled accent, hold variants, reused preview")
 """

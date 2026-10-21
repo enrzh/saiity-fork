@@ -159,18 +159,13 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(popup.contains("transaction.animation = nil"))
         XCTAssertTrue(popup.contains(".keyboardGlass("),
                       "key popups use the same plate as the keys")
-        XCTAssertTrue(popup.contains(".environment(\\.keyboardLiquidGlassEnabled, liquidGlassEnabled)"),
-                      "popup material must feed the shared KeyboardGlassSurface environment")
         XCTAssertFalse(popup.contains(".glassEffect("), "popups must not implement a separate material renderer")
         XCTAssertTrue(popup.contains("cornerRadius"))
         XCTAssertFalse(popup.contains("fill(Color(uiColor: .systemBackground))"))
         XCTAssertTrue(popup.contains("struct KeyPreviewPopup"),
-                      "press previews sit above keys when Key popups is popup")
-        XCTAssertTrue(popup.contains("struct KeyPopoutPreview"),
-                      "popout enlarges from the pressed key and fades")
+                      "press previews sit above keys")
+        XCTAssertFalse(popup.contains("struct KeyPopoutPreview"))
         XCTAssertTrue(popup.contains("struct KeyPressPreviewHost"))
-        XCTAssertTrue(popup.contains("static let expansionScale: CGFloat = 1.55"),
-                      "popout geometry uses one shared scale for layout and rendering")
     }
 
     func testKeyPopupsMayCrossTheGlassSurfaceButStayInsideTheKeyboardEdge() throws {
@@ -188,12 +183,6 @@ final class KeyboardRegressionTests: XCTestCase {
             popup.contains("let bottomBoundary = max(topBoundary, bounds.height - size.height - 4)"),
             "popup clamping must still respect the lower keyboard canvas limit"
         )
-        XCTAssertTrue(
-            popup.contains("source.width * expansionScale") &&
-                popup.contains("source.height * expansionScale"),
-            "popout previews reserve their transformed size before rendering"
-        )
-
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
         XCTAssertTrue(bar.contains("let popupTopOverflow = max(0, barOriginY - CGFloat(surface.minY))"),
                       "a period popup may use the space above the bottom bar")

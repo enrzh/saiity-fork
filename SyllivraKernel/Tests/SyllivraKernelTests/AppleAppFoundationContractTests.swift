@@ -402,10 +402,12 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("Transcript language"))
         XCTAssertFalse(settings.contains("Offer continuation after dictation"))
         XCTAssertTrue(settings.contains("Toggle(\"Autocorrection\""))
-        XCTAssertTrue(settings.contains("KeyPopupPicker()"))
-        XCTAssertTrue(settings.contains("KeyboardMaterialPicker()"))
+        XCTAssertTrue(settings.contains("Toggle(\"Show Top Bar\""))
         XCTAssertTrue(settings.contains("DictationPresencePicker()"))
-        XCTAssertTrue(settings.contains("Toggle(\"Key Containers\""))
+        for removed in ["KeyPopupPicker()", "KeyboardMaterialPicker()", "Toggle(\"Key Containers\"",
+                        "KeyboardHoldSpeedPicker()", "Toggle(\"Adaptive Touch\"", "KeyboardHoldOptionsView()"] {
+            XCTAssertFalse(settings.contains(removed), removed)
+        }
         XCTAssertFalse(settings.contains("Toggle(\"Liquid glass\""))
         XCTAssertTrue(settings.contains("transcriptionOutputMode"))
         XCTAssertTrue(settings.contains("TypingLanguagesPanel()"))
@@ -667,18 +669,14 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(speechModelProtocol.contains("in the Models tab"))
     }
 
-    func testKeyPopupPickerOffersOffPopupAndPopout() throws {
+    func testKeyboardKeepsOneLookWithoutAppearanceSettings() throws {
         let picker = try source("DictusApp/Views/KeyboardModePicker.swift")
-        let mode = try source("SyllivraKernel/Sources/SyllivraKernel/KeyPopupMode.swift")
-
-        XCTAssertTrue(picker.contains("struct KeyPopupPicker: View"))
-        XCTAssertTrue(picker.contains("ForEach(KeyPopupMode.allCases"))
-        XCTAssertTrue(mode.contains("case off"))
-        XCTAssertTrue(mode.contains("case popup"))
-        XCTAssertTrue(mode.contains("case popout"))
-        XCTAssertTrue(mode.contains("return \"Off\""))
-        XCTAssertTrue(mode.contains("return \"Popup\""))
-        XCTAssertTrue(mode.contains("return \"Popout\""))
+        let kernel = try source("SyllivraKernel/Sources/SyllivraKernel/KeyboardInteractionPreferences.swift")
+        XCTAssertFalse(picker.contains("KeyPopupMode"))
+        XCTAssertFalse(picker.contains("Picker(\"Material\""))
+        XCTAssertFalse(picker.contains("Toggle(\"Background\""))
+        XCTAssertFalse(kernel.contains("liquidGlassEnabled"))
+        XCTAssertFalse(kernel.contains("keyContainersEnabled"))
     }
 
     func testDictationPresenceDoesNotUsePictureInPicture() throws {

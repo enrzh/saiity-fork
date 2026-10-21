@@ -2,79 +2,25 @@ import XCTest
 @testable import SyllivraKernel
 
 final class KeyboardHoldPreferencesTests: XCTestCase {
-    func testDefaultTonePersistsAndDisabledAlternatesAreRespected() {
-        let defaults = AppGroup.defaults
-        let keys = [SharedKeys.defaultEmojiSkinTone, SharedKeys.disabledKeyVariants]
-        let saved = keys.map { defaults.object(forKey: $0) }
-        defer {
-            for (key, value) in zip(keys, saved) {
-                if let value { defaults.set(value, forKey: key) }
-                else { defaults.removeObject(forKey: key) }
-            }
-            KeyboardVariantPreferences.reload()
-        }
-        defaults.removeObject(forKey: SharedKeys.disabledKeyVariants)
-        KeyboardVariantPreferences.reload()
-        KeyboardVariantPreferences.setToneEnabled(false, tone: "🏽")
-        KeyboardVariantPreferences.setDefaultSkinTone("🏽")
-        XCTAssertEqual(defaults.string(forKey: SharedKeys.defaultEmojiSkinTone), "🏽")
-        XCTAssertTrue(KeyboardVariantPreferences.isToneEnabled("🏽"))
-        XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍"), "👍🏽")
-        KeyboardVariantPreferences.setEnabled(false, option: "👍🏽", key: "👍", kind: .emoji)
-        XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍"), "👍")
-        KeyboardVariantPreferences.setDefaultSkinTone("invalid")
-        XCTAssertEqual(KeyboardVariantPreferences.defaultSkinTone, "🏽")
-        KeyboardVariantPreferences.setToneEnabled(false, tone: "🏽")
-        XCTAssertEqual(KeyboardVariantPreferences.defaultSkinTone, "")
+    func testHoldDelaysUseTheDefaultTiming() {
+        XCTAssertEqual(KeyboardDeletion.holdRecognitionDuration, 0.35)
+        XCTAssertEqual(KeyboardDeletion.cursorHoldDuration, 0.3)
+        XCTAssertEqual(KeyboardDeletion.repeatDelay, 0.5)
+        XCTAssertEqual(KeyboardDeletion.dictationHoldRecognitionDuration, 0.15)
     }
-
-    func testDefaultSkinToneAppliesOnlyToOrdinaryUntonedEmoji() {
-        for (index, tone) in EmojiSkinToneVariants.modifiers.enumerated() {
-            XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍", tone: tone),
-                           EmojiSkinToneVariants.options(for: "👍")[index + 1])
-            XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍🏿", tone: tone), "👍🏿")
-            XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👩‍⚕️", tone: tone), "👩‍⚕️")
-            XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("🐈", tone: tone), "🐈")
-        }
-        XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍", tone: "invalid"), "👍")
-        XCTAssertEqual(KeyboardVariantPreferences.preferredEmoji("👍", tone: ""), "👍")
-    }
-    func testSpeedsKeepDefaultAndOrderTheRecognitionDelays() {
-        XCTAssertEqual(KeyboardHoldSpeed.allCases.map(\.displayName), ["Slow", "Default", "Fast", "Snappy"])
-        XCTAssertEqual(KeyboardHoldSpeed.allCases.map(\.duration), [0.55, 0.35, 0.25, 0.15])
-        XCTAssertEqual(KeyboardHoldSpeed.default.scaled(0.3), 0.3, accuracy: 0.0001)
-    }
-    func testRemovingAlternatesNeverRemovesTheBaseOrReordersRemainingOptions() {
-        let options = KeyboardVariantPreferences.allOptions(for: "e", kind: .letter)
-        let filtered = KeyboardVariantPreferences.filter(options, key: "e", kind: .letter,
-            disabled: ["letter:e": ["e", "é", "è"]])
-        XCTAssertEqual(filtered.first, "e")
-        XCTAssertFalse(filtered.contains("é"))
-        XCTAssertEqual(filtered, options.filter { !["é", "è"].contains($0) })
-        XCTAssertEqual(KeyboardVariantPreferences.filter([".", "?", "!"], key: ".", kind: .symbol,
-            disabled: ["symbol:.": ["?", "!"]]), ["."])
-    }
-    func testSkinTonePreferencesShareOneBaseEmojiIdentity() {
-        let options = KeyboardVariantPreferences.allOptions(for: "👍🏽", kind: .emoji)
-        let filtered = KeyboardVariantPreferences.filter(options, key: "👍🏽", kind: .emoji,
-            disabled: ["emoji:👍": ["👍🏽"]])
-        XCTAssertEqual(filtered.first, "👍")
-        XCTAssertFalse(filtered.contains("👍🏽"))
+    func testEveryKeyOffersItsBaseFirstAndEveryAlternate() {
+        let letters = KeyboardVariantPreferences.options(for: "e", kind: .letter)
+        XCTAssertEqual(letters.first, "e")
+        XCTAssertTrue(letters.contains("é"))
+        XCTAssertEqual(KeyboardVariantPreferences.options(for: "👍", kind: .emoji),
+                       EmojiSkinToneVariants.options(for: "👍"))
+        XCTAssertEqual(KeyboardVariantPreferences.options(for: "0", kind: .phone), ["0", "+"])
     }
     func testChangingAnAlternateInvalidatesTheCachedPageEvenWhenBothHavePopups() {
         let before = KeyGridPage(id: "letters", rows: [[KeyGridKey(id: "e", action: .character(base: "e", variants: ["e", "é", "è"]))]])
         let after = KeyGridPage(id: "letters", rows: [[KeyGridKey(id: "e", action: .character(base: "e", variants: ["e", "é"]))]])
         XCTAssertNotEqual(before.fingerprint, after.fingerprint)
     }
-    func testGlobalSkinTonesKeepBaseAndLeaveJoinedCombinationsAlone() {
-        let mask = ["emoji:tones": EmojiSkinToneVariants.modifiers]
-        XCTAssertEqual(KeyboardVariantPreferences.filter(EmojiSkinToneVariants.options(for: "👍"), key: "👍",
-            kind: .emoji, disabled: mask), ["👍"])
-        let joined = "👩‍⚕️"
-        XCTAssertEqual(KeyboardVariantPreferences.filter(EmojiSkinToneVariants.options(for: joined), key: joined,
-            kind: .emoji, disabled: mask), EmojiSkinToneVariants.options(for: joined))
-    }
-
     func testModelProfilesUseInstalledCompatibleModelsAndRespectMemoryPressure() {
         let modern = DeviceCapabilities(physicalMemoryGB: 12, availableMemoryMB: 4000,
                                        deviceModelIdentifier: "iPhone19,2", thermalState: .nominal)

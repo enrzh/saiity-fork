@@ -47,23 +47,11 @@ struct KeyboardDictationFaceStyle {
     }
 }
 
-private struct KeyboardLiquidGlassKey: EnvironmentKey {
-    static var defaultValue: Bool { KeyboardInteractionPreferences.liquidGlassEnabled }
-}
-
-extension EnvironmentValues {
-    var keyboardLiquidGlassEnabled: Bool {
-        get { self[KeyboardLiquidGlassKey.self] }
-        set { self[KeyboardLiquidGlassKey.self] = newValue }
-    }
-}
-
 /// A visual-only material component. Input belongs to `KeyboardKeyTouchControl`.
 struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     let shape: S
     var interactive: Bool = true
     var role: KeyboardChromeRole = .control
-    @Environment(\.keyboardLiquidGlassEnabled) private var liquidGlassEnabled
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
@@ -78,15 +66,16 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     private func plate<Plate: View>(_ content: Plate) -> some View {
         if role == .accessory {
             content.allowsHitTesting(false)
-        } else if !liquidGlassEnabled || (role != .board && role != .popup) {
-            if role == .board {
-                content.allowsHitTesting(false)
-            } else {
-                content.background {
-                    shape.fill(solidFill).allowsHitTesting(false)
-                }
-                .allowsHitTesting(false)
+        } else if role != .board {
+            // Keys and popups are opaque, like the system keyboard. Glass over the
+            // extension's transparent backdrop renders light, which hid the white
+            // glyph of a dark-mode popup.
+            content.background {
+                shape.fill(solidFill)
+                    .shadow(color: .black.opacity(role == .popup ? 0.2 : 0), radius: 2, y: 1)
+                    .allowsHitTesting(false)
             }
+            .allowsHitTesting(false)
         } else if reduceTransparency || accessibilityContrast == .increased {
             content.background {
                 shape.fill(Color(uiColor: role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)))
@@ -256,7 +245,6 @@ private struct LetterKeyPlateModifier: ViewModifier {
                     interactive: false,
                     role: .input
                 )
-                .opacity(KeyboardInteractionPreferences.keyContainersEnabled ? 1 : 0)
                 .allowsHitTesting(false)
         }
     }

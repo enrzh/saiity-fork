@@ -8,7 +8,6 @@ let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 let large = CommandLine.arguments.contains("--large")
 let emojiOnly = CommandLine.arguments.contains("--emoji")
-let inset = !CommandLine.arguments.contains("--no-inset")
 let topBar = CommandLine.arguments.contains("--top-bar")
 let keypadOnly = CommandLine.arguments.contains("--keypad")
 let shortcutsOnly = CommandLine.arguments.contains("--shortcuts")
@@ -34,9 +33,7 @@ final class FixtureController: KeyboardViewController {
 @main @MainActor struct RenderKeyboard {
     static func main() throws {
         let defaults = AppGroup.defaults
-        let keys = [SharedKeys.liquidGlassEnabled, SharedKeys.keyboardInsetEnabled,
-                    SharedKeys.keyContainersEnabled, SharedKeys.keyPopupMode,
-                    SharedKeys.serviceEnabled, SharedKeys.dictationStatus,
+        let keys = [SharedKeys.serviceEnabled, SharedKeys.dictationStatus,
                     SharedKeys.modelReady, SharedKeys.modelLoadState, SharedKeys.keyboardAudioReady,
                     SharedKeys.appProcessHeartbeat,
                     SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled]
@@ -49,14 +46,10 @@ final class FixtureController: KeyboardViewController {
         }
         defaults.set(false, forKey: SharedKeys.serviceEnabled)
         defaults.set(TOPBAR, forKey: SharedKeys.keyboardTopBarEnabled)
-        defaults.set(true, forKey: SharedKeys.keyContainersEnabled)
-        defaults.set(INSET, forKey: SharedKeys.keyboardInsetEnabled)
-        defaults.set(KeyPopupMode.off.rawValue, forKey: SharedKeys.keyPopupMode)
         try FileManager.default.createDirectory(atPath: "OUTPUT", withIntermediateDirectories: true)
         var geometry: [String: [String: String]] = [:]
         for dark in [false, true] {
-            for glass in [false, true] {
-                defaults.set(glass, forKey: SharedKeys.liquidGlassEnabled)
+            do {
                 for width: CGFloat in [320, 402] {
                     for landscape in [false, true] {
                         let size = landscape ? CGSize(width: width == 320 ? 667 : 852,
@@ -227,7 +220,7 @@ final class FixtureController: KeyboardViewController {
                                     }
                                 }
                             }
-                            let name = "\(page)-\(Int(width))-\(landscape ? "landscape" : "portrait")-\(glass ? "glass" : "solid")-\(dark ? "dark" : "light")"
+                            let name = "\(page)-\(Int(width))-\(landscape ? "landscape" : "portrait")-\(dark ? "dark" : "light")"
                             let pixels = UIGraphicsImageRenderer(size: window.bounds.size).image { context in
                                 root.view.layer.render(in: context.cgContext)
                             }
@@ -266,7 +259,6 @@ final class FixtureController: KeyboardViewController {
 }
 """#.replacingOccurrences(of: "OUTPUT", with: output).replacingOccurrences(of: "LARGE", with: String(large))
         .replacingOccurrences(of: "EMOJIONLY", with: String(emojiOnly))
-        .replacingOccurrences(of: "INSET", with: String(inset))
         .replacingOccurrences(of: "TOPBAR", with: String(topBar))
         .replacingOccurrences(of: "KEYPAD", with: String(keypadOnly))
         .replacingOccurrences(of: "SHORTCUTS", with: String(shortcutsOnly))

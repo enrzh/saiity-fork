@@ -100,7 +100,6 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(plates.contains("if reduceTransparency || accessibilityContrast == .increased"))
         XCTAssertTrue(plates.contains("role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)"))
         XCTAssertTrue(plates.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(plates.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
         XCTAssertTrue(plates.contains("case .input, .control: return .tertiarySystemBackground"))
         XCTAssertTrue(root.contains("background(Color.clear)"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("keyboardGlass(in: shape, role: role)"))
@@ -187,7 +186,6 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(source.contains("commandHitSize"))
         XCTAssertTrue(source.contains("Open letter keyboard"))
         XCTAssertTrue(style.contains("glassEffect(.regular.interactive(), in: shape)"))
-        XCTAssertTrue(style.contains("KeyboardInteractionPreferences.liquidGlassEnabled"))
         XCTAssertTrue(style.contains("case .input, .control: return .tertiarySystemBackground"))
         XCTAssertFalse(style.contains("systemGroupedBackground"),
                        "solid key plates use tertiary fill, not a grouped board slab")

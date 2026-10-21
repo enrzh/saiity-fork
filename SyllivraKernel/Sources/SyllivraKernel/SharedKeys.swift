@@ -113,7 +113,6 @@ public enum SharedKeys {
     public static let hapticsEnabled = "dictus.hapticsEnabled"
     /// Keyboard haptic preset: off / default / snappy. Reads older strength values for migration.
     public static let hapticIntensity = "dictus.hapticIntensity"
-    public static let keyboardHoldSpeed = "dictus.keyboardHoldSpeed"
     public static let modelSelectionProfile = "dictus.modelSelectionProfile"
     public static let spokenLanguages = "dictus.spokenLanguages"
     public static let onboardingUsage = "dictus.onboardingUsage"
@@ -121,23 +120,9 @@ public enum SharedKeys {
     public static let appDictationModel = "dictus.appDictationModel"
     public static let appDictationModelReady = "dictus.appDictationModelReady"
     public static let keyboardDictationModel = "dictus.keyboardDictationModel"
-    public static let disabledKeyVariants = "dictus.disabledKeyVariants"
-    public static let defaultEmojiSkinTone = "dictus.defaultEmojiSkinTone"
-    public static let keyboardInsetEnabled = "dictus.keyboardInsetEnabled"
     /// Retired styling preference. Kept for compatibility; current keyboards ignore it.
     public static let keyboardIOSStyling = "dictus.keyboardIOSStyling"
     public static let keyboardTopBarEnabled = "dictus.keyboardTopBarEnabled"
-    /// Whether long-press alternate-character popups are enabled, default true
-    public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
-    /// Off / popup / popout / one-shot key flash. Migrates from `keyPopupsEnabled`.
-    public static let keyPopupMode = "dictus.keyPopupMode"
-
-    /// Enable/disable adaptive hit-target prediction (default: on).
-    public static let adaptiveHitPredictionEnabled = "dictus.adaptiveHitPredictionEnabled"
-    /// Whether keyboard chrome uses liquid glass. Off is fully opaque, with no glass rim.
-    public static let liquidGlassEnabled = "dictus.liquidGlassEnabled"
-    /// Whether letter/symbol insert keys draw their own plates. Default off: keys sit in the inset.
-    public static let keyContainersEnabled = "dictus.keyContainersEnabled"
     /// Off / Live Activity / Picture in Picture presence while dictating.
     public static let dictationPresenceMode = "dictus.dictationPresenceMode"
     /// JSON array of the last 30 successful dictations for the Home recents list.

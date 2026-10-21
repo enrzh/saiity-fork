@@ -82,14 +82,8 @@ final class KeyboardSurfaceView: UIView {
         emojiDelete.keyboardFace.configure(symbol: CommandKeyStyle.deleteSymbolName, visualSize: visualFrame.size)
         emojiDelete.keyboardFace.autoresizingMask = []
         emojiDelete.keyboardFace.frame = visualFrame
-        let chrome = KeyboardEmojiCategoryFace(liquidGlassEnabled: KeyboardInteractionPreferences.liquidGlassEnabled)
-        if let emojiChrome {
-            if emojiChrome.rootView.liquidGlassEnabled != chrome.liquidGlassEnabled {
-                emojiChrome.rootView = chrome
-            }
-        } else {
-            let host = UIHostingController(rootView: chrome)
-            emojiChrome = host
+        if emojiChrome == nil {
+            emojiChrome = UIHostingController(rootView: KeyboardEmojiCategoryFace())
         }
         emojiChrome?.view.frame = emojiCategory.bounds
         emojiChrome?.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -103,11 +97,6 @@ final class KeyboardSurfaceView: UIView {
         bottomBar.refreshAppearance()
         emojiDelete.existingKeyboardFace?.refreshAppearance()
         emoji.refreshPreferences()
-        if let emojiChrome {
-            var chrome = emojiChrome.rootView
-            chrome.liquidGlassEnabled = KeyboardInteractionPreferences.liquidGlassEnabled
-            emojiChrome.rootView = chrome
-        }
     }
 
     func cancelInteractions() {
@@ -122,7 +111,6 @@ final class KeyboardSurfaceView: UIView {
 /// Existing shared faces, nested normally under their native touch owners.
 private struct KeyboardEmojiCategoryFace: View {
     @ObservedObject var state = KeyboardState.shared
-    var liquidGlassEnabled: Bool
 
     var body: some View {
         let sections = CategoryInfo.emojiBarSections
@@ -133,7 +121,6 @@ private struct KeyboardEmojiCategoryFace: View {
             )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .ignoresSafeArea()
-        .environment(\.keyboardLiquidGlassEnabled, liquidGlassEnabled)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -232,11 +219,7 @@ final class KeyboardPeriodKeyView: UIView {
         PersistentLog.log(.keyboardPeriodKeyProbe(details: "began native=true frame=\(frame)"))
         HapticFeedback.playInputClick()
         onInsert?(".")
-        if KeyboardInteractionPreferences.keyPopupMode == .flash {
-            control.flashKeyboardKey(in: plate.frame, cornerRadius: CommandKeyStyle.cornerRadius)
-        }
-        let container = window ?? superview
-        if KeyboardInteractionPreferences.keyPopupMode.showsPreview, let container {
+        if let container = window ?? superview {
             let source = convert(bounds, to: container)
             let session = KeyPreviewSession(text: ".", sourceFrame: source,
                 popupFrame: KeyPressPreviewHost.frame(for: source, in: container.bounds.size))
@@ -300,7 +283,6 @@ final class KeyboardPeriodKeyView: UIView {
     }
 
     func cancelInteraction() {
-        control.clearKeyboardKeyFlashes()
         control.cancelInteraction()
         finish(cancelled: true)
     }

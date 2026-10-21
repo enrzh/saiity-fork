@@ -8,12 +8,12 @@ import Foundation
 /// in SyllivraKernel makes the behavior identical for UIKit and SwiftUI and keeps it
 /// independently testable without constructing a text input proxy.
 public enum KeyboardDeletion {
-    public static var repeatDelay: TimeInterval { KeyboardHoldSpeed.current.scaled(0.5) }
+    public static let repeatDelay: TimeInterval = 0.5
     public static let repeatInterval: TimeInterval = 0.1
     public static let wordRepeatDelay: TimeInterval = 2.5
-    public static var cursorHoldDuration: TimeInterval { KeyboardHoldSpeed.current.scaled(0.3) }
-    public static var holdRecognitionDuration: TimeInterval { KeyboardHoldSpeed.current.duration }
-    public static var dictationHoldRecognitionDuration: TimeInterval { KeyboardHoldSpeed.current.scaled(0.15) }
+    public static let cursorHoldDuration: TimeInterval = 0.3
+    public static let holdRecognitionDuration: TimeInterval = 0.35
+    public static let dictationHoldRecognitionDuration: TimeInterval = 0.15
     /// Extra audio retained after a hold-to-dictate release. The UI enters its
     /// finishing state immediately; the app receives the stop request after this
     /// short tail so final words are less likely to be clipped.

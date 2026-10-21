@@ -136,7 +136,6 @@ final class KeyGridView: UIView {
     private var variantPopupHost: UIHostingController<KeyVariantPopup>?
     private var previewPopupHost: UIHostingController<KeyPressPreviewHost>?
     private var previewPopupIdentity: ObjectIdentifier?
-    private var previewPopupMode: KeyPopupMode?
     private var publishedCommandSpecs: [CommandSpec] = []
 
     /// Delete repeat, driven by the delegate so the timing lives in one place.
@@ -279,7 +278,6 @@ final class KeyGridView: UIView {
     }
 
     private func cancelActivePresses() {
-        clearKeyboardKeyFlashes()
         keypadVoice.cancelInteraction()
         keypadLetters.cancelInteraction()
         for press in presses.values {
@@ -307,8 +305,8 @@ final class KeyGridView: UIView {
 
     /// A new prior only changes the target map; active fingers retain their
     /// press identity and the visible plates are never re-solved or redrawn.
-    func updateHitPrediction(_ prediction: NextCharacterProbabilities?, enabled: Bool) {
-        let next = enabled && page?.id == "letters" ? prediction : nil
+    func updateHitPrediction(_ prediction: NextCharacterProbabilities?) {
+        let next = page?.id == "letters" ? prediction : nil
         guard next != hitPrediction else { return }
         hitPrediction = next
         guard solvedSize == bounds.size, !neutralLayout.placed.isEmpty else { return }
@@ -373,9 +371,7 @@ final class KeyGridView: UIView {
     }
 
     private func heldPositions() -> Set<PlacedPosition> {
-        Set(presses.values.filter {
-            KeyboardInteractionPreferences.keyPopupMode != .flash || $0.key.isCommand
-        }.map { PlacedPosition(row: $0.row, column: $0.column) })
+        Set(presses.values.map { PlacedPosition(row: $0.row, column: $0.column) })
     }
 
     /// A plate that should be backed by real material.
@@ -449,16 +445,10 @@ final class KeyGridView: UIView {
             : item.plate
     }
 
-    /// Spacers have no face; the preference affects typing keys, not commands or the pad.
+    /// Spacers have no face.
     private func showsPlate(for key: KeyGridKey) -> Bool {
         if case .none = key.action { return false }
-        if key.isCommand { return true }
-        switch page?.id {
-        case "letters", "symbols1", "symbols2":
-            return KeyboardInteractionPreferences.keyContainersEnabled
-        default:
-            return true
-        }
+        return true
     }
 
     private func cornerRadius(for key: KeyGridKey) -> CGFloat {
@@ -690,22 +680,18 @@ final class KeyGridView: UIView {
     private func updatePressPreview(force: Bool = false) {
         guard let previewOwner, let press = presses[previewOwner],
               !press.popupVisible, let text = press.previewText,
-              let item = itemAt(row: press.row, column: press.column),
-              KeyboardInteractionPreferences.keyPopupMode.showsPreview else {
+              let item = itemAt(row: press.row, column: press.column) else {
             previewPopupHost?.view.isHidden = true
             previewPopupIdentity = nil
-            previewPopupMode = nil
             return
         }
-        let mode = KeyboardInteractionPreferences.keyPopupMode
-        guard force || previewPopupIdentity != previewOwner || previewPopupMode != mode else { return }
+        guard force || previewPopupIdentity != previewOwner else { return }
         let session = KeyPreviewSession(
             text: text, sourceFrame: item.plate,
             popupFrame: KeyPressPreviewHost.frame(for: item.plate, in: bounds.size)
         )
-        let content = KeyPressPreviewHost(session: .constant(session), identity: UUID())
-        // Retain one host across key presses. Reset the popout's local animation
-        // with identity, without allocating another hosting controller per key.
+        let content = KeyPressPreviewHost(session: .constant(session))
+        // Retain one host across key presses instead of allocating one per key.
         if let previewPopupHost {
             previewPopupHost.rootView = content
             previewPopupHost.view.frame = bounds
@@ -722,7 +708,6 @@ final class KeyGridView: UIView {
             previewPopupHost = host
         }
         previewPopupIdentity = previewOwner
-        previewPopupMode = mode
     }
 
     private func updateVariantPopup() {
@@ -765,9 +750,6 @@ final class KeyGridView: UIView {
             let identity = ObjectIdentifier(touch)
             commitPendingCharacter()
             let action = item.key.action
-            if KeyboardInteractionPreferences.keyPopupMode == .flash, !item.key.isCommand {
-                flashKeyboardKey(in: visualPlate(for: item), cornerRadius: cornerRadius(for: item.key))
-            }
 
             switch action {
             case .shift:

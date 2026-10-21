@@ -26,7 +26,6 @@ private struct GlassPlates: View {
     let pageID: String
     let specs: [KeyGridView.GlassSpec]
     let commands: [KeyGridView.CommandSpec]
-    let liquidGlassEnabled: Bool
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -66,7 +65,6 @@ private struct GlassPlates: View {
         }
         .id(pageID)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .environment(\.keyboardLiquidGlassEnabled, liquidGlassEnabled)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -188,8 +186,7 @@ final class NextKeyboardHost: NSObject {
             return
         }
         let content = GlassPlates(pageID: gridView.page?.id ?? "",
-                                 specs: glassSpecs, commands: commandSpecs,
-                                 liquidGlassEnabled: KeyboardInteractionPreferences.liquidGlassEnabled)
+                                 specs: glassSpecs, commands: commandSpecs)
         if let glassHost {
             glassHost.rootView = content
         } else {
@@ -273,8 +270,8 @@ final class NextKeyboardHost: NSObject {
         gridView.refreshAppearance()
     }
 
-    func updateHitPrediction(_ prediction: NextCharacterProbabilities?, enabled: Bool) {
-        gridView.updateHitPrediction(prediction, enabled: enabled)
+    func updateHitPrediction(_ prediction: NextCharacterProbabilities?) {
+        gridView.updateHitPrediction(prediction)
     }
 
     // MARK: - Geometry

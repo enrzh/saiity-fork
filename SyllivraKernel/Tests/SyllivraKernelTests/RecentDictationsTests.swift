@@ -104,43 +104,6 @@ final class DictationPresenceModeTests: XCTestCase {
     }
 }
 
-final class KeyPopupModeTests: XCTestCase {
-    private var defaults: UserDefaults!
-    private var suiteName = ""
-
-    override func setUp() {
-        suiteName = "popup-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        defaults = nil
-    }
-
-    func testMigratesLegacyKeyPopupsToggle() {
-        defaults.set(false, forKey: SharedKeys.keyPopupsEnabled)
-        XCTAssertEqual(KeyPopupMode.load(from: defaults), .off)
-        defaults.set(true, forKey: SharedKeys.keyPopupsEnabled)
-        XCTAssertEqual(KeyPopupMode.load(from: defaults), .popup)
-    }
-
-    func testPopoutDoesNotDisableHoldVariants() {
-        KeyPopupMode.popout.persist(to: defaults)
-        XCTAssertEqual(KeyPopupMode.load(from: defaults), .popout)
-        XCTAssertEqual(defaults.string(forKey: SharedKeys.keyPopupMode), "popout")
-        XCTAssertTrue(defaults.bool(forKey: SharedKeys.keyPopupsEnabled))
-        XCTAssertTrue(KeyPopupMode.popout.showsPreview)
-    }
-
-    func testOffWritesLegacyToggleFalse() {
-        KeyPopupMode.off.persist(to: defaults)
-        XCTAssertEqual(KeyPopupMode.load(from: defaults), .off)
-        XCTAssertFalse(defaults.bool(forKey: SharedKeys.keyPopupsEnabled))
-        XCTAssertFalse(KeyPopupMode.off.showsPreview)
-    }
-}
-
 final class SpeechAudioGainTests: XCTestCase {
     func testAmplifiesQuietSpeechAndLeavesLoudSpeech() {
         let quiet = (0..<8).map { $0 == 0 ? Float(0.04) : 0 }
