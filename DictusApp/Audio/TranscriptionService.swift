@@ -34,8 +34,6 @@ final class TranscriptionService {
     private var revision: UInt = 0
 
     var hasLoadedModel: Bool { lock.withLock { engine?.isReady == true } }
-    @available(iOS 18.0, *)
-    var qwenEngine: QwenSpeechEngine? { lock.withLock { engine as? QwenSpeechEngine } }
 
     func prepare(engine: SpeechModelProtocol) {
         lock.withLock {
@@ -88,7 +86,7 @@ final class TranscriptionService {
         PersistentLog.log(.transcriptionStarted(modelName: name))
         PersistentLog.log(.diagnosticProbe(
             component: "TranscriptionService", instanceID: "languageResolution", action: "resolved",
-            details: "mode=\(languagePolicy.mode.telemetryDescription) keyboard=\(languagePolicy.keyboardLanguage.rawValue) engine=\(languagePolicy.engine.rawValue) stt=\(languagePolicy.sttLanguageCode ?? "auto") sttEffective=\(languagePolicy.sttLanguageIsEffective ? "yes" : "no")"))
+            details: "mode=\(languagePolicy.mode.telemetryDescription) keyboard=\(languagePolicy.keyboardLanguage.rawValue) engine=\(languagePolicy.engine.rawValue) stt=\(languagePolicy.sttLanguageCode ?? "auto")"))
         do {
             let result = try await SpokenLanguagePreferences.$recognitionLanguages.withValue(languagePolicy.spokenLanguages) {
                 try await runtime.transcribeDetailed(audioSamples: audioSamples, language: languagePolicy.sttLanguageCode)

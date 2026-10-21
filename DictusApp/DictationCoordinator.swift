@@ -6,7 +6,6 @@ import AVFoundation
 import UIKit
 import SyllivraKernel
 import WhisperKit
-import FluidAudio
 import NaturalLanguage
 #if canImport(Translation)
 import Translation
@@ -33,9 +32,6 @@ class DictationCoordinator: ObservableObject {
     /// so it is not, and must not be read as, a failure channel (#320). What went wrong
     /// lives in `DictationErrorChannel`.
     @Published var lastResult: String?
-    @Published private(set) var realtimeTranscript = ""
-    private var realtimeTask: Task<Void, Error>?
-    private var realtimeGeneration: Int?
     private var deferredPreload = false
     var canChangeSpeechRuntime: Bool {
         DictationModelPreferences.canChangeRuntime(status: status, finalizing: isTranscribingInFlight)
@@ -592,22 +588,12 @@ class DictationCoordinator: ObservableObject {
         // New session supersedes any pending delayed reset (issue #60) and any
         // outstanding work from the previous one (#267).
         sessions.beginSession()
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        realtimeGeneration = nil
-        realtimeTranscript = ""
 #if canImport(Translation)
         if #available(iOS 26.0, *) {
             cancelPendingTranslation()
         }
 #endif
         captureLanguageRequest()
-        if currentLanguagePolicy.engine == .qwenASR,
-           UIApplication.shared.applicationState != .active {
-            handleError("Keep Syllivra open for Qwen dictation. Choose Whisper Auto to dictate from another app.",
-                        disposition: .requiresApp)
-            return
-        }
         // A background assertion cannot activate a cold microphone. Offer an
         // explicit recovery action without switching apps during a keyboard hold.
         let appState = UIApplication.shared.applicationState
@@ -680,7 +666,6 @@ class DictationCoordinator: ObservableObject {
                     guard mayReport(session, "prepared warm start") else { return }
                     try audioEngine.startRecording()
                     updateStatus(.recording)
-                    startRealtimeIfEnabled(generation: session)
                     LiveActivityManager.shared.transitionToRecording()
                     PersistentLog.log(.audioEngineStarted)
                     schedulePolishPrewarm()
@@ -743,7 +728,6 @@ class DictationCoordinator: ObservableObject {
                     let loadedName = self.currentModelName ?? "unknown"
                     PersistentLog.log(.appWhisperKitLoaded(modelName: loadedName))
                     self.setModelLoadState(.ready, reason: "cold-start-success")
-                    startRealtimeIfEnabled(generation: session)
                 } catch {
                     PersistentLog.log(.dictationFailed(error: "Cold start engine load: \(error.localizedDescription)"))
                     // A last-chance start (#311) fails for a reason the user can do
@@ -866,12 +850,6 @@ class DictationCoordinator: ObservableObject {
         let session = sessions.current
         let capturedLanguageRequest = currentLanguageRequest
         let capturedModelIdentifier = currentLanguagePolicy.modelIdentifier
-        let capturedRealtimeTask = realtimeTask
-        let capturedRealtimeGeneration = realtimeGeneration
-        let capturedRealtimeEngine: SpeechModelProtocol? = {
-            if #available(iOS 18.0, *) { return transcriptionService.qwenEngine }
-            return nil
-        }()
         let cleanupSettings = PolishCoordinator.shared.snapshotSettings()
 
         var runtimeMetrics = DictationRuntimeMetrics(sessionID: capturedLanguageRequest.sessionID ?? "unbound")
@@ -935,29 +913,14 @@ class DictationCoordinator: ObservableObject {
                 // the snapshot, each stage would re-read App Group state and a
                 // keyboard-toolbar language change while transcription runs
                 // could make Whisper transcribe in one language and polish in
-                // another. The policy is also engine-aware: with Parakeet
-                // active the setting is Whisper-only-effective, so every mode
-                // resolves to the historical follow behavior.
+                // another.
                 let languagePolicy = currentLanguagePolicy
                 runtimeMetrics.setContext("asrModel", value: languagePolicy.modelIdentifier)
                 issueRecordingDurationMs = Int(audioDuration * 1000)
 
                 let transcribeStarted = DispatchTime.now().uptimeNanoseconds
-                let transcriptionOutput: SpeechTranscriptionOutput
-                if #available(iOS 18.0, *), capturedRealtimeGeneration == session,
-                   let qwen = capturedRealtimeEngine as? QwenSpeechEngine {
-                    if let capturedRealtimeTask { try await capturedRealtimeTask.value }
-                    guard mayReport(session, "realtime finalization") else { return }
-                    transcriptionOutput = try await DictationVocabulary.$currentHints.withValue(cleanupSettings.vocabulary) {
-                        try await SpokenLanguagePreferences.$recognitionLanguages.withValue(languagePolicy.spokenLanguages) {
-                            try await qwen.finishRealtime(samples: samples, session: UInt64(session),
-                                                          language: languagePolicy.sttLanguageCode)
-                        }
-                    }
-                } else {
-                    transcriptionOutput = try await DictationVocabulary.$currentHints.withValue(cleanupSettings.vocabulary) {
-                        try await transcriptionService.transcribeDetailed(audioSamples: samples, languagePolicy: languagePolicy)
-                    }
+                let transcriptionOutput = try await DictationVocabulary.$currentHints.withValue(cleanupSettings.vocabulary) {
+                    try await transcriptionService.transcribeDetailed(audioSamples: samples, languagePolicy: languagePolicy)
                 }
                 try Task.checkCancellation()
                 guard mayReport(session, "recognition complete") else { return }
@@ -1567,10 +1530,6 @@ class DictationCoordinator: ObservableObject {
     func cancelDictation() {
         initTask?.cancel()
         transcriptionService.cancelCurrentInference()
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        realtimeGeneration = nil
-        realtimeTranscript = ""
         pendingColdStartDictation = false
         DictationDelivery.clear(in: defaults)
         DictationLanguageRequest.load(from: defaults).unbound().persist(to: defaults)
@@ -1620,14 +1579,6 @@ class DictationCoordinator: ObservableObject {
     }
 
     // MARK: - Transcription background assertion
-
-    func stopForegroundOnlyRecognitionIfNeeded() {
-        guard currentLanguagePolicy.engine == .qwenASR,
-              DictationSessionLivenessPolicy.isActive(status) else { return }
-        cancelDictation()
-        handleError("Qwen dictation stopped when Syllivra left the foreground. Choose Whisper Auto for keyboard dictation.",
-                    disposition: .requiresApp)
-    }
 
     func beginTranscriptionAssertion() {
         guard transcriptionAssertion == .invalid else { return }
@@ -2090,9 +2041,6 @@ class DictationCoordinator: ObservableObject {
     private func handleError(_ message: String, disposition: DictationFailureDisposition = .recoverableRetry) {
         initTask?.cancel()
         transcriptionService.cancelCurrentInference()
-        realtimeTask?.cancel()
-        realtimeTask = nil
-        realtimeGeneration = nil
         disableKeyboardSession()
         // Errors can arrive during requested/recording or after capture has
         // stopped. In both cases no microphone resource should survive the
@@ -2254,10 +2202,6 @@ class DictationCoordinator: ObservableObject {
 private extension DictationCoordinator {
     /// Initialize the appropriate STT engine based on the active model.
     ///
-    /// WHY engine-aware:
-    /// The user can select either a WhisperKit or Parakeet model. This method
-    /// checks the active model's engine type and initializes the correct engine.
-    ///
     /// Falls back to the active model from App Group, then to the new-install default.
     func ensureEngineReady(preferredModel: String? = nil) async throws {
         try await ensureEngineReady(preferredModel: preferredModel, fallbackExclusions: [])
@@ -2269,12 +2213,10 @@ private extension DictationCoordinator {
     ) async throws {
         try Task.checkCancellation()
         let preparationGeneration = sessions.current
-        let recognizer = DictationRecognizer.load(from: defaults)
         let requestedModelName = preferredModel
             ?? (DictationSessionLivenessPolicy.isActive(status) ? currentLanguagePolicy.modelIdentifier : nil)
             ?? defaults.string(forKey: SharedKeys.appDictationModel)
-            ?? defaults.string(forKey: recognizer.modelPreferenceKey)
-            ?? recognizer.defaultModelIdentifier
+            ?? DictationModelPreferences.requestedAppModel(in: defaults)
         let modelName = resolveRuntimeModelIdentifier(requestedModelName)
         if modelName != requestedModelName {
             PersistentLog.log(.diagnosticProbe(
@@ -2292,7 +2234,6 @@ private extension DictationCoordinator {
            !SpokenLanguagePreferences.accepts(modelInfo, languages: spokenLanguages) {
             throw TranscriptionError.unsupportedLanguages
         }
-        let engine = modelInfo?.engine ?? .whisperKit
 
         do {
             while let pending = initTask {
@@ -2312,19 +2253,9 @@ private extension DictationCoordinator {
                 await self.transcriptionService.releaseLoadedModelAndWait()
                 self.whisperKit = nil; self.currentModelName = nil
                 try self.requireSessionModel(modelName)
-                let prepared: SpeechModelProtocol
-                var kit: WhisperKit?
-                switch engine {
-                case .parakeet: prepared = try await self.ensureParakeetReady(modelName: modelName)
-                case .whisperKit:
-                    let loaded = try await self.ensureWhisperKitEngineReady(modelName: modelName)
-                    let wrapper = WhisperKitEngine()
-                    wrapper.setWhisperKit(loaded)
-                    prepared = wrapper; kit = loaded
-                case .qwenASR:
-                    if #available(iOS 18.0, *) { prepared = try await self.ensureQwenReady(modelName: modelName) }
-                    else { throw ModelManagerError.qwenUnavailable }
-                }
+                let kit = try await self.ensureWhisperKitEngineReady(modelName: modelName)
+                let prepared = WhisperKitEngine()
+                prepared.setWhisperKit(kit)
                 do { try self.requireSessionModel(modelName) }
                 catch { await prepared.releaseLoadedModelAndWait(); throw error }
                 self.whisperKit = kit
@@ -2337,8 +2268,7 @@ private extension DictationCoordinator {
         } catch {
             try Task.checkCancellation()
             guard sessions.mayReport(from: preparationGeneration) else { throw CancellationError() }
-            guard engine == .whisperKit,
-                  error is SpeechModelError,
+            guard error is SpeechModelError,
                   let fallback = installedWhisperFallback(
                       excluding: fallbackExclusions.union([modelName])
                   ) else {
@@ -2390,7 +2320,7 @@ private extension DictationCoordinator {
         var candidates = [ModelInfo.recommendedIdentifier(for: capabilities)]
         if let recommended = ModelSelectionProfile.active(from: defaults).resolvedIdentifier(
             installed: installed.subtracting(excluding), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: capabilities, recognizer: .whisper,
+            capabilities: capabilities,
             requiredLanguages: SpokenLanguagePreferences.load(from: defaults)) {
             candidates.insert(recommended, at: 0)
         }
@@ -2504,122 +2434,5 @@ private extension DictationCoordinator {
         }
     }
 
-    /// Initialize Parakeet engine (iOS 17+ only).
-    ///
-    /// Loads strictly from the local FluidAudio cache (issue #252). This path used to call
-    /// `AsrModels.downloadAndLoad`, which starts a HuggingFace download when the cache is
-    /// absent — during dictation, with no progress and no way to cancel. That is the
-    /// asymmetry issue #249 removed for Whisper; downloading stays the model manager's job.
-    func ensureParakeetReady(modelName: String) async throws -> ParakeetEngine {
-        if #available(iOS 17.0, *) {
-            // Fail fast, before any task is created, when the cache is absent or partial —
-            // mirrors the WhisperKit guard above. `SharedKeys.modelReady` only reflects App
-            // Group bookkeeping; this checks the bundles FluidAudio will actually read.
-            let version: AsrModelVersion = modelName == "parakeet-tdt-0.6b-v2" ? .v2 : .v3
-            guard let cacheDirectory = ParakeetEngine.installedModelCacheDirectory(version: version) else {
-                let error = SpeechModelError.modelNotInstalled(identifier: modelName)
-                PersistentLog.log(.diagnosticProbe(
-                    component: "ParakeetLoad",
-                    instanceID: modelName,
-                    action: "localModelMissing",
-                    details: error.diagnosticDescription
-                ))
-                throw error
-            }
-
-            PersistentLog.log(.diagnosticProbe(
-                component: "ParakeetLoad",
-                instanceID: modelName,
-                action: "localModelResolved",
-                details: "folder=\(cacheDirectory.lastPathComponent) download=false"
-            ))
-
-            do {
-                if #available(iOS 14.0, *) {
-                    DictusLogger.app.info("Initializing ParakeetEngine for model: \(modelName, privacy: .public)")
-                }
-
-                let parakeetEngine = ParakeetEngine()
-                try await parakeetEngine.prepare(modelIdentifier: modelName)
-
-
-                if #available(iOS 14.0, *) {
-                    DictusLogger.app.info("ParakeetEngine ready for model: \(modelName, privacy: .public)")
-                }
-                return parakeetEngine
-            } catch {
-                // Wrap anything FluidAudio or Core ML raises (issue #249) — those
-                // messages are English and developer-facing, and `handleError` writes
-                // whatever reaches it into the keyboard's error banner.
-                let wrapped = SpeechModelError.engineLoadFailed(identifier: modelName, underlying: error)
-                PersistentLog.log(.diagnosticProbe(
-                    component: "ParakeetLoad",
-                    instanceID: modelName,
-                    action: "loadFailed",
-                    details: wrapped.diagnosticDescription
-                ))
-                throw wrapped
-            }
-        } else {
-            if #available(iOS 14.0, *) {
-                DictusLogger.app.warning("Parakeet not available on iOS 16 — falling back to WhisperKit small")
-            }
-            throw ModelManagerError.parakeetUnavailable
-        }
-    }
-
-    @available(iOS 18.0, *)
-    private func ensureQwenReady(modelName: String) async throws -> QwenSpeechEngine {
-        let engine = QwenSpeechEngine()
-        do {
-            try await engine.prepare(modelIdentifier: modelName)
-            return engine
-        } catch {
-            await engine.releaseLoadedModelAndWait()
-            throw error
-        }
-    }
-
-    private func startRealtimeIfEnabled(generation: Int) {
-        guard #available(iOS 18.0, *), realtimeTask == nil,
-              status == .recording, sessions.mayReport(from: generation),
-              defaults.bool(forKey: SharedKeys.dictationRealtimeText),
-              currentLanguagePolicy.engine == .qwenASR,
-              let engine = transcriptionService.qwenEngine else { return }
-        realtimeGeneration = generation
-        let language = currentLanguagePolicy.sttLanguageCode
-        let spokenLanguages = currentLanguagePolicy.spokenLanguages
-        let hints = DictationVocabulary.hints(in: defaults)
-        realtimeTask = Task {
-            do {
-              try await SpokenLanguagePreferences.$recognitionLanguages.withValue(spokenLanguages) {
-              try await DictationVocabulary.$currentHints.withValue(hints) {
-                try await engine.beginRealtime(session: UInt64(generation))
-                var consumed = 0
-                while self.sessions.mayReport(from: generation), self.audioEngine.isRecording {
-                    try Task.checkCancellation()
-                    if let capture = self.audioEngine.previewAudio(after: consumed) {
-                        let text = try await engine.appendRealtime(capture.samples, session: UInt64(generation), language: language)
-                        consumed += capture.samples.count
-                        guard self.sessions.mayReport(from: generation) else { throw CancellationError() }
-                        if let text, text != self.realtimeTranscript,
-                           SpokenLanguagePreferences.unexpectedLanguage(in: text, languages: spokenLanguages) == nil {
-                            self.realtimeTranscript = text
-                        }
-                        if consumed < capture.totalSampleCount { continue }
-                    }
-                    try await Task.sleep(for: .milliseconds(200))
-                }
-              }
-              }
-            } catch {
-                if !(error is CancellationError), self.sessions.mayReport(from: generation), self.status == .recording {
-                    self.cancelDictation()
-                    self.handleError(error.localizedDescription)
-                }
-                throw error
-            }
-        }
-    }
 
 }

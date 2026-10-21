@@ -87,8 +87,8 @@ public enum WhisperModelRepository {
                       && (!needsWeights || nonemptyFile(url.appendingPathComponent("weights/weight.bin")))
                   let hasNetwork = nonemptyFile(url.appendingPathComponent("model.espresso.net"))
                       && (!needsWeights || nonemptyFile(url.appendingPathComponent("model.espresso.weights")))
-                  return ParakeetModelRepository.isCompiledModelBundle(url, fileManager: fileManager)
-                      && nonemptyFile(url.appendingPathComponent(ParakeetModelRepository.compiledModelMarkerFile))
+                  // A compiled Core ML bundle carries a non-empty coremldata.bin marker.
+                  return nonemptyFile(url.appendingPathComponent("coremldata.bin"))
                       && (hasProgram || hasNetwork)
               }) else {
             return nil

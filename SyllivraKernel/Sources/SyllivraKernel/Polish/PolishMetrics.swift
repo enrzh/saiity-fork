@@ -85,19 +85,13 @@ public struct PolishMetrics: Sendable, Codable {
         public let keyboardLanguage: String
         /// The language code handed to the STT engine, or "auto".
         public let sttLanguageCode: String
-        /// Whether that engine honours the code. False for Parakeet, which
-        /// auto-detects from audio and ignores the parameter — so `stt:de`
-        /// there describes what was passed, never what was heard.
-        public let sttLanguageIsEffective: Bool
 
         public init(transcriptionMode: String,
                     keyboardLanguage: String,
-                    sttLanguageCode: String,
-                    sttLanguageIsEffective: Bool) {
+                    sttLanguageCode: String) {
             self.transcriptionMode = transcriptionMode
             self.keyboardLanguage = keyboardLanguage
             self.sttLanguageCode = sttLanguageCode
-            self.sttLanguageIsEffective = sttLanguageIsEffective
         }
 
         /// Read the trail off the per-dictation policy snapshot — the same
@@ -106,8 +100,7 @@ public struct PolishMetrics: Sendable, Codable {
             self.init(
                 transcriptionMode: policy.mode.telemetryDescription,
                 keyboardLanguage: policy.keyboardLanguage.rawValue,
-                sttLanguageCode: policy.sttLanguageCodeDescription,
-                sttLanguageIsEffective: policy.sttLanguageIsEffective
+                sttLanguageCode: policy.sttLanguageCodeDescription
             )
         }
     }
@@ -222,12 +215,8 @@ public struct PolishMetrics: Sendable, Codable {
             let reason = m.failureReason.map { " reason=\($0.slug)" } ?? ""
             // How the target was arrived at (#332), appended only when the
             // event carries the trail so pre-#332 events keep their old shape.
-            // `inert` marks a code the engine ignores — Parakeet auto-detects
-            // from audio, so `stt:de` there says nothing about what was heard.
             let resolution = m.languageResolution.map { r in
-                let inert = r.sttLanguageIsEffective ? "" : "(inert)"
-                return " resolution=tx:\(r.transcriptionMode)/kbd:\(r.keyboardLanguage)"
-                    + "/stt:\(r.sttLanguageCode)\(inert)"
+                " resolution=tx:\(r.transcriptionMode)/kbd:\(r.keyboardLanguage)/stt:\(r.sttLanguageCode)"
             } ?? ""
             PolishLog.logger.info(
                 "📊 polish outcome=\(m.outcome.rawValue, privacy: .public) engine=\(m.engine, privacy: .public) mode=\(m.mode?.rawValue ?? "-", privacy: .public) target=\(m.targetLanguage?.rawValue ?? "none", privacy: .public) detected=\(m.detectedLanguage ?? "-", privacy: .public)\(resolution, privacy: .public) stt=\(m.sttEngine ?? "-", privacy: .public)/\(m.sttModelID ?? "-", privacy: .public) chars=\(m.rawCharCount, privacy: .public)→\(m.polishedCharCount, privacy: .public) latencyMs=\(m.latencyMs, privacy: .public)\(breakdown, privacy: .public)\(reason, privacy: .public)"

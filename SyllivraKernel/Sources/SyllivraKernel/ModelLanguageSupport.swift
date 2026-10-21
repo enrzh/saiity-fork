@@ -7,7 +7,7 @@ import Foundation
 ///
 /// WHY static curated data instead of computed/fetched (#240 locked decision):
 /// Language coverage is a property of the model family, documented by the
-/// vendors (OpenAI/Argmax for Whisper, NVIDIA for Parakeet). It never changes
+/// vendor (OpenAI/Argmax for Whisper). It never changes
 /// at runtime and benchmark-grade quality data is out of scope — a small
 /// hand-curated set of entries with honest quality notes is more useful to
 /// users than an exhaustive generated list.
@@ -30,10 +30,6 @@ public struct ModelLanguageSupport: Equatable, Sendable {
         /// other languages reliably, but gives English users a smaller,
         /// specialized model choice.
         case whisperEnglishOnly
-        /// Parakeet TDT v3: exactly the 25 European languages documented by
-        /// NVIDIA. No Chinese or other non-European languages.
-        case parakeetEuropean
-        case qwenMultilingual
     }
 
     /// A curated quality note attached to a highlighted language on a
@@ -102,15 +98,12 @@ public struct ModelLanguageSupport: Equatable, Sendable {
     public let highlights: [Entry]
 
     /// Remaining documented language codes beyond `highlights`, shown as a
-    /// compact list. Populated for Parakeet (its 25-language list is finite
-    /// and worth spelling out); empty for Whisper, which uses `tierGroups`
-    /// for its full breakdown instead.
+    /// compact list. Whisper uses `tierGroups` for its full breakdown instead.
     public let additionalCodes: [String]
 
     /// Complete supported-language list grouped by published quality tier
     /// (issue #240 design round). Populated for Whisper models (the full
-    /// tokenizer language set, ~100 codes); empty for Parakeet, whose
-    /// finite documented list lives in `highlights` + `additionalCodes`.
+    /// tokenizer language set, ~100 codes).
     public let tierGroups: [TierGroup]
 
     public init(coverage: Coverage,
@@ -208,28 +201,6 @@ extension ModelLanguageSupport {
         ],
         tierGroups: whisperTierGroups
     )
-
-    /// Parakeet TDT 0.6b v3: exactly the 25 European languages documented by
-    /// NVIDIA — nothing else; Chinese and other non-European languages are
-    /// NOT supported (#226 research). The detail view conveys the limit via
-    /// the "25 European languages" summary plus the exhaustive list (design
-    /// round dropped the extra warning row as redundant).
-    /// The 21 codes below are the documented list minus the four tested
-    /// languages already present in `highlights`.
-    static let parakeetV3 = ModelLanguageSupport(
-        coverage: .parakeetEuropean,
-        highlights: testedHighlights,
-        additionalCodes: [
-            "bg", "hr", "cs", "da", "nl", "et", "fi", "el", "hu", "it",
-            "lv", "lt", "mt", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk"
-        ]
-    )
-
-    static let parakeetV2 = ModelLanguageSupport(
-        coverage: .whisperEnglishOnly,
-        highlights: [Entry(code: "en")]
-    )
-
 }
 
 // MARK: - ModelInfo accessor
@@ -244,11 +215,6 @@ extension ModelInfo {
     /// curated data in one reviewable block instead of repeating it across
     /// the seven catalog entries.
     public var languageSupport: ModelLanguageSupport {
-        if engine == .qwenASR {
-            return ModelLanguageSupport(coverage: .qwenMultilingual,
-                highlights: ["fr", "en", "es", "de", "zh"].map { .init(code: $0) },
-                additionalCodes: ["yue", "ja", "ko", "pt", "it", "ru", "th", "vi", "id", "ms", "ar", "hi", "he", "tr", "fa", "nl", "pl", "sv", "da", "fi", "cs", "fil", "el", "hu", "ro"])
-        }
         let support: ModelLanguageSupport
         switch identifier {
         case "openai_whisper-medium",
@@ -264,25 +230,14 @@ extension ModelInfo {
              "openai_whisper-small.en", "openai_whisper-small.en_217MB", "openai_whisper-medium.en",
              "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
             support = .whisperEnglishOnly
-        case "parakeet-tdt-0.6b-v3":
-            support = .parakeetV3
-        case "parakeet-tdt-0.6b-v2":
-            support = .parakeetV2
         default:
             // tiny / base / small / small_216MB, plus any future Whisper
             // entry until it is explicitly classified above. Defaulting to
             // the small-class (most conservative quality claims) is the safe
             // direction for unclassified models.
-            switch engine {
-            case .whisperKit:
-                support = .whisperSmallClass
-            case .parakeet:
-                support = .parakeetV3
-            case .qwenASR:
-                support = .whisperHighAccuracy // handled above
-            }
+            support = .whisperSmallClass
         }
-        guard engine == .whisperKit, !identifier.contains("large-v3") else { return support }
+        guard !identifier.contains("large-v3") else { return support }
         // The classic 51,865-token tokenizer has 99 languages; yue is large-v3 only.
         return ModelLanguageSupport(coverage: support.coverage, highlights: support.highlights,
             additionalCodes: support.additionalCodes,

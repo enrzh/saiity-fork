@@ -8,13 +8,6 @@ final class ModelRuntimeCapabilityTests: XCTestCase {
         XCTAssertEqual(model.languageSupport.highlights.map(\.code), ["en"])
     }
 
-    func testParakeetMetadataDoesNotClaimChineseSupport() throws {
-        let model = try XCTUnwrap(ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3"))
-        XCTAssertEqual(model.runtimeCapability.minimumOSMajorVersion, 17)
-        XCTAssertFalse(model.languageSupport.highlights.map(\.code).contains("zh"))
-        XCTAssertFalse(model.languageSupport.additionalCodes.contains("zh"))
-    }
-
     func testUnknownRequestedModelRemainsUnresolvedWithoutInstalledFallback() {
         let resolution = ModelInfo.runtimeResolution(
             for: "removed-speech-engine",

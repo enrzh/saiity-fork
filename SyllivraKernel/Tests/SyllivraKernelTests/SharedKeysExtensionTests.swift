@@ -11,7 +11,6 @@ final class SharedKeysExtensionTests: XCTestCase {
 
     func testHapticsEnabledKeyExists() {
         XCTAssertEqual(SharedKeys.hapticIntensity, "dictus.hapticIntensity")
-        XCTAssertEqual(SharedKeys.polishCleanupBackend, "dictus.polishCleanupBackend")
     }
 
     func testKeyPopupsEnabledKeyExists() {
@@ -36,7 +35,6 @@ final class SharedKeysExtensionTests: XCTestCase {
             SharedKeys.language,
             SharedKeys.hapticsEnabled,
             SharedKeys.hapticIntensity,
-            SharedKeys.polishCleanupBackend,
             SharedKeys.keyPopupsEnabled,
             SharedKeys.keyPopupMode,
             SharedKeys.liquidGlassEnabled,
@@ -55,7 +53,6 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertTrue(SharedKeys.language.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.hapticsEnabled.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.hapticIntensity.hasPrefix("dictus."))
-        XCTAssertTrue(SharedKeys.polishCleanupBackend.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.keyPopupsEnabled.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.keyPopupMode.hasPrefix("dictus."))
         XCTAssertTrue(SharedKeys.liquidGlassEnabled.hasPrefix("dictus."))

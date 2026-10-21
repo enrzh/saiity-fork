@@ -69,7 +69,7 @@ public enum PolishGuardrail {
     }
 
     /// Returns `true` when `polished` is within the allowed ratio band for `mode`.
-    /// Natural: `[0.5, 2.0]`. Repair: `[0.3, 3.0]`. Auto: `[0.4, 2.0]` so
+    /// Natural: `[0.5, 2.0]`. Auto: `[0.4, 2.0]` so
     /// filler/self-correction cleanup can shorten a restarting transcript.
     /// Empty raw → only empty polished accepted.
     public static func accepts(raw: String, polished: String, mode: PolishMode) -> Bool {
@@ -80,7 +80,6 @@ public enum PolishGuardrail {
         // Auto cleanup drops fillers, abandoned times, and restated clauses, so
         // a faithful edit can land below the Natural 0.5 band.
         case .auto:    return (0.4...2.0).contains(ratio)
-        case .repair:  return (0.3...3.0).contains(ratio)
         }
     }
 
@@ -88,14 +87,10 @@ public enum PolishGuardrail {
     ///
     /// A language model can produce a plausible paragraph while silently
     /// dropping line breaks or list markers. That is a destructive change for
-    /// dictated notes, so the deterministic floor should win instead. Repair
-    /// mode is intentionally excluded because repair is allowed to rebuild
-    /// malformed structure.
+    /// dictated notes, so the deterministic floor should win instead.
     public static func preservesStructure(raw: String,
                                           polished: String,
                                           mode: PolishMode) -> Bool {
-        guard mode != .repair else { return true }
-
         let rawLines = raw.split(separator: "\n", omittingEmptySubsequences: false)
         let polishedLines = polished.split(separator: "\n", omittingEmptySubsequences: false)
         guard rawLines.count <= 1 || polishedLines.count >= rawLines.count else {

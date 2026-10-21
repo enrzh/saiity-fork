@@ -185,7 +185,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
         defaults.set(["de-DE"], forKey: SharedKeys.spokenLanguages)
         defaults.set("fr", forKey: SharedKeys.language)
         defaults.set("multilingual", forKey: SharedKeys.transcriptionOutputMode)
-        for model in ["openai_whisper-small", QwenASRModel.small.rawValue] {
+        for model in ["openai_whisper-small", "openai_whisper-base"] {
             defaults.set(model, forKey: SharedKeys.activeModel)
             XCTAssertEqual(TranscriptionLanguagePolicy.snapshot().sttLanguageCode, "de")
         }
@@ -193,12 +193,10 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
 
     func testMultipleSpokenLanguagesStayCapturedWithoutForcingOneLanguage() {
         let choices = ["zh-Hant", "de-DE", "EN_us"]
-        for engine in [SpeechEngine.whisperKit, .qwenASR, .parakeet] {
-            let captured = TranscriptionLanguagePolicy(mode: .autoDetect, keyboardLanguage: .french,
-                engine: engine, modelIdentifier: "test", spokenLanguages: choices)
-            XCTAssertEqual(captured.spokenLanguages, ["de", "en", "zh"])
-            if engine != .parakeet { XCTAssertNil(captured.sttLanguageCode) }
-        }
+        let captured = TranscriptionLanguagePolicy(mode: .autoDetect, keyboardLanguage: .french,
+            engine: .whisperKit, modelIdentifier: "test", spokenLanguages: choices)
+        XCTAssertEqual(captured.spokenLanguages, ["de", "en", "zh"])
+        XCTAssertNil(captured.sttLanguageCode)
     }
 
 
@@ -240,7 +238,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     }
 
     func testMultilingualModeKeepsCleanupAndGrammarLanguageAgnostic() {
-        for engine in [SpeechEngine.whisperKit, .parakeet] {
+        for engine in [SpeechEngine.whisperKit] {
             let sut = policy(.autoDetect, keyboard: .german, engine: engine,
                              outputMode: .multilingual)
             XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .english), .autoDetected,
@@ -251,7 +249,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     }
 
     func testTranslationTargetWinsOverMultilingualCleanup() {
-        let sut = policy(.autoDetect, keyboard: .german, engine: .parakeet,
+        let sut = policy(.autoDetect, keyboard: .german, engine: .whisperKit,
                          outputMode: .multilingual)
         XCTAssertEqual(
             sut.polishPromptSelection(detectedLanguage: .german, translationTarget: .english),
@@ -263,7 +261,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     }
 
     func testMultilingualKeepSpokenLanguageSkipsModelPolish() {
-        let sut = policy(.autoDetect, keyboard: .german, engine: .parakeet,
+        let sut = policy(.autoDetect, keyboard: .german, engine: .whisperKit,
                          outputMode: .multilingual)
         XCTAssertTrue(sut.skipsModelPolish(translationTarget: nil),
                       "whole-document Auto polish must stay off for mixed speech")
@@ -285,28 +283,6 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
         XCTAssertFalse(sut.insertsTranscriptionAsIs)
     }
 
-    // MARK: - Parakeet: STT stage unchanged, polish stage follows the order
-
-    func testParakeetFollowUsesTheDetectedLanguage() {
-        let sut = policy(.followKeyboard, keyboard: .spanish, engine: .parakeet)
-        XCTAssertEqual(sut.sttLanguageCode, "es")
-        XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .spanish), .language(.spanish))
-        XCTAssertFalse(sut.insertsTranscriptionAsIs)
-    }
-
-    func testParakeetAutoDetectUsesAutoPrompt() {
-        // #239 scope amendment: Parakeet transcribes whichever of its 25
-        // languages is spoken, so targeting the keyboard language in Auto mode
-        // made polish TRANSLATE foreign speech (observed on device). The
-        // polish stage uses the auto prompt; the STT stage keeps the follow
-        // behavior (the engine ignores the language parameter anyway).
-        let sut = policy(.autoDetect, keyboard: .french, engine: .parakeet)
-        XCTAssertEqual(sut.sttLanguageCode, "fr", "STT stage untouched by #239")
-        XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .french), .autoDetected)
-        XCTAssertFalse(sut.insertsTranscriptionAsIs,
-                       "separator behavior is Whisper-auto-only, untouched by #239")
-    }
-
     // MARK: - Polish target resolution order (#332)
 
     /// The regression this issue is about: three device reproductions caught
@@ -316,7 +292,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     /// engine — and Parakeet is the shipping engine, so the user's choice was
     /// discarded on essentially every real dictation.
     func testExplicitTargetIsNeverOverriddenByTheKeyboard() {
-        for engine in [SpeechEngine.whisperKit, .parakeet] {
+        for engine in [SpeechEngine.whisperKit] {
             for keyboard in [SupportedLanguage.german, .english, .spanish] {
                 let sut = policy(.explicit(.french), keyboard: keyboard, engine: engine)
                 XCTAssertEqual(
@@ -330,7 +306,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     /// Rank 1 beats rank 2: the user's own words outrank a detector's guess,
     /// including when the detector disagrees.
     func testExplicitTargetOutranksDetection() {
-        let sut = policy(.explicit(.french), keyboard: .german, engine: .parakeet)
+        let sut = policy(.explicit(.french), keyboard: .german, engine: .whisperKit)
         XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: .german), .language(.french))
         XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: nil), .language(.french),
                        "an explicit choice does not need detection to back it up")
@@ -340,7 +316,7 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     /// as decides the target — so a keyboard switch cannot retarget polish
     /// onto a language the user never spoke.
     func testDetectedLanguageOutranksTheKeyboardInFollowMode() {
-        for engine in [SpeechEngine.whisperKit, .parakeet] {
+        for engine in [SpeechEngine.whisperKit] {
             let sut = policy(.followKeyboard, keyboard: .german, engine: engine)
             XCTAssertEqual(
                 sut.polishPromptSelection(detectedLanguage: .french), .language(.french),
@@ -353,24 +329,11 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
     /// detection was unconfident, or landed outside the four supported
     /// languages. That is a guess, and it is the only case where one is made.
     func testKeyboardLanguageIsTheLastResortOnly() {
-        let sut = policy(.followKeyboard, keyboard: .german, engine: .parakeet)
+        let sut = policy(.followKeyboard, keyboard: .german, engine: .whisperKit)
         XCTAssertEqual(sut.polishPromptSelection(detectedLanguage: nil), .language(.german))
     }
 
     // MARK: - STT telemetry (#332)
-
-    /// The `stt=en engine=PK` log line that read as "transcribed in English"
-    /// above a French transcript. The code is real, the engine ignores it.
-    func testSttLanguageIsMarkedIneffectiveForParakeet() {
-        let parakeet = policy(.explicit(.english), keyboard: .french, engine: .parakeet)
-        XCTAssertEqual(parakeet.sttLanguageCode, "fr",
-                       "STT stage keeps its pre-#226 follow behavior")
-        XCTAssertFalse(parakeet.sttLanguageIsEffective,
-                       "Parakeet auto-detects from audio and ignores the parameter")
-
-        let whisper = policy(.explicit(.english), keyboard: .french, engine: .whisperKit)
-        XCTAssertTrue(whisper.sttLanguageIsEffective)
-    }
 
     func testSttLanguageDescriptionSpellsOutWhisperAutoDetection() {
         let sut = policy(.autoDetect, keyboard: .french, engine: .whisperKit)
@@ -383,12 +346,11 @@ final class TranscriptionLanguagePolicyTests: XCTestCase {
         // The export must let a reader separate the mode, the keyboard, and
         // what STT was handed — the failure that made three device re-tests
         // necessary was that these collapsed into one mislabelled field.
-        let sut = policy(.explicit(.french), keyboard: .german, engine: .parakeet)
+        let sut = policy(.explicit(.french), keyboard: .german, engine: .whisperKit)
         let trail = PolishMetrics.LanguageResolution(policy: sut)
         XCTAssertEqual(trail.transcriptionMode, "explicit(fr)")
         XCTAssertEqual(trail.keyboardLanguage, "de")
-        XCTAssertEqual(trail.sttLanguageCode, "de")
-        XCTAssertFalse(trail.sttLanguageIsEffective)
+        XCTAssertEqual(trail.sttLanguageCode, sut.sttLanguageCodeDescription)
     }
 }
 
@@ -400,7 +362,7 @@ final class PolishLanguageResolutionPersistenceTests: XCTestCase {
 
     private func metric(resolution: PolishMetrics.LanguageResolution?) -> PolishMetrics {
         PolishMetrics(
-            engine: "apple-fm", mode: .repair, targetLanguage: .german,
+            engine: "apple-fm", mode: .natural, targetLanguage: .german,
             detectedLanguage: "fr", rawCharCount: 423, polishedCharCount: 342,
             latencyMs: 3203, outcome: .success,
             sttEngine: "PK", sttModelID: "parakeet-tdt-0.6b-v3",
@@ -411,14 +373,13 @@ final class PolishLanguageResolutionPersistenceTests: XCTestCase {
     func testTrailSurvivesTheMetricJSONRoundTrip() throws {
         let sut = metric(resolution: PolishMetrics.LanguageResolution(
             transcriptionMode: "explicit(fr)", keyboardLanguage: "de",
-            sttLanguageCode: "de", sttLanguageIsEffective: false
+            sttLanguageCode: "de"
         ))
         let data = try JSONEncoder().encode(sut)
         let decoded = try JSONDecoder().decode(PolishMetrics.self, from: data)
         XCTAssertEqual(decoded.languageResolution?.transcriptionMode, "explicit(fr)")
         XCTAssertEqual(decoded.languageResolution?.keyboardLanguage, "de")
         XCTAssertEqual(decoded.languageResolution?.sttLanguageCode, "de")
-        XCTAssertEqual(decoded.languageResolution?.sttLanguageIsEffective, false)
         // The distinction the export existed to make and could not: detected,
         // target and keyboard are three separate values on one event. Asserted
         // as exact values rather than as "target != detected" — that form also
@@ -443,7 +404,7 @@ final class PolishLanguageResolutionPersistenceTests: XCTestCase {
             sttEngine: "PK", sttModelID: "parakeet-tdt-0.6b-v3",
             languageResolution: PolishMetrics.LanguageResolution(
                 transcriptionMode: "autoDetect", keyboardLanguage: "de",
-                sttLanguageCode: "de", sttLanguageIsEffective: false
+                sttLanguageCode: "de"
             )
         )
         let json = try XCTUnwrap(String(data: try JSONEncoder().encode(sut), encoding: .utf8))

@@ -14,11 +14,7 @@ struct ModelManagerView: View {
     @State private var downloadError: String?
     @State private var showErrorAlert = false
     @State private var failedDownloadModelID: String?
-    @State private var customModelToDelete: CustomModel?
     @State private var searchText = ""
-    @State private var showsProcessingModels = false
-    @AppStorage(SharedKeys.dictationRealtimeText, store: AppGroup.defaults) private var realtime = false
-    @Environment(\.dynamicTypeSize) private var typeSize
     @EnvironmentObject private var coordinator: DictationCoordinator
 
     private let deviceCapabilities = DeviceCapabilities.current()
@@ -86,15 +82,6 @@ struct ModelManagerView: View {
         // Xcode 26.3 can time out when it carries the concrete nested List type
         // through every sheet, alert, and cover modifier below.
         AnyView(configuredModelList)
-        .alert("Delete custom model?", isPresented: Binding(get: { customModelToDelete != nil }, set: { if !$0 { customModelToDelete = nil } })) {
-            Button("Cancel", role: .cancel) { customModelToDelete = nil }
-            Button("Delete", role: .destructive) {
-                if let model = customModelToDelete { modelManager.deleteCustomModel(model) }
-                customModelToDelete = nil
-            }
-        } message: {
-            Text("This removes the saved model configuration from Syllivra.")
-        }
         .onAppear {
             modelManager.loadState()
         }
@@ -142,74 +129,51 @@ struct ModelManagerView: View {
             .textCase(nil)
             .navigationTitle("Models")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: showsProcessingModels ? "Processing model" : "Voice model or language")
-    }
-
-    private var modelTypePicker: some View {
-        Picker("Model type", selection: $showsProcessingModels) {
-            Text("Voice").tag(false)
-            Text("Processing").tag(true)
-        }
+        .searchable(text: $searchText, prompt: "Model or language")
     }
 
     @ViewBuilder
     private var modelList: some View {
         List {
             Section {
-                if typeSize.isAccessibilitySize {
-                    modelTypePicker.pickerStyle(.menu)
+                voiceModelPicker
+            } footer: {
+                if !coordinator.canChangeSpeechRuntime {
+                    Text("Finish this dictation before changing voice settings.")
                 } else {
-                    modelTypePicker.pickerStyle(.segmented)
+                    Text("Automatic picks the best installed model for your languages and this iPhone.")
                 }
             }
-            if showsProcessingModels {
-                dictationCleanupSection
-            } else {
-                Section {
-                    currentModelRow("In App", keyboard: false)
-                    currentModelRow("Keyboard", keyboard: true)
-                    if modelManager.activeModel.flatMap(ModelInfo.forIdentifier)?.engine == .qwenASR {
-                        Toggle("Realtime Text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
-                    }
-                } header: {
-                    Text("In Use")
-                } footer: {
-                    if !coordinator.canChangeSpeechRuntime {
-                        Text("Finish this dictation before changing voice settings.")
-                    } else {
-                        Text("Automatic picks the best installed model for your languages and this iPhone.")
-                    }
-                }
-                installedSection
-                availableSection
-            }
+            installedSection
+            availableSection
         }
     }
 
-    @ViewBuilder
-    private func currentModelRow(_ title: LocalizedStringKey, keyboard: Bool) -> some View {
-        let identifier = keyboard
-            ? AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic"
-            : modelManager.selectionMode == .automatic ? "automatic" : modelManager.activeModel ?? "unavailable"
+    /// One choice for the app and the keyboard. Automatic keeps their separate
+    /// defaults (the keyboard favours a lighter model while it runs in the background).
+    private var voiceModelPicker: some View {
+        let selected = modelManager.selectionMode == .automatic ? "automatic" : modelManager.activeModel ?? "unavailable"
         let choices = ModelInfo.installedRows(from: ModelInfo.allIncludingDeprecated).filter {
-            isInstalled($0) && (!keyboard || $0.engine != .qwenASR)
-                && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-                                         capabilities: deviceCapabilities)
+            isInstalled($0) && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                                      capabilities: deviceCapabilities)
         }.sorted { $0.sizeBytes < $1.sizeBytes }
-        Picker(title, selection: Binding(
-            get: { identifier },
-            set: { selected in
-                if keyboard { modelManager.chooseKeyboardModel(selected) }
-                else if selected == "automatic" { modelManager.setSelectionProfile(.recommended) }
-                else { modelManager.selectModel(selected) }
+        return Picker("Voice Model", selection: Binding(
+            get: { selected },
+            set: { choice in
+                if choice == "automatic" {
+                    modelManager.useRecommendedSettings()
+                } else {
+                    modelManager.selectModel(choice)
+                    modelManager.chooseKeyboardModel(choice)
+                }
             }
         )) {
-            let automatic = keyboard ? modelManager.keyboardModel : modelManager.selectionMode == .automatic ? modelManager.activeModel : nil
+            let automatic = modelManager.selectionMode == .automatic ? modelManager.activeModel : nil
             Text(automatic.flatMap(ModelInfo.forIdentifier).map { "Automatic (\($0.displayName))" } ?? "Automatic")
                 .tag("automatic")
-            if identifier != "automatic" && !choices.contains(where: { $0.identifier == identifier }) {
-                Text(ModelInfo.forIdentifier(identifier)?.displayName ?? String(localized: "No compatible model"))
-                    .tag(identifier).disabled(true)
+            if selected != "automatic" && !choices.contains(where: { $0.identifier == selected }) {
+                Text(ModelInfo.forIdentifier(selected)?.displayName ?? String(localized: "No compatible model"))
+                    .tag(selected).disabled(true)
             }
             ForEach(choices) { model in
                 Text(model.displayName).tag(model.identifier)
@@ -217,7 +181,7 @@ struct ModelManagerView: View {
         }
         .pickerStyle(.menu)
         .disabled(!coordinator.canChangeSpeechRuntime)
-        .accessibilityIdentifier(keyboard ? "models.keyboardModel" : "models.appModel")
+        .accessibilityIdentifier("models.voiceModel")
     }
 
     @ViewBuilder
@@ -277,117 +241,6 @@ struct ModelManagerView: View {
     private func requestDelete(_ model: ModelInfo) {
         modelToDelete = model
         showDeleteAlert = true
-    }
-
-    @ViewBuilder
-    private var dictationCleanupSection: some View {
-        let localModels = LocalCleanupModel.allCases.filter { matchesProcessingFilter($0.displayName + " " + $0.explanation) }
-        let cleanupModels = modelManager.customModels.filter { $0.role == .cleanup && matchesProcessingFilter($0.name) }
-        let showsApple = matchesProcessingFilter("Apple Intelligence")
-        Section {
-            if showsApple { appleIntelligenceCleanupRow }
-            ForEach(localModels, id: \.self) { model in
-                CleanupModelCardView(model: model, manager: modelManager)
-            }
-            ForEach(cleanupModels) { model in
-                customCleanupRow(model)
-            }
-            if !showsApple && localModels.isEmpty && cleanupModels.isEmpty {
-                Text("No matching processing models").foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Text processing")
-        } footer: {
-            Text("One processing model handles punctuation, cleanup and grammar. Apple supports background processing; downloaded local models need Syllivra to stay open.")
-        }
-    }
-
-    private func matchesProcessingFilter(_ text: String) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return query.isEmpty || text.localizedCaseInsensitiveContains(query)
-    }
-
-    private var isAppleIntelligenceCleanupActive: Bool {
-        modelManager.cleanupBackend == .appleIntelligence
-    }
-
-    private var appleIntelligenceCleanupRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ModelCardHeading(name: "Apple Intelligence", size: "", active: isAppleIntelligenceCleanupActive)
-            Text("Included on supported iPhones. Works in the background.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if PolishAvailability.state != .available {
-                Text(PolishAvailability.guidance(for: PolishAvailability.state))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            if !isAppleIntelligenceCleanupActive {
-                Button {
-                    modelManager.selectCleanupBackend(.appleIntelligence)
-                } label: {
-                    Label("Use for processing", systemImage: "checkmark.circle").frame(minHeight: 44)
-                }
-                .buttonStyle(.borderless)
-                .font(.subheadline.weight(.semibold))
-                .accessibilityHint("Uses Apple Intelligence for dictation cleanup")
-            }
-        }
-        .padding(.vertical, 8)
-        .labelStyle(.titleAndIcon)
-    }
-
-    private func customCleanupRow(_ model: CustomModel) -> some View {
-        let isActive = modelManager.cleanupBackend == .ollama(model.id)
-        let actionLayout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 8))
-        return VStack(alignment: .leading, spacing: 4) {
-            ModelCardHeading(name: model.name, size: model.source.displayName, active: isActive)
-            Text(customModelStatus(model)).font(.footnote).foregroundStyle(.secondary)
-            Text("Dictated text is sent to \(URL(string: model.repositoryURL)?.host ?? "your configured server"). Choose a server you trust.")
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            actionLayout {
-                if model.validationError == nil && !isActive {
-                    Button {
-                        modelManager.selectCleanupBackend(.ollama(model.id))
-                    } label: {
-                        Label("Use for processing", systemImage: "checkmark.circle").frame(minHeight: 44)
-                    }
-                    .accessibilityHint("Uses this Ollama model for dictation cleanup")
-                }
-                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-                Menu {
-                    Button("Delete configuration", role: .destructive) { customModelToDelete = model }
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("Actions for \(model.name)")
-                .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.borderless)
-            .font(.subheadline.weight(.semibold))
-        }
-        .padding(.vertical, 8)
-        .labelStyle(.titleAndIcon)
-    }
-
-    private func customModelStatus(_ model: CustomModel) -> String {
-        if let error = model.validationError { return "Invalid: \(error)" }
-        if model.role == .asr && model.source == .huggingFace && model.remoteValidationState == .needsVerification {
-            return "Needs remote verification before use · \(model.source.displayName)"
-        }
-        if let error = model.runtimeSupportError {
-            if model.role == .asr && model.source == .huggingFace && model.remoteValidationState == .verified {
-                return "Verified, but runtime unavailable: \(error)"
-            }
-            return error
-        }
-        if model.role == .cleanup && model.source == .ollama && model.validationError == nil {
-            return "Available for dictation cleanup · \(model.source.displayName)"
-        }
-        return "Configuration only · \(model.source.displayName)"
     }
 
     private func presentError(_ error: String) {

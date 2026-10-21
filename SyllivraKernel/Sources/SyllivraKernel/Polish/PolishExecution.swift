@@ -1,16 +1,14 @@
 import Foundation
 
 public enum PolishExecutionError: String, Error, LocalizedError, Sendable {
-    case timedOut, inferenceStillRunning, outputTruncated, contextExceeded, artifactsUnavailable, unsupportedLanguage
+    case timedOut, inferenceStillRunning, outputTruncated, contextExceeded
 
     public var errorDescription: String? {
         switch self {
-        case .timedOut: return "Processing took too long. Try a smaller model."
-        case .inferenceStillRunning: return "The previous model is still finishing. Try again when processing has stopped."
-        case .outputTruncated: return "The processing model returned incomplete text."
-        case .contextExceeded: return "This transcript is too long for the processing model."
-        case .artifactsUnavailable: return "The processing model's files are missing or incomplete. Download or repair it on the Models page."
-        case .unsupportedLanguage: return "This model could not safely process this language. Choose a multilingual processing model."
+        case .timedOut: return "Cleanup took too long."
+        case .inferenceStillRunning: return "The previous cleanup is still finishing. Try again in a moment."
+        case .outputTruncated: return "Cleanup returned incomplete text."
+        case .contextExceeded: return "This transcript is too long for cleanup."
         }
     }
 }

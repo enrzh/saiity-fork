@@ -9,7 +9,7 @@ import SyllivraKernel
 ///    follow/explicit modes, language-agnostic auto path for Auto-detect.
 /// 3. Detect the language of the raw STT output via `NLLanguageRecognizer`;
 ///    skip on gibberish (top hypothesis below `confidenceThreshold`).
-/// 4. Choose mode: `.natural` for Whisper or `.natural`/`.repair` for Parakeet
+/// 4. Use `.natural` mode for the targeted language
 ///    depending on detected-vs-target match; `.auto` in Auto-detect mode.
 /// 5. Run the engine with cancellation support, apply the guardrail, emit metrics.
 ///
@@ -62,17 +62,6 @@ public final class PolishCoordinator {
     /// observer, a retry — would be theatre against the measurements on #315.
     private var availabilityGate = PolishAvailabilityGate()
 
-    /// Valid Ollama cleanup registrations. ASR rows stay configuration-only.
-    private var validCleanupOllamaModels: [CustomModel] {
-        PolishCleanupBackend.validOllamaCleanupModels(from: CustomModel.load(from: defaults))
-    }
-
-    @available(iOS 26.0, *)
-    private func ollamaEngine(for id: UUID) -> OllamaPolishEngine? {
-        guard let model = validCleanupOllamaModels.first(where: { $0.id == id }) else { return nil }
-        return OllamaPolishEngine(model: model)
-    }
-
     private init() {
         self.defaults = AppGroup.defaults
         // One ordered writer, capped at 64 events. On process termination,
@@ -103,33 +92,9 @@ public final class PolishCoordinator {
     /// Resolve the engine for this call. Re-checked on every `polish()` so a
     /// late availability flip (model finishes downloading, user toggles Apple
     /// Intelligence on) takes effect without an app relaunch.
-    ///
-    /// The user-selected cleanup backend wins. Apple Intelligence never yields
-    /// to a registered Ollama model unless that model is the explicit choice.
     private var activeEngine: PolishEngineProtocol {
-        let validOllama = validCleanupOllamaModels
-        let preference = PolishCleanupBackend.load(from: defaults, customModels: validOllama)
-        let kind = PolishCleanupBackend.resolvedEngine(
-            preference: preference,
-            appleFMAvailable: appleFMEngine != nil && PolishAvailability.isAppleFMAvailable,
-            validOllamaIDs: Set(validOllama.map(\.id))
-        )
-        switch kind {
-        case .local(let model):
-            return CleanupModelManager.shared.engine(for: model)
-        case .appleIntelligence:
-            return appleFMEngine ?? passthroughEngine
-        case .ollama(let id):
-            if #available(iOS 26.0, *), let engine = ollamaEngine(for: id) {
-                return engine
-            }
-            if let appleFMEngine, PolishAvailability.isAppleFMAvailable {
-                return appleFMEngine
-            }
-            return passthroughEngine
-        case .passthrough:
-            return passthroughEngine
-        }
+        guard let appleFMEngine, PolishAvailability.isAppleFMAvailable else { return passthroughEngine }
+        return appleFMEngine
     }
 
     // MARK: - Public API
@@ -154,25 +119,7 @@ public final class PolishCoordinator {
     /// no polish will run) or when the engine has nothing to warm.
     public func prewarm() {
         guard defaults.bool(forKey: SharedKeys.polishEnabled) else { return }
-        if case .local(let model) = PolishCleanupBackend.load(from: defaults) {
-            let engine = CleanupModelManager.shared.engine(for: model)
-            Task {
-                _ = try? await PolishExecution.shared.run(deadline: PolishDeadline()) {
-                    try await engine.prepare()
-                    return ""
-                }
-            }
-            return
-        }
         guard let engineToWarm = appleFMEngine, PolishAvailability.isAppleFMAvailable else { return }
-        let validOllama = validCleanupOllamaModels
-        let preference = PolishCleanupBackend.load(from: defaults, customModels: validOllama)
-        let kind = PolishCleanupBackend.resolvedEngine(
-            preference: preference,
-            appleFMAvailable: true,
-            validOllamaIDs: Set(validOllama.map(\.id))
-        )
-        guard kind == .appleIntelligence else { return }
         // Resolve the prompt selection through the language policy
         // (#226/#239/#332): explicit mode targets the language the user chose,
         // not the keyboard one; Auto mode warms the language-agnostic auto
@@ -438,8 +385,7 @@ public final class PolishCoordinator {
     /// to write in — and `request.detected` is what detection read in the raw
     /// text, already run by the caller because the target is resolved from it
     /// (#332). They are separate values because they legitimately differ: an
-    /// explicit transcription language outranks detection, and that gap is
-    /// exactly what selects `PolishMode.repair` below.
+    /// explicit transcription language outranks detection.
     private func polishTargeted(_ request: Request,
                                 target: SupportedLanguage,
                                 writingStyle: WritingStyle,
@@ -534,7 +480,7 @@ public final class PolishCoordinator {
             return fallback
         }
 
-        let mode = PolishPipeline.mode(sttEngine: sttEngine, detected: detected, target: target)
+        let mode = PolishMode.natural
 
         // Resolve the engine for this call — see `activeEngine` doc-comment.
         inflight?.cancel()
@@ -894,63 +840,5 @@ public final class PolishCoordinator {
         return regions.map { region in
             "\(region.region.startSample)-\(region.region.endSample):\(region.validatedLanguage ?? "-"):\(region.overlapsPreviousRegion ? "1" : "0")"
         }.joined(separator: ";")
-    }
-}
-
-/// App-target cleanup backend for a registered Ollama model.
-/// The pipeline still owns prompt framing, guardrails, and fallback behavior.
-@available(iOS 26.0, *)
-private struct OllamaPolishEngine: PolishEngineProtocol {
-    let identifier: String
-    private let endpoint: URL
-    private let model: String
-    private let session: URLSession
-
-    init?(model: CustomModel) {
-        guard let modelName = model.modelName?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !modelName.isEmpty,
-              let endpoint = OllamaHTTPContract.endpoint(baseURL: model.repositoryURL) else { return nil }
-        self.identifier = "ollama:\(modelName)"
-        self.endpoint = endpoint
-        self.model = modelName
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = OllamaHTTPContract.cleanupTimeout
-        configuration.timeoutIntervalForResource = OllamaHTTPContract.cleanupTimeout
-        self.session = URLSession(configuration: configuration)
-    }
-
-    func polish(raw: String,
-                targetLanguage: SupportedLanguage,
-                mode: PolishMode) async throws -> String {
-        try await polish(raw: raw, targetLanguage: targetLanguage, mode: mode, style: .balanced)
-    }
-
-    func polish(raw: String,
-                targetLanguage: SupportedLanguage,
-                mode: PolishMode,
-                style: WritingStyle) async throws -> String {
-        let instructions = DictationVocabulary.$currentHints.withValue(DictationVocabulary.serverHints(for: raw)) {
-            PolishPromptEnvelope.resolve(raw: raw, style: style).instructions
-        }
-        let body: [String: Any] = [
-            "model": model,
-            "temperature": 0.0,
-            "stream": false,
-            "max_tokens": PolishContextBudget.outputLimit(for: raw),
-            "messages": [
-                ["role": "system", "content": instructions],
-                    ["role": "user", "content": PolishPromptEnvelope.userTurn(raw: raw, style: style)]
-            ],
-            "reasoning_effort": "none",
-            "chat_template_kwargs": ["enable_thinking": false]
-        ]
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await session.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        return try OllamaHTTPContract.responseText(data: data, statusCode: statusCode)
     }
 }

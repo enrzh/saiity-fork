@@ -18,8 +18,6 @@ public enum SharedKeys {
     public static let activeModel = "dictus.activeModel"
     public static let modelReady = "dictus.modelReady"
     public static let downloadedModels = "dictus.downloadedModels"
-    /// JSON-encoded custom model registrations, kept separate from built-in models.
-    public static let customModels = "dictus.customModels"
     /// Tri-state model lifecycle: "idle" / "loading" / "ready".
     /// "idle" = no active load in flight, but `modelReady` may still be true.
     /// "loading" = WhisperKit/Parakeet is being loaded into RAM (or compiling/downloading).
@@ -119,10 +117,7 @@ public enum SharedKeys {
     public static let modelSelectionProfile = "dictus.modelSelectionProfile"
     public static let spokenLanguages = "dictus.spokenLanguages"
     public static let onboardingUsage = "dictus.onboardingUsage"
-    public static let dictationRecognizer = "dictus.dictationRecognizer"
-    public static let dictationStreamingModel = "dictus.dictationStreamingModel"
     public static let dictationWhisperModel = "dictus.dictationWhisperModel"
-    public static let dictationRealtimeText = "dictus.dictationRealtimeText"
     public static let appDictationModel = "dictus.appDictationModel"
     public static let appDictationModelReady = "dictus.appDictationModelReady"
     public static let keyboardDictationModel = "dictus.keyboardDictationModel"
@@ -189,9 +184,6 @@ public enum SharedKeys {
     /// Whether the cleanup layer runs between STT final output and App Group write.
     /// Defaults to true; an explicit user choice is preserved by app migration.
     public static let polishEnabled = "dictus.polishEnabled"
-    /// Selected dictation cleanup backend: `appleIntelligence` or `ollama:<uuid>`.
-    /// Missing values resolve through `PolishCleanupBackend.load`.
-    public static let polishCleanupBackend = "dictus.polishCleanupBackend"
     /// Bool: multilingual output uses sentence-span polish instead of skipping
     /// the model. Absent defaults to on. Set false to keep the language-neutral
     /// floor only.

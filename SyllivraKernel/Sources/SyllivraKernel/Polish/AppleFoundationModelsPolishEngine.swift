@@ -244,18 +244,8 @@ public final class AppleFoundationModelsPolishEngine: PolishEngineProtocol, Send
             return PolishNaturalPromptES.instructions(glossary: glossary)
         case (.natural, .german):
             return PolishNaturalPromptDE.instructions(glossary: glossary)
-        case (.repair, .french):
-            return PolishRepairPromptFR.instructions(glossary: glossary)
-        case (.repair, .english):
-            return PolishRepairPromptEN.instructions(glossary: glossary)
-        case (.repair, .spanish):
-            return PolishRepairPromptES.instructions(glossary: glossary)
-        case (.repair, .german):
-            return PolishRepairPromptDE.instructions(glossary: glossary)
         case (.natural, _):
             return PolishNaturalPromptEN.instructions(glossary: glossary)
-        case (.repair, _):
-            return PolishRepairPromptEN.instructions(glossary: glossary)
         }
     }
 }

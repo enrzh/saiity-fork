@@ -13,17 +13,11 @@ struct Notice: Codable {
     var note: String? = nil
 }
 let packages: [(String, String, String)] = [
-    ("DeviceKit", "DeviceKit", "LICENSE"), ("FluidAudio", "FluidAudio", "LICENSE"),
-    ("WhisperKit", "WhisperKit", "LICENSE"), ("MLX Swift", "mlx-swift", "LICENSE"),
-    ("MLX Swift LM", "mlx-swift-lm", "LICENSE"), ("MLX", "mlx-swift", "Source/Cmlx/mlx/LICENSE"),
-    ("MLX C", "mlx-swift", "Source/Cmlx/mlx-c/LICENSE"),
-    ("Metal-cpp", "mlx-swift", "Source/Cmlx/metal-cpp/LICENSE.txt"),
-    ("fmt", "mlx-swift", "Source/Cmlx/fmt/LICENSE"),
-    ("nlohmann/json", "mlx-swift", "Source/Cmlx/json/LICENSE.MIT"),
+    ("DeviceKit", "DeviceKit", "LICENSE"), ("WhisperKit", "WhisperKit", "LICENSE"),
     ("Swift Transformers", "swift-transformers", "LICENSE"),
     ("Swift Jinja", "swift-jinja", "LICENSE"), ("Swift Crypto", "swift-crypto", "LICENSE.txt"),
     ("Swift ASN.1", "swift-asn1", "LICENSE.txt"), ("Swift Collections", "swift-collections", "LICENSE.txt"),
-    ("Swift Numerics", "swift-numerics", "LICENSE.txt"), ("yyjson", "yyjson", "LICENSE")]
+    ("yyjson", "yyjson", "LICENSE")]
 var notices = try packages.map { name, package, file in
     let checkout = checkouts.appendingPathComponent(package)
     var text = try String(contentsOf: checkout.appendingPathComponent(file), encoding: .utf8)
@@ -32,26 +26,21 @@ var notices = try packages.map { name, package, file in
         text += "\n\n" + (try String(contentsOf: attribution, encoding: .utf8))
     }
     return Notice(name: name, source: "https://github.com/" + [
-        "DeviceKit": "devicekit/DeviceKit", "FluidAudio": "FluidInference/FluidAudio", "WhisperKit": "argmaxinc/WhisperKit",
-        "speech-swift": "soniqo/speech-swift",
-        "mlx-swift": "ml-explore/mlx-swift", "mlx-swift-lm": "ml-explore/mlx-swift-lm",
+        "DeviceKit": "devicekit/DeviceKit", "WhisperKit": "argmaxinc/WhisperKit",
         "swift-transformers": "huggingface/swift-transformers", "swift-jinja": "huggingface/swift-jinja", "yyjson": "ibireme/yyjson"
     ][package, default: "apple/" + package],
     text: text)
 }
-notices.append(Notice(name: "Qwen3 Speech Swift", source: "https://github.com/soniqo/speech-swift",
-    text: try String(contentsOf: root.appendingPathComponent("Vendor/QwenASRRuntime/LICENSE"), encoding: .utf8)))
 notices.append(Notice(name: "Dictus", source: "https://github.com/getdictus/dictus-ios",
                      text: try String(contentsOf: root.appendingPathComponent("LICENSE"), encoding: .utf8),
                      note: "Attribution for inherited app, keyboard and shared source code. The current shared package is SyllivraKernel; DictusCore is no longer linked."))
 notices.append(Notice(name: "giellakbd-ios", source: "https://github.com/divvun/giellakbd-ios",
     text: try String(contentsOf: root.appendingPathComponent("DictusKeyboard/Vendored/LICENSE-MIT"), encoding: .utf8)))
+// The blank Apache 2.0 template: swift-transformers' copy with its copyright line reset.
+let apache = try String(contentsOf: checkouts.appendingPathComponent("swift-transformers/LICENSE"), encoding: .utf8)
+    .replacingOccurrences(of: "Copyright 2022 Hugging Face SAS.", with: "Copyright [yyyy] [name of copyright owner]")
 notices.append(Notice(name: "AOSP keyboard and dictionaries", source: "https://android.googlesource.com/platform/packages/inputmethods/LatinIME/",
-    text: "Copyright The Android Open Source Project\n\n" + (try String(contentsOf: checkouts.appendingPathComponent("FluidAudio/LICENSE"), encoding: .utf8))))
-notices.append(Notice(name: "fastcluster", source: "https://github.com/fastcluster/fastcluster",
-    text: try String(contentsOf: checkouts.appendingPathComponent("FluidAudio/ThirdPartyLicenses/fastcluster-LICENSE.md"), encoding: .utf8)))
-notices.append(Notice(name: "VBx", source: "https://github.com/BUTSpeechFIT/VBx",
-    text: try String(contentsOf: checkouts.appendingPathComponent("FluidAudio/ThirdPartyLicenses/vbx-LICENSE.md"), encoding: .utf8)))
+    text: "Copyright The Android Open Source Project\n\n" + apache))
 let encoder = JSONEncoder()
 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 let data = try encoder.encode(notices)

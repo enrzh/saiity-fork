@@ -32,35 +32,9 @@ final class PolishGuardrailTests: XCTestCase {
         XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .natural))
     }
 
-    func testRepairAcceptsLowerBound() {
-        let raw = String(repeating: "a", count: 100)
-        let polished = String(repeating: "a", count: 30)
-        XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .repair))
-    }
-
-    func testRepairAcceptsUpperBound() {
-        let raw = String(repeating: "a", count: 100)
-        let polished = String(repeating: "a", count: 300)
-        XCTAssertTrue(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .repair))
-    }
-
-    func testRepairRejectsBelowLowerBound() {
-        let raw = String(repeating: "a", count: 100)
-        let polished = String(repeating: "a", count: 29)
-        XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .repair))
-    }
-
-    func testRepairRejectsAboveUpperBound() {
-        let raw = String(repeating: "a", count: 100)
-        let polished = String(repeating: "a", count: 301)
-        XCTAssertFalse(PolishGuardrail.accepts(raw: raw, polished: polished, mode: .repair))
-    }
-
     func testEmptyRawAcceptsOnlyEmptyPolished() {
         XCTAssertTrue(PolishGuardrail.accepts(raw: "", polished: "", mode: .natural))
-        XCTAssertTrue(PolishGuardrail.accepts(raw: "", polished: "", mode: .repair))
         XCTAssertFalse(PolishGuardrail.accepts(raw: "", polished: "x", mode: .natural))
-        XCTAssertFalse(PolishGuardrail.accepts(raw: "", polished: "x", mode: .repair))
     }
 
     // MARK: - Language-match guardrail
@@ -137,7 +111,7 @@ final class PolishGuardrailTests: XCTestCase {
     func testPolishMetricsRoundTripJSON() throws {
         let original = PolishMetrics(
             engine: "apple-fm",
-            mode: .repair,
+            mode: .natural,
             targetLanguage: .french,
             detectedLanguage: "en",
             rawCharCount: 42,

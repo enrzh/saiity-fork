@@ -30,7 +30,7 @@ final class ASREvaluationTests: XCTestCase {
 
     func testEmptyRunTemplateMatchesEligibleLanguages() throws {
         let englishOnly = try XCTUnwrap(ModelInfo.forIdentifier("openai_whisper-tiny.en"))
-        let parakeet = try XCTUnwrap(ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3"))
+        let multilingual = try XCTUnwrap(ModelInfo.forIdentifier("openai_whisper-small"))
         let fixtures = try fixtures()
 
         let englishRun = ASREvaluation.emptyRun(
@@ -39,14 +39,12 @@ final class ASREvaluationTests: XCTestCase {
         )
         XCTAssertEqual(Set(englishRun.transcripts.keys), ["en-reminder"])
 
-        let parakeetRun = ASREvaluation.emptyRun(
-            model: parakeet, fixtures: fixtures, device: "iPhone", osVersion: "26.0",
+        let multilingualRun = ASREvaluation.emptyRun(
+            model: multilingual, fixtures: fixtures, device: "iPhone", osVersion: "26.0",
             modelRevision: "rev", runtimeRevision: "rt"
         )
-        XCTAssertTrue(parakeetRun.transcripts.keys.contains("de-en-switch"))
-        XCTAssertFalse(parakeetRun.transcripts.keys.contains("zh-reminder"),
-                       "Parakeet v3 must not be scored as supporting Chinese")
-        XCTAssertFalse(parakeetRun.transcripts.keys.contains("en-zh-switch"))
+        XCTAssertTrue(multilingualRun.transcripts.keys.contains("de-en-switch"))
+        XCTAssertTrue(multilingualRun.transcripts.keys.contains("zh-reminder"))
 
     }
 

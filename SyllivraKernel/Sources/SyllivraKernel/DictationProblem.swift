@@ -47,7 +47,7 @@ public struct DictationProblem: Equatable, Sendable {
                 ? "The model server is busy. Try the download again in a few minutes."
                 : "The model couldn’t be downloaded. Try again in a few minutes."
             action = .retry
-        } else if text.contains("model") || text.contains("memory") || text.contains("qwen") {
+        } else if text.contains("model") || text.contains("memory") {
             message = "The voice model couldn’t be prepared. Choose another compatible model or repair its download."
             action = .models
         } else if text.contains("microphone is busy") || text.contains("phone call") || text.contains("appel") {

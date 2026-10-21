@@ -274,12 +274,7 @@ private struct EntryDetailView: View {
                 HStack(spacing: 12) {
                     LabeledValue("tx mode", resolution.transcriptionMode)
                     LabeledValue("keyboard", resolution.keyboardLanguage)
-                    LabeledValue(
-                        "stt lang",
-                        resolution.sttLanguageIsEffective
-                            ? resolution.sttLanguageCode
-                            : "\(resolution.sttLanguageCode) (inert)"
-                    )
+                    LabeledValue("stt lang", resolution.sttLanguageCode)
                 }
             }
             HStack(spacing: 12) {

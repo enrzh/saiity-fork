@@ -111,15 +111,10 @@ struct RecordingView: View {
                                     .disabled(!coordinator.canChangeSpeechRuntime)
                             }
                         } else {
-                            Text(!coordinator.realtimeTranscript.isEmpty ? coordinator.realtimeTranscript :
-                                 displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
+                            Text(displayedStatus == .recording ? "Listening…" : "Your words will appear here.")
                                 .font(.title2).lineSpacing(4)
-                                .foregroundStyle(coordinator.realtimeTranscript.isEmpty ? Color.secondary : .primary)
+                                .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if !coordinator.realtimeTranscript.isEmpty {
-                                Text("Live preview. Your final text appears when you finish.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
                         }
                 }
                 if scrollsControls {

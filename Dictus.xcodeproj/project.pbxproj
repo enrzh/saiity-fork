@@ -7,19 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-        NI000001 /* SyllivraInference in App Frameworks */ = {isa = PBXBuildFile; productRef = NI900001 /* SyllivraInference */; };
-        QW000003 /* QwenSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = QW100003; };
-        QW000001 /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = QW900001 /* Qwen3ASR */; };
-        QW000002 /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = QW900002 /* SpeechVAD */; };
         RR000201 /* EmojiData.swift in App Sources */ = {isa = PBXBuildFile; fileRef = AA1000B0 /* EmojiData.swift */; };
-        RR000202 /* LocalPolishEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = RR100202 /* LocalPolishEngine.swift */; };
-        RR000203 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = RR900201 /* MLXLLM */; };
-        RR000204 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = RR900202 /* MLXLMCommon */; };
         RR000205 /* Saiity.icon in Resources */ = {isa = PBXBuildFile; fileRef = RR100205 /* Saiity.icon */; };
         RR000207 /* OpenSourceNotices.json in Resources */ = {isa = PBXBuildFile; fileRef = RR100207 /* OpenSourceNotices.json */; };
         RR000208 /* DeviceKit in App Frameworks */ = {isa = PBXBuildFile; productRef = CC900001 /* DeviceKit */; };
 		4647AD302F76AAA5003C3546 /* RecordingView.swift in Frameworks */ = {isa = PBXBuildFile; fileRef = AA100043 /* RecordingView.swift */; };
-		4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = AA900030 /* FluidAudio */; };
 		AA000001 /* DictusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* DictusApp.swift */; };
 		AA000003 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* KeyboardViewController.swift */; };
 		AA000004 /* KeyboardRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* KeyboardRootView.swift */; };
@@ -74,7 +66,6 @@
 		AA0000E3 /* ModelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E3 /* ModelCardView.swift */; };
 		AA0000E4 /* SwipeBackOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E4 /* SwipeBackOverlayView.swift */; };
 		AA0000F0 /* SpeechModelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F0 /* SpeechModelProtocol.swift */; };
-		AA0000F1 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F1 /* ParakeetEngine.swift */; };
 		AA0000F5 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F5 /* LiveActivityManager.swift */; };
 		AA0000F6 /* StopStandbyIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB100005 /* StopStandbyIntent.swift */; };
 		AA0000F7 /* KeyboardLifecycleProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000F6 /* KeyboardLifecycleProbe.swift */; };
@@ -159,7 +150,6 @@
 
 /* Begin PBXFileReference section */
         QW100003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenSpeechEngine.swift; sourceTree = "<group>"; };
-        RR100202 /* LocalPolishEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPolishEngine.swift; sourceTree = "<group>"; };
         RR100205 /* Saiity.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = DictusApp/Saiity.icon; sourceTree = SOURCE_ROOT; };
         RR100207 /* OpenSourceNotices.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = DictusApp/Resources/OpenSourceNotices.json; sourceTree = SOURCE_ROOT; };
 		AA100001 /* DictusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictusApp.swift; sourceTree = "<group>"; };
@@ -220,7 +210,6 @@
 		AA1000E3 /* ModelCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCardView.swift; sourceTree = "<group>"; };
 		AA1000E4 /* SwipeBackOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeBackOverlayView.swift; sourceTree = "<group>"; };
 		AA1000F0 /* SpeechModelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelProtocol.swift; sourceTree = "<group>"; };
-		AA1000F1 /* ParakeetEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngine.swift; sourceTree = "<group>"; };
 		AA1000F5 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		AA1000F6 /* KeyboardLifecycleProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLifecycleProbe.swift; sourceTree = "<group>"; };
 		AA1000L0 /* ModelInfo+Localized.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelInfo+Localized.swift"; sourceTree = "<group>"; };
@@ -287,13 +276,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-                RR000203 /* MLXLLM in Frameworks */,
-                QW000001 /* Qwen3ASR in Frameworks */,
-                QW000002 /* SpeechVAD in Frameworks */,
-                RR000204 /* MLXLMCommon in Frameworks */,
                 RR000208 /* DeviceKit in App Frameworks */,
-                NI000001 /* SyllivraInference in App Frameworks */,
-				4647AD312F76AAA5003C3546 /* FluidAudio in Frameworks */,
 				AA000010 /* SyllivraKernel in Frameworks */,
 				AA000042 /* WhisperKit in Frameworks */,
 				4647AD302F76AAA5003C3546 /* RecordingView.swift in Frameworks */,
@@ -434,8 +417,6 @@
 		AA400007 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
-        QW100003 /* QwenSpeechEngine.swift */,
-				AA1000F1 /* ParakeetEngine.swift */,
 				AA1000F0 /* SpeechModelProtocol.swift */,
 				AA100041 /* TranscriptionService.swift */,
 				AA100045 /* UnifiedAudioEngine.swift */,
@@ -552,7 +533,6 @@
 		AA40P200 /* Polish */ = {
 			isa = PBXGroup;
 			children = (
-                RR100202 /* LocalPolishEngine.swift */,
 				AA10P201 /* PolishAvailability.swift */,
 				AA10P203 /* PolishCoordinator.swift */,
 				AA10P205 /* PolishDebugView.swift */,
@@ -683,15 +663,9 @@
 			);
 			name = DictusApp;
 			packageProductDependencies = (
-                RR900201 /* MLXLLM */,
-                QW900001 /* Qwen3ASR */,
-                QW900002 /* SpeechVAD */,
-                RR900202 /* MLXLMCommon */,
                 CC900001 /* DeviceKit */,
-                NI900001 /* SyllivraInference */,
 				AA900010 /* SyllivraKernel */,
 				AA900020 /* WhisperKit */,
-				AA900030 /* FluidAudio */,
 			);
 			productName = DictusApp;
 			productReference = AA200001 /* DictusApp.app */;
@@ -772,11 +746,8 @@
 			);
 			mainGroup = AA400000;
 			packageReferences = (
-                RR800201 /* mlx-swift-lm */,
-                QW800001 /* QwenASRRuntime */,
 				AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */,
 				AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */,
-				AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				CC800001 /* XCRemoteSwiftPackageReference "DeviceKit" */,
 			);
 			productRefGroup = AA400004 /* Products */;
@@ -917,7 +888,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000001 /* DictusApp.swift in Sources */,
-                QW000003 /* QwenSpeechEngine.swift in Sources */,
 				AA000005 /* DictationCoordinator.swift in Sources */,
 				RR000010 /* CleanupPipeline.swift in Sources */,
 				RR000011 /* ModelPreparationCoordinator.swift in Sources */,
@@ -928,7 +898,6 @@
 				AA00P201 /* PolishAvailability.swift in Sources */,
 				AA00P203 /* PolishCoordinator.swift in Sources */,
                 RR000201 /* EmojiData.swift in App Sources */,
-                RR000202 /* LocalPolishEngine.swift in Sources */,
 				AA00P205 /* PolishDebugView.swift in Sources */,
 				AA00P207 /* PolishDebugExporter.swift in Sources */,
 				AA000045 /* UnifiedAudioEngine.swift in Sources */,
@@ -954,7 +923,6 @@
 				AA0000A8 /* DebugLogView.swift in Sources */,
 				AA0000E0 /* KeyboardModePicker.swift in Sources */,
 				AA0000F0 /* SpeechModelProtocol.swift in Sources */,
-				AA0000F1 /* ParakeetEngine.swift in Sources */,
 				AA0000E3 /* ModelCardView.swift in Sources */,
 				AA0000E4 /* SwipeBackOverlayView.swift in Sources */,
 				AA000301 /* ModelLoadingOverlay.swift in Sources */,
@@ -1347,29 +1315,12 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-        QW800001 /* QwenASRRuntime */ = {
-            isa = XCLocalSwiftPackageReference;
-            relativePath = Vendor/QwenASRRuntime;
-        };
-        RR800201 /* mlx-swift-lm */ = {
-            isa = XCRemoteSwiftPackageReference;
-            repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-            requirement = { kind = exactVersion; version = 2.30.6; };
-        };
 		AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.16.0;
-			};
-		};
-		AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 0.12.3;
 			};
 		};
 		CC800001 /* XCRemoteSwiftPackageReference "DeviceKit" */ = {
@@ -1383,11 +1334,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-        NI900001 /* SyllivraInference */ = {isa = XCSwiftPackageProductDependency; package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */; productName = SyllivraInference; };
-        QW900001 /* Qwen3ASR */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = Qwen3ASR; };
-        QW900002 /* SpeechVAD */ = {isa = XCSwiftPackageProductDependency; package = QW800001; productName = SpeechVAD; };
-        RR900201 /* MLXLLM */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLLM; };
-        RR900202 /* MLXLMCommon */ = {isa = XCSwiftPackageProductDependency; package = RR800201; productName = MLXLMCommon; };
 		AA900010 /* SyllivraKernel */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA800001 /* XCLocalSwiftPackageReference "SyllivraKernel" */;
@@ -1402,11 +1348,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA800002 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
-		};
-		AA900030 /* FluidAudio */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AA800003 /* XCRemoteSwiftPackageReference "FluidAudio" */;
-			productName = FluidAudio;
 		};
 		BB900010 /* SyllivraKernel */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -57,8 +57,6 @@ struct PolishDebugExport: Codable {
         /// triage when `appleFMAvailable` is false (e.g. user has Siri in
         /// English but iPhone in French → "appleIntelligenceNotEnabled").
         let appleFMState: String
-        /// Stored cleanup backend (`appleIntelligence` or `ollama:<uuid>`).
-        let polishCleanupBackend: String
     }
 
     struct Event: Codable {
@@ -86,10 +84,6 @@ struct PolishDebugExport: Codable {
         let keyboardLanguage: String?
         /// The code handed to the STT engine, or "auto".
         let sttLanguageCode: String?
-        /// Whether the STT engine honours that code. False for Parakeet, which
-        /// auto-detects from audio — so `sttLanguageCode` there says what was
-        /// passed, never what was transcribed.
-        let sttLanguageIsEffective: Bool?
 
         let outcome: String
         /// Why the engine failed (#315) — present on `engineFailed` events only.
@@ -135,8 +129,7 @@ enum PolishDebugExporter {
             activeModelID: activeModelID,
             activeModelEngine: activeEngine,
             appleFMAvailable: PolishAvailability.isAppleFMAvailable,
-            appleFMState: String(describing: PolishAvailability.state),
-            polishCleanupBackend: PolishCleanupBackend.load(from: defaults).storageValue
+            appleFMState: String(describing: PolishAvailability.state)
         )
 
         var outcomes: [String: Int] = [
@@ -163,7 +156,6 @@ enum PolishDebugExporter {
                 transcriptionMode: entry.metrics.languageResolution?.transcriptionMode,
                 keyboardLanguage: entry.metrics.languageResolution?.keyboardLanguage,
                 sttLanguageCode: entry.metrics.languageResolution?.sttLanguageCode,
-                sttLanguageIsEffective: entry.metrics.languageResolution?.sttLanguageIsEffective,
                 outcome: entry.metrics.outcome.rawValue,
                 failureReason: entry.metrics.failureReason?.slug,
                 latencyMs: entry.metrics.latencyMs,

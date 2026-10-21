@@ -9,4 +9,3 @@ xcodebuild -resolvePackageDependencies \
   -project Dictus.xcodeproj \
   -scheme sAiity-iOS \
   -derivedDataPath "${CI_DERIVED_DATA_PATH:?Xcode Cloud derived data path is required}"
-bash scripts/patch-fluidaudio-swift5.sh "$CI_DERIVED_DATA_PATH"

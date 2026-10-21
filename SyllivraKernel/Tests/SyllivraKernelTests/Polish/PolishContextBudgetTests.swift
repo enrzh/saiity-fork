@@ -257,11 +257,11 @@ final class PolishContextBudgetTests: XCTestCase {
         }
         let budget = PolishContextBudget.appleFoundationModels
         let auto = AppleFoundationModelsPolishEngine.instructions(for: .auto, language: .english)
-        let repairEN = AppleFoundationModelsPolishEngine.instructions(for: .repair, language: .english)
-        let autoLimit = largestAcceptedLength(budget: budget, instructions: auto)
-        let repairLimit = largestAcceptedLength(budget: budget, instructions: repairEN)
-        XCTAssertLessThan(autoLimit, repairLimit,
-                          "the longest prompt must leave the least room for input")
+        let natural = AppleFoundationModelsPolishEngine.instructions(for: .natural, language: .english)
+        let (longer, shorter) = auto.count >= natural.count ? (auto, natural) : (natural, auto)
+        XCTAssertLessThanOrEqual(largestAcceptedLength(budget: budget, instructions: longer),
+                                 largestAcceptedLength(budget: budget, instructions: shorter),
+                                 "the longer prompt must leave no more room for input")
     }
 
     /// A regression guard on the constants, deliberately loose. The sweep
@@ -291,7 +291,7 @@ final class PolishContextBudgetTests: XCTestCase {
         }
         let engine = AppleFoundationModelsPolishEngine()
         let input = "bonjour, on se voit demain matin pour parler du projet"
-        for mode in [PolishMode.natural, .repair, .auto] {
+        for mode in [PolishMode.natural, .auto] {
             for language in SupportedLanguage.allCases {
                 XCTAssertEqual(engine.contextFit(input: input, targetLanguage: language, mode: mode),
                                .fits,

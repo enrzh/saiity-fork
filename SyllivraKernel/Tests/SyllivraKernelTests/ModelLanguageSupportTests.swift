@@ -61,11 +61,6 @@ final class ModelLanguageSupportTests: XCTestCase {
         }
     }
 
-    func testParakeetIsEuropeanOnly() {
-        let parakeet = ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3")
-        XCTAssertEqual(parakeet?.languageSupport.coverage, .parakeetEuropean)
-    }
-
     // MARK: - Tested languages ordering
 
     func testTestedLanguagesComeFirstOnEveryModel() {
@@ -110,41 +105,6 @@ final class ModelLanguageSupportTests: XCTestCase {
 
     // MARK: - Parakeet documented list
 
-    func testParakeetListsExactly25UniqueLanguagesWithoutChinese() {
-        guard let parakeet = ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3") else {
-            XCTFail("Parakeet missing from catalog")
-            return
-        }
-        let support = parakeet.languageSupport
-        let allCodes = support.highlights.map(\.code) + support.additionalCodes
-        // NVIDIA documents exactly 25 European languages for TDT 0.6b v3.
-        XCTAssertEqual(allCodes.count, 25)
-        XCTAssertEqual(Set(allCodes).count, 25, "language codes must be unique")
-        XCTAssertFalse(allCodes.contains("zh"), "Parakeet does not support Chinese")
-        for code in testedCodes {
-            XCTAssertTrue(allCodes.contains(code), "\(code) missing from Parakeet list")
-        }
-        // No quality caveats curated on Parakeet's highlighted languages.
-        XCTAssertTrue(support.highlights.allSatisfy { $0.note == nil })
-    }
-
-    func testParakeetCodesAreValidISO639_1() {
-        guard let parakeet = ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3") else {
-            XCTFail("Parakeet missing from catalog")
-            return
-        }
-        let allCodes = parakeet.languageSupport.highlights.map(\.code)
-            + parakeet.languageSupport.additionalCodes
-        for code in allCodes {
-            XCTAssertEqual(code.count, 2, "\(code) is not a two-letter ISO 639-1 code")
-            // The English locale must be able to name every documented code —
-            // guards against typos like "cz" (Czech is "cs").
-            let name = Locale(identifier: "en").localizedString(forLanguageCode: code)
-            XCTAssertNotNil(name, "\(code) is not a language code the OS can name")
-            XCTAssertNotEqual(name, code, "\(code) resolved to itself — likely invalid")
-        }
-    }
-
     // MARK: - Whisper full list with quality tiers (#240 design round)
 
     func testWhisperModelsHaveNoAdditionalCodesList() {
@@ -154,12 +114,6 @@ final class ModelLanguageSupportTests: XCTestCase {
             XCTAssertTrue(model.languageSupport.additionalCodes.isEmpty,
                           "\(model.identifier) should not list additional codes")
         }
-    }
-
-    func testParakeetHasNoTierGroups() {
-        // Parakeet's finite documented list needs no tier breakdown.
-        let parakeet = ModelInfo.forIdentifier("parakeet-tdt-0.6b-v3")
-        XCTAssertEqual(parakeet?.languageSupport.tierGroups.isEmpty, true)
     }
 
     /// Golden copy of WhisperKit's tokenizer language map (Constants in

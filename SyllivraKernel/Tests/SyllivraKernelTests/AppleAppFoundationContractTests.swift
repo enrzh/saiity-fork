@@ -232,15 +232,11 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(body.contains("dictationTask?.cancel()"))
     }
 
-    func testEveryRecognizerAndProcessingPathKeepsTheSelectedLanguageSnapshot() throws {
+    func testRecognitionAndProcessingKeepTheSelectedLanguageSnapshot() throws {
         let coordinator = try source("DictusApp/DictationCoordinator.swift")
         let service = try source("DictusApp/Audio/TranscriptionService.swift")
-        let qwen = try source("DictusApp/Audio/QwenSpeechEngine.swift")
         XCTAssertTrue(service.contains("$recognitionLanguages.withValue(languagePolicy.spokenLanguages)"))
-        XCTAssertTrue(coordinator.contains("$recognitionLanguages.withValue(languagePolicy.spokenLanguages)"))
-        XCTAssertTrue(coordinator.contains("$recognitionLanguages.withValue(spokenLanguages)"))
         XCTAssertTrue(coordinator.contains("spokenLanguages: currentLanguagePolicy.spokenLanguages"))
-        XCTAssertTrue(qwen.contains("options.allowedLanguages = SpokenLanguagePreferences.recognitionLanguages"))
         let guardPosition = try XCTUnwrap(coordinator.range(of: "unexpectedLanguage(in: rawText"))
         let deliveryPosition = try XCTUnwrap(coordinator.range(of: "let decision = DictationFinalizationDecision.make("))
         XCTAssertLessThan(guardPosition.lowerBound, deliveryPosition.lowerBound)
@@ -287,19 +283,14 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("private var polishEnabled = true"))
     }
 
-    func testCleanupBackendIsUserSelectableAppleIntelligenceOrOllama() throws {
+    func testCleanupRunsOnAppleIntelligenceOrPassesTextThrough() throws {
         let coordinator = try source("DictusApp/Polish/PolishCoordinator.swift")
         let manager = try source("DictusApp/Models/ModelManager.swift")
-        let models = try source("DictusApp/Views/ModelManagerView.swift")
 
         XCTAssertTrue(coordinator.contains("PolishSpanPipeline"))
-        XCTAssertTrue(coordinator.contains("PolishCleanupBackend.load"))
-        XCTAssertTrue(coordinator.contains("PolishCleanupBackend.resolvedEngine"))
-        XCTAssertFalse(coordinator.contains("A valid custom Ollama cleanup registration takes precedence"))
-        XCTAssertTrue(manager.contains("selectCleanupBackend"))
-        XCTAssertTrue(manager.contains("SharedKeys.polishCleanupBackend") || manager.contains("cleanupBackend"))
-        XCTAssertTrue(models.contains("dictationCleanupSection"))
-        XCTAssertFalse(models.contains("Custom cleanup"))
+        XCTAssertTrue(coordinator.contains("guard let appleFMEngine, PolishAvailability.isAppleFMAvailable else { return passthroughEngine }"))
+        XCTAssertFalse(coordinator.contains("Ollama"), "Dictated text never leaves the iPhone for cleanup")
+        XCTAssertFalse(manager.contains("cleanupBackend"))
     }
 
     func testCleanupMigrationEnablesUpgradeUsersWithoutOverwritingExplicitChoice() throws {
@@ -315,11 +306,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
             "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPromptEN.swift",
             "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPromptFR.swift",
             "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPromptDE.swift",
-            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPromptES.swift",
-            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishRepairPromptEN.swift",
-            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishRepairPromptFR.swift",
-            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishRepairPromptDE.swift",
-            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishRepairPromptES.swift"
+            "SyllivraKernel/Sources/SyllivraKernel/Polish/Prompts/PolishNaturalPromptES.swift"
         ] {
             let prompt = try source(path)
             XCTAssertTrue(prompt.contains("self-correction"), "Missing self-correction rule in \(path)")
@@ -403,8 +390,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("CleanupSettingsView"))
         XCTAssertFalse(settings.contains("Cleanup options"))
         let modelManagerView = try source("DictusApp/Views/ModelManagerView.swift")
-        XCTAssertTrue(modelManagerView.contains("modelManager.selectCleanupBackend("),
-                      "cleanup backend must stay selectable from Model Manager")
+        XCTAssertFalse(modelManagerView.contains("CleanupModelPicker"), "Cleanup has no model choice")
         XCTAssertTrue(settings.contains("Privacy Policy"))
         XCTAssertFalse(settings.contains("moreGroup("))
         XCTAssertFalse(settings.contains("settingsExternalRow"))
@@ -460,8 +446,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertEqual(Set(notices.compactMap { $0["name"] }).count, notices.count)
         for (name, path) in [
             ("Dictus", "LICENSE"),
-            ("giellakbd-ios", "DictusKeyboard/Vendored/LICENSE-MIT"),
-            ("Qwen3 Speech Swift", "Vendor/QwenASRRuntime/LICENSE")
+            ("giellakbd-ios", "DictusKeyboard/Vendored/LICENSE-MIT")
         ] {
             let notice = try XCTUnwrap(notices.first { $0["name"] == name })
             XCTAssertEqual(notice["text"], try source(path), "Preserve the source license for \(name)")
@@ -484,11 +469,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(manager.contains(".swipeActions"))
         XCTAssertFalse(manager.contains("modelSectionHeader"))
         XCTAssertFalse(manager.contains(".listRowSeparator(.hidden)"))
-        XCTAssertTrue(manager.contains("Text processing"))
-        XCTAssertTrue(manager.contains("Apple Intelligence"))
-        XCTAssertTrue(manager.contains("selectCleanupBackend(.appleIntelligence)"))
-        XCTAssertTrue(manager.contains("PolishAvailability.guidance"))
-        XCTAssertTrue(manager.contains("Dictated text is sent to"), "Remote cleanup must disclose where dictated text goes")
+        XCTAssertFalse(manager.contains("Processing"), "Cleanup has no model choice; Apple Intelligence runs it")
+        XCTAssertTrue(manager.contains("Picker(\"Voice Model\""), "One voice model choice covers the app and keyboard")
         XCTAssertFalse(card.contains("actionColumnWidth"))
         XCTAssertTrue(card.contains("languageSupport.coverage.localizedSummary"))
         XCTAssertTrue(card.contains("cancelCatalogDownload(model.identifier)"))
@@ -497,8 +479,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(card.contains("GaugeBarView("), "Catalog estimates must not appear as measured scores")
         XCTAssertFalse(manager.contains("DictationSettingsAdvisor(modelManager: modelManager)"))
         XCTAssertFalse(manager.contains("VoiceOptionsView(modelManager: modelManager)"))
-        XCTAssertTrue(manager.contains("modelManager.setSelectionProfile(.recommended)"), "Automatic restores the recommended model")
-        XCTAssertTrue(manager.contains("Toggle(\"Realtime Text\""))
+        XCTAssertTrue(manager.contains("modelManager.useRecommendedSettings()"), "Automatic restores the recommended models")
+        XCTAssertFalse(manager.contains("Realtime"), "Live text existed only for the retired Qwen engine")
         XCTAssertFalse(manager.contains("ModelSelectionProfilePicker"))
         XCTAssertFalse(manager.contains("ModelSelectionModePicker"))
         XCTAssertFalse(manager.contains(".fullScreenCover("), "Model preparation should leave navigation available")
@@ -508,7 +490,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testModelRowsKeepEveryStateAndDeterminateProgressReadable() throws {
         let card = try source("DictusApp/Views/ModelCardView.swift")
 
-        for label in ["Not installed", "Downloading", "Preparing", "In app", "Keyboard", "App & keyboard", "Installed", "Failed", "Unavailable"] {
+        for label in ["Downloading", "Preparing", "In app", "Keyboard", "App & keyboard", "Failed", "Unavailable"] {
             XCTAssertTrue(card.contains("\"\(label)"), "Missing model state label: \(label)")
         }
         XCTAssertTrue(card.contains("downloadProgressLabel"))

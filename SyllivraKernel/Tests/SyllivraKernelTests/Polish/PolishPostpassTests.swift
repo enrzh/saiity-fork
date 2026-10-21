@@ -320,7 +320,6 @@ final class PolishPostpassTests: XCTestCase {
         let raw = "- first\n- second"
         XCTAssertFalse(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .auto))
         XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "- First\n- Second", mode: .auto))
-        XCTAssertTrue(PolishGuardrail.preservesStructure(raw: raw, polished: "First and second", mode: .repair))
     }
 
     func testCleanupFloorAutoPathPreservesDistinctEventsAtTheSameTime() {

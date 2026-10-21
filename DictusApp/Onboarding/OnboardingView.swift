@@ -119,7 +119,7 @@ struct AvailabilityPage: View {
         if let requested = AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) { return requested }
         return ModelSelectionProfile.balanced.resolvedIdentifier(installed: Set(ModelInfo.downloadableIdentifiers),
             osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: DeviceCapabilities.current(), recognizer: .whisper,
+            capabilities: DeviceCapabilities.current(),
             requiredLanguages: SpokenLanguagePreferences.load(from: AppGroup.defaults))
     }
     private var modelReady: Bool {

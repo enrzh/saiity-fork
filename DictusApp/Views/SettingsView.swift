@@ -45,7 +45,7 @@ struct DictationSettingsView: View {
                         }
                     }
                 } else {
-                    Text("Choose the processing model in Models.")
+                    Text("Apple Intelligence fixes punctuation and grammar on this iPhone.")
                 }
             }
             Section {
@@ -70,10 +70,7 @@ struct DictationSettingsView: View {
         TranscriptionOutputMode(storedValue: transcriptionOutputModeRaw)
     }
 
-    private var cleanupAvailable: Bool {
-        if modelManager.cleanupBackend != .appleIntelligence { return true }
-        return PolishAvailability.isAppleFMAvailable
-    }
+    private var cleanupAvailable: Bool { PolishAvailability.isAppleFMAvailable }
 
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
@@ -227,7 +224,7 @@ struct AboutView: View {
                     Link("Privacy Policy", destination: privacyURL)
                 }
             } footer: {
-                Text("Speech is recognized on this iPhone. Downloading models uses the network. Server cleanup, if you choose it, sends text to that server.")
+                Text("Speech is recognized and cleaned up on this iPhone. Only downloading voice models uses the network.")
             }
         }
         .navigationTitle("About")
@@ -305,7 +302,7 @@ struct VocabularyView: View {
             } header: {
                 Text("Learned Words")
             } footer: {
-                Text("Hints help Whisper recognize a word and help cleanup spell it. Keep up to 32, each under 65 characters and six words. Server cleanup receives only hints already in its transcript.")
+                Text("Hints help Whisper recognize a word and help cleanup spell it. Keep up to 32, each under 65 characters and six words.")
             }
 
             if !words.isEmpty {

@@ -11,33 +11,32 @@ final class DictationModelPreferencesTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.removePersistentDomain(forName: name)
         defaults.set("manual", forKey: SharedKeys.modelSelectionMode)
-        defaults.set(QwenASRModel.large.rawValue, forKey: SharedKeys.dictationStreamingModel)
-        let installed: Set<String> = [QwenASRModel.small.rawValue, "openai_whisper-tiny"]
+        defaults.set("openai_whisper-medium", forKey: SharedKeys.dictationWhisperModel)
+        let installed: Set<String> = ["openai_whisper-base", "openai_whisper-tiny"]
         for _ in 0..<3 {
-            XCTAssertNil(DictationModelPreferences.resolveAppModel(in: defaults, recognizer: .streaming,
+            XCTAssertNil(DictationModelPreferences.resolveAppModel(in: defaults,
                 installed: installed, osMajor: 27, capabilities: phone))
-            XCTAssertEqual(DictationModelPreferences.requestedAppModel(in: defaults, recognizer: .streaming), QwenASRModel.large.rawValue)
+            XCTAssertEqual(DictationModelPreferences.requestedAppModel(in: defaults), "openai_whisper-medium")
         }
-        XCTAssertEqual(DictationModelPreferences.resolveAppModel(in: defaults, recognizer: .streaming,
-            installed: installed.union([QwenASRModel.large.rawValue]), osMajor: 27, capabilities: phone), QwenASRModel.large.rawValue)
+        XCTAssertEqual(DictationModelPreferences.resolveAppModel(in: defaults,
+            installed: installed.union(["openai_whisper-medium"]), osMajor: 27, capabilities: phone), "openai_whisper-medium")
     }
 
-    func testAppQwenAndKeyboardWhisperAreIndependentAndMigrateOnce() throws {
+    func testAppAndKeyboardModelsAreIndependentAndMigrateOnce() throws {
         let name = "dictus.scope-model-tests"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.removePersistentDomain(forName: name)
-        defaults.set(QwenASRModel.small.rawValue, forKey: SharedKeys.activeModel)
+        defaults.set("openai_whisper-base", forKey: SharedKeys.activeModel)
         defaults.set(true, forKey: SharedKeys.modelReady)
         DictationModelPreferences.migrate(in: defaults)
-        let keyboard = DictationModelPreferences.resolveKeyboardModel(in: defaults,
-            installed: [QwenASRModel.small.rawValue, "openai_whisper-base"], osMajor: 27, capabilities: phone)
-        XCTAssertEqual(keyboard, "openai_whisper-base")
-        defaults.set(keyboard, forKey: SharedKeys.activeModel)
+        XCTAssertEqual(defaults.string(forKey: SharedKeys.dictationWhisperModel), "openai_whisper-base")
+        XCTAssertEqual(defaults.string(forKey: SharedKeys.keyboardDictationModel), "openai_whisper-base")
+        defaults.set("openai_whisper-medium", forKey: SharedKeys.appDictationModel)
         DictationModelPreferences.migrate(in: defaults)
         let appRequest = DictationLanguageRequest(mode: .autoDetect, translationTarget: nil)
             .bound(sessionID: "app-session", generation: 1, clientIdentifier: "app-test")
-        XCTAssertEqual(DictationModelPreferences.requestedModel(for: appRequest, in: defaults), QwenASRModel.small.rawValue)
+        XCTAssertEqual(DictationModelPreferences.requestedModel(for: appRequest, in: defaults), "openai_whisper-medium")
         let keyboardRequest = appRequest.bound(sessionID: "keyboard-session", generation: 2, clientIdentifier: "keyboard-test")
         XCTAssertEqual(DictationModelPreferences.requestedModel(for: keyboardRequest, in: defaults), "openai_whisper-base")
     }
@@ -53,13 +52,13 @@ final class DictationModelPreferencesTests: XCTestCase {
 
     func testAQueuedPreloadCannotSwapTheModelAfterARecordingBegins() {
         for status in [DictationStatus.requested, .recording, .transcribing, .processing, .ready] {
-            XCTAssertFalse(DictationModelPreferences.canPrepareModel(QwenASRModel.large.rawValue,
-                sessionModel: QwenASRModel.small.rawValue, status: status, finalizing: true))
-            XCTAssertTrue(DictationModelPreferences.canPrepareModel(QwenASRModel.small.rawValue,
-                sessionModel: QwenASRModel.small.rawValue, status: status, finalizing: true))
+            XCTAssertFalse(DictationModelPreferences.canPrepareModel("openai_whisper-medium",
+                sessionModel: "openai_whisper-base", status: status, finalizing: true))
+            XCTAssertTrue(DictationModelPreferences.canPrepareModel("openai_whisper-base",
+                sessionModel: "openai_whisper-base", status: status, finalizing: true))
         }
-        XCTAssertTrue(DictationModelPreferences.canPrepareModel(QwenASRModel.large.rawValue,
-            sessionModel: QwenASRModel.small.rawValue, status: .idle, finalizing: false))
+        XCTAssertTrue(DictationModelPreferences.canPrepareModel("openai_whisper-medium",
+            sessionModel: "openai_whisper-base", status: .idle, finalizing: false))
     }
 
     func testPreviewReadsHaveABoundAndPreserveAllSamplesForStop() {
@@ -75,13 +74,5 @@ final class DictationModelPreferencesTests: XCTestCase {
         XCTAssertEqual(copied, audio)
         XCTAssertEqual(buffer.stop(), audio)
         XCTAssertNil(buffer.read(after: 0, maximumSamples: 0))
-    }
-
-    func testCancellationSignalIsStickyAndVisibleAcrossThreads() async throws {
-        let control = InferenceCancellation()
-        try control.check()
-        await Task.detached { control.cancel() }.value
-        XCTAssertTrue(control.isCancelled)
-        XCTAssertThrowsError(try control.check())
     }
 }

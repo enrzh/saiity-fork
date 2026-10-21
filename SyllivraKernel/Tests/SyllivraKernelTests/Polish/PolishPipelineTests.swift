@@ -128,18 +128,9 @@ final class PolishPipelineTests: XCTestCase {
         XCTAssertEqual(lang, .french)
     }
 
-    // MARK: - mode()
-
-    func testModeWhisperAlwaysNatural() {
-        XCTAssertEqual(PolishPipeline.mode(sttEngine: .whisperKit, detected: .english, target: .french), .natural)
-    }
-
-    func testModeParakeetNaturalWhenMatched() {
-        XCTAssertEqual(PolishPipeline.mode(sttEngine: .parakeet, detected: .french, target: .french), .natural)
-    }
-
-    func testModeParakeetRepairWhenMismatched() {
-        XCTAssertEqual(PolishPipeline.mode(sttEngine: .parakeet, detected: .english, target: .french), .repair)
+    func testEventsSavedWithTheRetiredRepairModeStillDecode() throws {
+        let decoded = try JSONDecoder().decode([PolishMode].self, from: Data(#"["repair","auto"]"#.utf8))
+        XCTAssertEqual(decoded, [.natural, .auto])
     }
 
     // MARK: - Auto mode (#239)

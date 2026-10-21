@@ -265,14 +265,7 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     }
 
     /// Language code for the STT engine, or `nil` for Whisper auto-detection.
-    /// Parakeet ignores the parameter either way; it receives the keyboard
-    /// code exactly as it did before #226 so its flows stay byte-identical.
     public var sttLanguageCode: String? {
-        guard engine != .parakeet else {
-            // Parakeet ignores this parameter; retain its existing call shape
-            // and expose the limitation through `sttLanguageIsEffective`.
-            return keyboardLanguage.rawValue
-        }
         guard outputMode == .singleLanguage else {
             return spokenLanguages.count == 1 ? spokenLanguages.first : nil
         }
@@ -372,18 +365,6 @@ public struct TranscriptionLanguagePolicy: Equatable, Sendable {
     /// Span-aware polish may still run on confident monolingual slices.
     public func skipsModelPolish(translationTarget: TranslationLanguage? = nil) -> Bool {
         translationTarget == nil && outputMode == .multilingual
-    }
-
-    /// Whether the STT engine actually honours `sttLanguageCode` (#332).
-    ///
-    /// Parakeet auto-detects from audio and ignores the parameter entirely
-    /// (`ParakeetEngine.transcribe(audioSamples:language:)`), so the code it
-    /// receives is inert. The language-resolution probe logs a code either
-    /// way, which made `stt=en engine=PK` read as "transcribed in English"
-    /// when the raw text was French; recording this alongside it is what
-    /// removes the ambiguity.
-    public var sttLanguageIsEffective: Bool {
-        engine != .parakeet
     }
 
     /// `sttLanguageCode` rendered for logs and the debug export, with `nil`

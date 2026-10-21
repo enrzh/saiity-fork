@@ -280,18 +280,4 @@ public enum PolishPipeline {
         case "es": return .spanish
         default: return nil
         }
-    }
-
-    /// Choose the polish mode. Whisper respects the language picker upstream →
-    /// always Natural. Parakeet auto-detects → Repair when detected ≠ target.
-    public static func mode(sttEngine: SpeechEngine,
-                            detected: SupportedLanguage,
-                            target: SupportedLanguage) -> PolishMode {
-        switch sttEngine {
-        case .whisperKit, .qwenASR:
-            return .natural
-        case .parakeet:
-            return detected == target ? .natural : .repair
-        }
-    }
-}
+    }}

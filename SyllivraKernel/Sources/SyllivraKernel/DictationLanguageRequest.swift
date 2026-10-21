@@ -29,7 +29,7 @@ public struct ASRCapability: Equatable, Sendable {
         let effectiveOutputMode = outputMode ?? (mode == .autoDetect ? .multilingual : .singleLanguage)
 
         switch model.languageSupport.coverage {
-        case .whisperMultilingual, .qwenMultilingual:
+        case .whisperMultilingual:
             switch mode {
             case .autoDetect:
                 return effectiveOutputMode == .multilingual
@@ -45,10 +45,6 @@ public struct ASRCapability: Equatable, Sendable {
             // English: offering Auto or another selected language would make
             // the settings UI promise behavior the model cannot provide.
             return Self(supportsAutomaticInputLanguage: false, sourceLanguage: .english)
-        case .parakeetEuropean:
-            // FluidAudio currently ignores the source-language parameter. Do not
-            // present the keyboard choice as a resolved runtime source.
-            return Self(supportsAutomaticInputLanguage: false, sourceLanguage: nil)
         }
     }
 }

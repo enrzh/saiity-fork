@@ -62,15 +62,13 @@ final class ModelInfoTests: XCTestCase {
             "openai_whisper-tiny", "openai_whisper-tiny.en", "openai_whisper-base", "openai_whisper-base.en",
             "openai_whisper-small", "openai_whisper-small.en",
             "openai_whisper-small_216MB", "openai_whisper-medium",
-            "parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3",
             "openai_whisper-large-v3_turbo_954MB",
             "openai_whisper-large-v2_949MB", "openai_whisper-large-v2_turbo_955MB",
             "openai_whisper-large-v3_947MB", "distil-whisper_distil-large-v3_594MB",
             "distil-whisper_distil-large-v3_turbo_600MB",
             "openai_whisper-large-v3-v20240930_626MB",
             "openai_whisper-large-v3-v20240930_turbo_632MB",
-            "openai_whisper-small.en_217MB", "openai_whisper-medium.en", "openai_whisper-large-v3-v20240930_547MB",
-            QwenASRModel.small.rawValue, QwenASRModel.large.rawValue
+            "openai_whisper-small.en_217MB", "openai_whisper-medium.en", "openai_whisper-large-v3-v20240930_547MB"
         ])
     }
 
@@ -90,8 +88,6 @@ final class ModelInfoTests: XCTestCase {
             ExpectedModel(identifier: "openai_whisper-small.en", sizeLabel: "~487 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-small_216MB", sizeLabel: "~216 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-medium", sizeLabel: "~1.53 GB", engine: SpeechEngine.whisperKit.rawValue),
-            ExpectedModel(identifier: "parakeet-tdt-0.6b-v2", sizeLabel: "~800 MB", engine: SpeechEngine.parakeet.rawValue),
-            ExpectedModel(identifier: "parakeet-tdt-0.6b-v3", sizeLabel: "~800 MB", engine: SpeechEngine.parakeet.rawValue),
             ExpectedModel(identifier: "openai_whisper-large-v3_turbo_954MB", sizeLabel: "~954 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-large-v2_949MB", sizeLabel: "~949 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-large-v2_turbo_955MB", sizeLabel: "~955 MB", engine: SpeechEngine.whisperKit.rawValue),
@@ -102,9 +98,7 @@ final class ModelInfoTests: XCTestCase {
             ExpectedModel(identifier: "openai_whisper-large-v3-v20240930_turbo_632MB", sizeLabel: "~632 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-small.en_217MB", sizeLabel: "~218 MB", engine: SpeechEngine.whisperKit.rawValue),
             ExpectedModel(identifier: "openai_whisper-medium.en", sizeLabel: "~1.53 GB", engine: SpeechEngine.whisperKit.rawValue),
-            ExpectedModel(identifier: "openai_whisper-large-v3-v20240930_547MB", sizeLabel: "~550 MB", engine: SpeechEngine.whisperKit.rawValue),
-            ExpectedModel(identifier: QwenASRModel.small.rawValue, sizeLabel: "~700 MB", engine: SpeechEngine.qwenASR.rawValue),
-            ExpectedModel(identifier: QwenASRModel.large.rawValue, sizeLabel: "~2.1 GB", engine: SpeechEngine.qwenASR.rawValue)
+            ExpectedModel(identifier: "openai_whisper-large-v3-v20240930_547MB", sizeLabel: "~550 MB", engine: SpeechEngine.whisperKit.rawValue)
         ]
 
         XCTAssertEqual(ModelInfo.redesignCatalog.count, expected.count)
@@ -119,7 +113,7 @@ final class ModelInfoTests: XCTestCase {
         XCTAssertEqual(ModelInfo.allIncludingDeprecated.map(\.identifier), ModelInfo.redesignCatalog.filter { $0.visibility != .evaluationOnly }.map(\.identifier))
         XCTAssertEqual(ModelInfo.allIncludingDeprecated.map(\.identifier).count,
                        Set(ModelInfo.allIncludingDeprecated.map(\.identifier)).count)
-        XCTAssertEqual(ModelInfo.redesignCatalog.count, 23)
+        XCTAssertEqual(ModelInfo.redesignCatalog.count, 19)
         XCTAssertEqual(ModelInfo.all.count, Set(ModelInfo.all.map(\.id)).count)
     }
 
@@ -131,8 +125,7 @@ final class ModelInfoTests: XCTestCase {
             "openai_whisper-base",
             "openai_whisper-medium",
             "openai_whisper-large-v3_turbo_954MB",
-            "openai_whisper-large-v3_947MB",
-            QwenASRModel.small.rawValue, QwenASRModel.large.rawValue
+            "openai_whisper-large-v3_947MB"
         ])
         let ids = Set(ModelInfo.all.map(\.identifier))
         XCTAssertEqual(ids, ModelInfo.downloadableIdentifiers)
@@ -144,11 +137,11 @@ final class ModelInfoTests: XCTestCase {
 
     func testAllIncludingDeprecatedKeepsCompatibilityAliasForCurrentCatalog() {
         // Compatibility alias: the current catalog has no deprecated entries.
-        XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 23)
+        XCTAssertEqual(ModelInfo.allIncludingDeprecated.count, 19)
         let deprecated = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .deprecated }
         XCTAssertEqual(deprecated.count, 0)
         let available = ModelInfo.allIncludingDeprecated.filter { $0.visibility == .available }
-        XCTAssertEqual(available.count, 23)
+        XCTAssertEqual(available.count, 19)
     }
 
     func testPreviouslyDownloadedModelsRemainResolvable() {
@@ -232,20 +225,16 @@ final class ModelInfoTests: XCTestCase {
 
     func testSpeechEngineRawValues() {
         XCTAssertEqual(SpeechEngine.whisperKit.rawValue, "WK")
-        XCTAssertEqual(SpeechEngine.parakeet.rawValue, "PK")
     }
 
     func testSpeechEngineDisplayNames() {
         XCTAssertEqual(SpeechEngine.whisperKit.displayName, "WhisperKit")
-        XCTAssertEqual(SpeechEngine.parakeet.displayName, "Parakeet")
     }
 
     func testEngineAssignment() {
         let whisperKitModels = ModelInfo.allIncludingDeprecated.filter { $0.engine == .whisperKit }
-        let parakeetModels = ModelInfo.allIncludingDeprecated.filter { $0.engine == .parakeet }
         XCTAssertEqual(whisperKitModels.count, 19, "Compact preview exports are runtime catalog rows")
-        XCTAssertEqual(parakeetModels.count, 2, "Should have two Parakeet models")
-        XCTAssertEqual(parakeetModels.map(\.identifier), ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3"])
+        XCTAssertEqual(whisperKitModels.count, ModelInfo.allIncludingDeprecated.count, "Whisper is the only engine")
     }
 
     // MARK: - Phase 37: per-device gating (issue #104)
@@ -316,7 +305,7 @@ final class ModelInfoTests: XCTestCase {
             XCTAssertEqual(model?.incompatibilityReason(on: lowRam), .insufficientMemory(requiredGB: 6))
         }
         for identifier in ["openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small",
-                            "openai_whisper-small_216MB", "openai_whisper-medium", "parakeet-tdt-0.6b-v3"] {
+                            "openai_whisper-small_216MB", "openai_whisper-medium"] {
             XCTAssertTrue(ModelInfo.forIdentifier(identifier)?.isSupported(on: lowRam) == true,
                           "\(identifier) should remain supported on a 4 GB A14 device")
         }
@@ -377,10 +366,7 @@ final class ModelInfoTests: XCTestCase {
             XCTAssertTrue(rows.map(\.identifier).contains("openai_whisper-medium"))
             XCTAssertFalse(runnable.contains("openai_whisper-medium"))
             for hidden in ["openai_whisper-small",
-                           "openai_whisper-small_216MB",
-                           "parakeet-tdt-0.6b-v2",
-                           "parakeet-tdt-0.6b-v3",
-                           "parakeet-tdt-0.6b-v3"] {
+                           "openai_whisper-small_216MB"] {
                 XCTAssertFalse(rows.map(\.identifier).contains(hidden),
                                "\(identifier) must not offer \(hidden) for new downloads")
             }
@@ -513,7 +499,7 @@ final class ModelInfoTests: XCTestCase {
 
     func testSupportedIdentifiersMatchesAllIncludingDeprecated() {
         let ids = ModelInfo.supportedIdentifiers
-        XCTAssertEqual(ids.count, 23)
+        XCTAssertEqual(ids.count, 19)
         for model in ModelInfo.allIncludingDeprecated {
             XCTAssertTrue(ids.contains(model.identifier))
         }

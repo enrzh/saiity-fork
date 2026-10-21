@@ -69,12 +69,12 @@ struct ModelCardView: View {
 
             Text(model.localizedDescription)
                 .font(.subheadline)
-                .foregroundStyle(model.engine == .qwenASR ? Color.primary : .secondary)
-                .lineLimit(typeSize.isAccessibilitySize || model.engine == .qwenASR ? nil : 2)
+                .foregroundStyle(.secondary)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
 
             Label(model.languageSupport.coverage.localizedSummary, systemImage: "globe")
-                .font(.caption).foregroundStyle(model.engine == .qwenASR ? Color.primary : .secondary)
+                .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if model.isExperimental {
                 Label("Preview · validate on your iPhone", systemImage: "flask")
@@ -214,15 +214,16 @@ struct ModelCardView: View {
             case .prewarming:
                 EmptyView()
             case .ready:
-                if !isActive {
+                if !isActive || !isKeyboardModel {
                     Button {
                         modelManager.selectModel(model.identifier)
+                        modelManager.chooseKeyboardModel(model.identifier)
                     } label: {
-                        Label("Use in app", systemImage: "checkmark.circle")
+                        Label("Use", systemImage: "checkmark.circle")
                             .frame(minHeight: 44)
                     }
-                    .accessibilityLabel("Use \(model.displayName) in app")
-                    .accessibilityHint("Uses this model for transcription")
+                    .accessibilityLabel("Use \(model.displayName)")
+                    .accessibilityHint("Uses this model in the app and from the keyboard")
                 }
             case .error(let message):
                 Button {
@@ -293,119 +294,6 @@ struct ModelCardHeading: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-}
-
-struct CleanupModelCardView: View {
-    let model: LocalCleanupModel
-    @ObservedObject var manager: ModelManager
-    @ObservedObject private var cleanup = CleanupModelManager.shared
-    @State private var showInfo = false
-    @State private var confirmDelete = false
-    @State private var deleteError: String?
-    @Environment(\.dynamicTypeSize) private var typeSize
-    private var active: Bool { manager.cleanupBackend == .local(model) }
-    private var downloading: Bool { cleanup.preparing == model }
-    private var size: String {
-        cleanup.installedBytes[model].map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? ""
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ModelCardHeading(name: model.displayName, size: size, active: active)
-            Text(model.explanation).font(.subheadline).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if !active || downloading {
-                Label(downloading ? "Preparing" : cleanup.installedBytes[model] != nil ? "Installed" : "Not installed",
-                      systemImage: downloading ? "arrow.down.circle" : cleanup.installedBytes[model] != nil ? "checkmark.circle" : "arrow.down.circle")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if downloading {
-                ProgressView(value: cleanup.progress)
-                    .accessibilityValue("\(Int(cleanup.progress * 100)) percent")
-            }
-            if let error = cleanup.error, cleanup.failedModel == model {
-                Text(error).font(.footnote).foregroundStyle(.primary)
-            }
-            let actionLayout = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                : AnyLayout(HStackLayout(spacing: 8))
-            actionLayout {
-                if downloading {
-                    Button { cleanup.cancel() } label: {
-                        Label("Cancel", systemImage: "xmark.circle").frame(minHeight: 44)
-                    }
-                } else if !active {
-                    Button {
-                        cleanup.select(model, manager: manager)
-                    } label: {
-                        Label(cleanup.installedBytes[model] != nil ? "Use for processing" : "Download & use",
-                              systemImage: cleanup.installedBytes[model] != nil ? "checkmark.circle" : "arrow.down.circle")
-                            .frame(minHeight: 44)
-                    }
-                    .disabled(cleanup.preparing != nil)
-                    .accessibilityLabel(cleanup.installedBytes[model] != nil ? "Use \(model.displayName) for processing" : "Download and use \(model.displayName) for processing")
-                    .accessibilityHint("Downloads this model if needed, then selects it for processing")
-                }
-                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-                processingMenu
-            }
-            .buttonStyle(.borderless)
-            .font(.subheadline.weight(.semibold))
-        }
-        .padding(.vertical, 8)
-        .labelStyle(.titleAndIcon)
-        .onAppear { cleanup.refreshArtifacts() }
-        .sheet(isPresented: $showInfo) {
-            NavigationStack {
-                List {
-                    Section("Processing model") {
-                        LabeledContent("Model", value: model.displayName)
-                        LabeledContent("Engine", value: "MLX · on device")
-                        LabeledContent("Parameters", value: model.parameterCount)
-                        LabeledContent("Quantization", value: "4-bit")
-                        LabeledContent("Storage", value: cleanup.installedBytes[model].map {
-                            ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-                        } ?? "Not downloaded")
-                    }
-                    Section("Use") {
-                        Text("Punctuation, cleanup and grammar run in one pass. Keep Syllivra open while processing; Apple Foundation Models remains the background option.")
-                        Text("Speed depends on text length and your iPhone. Mixed-language rewrites are checked and fall back to conservative cleanup when meaning changes.")
-                        Text(model.explanation)
-                    }
-                    if let source = URL(string: "https://huggingface.co/" + model.repository) {
-                        Section { Link("Model card, languages and license", destination: source) }
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .navigationTitle(model.displayName)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showInfo = false } } }
-            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        }
-        .alert("Delete processing model?", isPresented: $confirmDelete) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                do { try cleanup.delete(model, manager: manager) } catch { deleteError = error.localizedDescription }
-            }
-        } message: { Text("Delete the downloaded files for \(model.displayName)?") }
-        .alert("Could not delete model", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
-            Button("OK") { deleteError = nil }
-        } message: { Text(deleteError ?? "") }
-    }
-
-    private var processingMenu: some View {
-        Menu {
-            Button { showInfo = true } label: { Label("Model details", systemImage: "info.circle") }
-            if cleanup.installedBytes[model] != nil {
-                Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
-                    .disabled(active || cleanup.preparing != nil)
-                    .accessibilityHint(active ? "Choose another processing model before deleting this one." : "Removes this model from the device.")
-            }
-        } label: {
-            Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
-        }
-        .foregroundStyle(.secondary).buttonStyle(.borderless)
-        .accessibilityLabel("Actions for \(model.displayName)")
     }
 }
 

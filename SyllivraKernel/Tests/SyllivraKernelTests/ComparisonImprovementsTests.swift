@@ -68,12 +68,7 @@ final class ComparisonImprovementsTests: XCTestCase {
         XCTAssertTrue(PolishPromptEnvelope.resolve(raw: "hello", style: .concise).instructions.contains("Be concise"))
     }
 
-    func testGemmaLanguageAdmissionAndPromptRevisionInvalidation() {
-        XCTAssertTrue(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "en", mixedScript: false))
-        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "de", mixedScript: false))
-        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: "en", mixedScript: true))
-        XCTAssertFalse(LocalCleanupModel.gemma3_1b.supportsCleanup(languageCode: nil, mixedScript: false))
-        XCTAssertTrue(LocalCleanupModel.qwen2_5_0_5b.supportsCleanup(languageCode: "de", mixedScript: false))
+    func testPromptRevisionInvalidatesCachedCleanup() {
         let old = PolishResultCache.Key(raw: "hello", engine: "fixture", target: nil, spanAware: false, promptRevision: "old")
         let new = PolishResultCache.Key(raw: "hello", engine: "fixture", target: nil, spanAware: false, promptRevision: "new")
         var cache = PolishResultCache()

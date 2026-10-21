@@ -52,9 +52,9 @@ public enum SpokenLanguagePreferences {
     public static func accepts(_ model: ModelInfo, languages: [String]) -> Bool {
         let required = normalized(languages)
         if required.isEmpty {
-            return model.languageSupport.coverage == .whisperMultilingual || model.languageSupport.coverage == .qwenMultilingual
+            return model.languageSupport.coverage == .whisperMultilingual
         }
-        if required.contains("yue"), model.engine == .whisperKit, !model.identifier.contains("large-v3") { return false }
+        if required.contains("yue"), !model.identifier.contains("large-v3") { return false }
         let supported = Set(normalized(model.languageSupport.languageCodes))
         return required.allSatisfy(supported.contains)
     }

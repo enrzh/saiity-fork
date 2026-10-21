@@ -48,41 +48,6 @@ struct SpokenLanguagesPicker: View {
     }
 }
 
-struct CleanupModelPicker: View {
-    @ObservedObject var manager: ModelManager
-    @ObservedObject private var local = CleanupModelManager.shared
-    var body: some View {
-        Picker("Processing model", selection: Binding(
-            get: { manager.cleanupBackend.storageValue },
-            set: { value in
-                guard let backend = PolishCleanupBackend.parse(value) else { return }
-                if case .local(let model) = backend { local.select(model, manager: manager) }
-                else { manager.selectCleanupBackend(backend) }
-            })) {
-            Text("Apple Foundation Models").tag(PolishCleanupBackend.appleIntelligence.storageValue)
-            ForEach(LocalCleanupModel.allCases, id: \.self) { model in
-                Text(model.displayName).tag(PolishCleanupBackend.local(model).storageValue)
-            }
-            ForEach(PolishCleanupBackend.validOllamaCleanupModels(from: manager.customModels)) { model in
-                Text(model.name).tag(PolishCleanupBackend.ollama(model.id).storageValue)
-            }
-        }
-        .disabled(local.preparing != nil)
-        .accessibilityHint("One model handles punctuation, cleanup and grammar. Local models download once before selection.")
-        if let model = local.preparing {
-            ProgressView("Preparing \(model.displayName)", value: local.progress)
-            Button("Cancel download") { local.cancel() }
-        }
-        if let error = local.error { Text(error).font(.footnote).foregroundStyle(.red) }
-        if case .local(let model) = manager.cleanupBackend { Text(model.explanation).font(.footnote).foregroundStyle(.secondary) }
-        if case .ollama(let id) = manager.cleanupBackend,
-           let model = manager.customModels.first(where: { $0.id == id }) {
-            Text("Cleanup sends your dictated text to \(URL(string: model.repositoryURL)?.host ?? "your configured server"). Speech recognition stays on this iPhone. Choose a server you trust.")
-                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
 struct KeyboardHoldSpeedPicker: View {
     @AppStorage(SharedKeys.keyboardHoldSpeed, store: AppGroup.defaults) private var speed = KeyboardHoldSpeed.default.rawValue
     var body: some View {

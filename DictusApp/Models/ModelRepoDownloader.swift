@@ -2,34 +2,14 @@
 // Downloads model files from a HuggingFace repo with real byte-level progress.
 import Foundation
 import SyllivraKernel
-import FluidAudio
 
-/// Downloads a HuggingFace model repo (Parakeet or WhisperKit) into the exact
-/// directory the respective engine expects, reporting real byte-level progress.
+/// Downloads a WhisperKit model from HuggingFace into the directory WhisperKit
+/// expects, reporting real byte-level progress (issue #207: a bar that only moved
+/// per finished file read as a freeze in App Review), with stall detection and resume.
 ///
-/// WHY this exists (issue #207, App Review rejection of 1.7.1 build 19):
-/// FluidAudio's `DownloadUtils.downloadRepo` attaches a `URLSessionDownloadDelegate`
-/// but downloads via the async `URLSession.download(for:)` convenience API — and that
-/// API never delivers `didWriteData` callbacks, even with a delegate attached (verified
-/// empirically; only the classic `downloadTask(with:)` + delegate pattern fires them).
-/// Progress therefore only advanced when a whole file completed. Since
-/// `Encoder.mlmodelc/weights/weight.bin` alone is ~92% of the ~483 MB payload, the bar
-/// sat at ~5% for minutes and then jumped to ~97% — App Review read that as a freeze.
-///
-/// Issue #210 generalized the class (formerly `ParakeetModelDownloader`) so WhisperKit
-/// models get the same MB counter, stall detection, and resume. The engine-specific
-/// knowledge (repo path, file selection, on-disk layout, final verification) lives in
-/// `Configuration.parakeet()` / `Configuration.whisperKit(variant:)`; the download
-/// machinery is shared.
-///
-/// Parity contracts to re-check on dependency bumps:
-/// - FluidAudio 0.12.4 `DownloadUtils.downloadRepo` (file selection + layout) so that
-///   `AsrModels.load` finds the cached files and goes straight to CoreML compilation.
-///   Since issue #252 nothing downloads Parakeet on the load path, so a file this
-///   downloader misses is a hard failure rather than a silent second download.
-/// - WhisperKit `WhisperKit.download` / HubApi snapshot layout
-///   (`Documents/huggingface/models/{repo}/{variant}`) so that
-///   `WhisperKitConfig(modelFolder:)` and `ModelManager.deleteModel` keep working.
+/// Parity contract to re-check on dependency bumps: WhisperKit `WhisperKit.download` /
+/// HubApi snapshot layout (`Documents/huggingface/models/{repo}/{variant}`) so that
+/// `WhisperKitConfig(modelFolder:)` and `ModelManager.deleteModel` keep working.
 final class ModelRepoDownloader {
 
     // MARK: - Public types
@@ -67,24 +47,6 @@ final class ModelRepoDownloader {
         let requiredPaths: [String]
         /// Quantized local cleanup weights and tokenizer assets at the repo root.
         var includesRootWeights = false
-        /// Parakeet v3 repo. Matches FluidAudio's `Repo.parakeet.remotePath`,
-        /// its file selection, and mirrors `AsrModels.modelsExist` verification.
-        static func parakeet(version: AsrModelVersion = .v3) -> Configuration {
-            let repo: Repo
-            switch version {
-            case .v2:
-                repo = .parakeetV2
-            case .v3:
-                repo = .parakeet
-            }
-            return Configuration(
-                repoPath: repo.remotePath,
-                directoryPatterns: ModelNames.ASR.requiredModels.map { "\($0)/" }.sorted(),
-                includesRootMetadata: true,
-                requiredPaths: ModelNames.ASR.requiredModels + [ModelNames.ASR.vocabularyFile]
-            )
-        }
-
         /// One WhisperKit variant from argmaxinc/whisperkit-coreml.
         ///
         /// WHY exact-folder matching is safe here: `WhisperKit.download` resolves the

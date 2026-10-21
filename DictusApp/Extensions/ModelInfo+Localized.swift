@@ -25,12 +25,6 @@ extension ModelInfo {
             return String(localized: "A middle-ground multilingual voice model.")
         case "openai_whisper-medium":
             return String(localized: "More capacity for difficult speech; needs more memory.")
-        case "parakeet-tdt-0.6b-v2":
-            return String(localized: "NVIDIA speech recognition for English.")
-        case "parakeet-tdt-0.6b-v3":
-            return String(localized: "NVIDIA speech recognition for 25 European languages.")
-        case QwenASRModel.small.rawValue, QwenASRModel.large.rawValue:
-            return String(localized: "Qwen streaming recognition in the foreground app. Requires compatible iOS 18+ hardware; phone accuracy and speed remain unverified.")
         case "distil-whisper_distil-large-v3_594MB", "distil-whisper_distil-large-v3_turbo_600MB":
             return String(localized: "Distilled Whisper model specialized for English.")
         default:
@@ -69,10 +63,6 @@ extension ModelLanguageSupport.Coverage {
             return String(localized: "About 99 languages (multilingual)")
         case .whisperEnglishOnly:
             return String(localized: "English only")
-        case .parakeetEuropean:
-            return String(localized: "25 European languages")
-        case .qwenMultilingual:
-            return String(localized: "Multilingual streaming; complete language coverage remains unverified")
         }
     }
 }

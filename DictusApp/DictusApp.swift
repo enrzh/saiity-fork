@@ -73,9 +73,6 @@ struct DictusApp: App {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PersistentLog.log(.appLaunched(version: version))
         PerformanceMetricsSubscriber.shared.start()
-        #if DEBUG
-        CleanupModelProbe.startIfRequested()
-        #endif
 
         // Clean up any Live Activities left over from a previous app session.
         // WHY in init: If the app crashed or was force-quit, the Dynamic Island
@@ -131,6 +128,9 @@ struct DictusApp: App {
             defaults?.set(true, forKey: SharedKeys.polishEnabled)
         }
 
+        // Free the disk space of model engines this version no longer ships.
+        Task.detached(priority: .utility) { ModelManager.removeRetiredModelFiles() }
+
         // Warm up the polish engine for the current target language (#141).
         // No-op when the toggle is off or when the engine has nothing to warm.
         PolishCoordinator.shared.prewarm()
@@ -165,7 +165,6 @@ struct DictusApp: App {
                         catch { print("MODEL_DOWNLOAD_PROBE failed: \(error.localizedDescription)") }
                         return
                     }
-                    if ProcessInfo.processInfo.arguments.contains("--cleanup-model-probe") { return }
                     if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe")
                         || ProcessInfo.processInfo.arguments.contains("--native-design-probe") {
                         coordinator.resetStatus()
@@ -208,7 +207,6 @@ struct DictusApp: App {
                     case .active:
                         PersistentLog.log(.appDidBecomeActive)
                     case .inactive:
-                        coordinator.stopForegroundOnlyRecognitionIfNeeded()
                         PersistentLog.log(.appWillResignActive)
                     case .background:
                         PersistentLog.log(.appDidEnterBackground)

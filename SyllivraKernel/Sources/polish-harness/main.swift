@@ -13,17 +13,10 @@
 //
 // `--instructions <file>` overrides the system prompt (A/B a candidate without
 // recompiling). `ab` runs two prompt files side by side.
-//
-// SPIKE ADDITION (#268, throwaway): `--engine local --model <name> [--base-url <url>]`
-// on `show` and `eval` runs the same pipeline against an OpenAI-compatible server
-// on localhost instead of Apple FM, so a candidate open-weights model can be
-// scored on the shipping fixtures. `--engine apple-fm` is the default and the
-// baseline. See `LocalHTTPPolishEngine.swift` for what that measurement is and is
-// not worth.
+
 
 import Foundation
 import SyllivraKernel
-import SyllivraInference
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -44,7 +37,7 @@ func optionValue(_ name: String, in args: [String]) -> String? {
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
-guard let command = args.first, ["show", "eval", "ab", "prompt", "spans", "quality", "quality-template", "native-inspect", "native-generate"].contains(command), args.count >= 2 else {
+guard let command = args.first, ["show", "eval", "ab", "prompt", "spans", "quality", "quality-template"].contains(command), args.count >= 2 else {
     print("""
     polish-harness — off-device polish eval (macOS + Apple Intelligence)
 
@@ -55,55 +48,12 @@ guard let command = args.first, ["show", "eval", "ab", "prompt", "spans", "quali
       spans  <fixtures.json>
       quality <product-fixtures.json> <captured-run.json>
       quality-template <product-fixtures.json> --model <installed-model-id>
-      native-inspect <model-directory> --model <model-id> [--revision <revision>] [--load]
-      native-generate <model-directory> --model <model-id> --tokens <public-token-ids.json> [--eos <token-id>] [--max-tokens N]
 
     --spans  multilingual coordinator path (floor + per-sentence engine)
     spans    print floor + sentence-span decisions; no model required
 
-    show/eval also accept (#268 spike, throwaway):
-      --engine apple-fm | local   (default apple-fm)
-      --model <name>              required with --engine local
-      --base-url <url>            default http://127.0.0.1:11434
     """)
     exit(2)
-}
-
-if command == "native-inspect" || command == "native-generate" {
-    guard let identifier = optionValue("--model", in: args), !identifier.isEmpty else {
-        print("Provide the expected model identifier with --model"); exit(2)
-    }
-    do {
-        let artifacts = try NativeModelArtifacts(directory: URL(fileURLWithPath: args[1]),
-            expectedModelIdentifier: identifier, expectedRevision: optionValue("--revision", in: args))
-        print("Native artifact integrity: verified")
-        print("Model: \(artifacts.manifest.modelIdentifier), revision: \(artifacts.manifest.upstreamRevision)")
-        print("Architecture: \(artifacts.manifest.architecture.rawValue), graphs: \(artifacts.manifest.graphs.count)")
-        if command == "native-generate" {
-            guard let tokensPath = optionValue("--tokens", in: args) else {
-                print("Provide explicitly approved input token IDs with --tokens"); exit(2)
-            }
-            let ids = try JSONDecoder().decode([Int32].self, from: Data(contentsOf: URL(fileURLWithPath: tokensPath)))
-            let ends = optionValue("--eos", in: args).flatMap(Int32.init).map { Set([$0]) }
-                ?? Set((artifacts.manifest.tokenizer?.endTokenIDs ?? []).compactMap(Int32.init(exactly:)))
-            let maximum = Int(optionValue("--max-tokens", in: args) ?? "64") ?? 0
-            let model = try await artifacts.loadModel(named: "decoder")
-            let output = try await artifacts.generate(using: model, inputTokens: ids,
-                maximumNewTokens: maximum, endTokenIDs: ends)
-            print("Native cached generation: completed at EOS (CPU)")
-            print("Generated token IDs: \(output)")
-            print("Numeric/model execution only; trained text quality and phone performance remain separate gates.")
-            exit(0)
-        }
-        for graph in artifacts.manifest.graphs {
-            if args.contains("--load") {
-                _ = try await artifacts.loadModel(named: graph.name)
-                print("Graph \(graph.name): Core ML loaded; tensor contract verified (CPU)")
-            } else { print("Graph \(graph.name): declared tensor contract; not executed") }
-        }
-        print("Model license rights, semantic quality and phone performance require separate evidence.")
-        exit(0)
-    } catch { print("Native artifact check failed: \(error.localizedDescription)"); exit(1) }
 }
 
 if command == "quality" || command == "quality-template" {
@@ -156,10 +106,6 @@ let runs = Int(optionValue("--runs", in: args) ?? "1") ?? 1
 let instructionsFile = optionValue("--instructions", in: args)
 let abA = optionValue("--a", in: args)
 let abB = optionValue("--b", in: args)
-// #268 spike, throwaway.
-let engineKind = optionValue("--engine", in: args) ?? "apple-fm"
-let localModel = optionValue("--model", in: args)
-let localBaseURL = optionValue("--base-url", in: args) ?? "http://127.0.0.1:11434"
 // #268 D2, throwaway. `prompt` only.
 let promptFixtureID = optionValue("--id", in: args)
 let promptOutputDir = optionValue("--out", in: args)
@@ -191,14 +137,10 @@ guard #available(macOS 26.0, *) else {
     exit(1)
 }
 
-// Apple Intelligence is required only by the apple-fm engine. The #268 spike runs
-// candidate models through a local server on machines where the check would be
-// beside the point, so it is scoped to the engine that needs it rather than to
-// the process.
 #if canImport(FoundationModels)
 // `prompt` never runs a model — it prints the bytes one would be sent — so it is
 // usable on a machine with Apple Intelligence off, which is the point of it.
-if command != "prompt", command != "spans", engineKind == "apple-fm" {
+if command != "prompt", command != "spans" {
     switch SystemLanguageModel.default.availability {
     case .available:
         break
@@ -214,24 +156,6 @@ exit(1)
 
 @available(macOS 26.0, *)
 func makeEngine(_ override: (@Sendable (PolishMode, SupportedLanguage) -> String)?) -> any PolishEngineProtocol {
-    // #268 spike, throwaway. `--instructions` has no meaning for the local engine:
-    // it is there to A/B prompts on one model, and the spike A/Bs models on one
-    // prompt. Refusing the combination beats silently ignoring the flag.
-    if engineKind != "apple-fm" {
-        guard engineKind == "local" else {
-            print("error: unknown --engine \(engineKind) (expected 'apple-fm' or 'local')")
-            exit(2)
-        }
-        guard let localModel else {
-            print("error: --engine local requires --model <name>")
-            exit(2)
-        }
-        if override != nil {
-            print("error: --instructions is not supported with --engine local")
-            exit(2)
-        }
-        return LocalHTTPPolishEngine(baseURL: localBaseURL, model: localModel)
-    }
     if let override { return AppleFoundationModelsPolishEngine(instructionsOverride: override) }
     return AppleFoundationModelsPolishEngine()
 }
@@ -278,7 +202,7 @@ func runOnce(_ fx: Fixture, engine: any PolishEngineProtocol) async -> RunOutcom
         let fallback = PolishPostpass.decodeFromEngine(preprocessed, language: target)
         return RunOutcome(final: fallback, engineOutput: nil, outcome: .skipped, engineMs: 0, detected: nil, mode: nil)
     }
-    let mode = PolishPipeline.mode(sttEngine: fx.speechEngine, detected: detected, target: target)
+    let mode = PolishMode.natural
     let r = await PolishPipeline.transform(preprocessed: preprocessed, engine: engine, target: target, mode: mode)
     let final = PolishPipeline.resolvedOutput(r, preprocessed: preprocessed, target: target, mode: mode)
     return RunOutcome(final: final, engineOutput: r.engineOutput, outcome: r.outcome, engineMs: r.engineMs, detected: detected.rawValue, mode: mode, failureReason: r.failureReason)
@@ -432,7 +356,7 @@ func runHarness() async {
             } else if let target = fx.language {
                 let text = VerbalPunctuationPrepass.apply(fx.raw, language: target)
                 if let detected = PolishPipeline.detectLanguage(in: text) {
-                    requests = [(text, PolishPipeline.mode(sttEngine: fx.speechEngine, detected: detected, target: target), target)]
+                    requests = [(text, PolishMode.natural, target)]
                 }
             } else if let code = PolishPipeline.detectLanguageCode(in: fx.raw) {
                 requests = [(PolishPipeline.autoPreprocess(fx.raw, detectedCode: code), .auto, .english)]

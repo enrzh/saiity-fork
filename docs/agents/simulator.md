@@ -49,26 +49,17 @@ On an already-booted device it prints `Device already booted, nothing to do.`
 
 ## 2. Build for that simulator
 
-A fresh worktree resolves its packages from zero, so all three steps are needed the first time:
+A fresh worktree resolves its packages from zero, so both steps are needed the first time:
 
 ```bash
 xcodebuild -resolvePackageDependencies \
   -project Dictus.xcodeproj -scheme DictusApp \
   -derivedDataPath build/DerivedData
 
-./scripts/patch-fluidaudio-swift5.sh build/DerivedData
-
 xcodebuild build \
   -project Dictus.xcodeproj -scheme DictusApp -configuration Debug \
   -destination 'platform=iOS Simulator,id=<udid>' \
   -derivedDataPath build/DerivedData
-```
-
-The patch step is not optional and the path is not optional (#285): a build passing `-derivedDataPath` resolves its own FluidAudio checkout, and patching Xcode's shared one says nothing about it.
-
-```
-Patched: /Users/…/298/build/DerivedData/SourcePackages/checkouts/FluidAudio/Package.swift
-FluidAudio checkout patched for the build using: /Users/…/298/build/DerivedData
 ```
 
 Building `DictusApp` builds the embedded keyboard, widgets and core. The product lands at:

@@ -20,7 +20,6 @@ struct Fixture: Codable {
 
     /// `nil` routes the fixture through the Auto-detect path.
     var language: SupportedLanguage? { SupportedLanguage(rawValue: lang) }
-    var speechEngine: SpeechEngine { sttEngine == "WK" ? .whisperKit : .parakeet }
 }
 
 /// A single tolerant assertion on the polished output. LLM output is

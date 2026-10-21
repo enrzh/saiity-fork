@@ -91,7 +91,7 @@ struct ModelLanguageDetailView: View {
                             Text(language)
                         }
                     } header: {
-                        Text(model.engine == .qwenASR ? "Languages to verify" : "Also supported")
+                        Text("Also supported")
                     }
                 }
             }
@@ -168,10 +168,4 @@ struct ModelLanguageDetailView: View {
 
 #Preview("Whisper small") {
     ModelLanguageDetailView(model: ModelInfo.redesignCatalog[0])
-}
-
-#Preview("Parakeet") {
-    ModelLanguageDetailView(
-        model: ModelInfo.redesignCatalog.first { $0.engine == .parakeet } ?? ModelInfo.redesignCatalog[0]
-    )
 }

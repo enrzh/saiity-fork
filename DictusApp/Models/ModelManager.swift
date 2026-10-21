@@ -4,7 +4,6 @@ import Foundation
 import Combine
 import SyllivraKernel
 import WhisperKit
-import FluidAudio
 
 /// Represents the current state of a model in the download/preparation lifecycle.
 ///
@@ -55,7 +54,6 @@ class ModelManager: ObservableObject {
     /// Whether the active model is chosen by the device-aware resolver or by the user.
     @Published var selectionMode: ModelSelectionMode = .automatic
     @Published var selectionProfile: ModelSelectionProfile = .balanced
-    @Published var recognizer: DictationRecognizer = .whisper
     @Published private(set) var keyboardModel: String?
 
     /// Per-model download progress (0.0 to 1.0). Only populated during active downloads.
@@ -74,9 +72,6 @@ class ModelManager: ObservableObject {
     /// Mirrors `DictationCoordinator.modelLoadState` via App Group + NotificationCenter
     /// so SwiftUI can drive the loading overlay reactively.
     @Published var modelLoadState: ModelLoadState = .idle
-    @Published var customModels: [CustomModel] = []
-    /// Selected dictation cleanup / grammar backend (Apple Intelligence or Ollama).
-    @Published var cleanupBackend: PolishCleanupBackend = .appleIntelligence
 
     // MARK: - Private
 
@@ -190,7 +185,6 @@ class ModelManager: ObservableObject {
     func loadState() {
         selectionMode = ModelSelectionMode.active(from: defaults)
         selectionProfile = ModelSelectionProfile.active(from: defaults)
-        recognizer = DictationRecognizer.load(from: defaults)
         var didMigrateRemovedModels = false
         if let data = defaults.data(forKey: SharedKeys.downloadedModels),
            let models = try? JSONDecoder().decode([String].self, from: data) {
@@ -212,14 +206,12 @@ class ModelManager: ObservableObject {
         }
         let storedActiveModel = defaults.string(forKey: SharedKeys.appDictationModel)
         if DictationCoordinator.shared.canChangeSpeechRuntime {
-            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults,
                 installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
                 capabilities: DeviceCapabilities.current())
             keyboardModel = resolvedKeyboardModel()
         } else { selectionRefreshPending = true }
         didMigrateRemovedModels = didMigrateRemovedModels || storedActiveModel != activeModel
-        customModels = CustomModel.load(from: defaults)
-        cleanupBackend = PolishCleanupBackend.load(from: defaults, customModels: customModels)
 
         if didMigrateRemovedModels && DictationCoordinator.shared.canChangeSpeechRuntime {
             persistState()
@@ -235,87 +227,14 @@ class ModelManager: ObservableObject {
         }
     }
 
-    func addCustomModel(_ model: CustomModel) {
-        if let index = customModels.firstIndex(where: {
-            $0.id == model.id || $0.identityKey == model.identityKey
-        }) {
-            customModels[index] = model
-        } else {
-            customModels.append(model)
-        }
-        CustomModel.save(customModels, to: defaults)
-    }
-
-    func deleteCustomModel(_ model: CustomModel) {
-        customModels.removeAll { $0.id == model.id }
-        CustomModel.save(customModels, to: defaults)
-        PolishCleanupBackend.handleDeletedModel(model, remaining: customModels, defaults: defaults)
-        cleanupBackend = PolishCleanupBackend.load(from: defaults, customModels: customModels)
-    }
-
-    func selectCleanupBackend(_ backend: PolishCleanupBackend) {
-        backend.persist(to: defaults)
-        cleanupBackend = backend
-    }
-
     /// Downloads a model variant, prewarms it, and updates state.
-    ///
-    /// WHY engine-aware download:
-    /// Both engines download their HuggingFace repo via the shared
-    /// ModelRepoDownloader (issue #210), but their on-disk layouts and
-    /// prewarm/compile pipelines differ (WhisperKitConfig vs FluidAudio's
-    /// AsrModels). This method routes to the correct path based on the engine.
     ///
     /// WHY foreground download (not background session):
     /// Background URLSession adds significant complexity (delegate callbacks, session
     /// restoration, app lifecycle handling). For v1, foreground download with visible
     /// progress is simpler and sufficient. Users will have the app open during download.
     func downloadModel(_ identifier: String) async throws {
-        switch ModelInfo.forIdentifier(identifier)?.engine {
-        case .qwenASR:
-            if #available(iOS 18.0, *) { try await downloadQwenModel(identifier) }
-            else { throw ModelManagerError.qwenUnavailable }
-        case .parakeet:
-            guard let version = parakeetVersion(for: identifier) else {
-                throw ModelManagerError.parakeetUnavailable
-            }
-            try await downloadParakeetModel(identifier, version: version)
-        default:
-            try await downloadWhisperKitModel(identifier)
-        }
-    }
-
-    @available(iOS 18.0, *)
-    private func downloadQwenModel(_ identifier: String) async throws {
-        guard let choice = QwenASRModel(rawValue: identifier), let directory = choice.directory else {
-            throw ModelManagerError.noContainer
-        }
-        guard ModelInfo.forIdentifier(identifier)?.isSupported(on: DeviceCapabilities.current()) == true else {
-            throw ModelManagerError.qwenUnavailable
-        }
-        modelStates[identifier] = .downloading
-        downloadProgress[identifier] = 0
-        defer { downloadProgress.removeValue(forKey: identifier); downloadByteInfo.removeValue(forKey: identifier) }
-        do {
-            let asr = ModelRepoDownloader(configuration: QwenSpeechEngine.configuration(for: choice))
-            try await asr.download(to: directory, modelName: identifier) { [weak self] progress in
-                Task { @MainActor in self?.updateDownloadProgress(progress, identifier: identifier,
-                                                                  fraction: progress.fraction * 0.9) }
-            }
-            let vad = ModelRepoDownloader(configuration: QwenSpeechEngine.vadConfiguration)
-            try await vad.download(to: directory.appendingPathComponent("vad"), modelName: identifier) { [weak self] progress in
-                Task { @MainActor in self?.updateDownloadProgress(progress, identifier: identifier,
-                                                                  fraction: 0.9 + progress.fraction * 0.1) }
-            }
-            try Task.checkCancellation()
-            guard QwenSpeechEngine.isInstalled(choice) else { throw ModelManagerError.qwenUnavailable }
-            if !downloadedModels.contains(identifier) { downloadedModels.append(identifier) }
-            modelStates[identifier] = .ready
-            applyDownloadedModels()
-        } catch {
-            modelStates[identifier] = .error(error.localizedDescription)
-            throw error
-        }
+        try await downloadWhisperKitModel(identifier)
     }
 
     /// Download a WhisperKit model variant from HuggingFace.
@@ -491,111 +410,12 @@ class ModelManager: ObservableObject {
         }
     }
 
-    /// Download a Parakeet model via the app-side downloader, then compile via FluidAudio.
-    ///
-    /// WHY a separate method:
-    /// WhisperKit and Parakeet use completely different download pipelines and
-    /// cache locations. This method downloads the raw model files itself, then
-    /// hands off to FluidAudio for CoreML compilation.
-    ///
-    /// Since Dictus now targets iOS 17, no availability guard is needed.
-    /// FluidAudio is always available.
-    private func downloadParakeetModel(_ identifier: String, version: AsrModelVersion) async throws {
-        modelStates[identifier] = .downloading
-        downloadProgress[identifier] = 0.0
-        lastLoggedDeciles[identifier] = -1
-        let catalogSizeMB = Int((ModelInfo.forIdentifier(identifier)?.sizeBytes ?? 0) / 1_000_000)
-        PersistentLog.log(.modelDownloadStarted(name: identifier, sizeMB: catalogSizeMB))
-
-        do {
-            // Step 1: Download all raw model files with REAL byte-level progress
-            // (issue #207). FluidAudio's DownloadUtils.downloadRepo uses the async
-            // URLSession API, which never delivers didWriteData — progress only
-            // moved on whole-file completion, and with Encoder's weight.bin being
-            // ~92% of the payload the bar froze at ~5% for minutes (App Review
-            // rejected 1.7.1(19) as "frozen at 4%"). ModelRepoDownloader downloads
-            // the same files into the same cache directory using a delegate-based
-            // downloadTask that does deliver byte callbacks.
-            let cacheDir = AsrModels.defaultCacheDirectory(for: version)
-            let downloader = ModelRepoDownloader(configuration: .parakeet(version: version))
-            try await downloader.download(to: cacheDir, modelName: identifier) { [weak self] progress in
-                Task { @MainActor in
-                    self?.updateDownloadProgress(progress, identifier: identifier)
-                }
-            }
-
-            // Step 2: Wait for any other prewarm to finish (ANE conflict avoidance).
-            // A timed-out Whisper initializer still owns its files; do not compile
-            // Parakeet over that work.
-            try await preparation.waitUntilIdle()
-
-            // Step 3: Switch to prewarming state — download is done, CoreML compilation starts.
-            preparation.beginPrewarm()
-            modelStates[identifier] = .prewarming
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
-            PersistentLog.log(.modelPrewarmStarted(name: identifier))
-            defer { preparation.endPrewarm() }
-
-            // Step 4: Load and compile CoreML models.
-            // ParakeetEngine.prepare() loads the files step 1 just downloaded and compiles
-            // them; it never downloads anything itself (issue #252). This method is the
-            // only place a Parakeet download starts.
-            //
-            // Phase 37 instrumentation mirrors the WhisperKit path: measure prewarm
-            // duration + jetsam-headroom delta so both engines produce comparable
-            // gating signals.
-            let prewarmStart = Date()
-            let availableBeforeMB = DeviceCapabilities.current().availableMemoryMB
-
-            let parakeetEngine = ParakeetEngine()
-            try await parakeetEngine.prepare(modelIdentifier: identifier)
-
-            let prewarmDurationMs = Int(Date().timeIntervalSince(prewarmStart) * 1000)
-            let availableAfterMB = DeviceCapabilities.current().availableMemoryMB
-            let consumedMB = max(0, availableBeforeMB - availableAfterMB)
-
-            // Update state
-            if !downloadedModels.contains(identifier) {
-                downloadedModels.append(identifier)
-            }
-
-            modelStates[identifier] = .ready
-            applyDownloadedModels()
-
-            PersistentLog.log(.modelCompilationCompleted(name: identifier, durationMs: prewarmDurationMs))
-            PersistentLog.log(.modelPrewarmPeakMemory(modelName: identifier, peakMB: consumedMB))
-            PersistentLog.log(.modelDownloadCompleted(name: identifier))
-            PersistentLog.log(.modelSelected(name: identifier))
-
-            // Issue #144: same proactive load as the WhisperKit path — see comment there.
-        } catch {
-            modelStates[identifier] = .error(error.localizedDescription)
-            downloadProgress.removeValue(forKey: identifier)
-            downloadByteInfo.removeValue(forKey: identifier)
-            lastLoggedDeciles.removeValue(forKey: identifier)
-
-            // Deliberately NO cleanupModelFiles here after a download failure:
-            // the downloader moves each file into place atomically, so anything on
-            // disk is a complete file — leaving the cache intact lets a retry skip
-            // already-downloaded files and resume where it left off. Since issue
-            // #235, tapping the card's "Retry" affordance retries in place; the
-            // full reset lives in the overflow menu's "Delete partial download"
-            // entry (cleanupFailedModel).
-            PersistentLog.log(.modelDownloadFailed(name: identifier, error: error.localizedDescription))
-            throw error
-        }
-    }
-
     /// Applies one downloader progress tick: percentage bar, MB counter, and
     /// decile-throttled persistent logging (~10 log lines per download).
-    /// Shared by the WhisperKit and Parakeet download paths (issue #210).
-    private func updateDownloadProgress(_ progress: ModelRepoDownloader.Progress, identifier: String,
-                                        fraction: Double? = nil) {
+    private func updateDownloadProgress(_ progress: ModelRepoDownloader.Progress, identifier: String) {
         // Queued callbacks must not resurrect a progress bar after Cancel or Ready.
         guard modelStates[identifier] == .downloading else { return }
-        let fraction = fraction ?? progress.fraction
+        let fraction = progress.fraction
         downloadProgress[identifier] = Float(fraction)
         downloadByteInfo[identifier] = ModelDownloadBytes(progress)
 
@@ -627,47 +447,19 @@ class ModelManager: ObservableObject {
         guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         guard downloadedModels.contains(identifier), isArtifactInstalled(identifier) else { return }
         selectionMode = .manual
-        recognizer = ModelInfo.forIdentifier(identifier)?.engine == .whisperKit ? .whisper : .streaming
         activeModel = identifier
-        defaults.set(identifier, forKey: recognizer.modelPreferenceKey)
+        defaults.set(identifier, forKey: SharedKeys.dictationWhisperModel)
         persistState()
         PersistentLog.log(.modelSelected(name: identifier))
         // Trigger an eager load so the model is in RAM before the next mic tap.
         DictationCoordinator.shared.preloadActiveModel()
     }
 
-    func selectRecognizer(_ choice: DictationRecognizer) {
-        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
-        guard choice != recognizer else { return }
-        recognizer = choice
-        defaults.set(choice.rawValue, forKey: SharedKeys.dictationRecognizer)
-        activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: choice,
-            installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: DeviceCapabilities.current())
-        persistState()
-        if activeModel != nil { DictationCoordinator.shared.preloadActiveModel() }
-    }
-
-    private func belongsToRecognizer(_ identifier: String) -> Bool {
-        ModelInfo.forIdentifier(identifier).map(recognizer.contains) ?? false
-    }
-
-    func chooseDictationModel(_ identifier: String) {
-        guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
-        guard belongsToRecognizer(identifier) else { return }
-        defaults.set(identifier, forKey: recognizer.modelPreferenceKey)
-        if downloadedModels.contains(identifier) { selectModel(identifier) }
-        else {
-            selectionMode = .manual; activeModel = nil
-            persistState()
-        }
-    }
-
     func chooseKeyboardModel(_ identifier: String) {
         guard DictationCoordinator.shared.canChangeSpeechRuntime else { return }
         if identifier == "automatic" { defaults.removeObject(forKey: SharedKeys.keyboardDictationModel) }
         else {
-            guard let model = ModelInfo.forIdentifier(identifier), model.engine != .qwenASR,
+            guard ModelInfo.forIdentifier(identifier) != nil,
                   downloadedModels.contains(identifier), isArtifactInstalled(identifier) else { return }
             defaults.set(identifier, forKey: SharedKeys.keyboardDictationModel)
         }
@@ -684,7 +476,7 @@ class ModelManager: ObservableObject {
     private func applyDownloadedModels() {
         if let data = try? JSONEncoder().encode(downloadedModels) { defaults.set(data, forKey: SharedKeys.downloadedModels) }
         guard DictationCoordinator.shared.canChangeSpeechRuntime else { selectionRefreshPending = true; return }
-        activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+        activeModel = DictationModelPreferences.resolveAppModel(in: defaults,
             installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
             capabilities: DeviceCapabilities.current())
         keyboardModel = resolvedKeyboardModel()
@@ -707,8 +499,6 @@ class ModelManager: ObservableObject {
             throw ModelManagerError.cannotDeleteLastModel
         }
 
-        let engine = ModelInfo.forIdentifier(identifier)?.engine ?? .whisperKit
-
         // Remove model files from App Group container
         if let modelsDir = modelsDirectory {
             let modelPath = modelsDir.appendingPathComponent(identifier)
@@ -726,32 +516,18 @@ class ModelManager: ObservableObject {
             }
         }
 
-        // Remove only the selected FluidAudio cache so switching Parakeet versions
-        // does not unexpectedly remove the other choice.
-        switch engine {
-        case .parakeet:
-            if let version = parakeetVersion(for: identifier) {
-                let versionDir = AsrModels.defaultCacheDirectory(for: version)
-                if FileManager.default.fileExists(atPath: versionDir.path) {
-                    try FileManager.default.removeItem(at: versionDir)
-                }
-            }
-        default:
-            break
-        }
-
         downloadedModels.removeAll { $0 == identifier }
         modelStates[identifier] = .notDownloaded
 
         // Resolve the remaining artifacts without overwriting an explicit requested choice.
         if activeModel == identifier {
-            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults,
                 installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
                 capabilities: DeviceCapabilities.current())
         }
 
         persistState()
-        PersistentLog.log(.modelDeleted(name: identifier, engine: engine.displayName))
+        PersistentLog.log(.modelDeleted(name: identifier, engine: SpeechEngine.whisperKit.displayName))
     }
 
     /// Checks if a model is the device-recommended variant.
@@ -767,7 +543,7 @@ class ModelManager: ObservableObject {
     var preferredModelIdentifier: String {
         selectionProfile.resolvedIdentifier(installed: Set(ModelInfo.downloadableIdentifiers),
             osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: DeviceCapabilities.current(), recognizer: recognizer,
+            capabilities: DeviceCapabilities.current(),
             requiredLanguages: SpokenLanguagePreferences.load(from: defaults)) ?? ""
     }
 
@@ -824,22 +600,12 @@ class ModelManager: ObservableObject {
             try? FileManager.default.removeItem(at: whisperKitDir)
         }
 
-        let engine = ModelInfo.allIncludingDeprecated.first(where: { $0.identifier == identifier })?.engine
-        switch engine {
-        case .parakeet:
-            if let version = parakeetVersion(for: identifier) {
-                try? FileManager.default.removeItem(at: AsrModels.defaultCacheDirectory(for: version))
-            }
-        default:
-            break
-        }
-
         PersistentLog.log(.modelCleanupPerformed(name: identifier, reason: "download-or-prewarm-failure"))
 
         // Remove from downloaded list if it was added prematurely
         downloadedModels.removeAll { $0 == identifier }
         if activeModel == identifier {
-            activeModel = DictationModelPreferences.resolveAppModel(in: defaults, recognizer: recognizer,
+            activeModel = DictationModelPreferences.resolveAppModel(in: defaults,
                 installed: Set(downloadedModels), osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
                 capabilities: DeviceCapabilities.current())
         }
@@ -852,15 +618,28 @@ class ModelManager: ObservableObject {
         return downloadedModels.contains(activeModel) && isArtifactInstalled(activeModel)
     }
 
-    // MARK: - Private
-
-    private func parakeetVersion(for identifier: String) -> AsrModelVersion? {
-        switch identifier {
-        case "parakeet-tdt-0.6b-v2": return .v2
-        case "parakeet-tdt-0.6b-v3": return .v3
-        default: return nil
+    /// Speech and cleanup models from engines Syllivra no longer ships (Parakeet,
+    /// Qwen3-ASR and the local MLX cleanup models) would keep their gigabytes on
+    /// disk. Remove exactly those folders; Whisper downloads live elsewhere.
+    nonisolated static func removeRetiredModelFiles(fileManager: FileManager = .default) {
+        var folders: [URL] = []
+        if let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            folders.append(support.appendingPathComponent("FluidAudio", isDirectory: true))
+        }
+        if let models = AppGroup.containerURL?.appendingPathComponent("Models", isDirectory: true) {
+            folders += ["qwen3-asr-0.6b-4bit", "qwen3-asr-1.7b-4bit"].map { models.appendingPathComponent($0, isDirectory: true) }
+        }
+        if let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let mlx = documents.appendingPathComponent("huggingface/models/mlx-community", isDirectory: true)
+            folders += ["gemma-3-1b-it-qat-4bit", "Qwen2.5-0.5B-Instruct-4bit", "Qwen2.5-1.5B-Instruct-4bit"]
+                .map { mlx.appendingPathComponent($0, isDirectory: true) }
+        }
+        for folder in folders where fileManager.fileExists(atPath: folder.path) {
+            try? fileManager.removeItem(at: folder)
         }
     }
+
+    // MARK: - Private
 
     private func automaticActiveModel() -> String? {
         guard !downloadedModels.isEmpty else { return nil }
@@ -869,7 +648,6 @@ class ModelManager: ObservableObject {
             installed: Set(downloadedModels),
             osMajor: osMajor,
             capabilities: DeviceCapabilities.current(),
-            recognizer: recognizer,
             requiredLanguages: SpokenLanguagePreferences.load(from: defaults)
         )
     }
@@ -883,7 +661,7 @@ class ModelManager: ObservableObject {
     }
 
     var initialVoiceModel: String? {
-        if selectionMode == .manual { return DictationModelPreferences.requestedAppModel(in: defaults, recognizer: recognizer) }
+        if selectionMode == .manual { return DictationModelPreferences.requestedAppModel(in: defaults) }
         return preferredModelIdentifier.isEmpty ? nil : preferredModelIdentifier
     }
 
@@ -891,17 +669,7 @@ class ModelManager: ObservableObject {
     /// artifact before exposing it as runnable so a stale or partial cache
     /// cannot trap the keyboard in a load failure loop.
     private func isArtifactInstalled(_ identifier: String) -> Bool {
-        guard let model = ModelInfo.forIdentifier(identifier) else { return false }
-        switch model.engine {
-        case .whisperKit:
-            return WhisperModelRepository.isModelInstalled(identifier)
-        case .parakeet:
-            guard let version = parakeetVersion(for: identifier) else { return false }
-            return ParakeetEngine.installedModelCacheDirectory(version: version) != nil
-        case .qwenASR:
-            guard #available(iOS 18.0, *), let choice = QwenASRModel(rawValue: identifier) else { return false }
-            return QwenSpeechEngine.isInstalled(choice)
-        }
+        ModelInfo.forIdentifier(identifier) != nil && WhisperModelRepository.isModelInstalled(identifier)
     }
 
     /// Persists model state to App Group UserDefaults so the keyboard extension
@@ -914,7 +682,6 @@ class ModelManager: ObservableObject {
         defaults.set(activeModel, forKey: SharedKeys.appDictationModel)
         defaults.set(isModelReady, forKey: SharedKeys.appDictationModelReady)
         defaults.set(keyboardModel, forKey: SharedKeys.activeModel)
-        defaults.set(recognizer.rawValue, forKey: SharedKeys.dictationRecognizer)
         defaults.set(selectionMode.rawValue, forKey: SharedKeys.modelSelectionMode)
         defaults.set(keyboardModel.map { downloadedModels.contains($0) && isArtifactInstalled($0) } ?? false,
                      forKey: SharedKeys.modelReady)
@@ -927,8 +694,6 @@ class ModelManager: ObservableObject {
 enum ModelManagerError: Error, LocalizedError {
     case cannotDeleteLastModel
     case noContainer
-    case parakeetUnavailable
-    case qwenUnavailable
     case modelInUse
     case prewarmTimeout(seconds: Int)
     case prewarmBusy
@@ -939,10 +704,6 @@ enum ModelManagerError: Error, LocalizedError {
             return "Cannot delete the last remaining model"
         case .noContainer:
             return "App Group container not available"
-        case .parakeetUnavailable:
-            return "Parakeet requires iOS 17+ or FluidAudio is not linked"
-        case .qwenUnavailable:
-            return "Qwen requires iOS 18, a compatible iPhone and a complete model download."
         case .modelInUse:
             return "Finish or cancel dictation before changing model files."
         case .prewarmTimeout(let seconds):

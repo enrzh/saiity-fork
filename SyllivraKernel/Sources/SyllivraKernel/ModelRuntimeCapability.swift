@@ -69,23 +69,11 @@ extension ModelInfo {
     /// Runtime capability metadata for the selected engine/model family.
     /// No language claim is made here beyond the existing catalog support data.
     public var runtimeCapability: ModelRuntimeCapability {
-        switch engine {
-        case .whisperKit:
-            return ModelRuntimeCapability(
-                minimumOSMajorVersion: 17,
-                supportsAutomaticLanguageDetection: languageSupport.coverage != .whisperEnglishOnly,
-                fallbackIdentifier: nil
-            )
-        case .parakeet:
-            return ModelRuntimeCapability(
-                minimumOSMajorVersion: 17,
-                supportsAutomaticLanguageDetection: languageSupport.coverage == .parakeetEuropean,
-                fallbackIdentifier: "openai_whisper-small"
-            )
-        case .qwenASR:
-            return ModelRuntimeCapability(minimumOSMajorVersion: 18,
-                supportsAutomaticLanguageDetection: true, fallbackIdentifier: nil)
-        }
+        ModelRuntimeCapability(
+            minimumOSMajorVersion: 17,
+            supportsAutomaticLanguageDetection: languageSupport.coverage != .whisperEnglishOnly,
+            fallbackIdentifier: nil
+        )
     }
 
     public func isRuntimeAvailable(onOSMajor osMajor: Int, capabilities: DeviceCapabilities) -> Bool {
@@ -155,10 +143,6 @@ extension ModelInfo {
         }.map(\.element)
         candidates = ranked
 
-        if requestedModel?.engine == .qwenASR && requestedReason != .unsupportedLanguages {
-            return ModelRuntimeResolution(requestedIdentifier: requestedIdentifier,
-                resolvedIdentifier: nil, fallbackReason: requestedReason)
-        }
         for candidate in candidates where candidate != requestedIdentifier {
             guard let model = forIdentifier(candidate),
                   installedIdentifiers.contains(candidate),

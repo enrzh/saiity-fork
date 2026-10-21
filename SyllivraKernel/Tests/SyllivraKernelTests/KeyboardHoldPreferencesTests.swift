@@ -89,13 +89,7 @@ final class KeyboardHoldPreferencesTests: XCTestCase {
                                     deviceModelIdentifier: "iPhone19,2", thermalState: .serious)
         XCTAssertEqual(ModelSelectionProfile.precise.resolvedIdentifier(installed: installed, osMajor: 27, capabilities: hot), "openai_whisper-tiny")
     }
-    func testLocalCleanupChoiceRoundTripsWithoutSilentlySelectingApple() {
-        for model in LocalCleanupModel.allCases {
-            let backend = PolishCleanupBackend.local(model)
-            XCTAssertEqual(PolishCleanupBackend.parse(backend.storageValue), backend)
-            XCTAssertEqual(PolishCleanupBackend.resolvedEngine(preference: backend, appleFMAvailable: true,
-                validOllamaIDs: []), .local(model))
-        }
+    func testCleanupPromptStaysCompactAndKeepsLanguagesInPlace() {
         XCTAssertLessThan(DictationCleanupPrompt.instructions().count, 1400)
         XCTAssertTrue(DictationCleanupPrompt.instructions().contains("Never translate"))
         XCTAssertTrue(DictationCleanupPrompt.instructions().contains("<<NL>>"))
