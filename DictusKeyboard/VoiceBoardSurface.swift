@@ -50,6 +50,8 @@ extension KeyboardRootView {
                         .foregroundStyle(.red)
                         .lineLimit(1)
                         .allowsTightening(true)
+                        .minimumScaleFactor(0.8)
+                        .accessibilityLabel(dictationErrorText)
                         .frame(width: max(CGFloat.zero, errorFrame.width - 8), height: errorFrame.height)
                         .position(x: CGFloat(errorFrame.midX - layout.surfaceFrame.minX),
                                   y: CGFloat(errorFrame.midY - layout.surfaceFrame.minY))
@@ -268,10 +270,17 @@ extension KeyboardRootView {
     /// The blocked-link guidance belongs to the recovery control now, so it only
     /// appears when a session actually failed. It used to show whenever the app
     /// handoff was pending, which read as a permanent warning on a healthy board.
-    private var dictationErrorMessage: String {
+    private var dictationErrorText: String {
         if let message = state.statusMessage { return message }
         guard state.dictationStatus == .failed else { return "" }
-        return "Dictation could not be completed."
+        return "Dictation didn’t finish."
+    }
+
+    /// The lane between the side keys fits one short sentence; VoiceOver reads the whole text.
+    private var dictationErrorMessage: String {
+        let text = dictationErrorText
+        guard let end = text.range(of: ". ") else { return text }
+        return String(text[..<end.lowerBound]) + "."
     }
 
 }
