@@ -10,7 +10,7 @@ let package = Package(
         .executable(name: "polish-harness", targets: ["polish-harness"])
     ],
     targets: [
-        .target(name: "SyllivraKernel", path: "Sources/SyllivraKernel", resources: [.process("Resources")]),
+        .target(name: "SyllivraKernel", path: "Sources/SyllivraKernel"),
         .target(name: "SyllivraInference", dependencies: ["SyllivraKernel"], path: "Sources/SyllivraInference"),
         // Off-device polish eval harness (macOS only — needs Apple Intelligence).
         // Runs the REAL pipeline (PolishPipeline + AppleFoundationModelsPolishEngine)

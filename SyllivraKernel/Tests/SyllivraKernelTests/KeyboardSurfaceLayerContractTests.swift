@@ -82,8 +82,8 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertTrue(native.contains("attachKeyboardVisualController(emojiChrome, from: emojiCategory)"))
         XCTAssertFalse(root.contains("EmojiCategoryBar("))
         XCTAssertTrue(root.contains("KeyboardDeleteButton("))
-        XCTAssertTrue(native.contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"),
-                      "emoji content must receive the complete embedded surface width")
+        XCTAssertTrue(native.contains("layout.boardDeleteFrame.minX - surface.minX - VoiceOnlyKeyboardPolicy.visibleControlGap"),
+                      "emoji content must stop before the shared Delete target")
         XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertTrue(emoji.contains("UICollectionView"),
                       "emoji categories must use the native paged collection surface")

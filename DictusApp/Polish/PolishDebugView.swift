@@ -78,7 +78,7 @@ struct PolishDebugView: View {
             }
             #endif
         }
-        .navigationTitle("Polish debug")
+        .navigationTitle("Cleanup Diagnostics")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -260,7 +260,7 @@ private struct EntryDetailView: View {
             }
             .padding()
         }
-        .navigationTitle("Polish event")
+        .navigationTitle("Cleanup Event")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

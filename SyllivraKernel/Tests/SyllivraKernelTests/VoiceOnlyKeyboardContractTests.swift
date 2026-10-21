@@ -34,8 +34,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
     func testSettingsKeyboardSectionUsesNativePickerSyntax() throws {
         let settings = try source("DictusApp/Views/SettingsView.swift")
-        let keyboardStart = try XCTUnwrap(settings.range(of: "LabeledContent(\"Keyboard layout\")"))
-        let nextSection = try XCTUnwrap(settings.range(of: "Section(\"Help\")", range: keyboardStart.upperBound..<settings.endIndex))
+        let keyboardStart = try XCTUnwrap(settings.range(of: "LabeledContent(\"Layout\")"))
+        let nextSection = try XCTUnwrap(settings.range(of: "struct HelpView", range: keyboardStart.upperBound..<settings.endIndex))
         let keyboardSection = String(settings[keyboardStart.lowerBound..<nextSection.lowerBound])
 
         XCTAssertFalse(keyboardSection.contains("Control order"))
@@ -259,17 +259,14 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                        "alternate pages must not grow for the removed accessory row")
     }
 
-    func testMainTabsKeepSpeakAndSettingsWithModelsInsideSettings() throws {
-        let mainTabs = try source("DictusApp/Views/MainTabView.swift")
-        let settings = try source("DictusApp/Views/SettingsView.swift")
+    func testModelsOpenFromTheHomeListWithTheRootModelOwner() throws {
+        let root = try source("DictusApp/Views/RootView.swift")
         let home = try source("DictusApp/Views/HomeView.swift")
 
-        XCTAssertFalse(mainTabs.contains("Label(\"Models\", systemImage:"), "Models must not be a root tab")
-        XCTAssertTrue(settings.contains("settings.models"))
-        XCTAssertTrue(settings.contains("ModelManagerView(modelManager: modelManager)"),
-                      "Models must reuse the existing root model owner")
+        XCTAssertFalse(root.contains("Label(\"Models\", systemImage:"), "Models must not be a root tab")
+        XCTAssertTrue(home.contains("settings.models"))
         XCTAssertTrue(home.contains("ModelManagerView(modelManager: modelManager)"),
-                       "Models opens from Speak")
+                      "Models must reuse the existing root model owner")
     }
 
     func testDictationErrorsRenderOutsideTheMicButton() throws {
@@ -1076,12 +1073,12 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                        "letter mode must not install the dictation hit target")
         XCTAssertFalse(root.contains("showsSymbolsControl:"))
         XCTAssertFalse(root.contains("Text(\"AUTO\")"))
-        XCTAssertTrue(root.contains("title: \"AUTO\""))
+        XCTAssertTrue(root.contains("title: \"Automatic\""))
         XCTAssertTrue(root.contains("state.selectTranscription()"))
         XCTAssertFalse(root.contains("state.selectAutomaticTypingLanguage()"))
         XCTAssertFalse(root.contains("state.selectKeyboardLayout(layout)"))
-        XCTAssertTrue(root.contains("title: \"AUTO\""))
-        XCTAssertTrue(root.contains("\"Keep spoken language\""))
+        XCTAssertTrue(root.contains("\"Keep the spoken language\""))
+        XCTAssertFalse(root.contains("checkmark.circle.fill"), "the menu's own state shows the single checkmark")
         XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"))
         XCTAssertFalse(root.contains("LanguageMenuButton()"))
         XCTAssertFalse(root.contains("suggestionState.suggestions"),
@@ -1257,8 +1254,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("private func boardCapsuleVisual("))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("private func recoveryControlVisual(frame: CGRect)"))
         XCTAssertTrue(root.contains("surfaceFrame.midX"))
-        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"),
-                      "emoji content must receive the complete embedded surface width")
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("layout.boardDeleteFrame.minX - surface.minX - VoiceOnlyKeyboardPolicy.visibleControlGap"),
+                      "emoji content must stop before the shared Delete target")
         XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertFalse(root.contains("auxiliaryContentFrame"))
     }
@@ -1326,7 +1323,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         let layout = VoiceOnlyKeyboardPolicy.layout(for: 390)
         XCTAssertEqual(layout.centerAreaWidth, 162)
-        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,"))
+        XCTAssertTrue(try source("DictusKeyboard/Next/KeyboardSurfaceView.swift").contains("layout.boardDeleteFrame.minX - surface.minX - VoiceOnlyKeyboardPolicy.visibleControlGap"))
         XCTAssertFalse(root.contains("availableWidth: surfaceFrame.width"))
         XCTAssertFalse(root.contains("layout.auxiliaryContentFrame"))
     }
@@ -1423,10 +1420,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
 
         XCTAssertFalse(root.contains("if isBoard && layout.showsLanguageIndicator"),
-                       "AUTO must remain available on every page")
+                       "Automatic must remain available on every page")
         XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"),
                       "the more menu owns output language on every page")
-        XCTAssertTrue(root.contains("title: \"AUTO\""))
+        XCTAssertTrue(root.contains("title: \"Automatic\""))
     }
 
     func testKeyboardRuntimeLanguageDefaultsUseTheResolvedProductLanguage() throws {

@@ -15,7 +15,7 @@ struct DictusLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 8) {
-                        DictusLogo(height: 28, foregroundOnly: true)
+                        DictusLogo(height: 28)
                         Text("Syllivra").font(.headline).foregroundStyle(.white)
                     }
                 }
@@ -27,7 +27,7 @@ struct DictusLiveActivity: Widget {
                         .padding(.top, 6)
                 }
             } compactLeading: {
-                DictusLogo(height: 20, foregroundOnly: true)
+                DictusLogo(height: 20)
                     .accessibilityLabel("Syllivra")
             } compactTrailing: {
                 ActivitySignal(state: context.state, compact: true)
@@ -89,7 +89,7 @@ struct DictationActivityCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                DictusLogo(height: 24, foregroundOnly: true)
+                DictusLogo(height: 24)
                 if !typeSize.isAccessibilitySize {
                     Text("Syllivra").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -143,7 +143,7 @@ private struct ActivitySignal: View {
             if state.phase == .recording {
                 SaiityVoiceSignal(level: state.waveformLevels.max() ?? 0, height: compact ? 18 : 24)
             } else if state.phase == .standby && !status.paused {
-                DictusLogo(height: compact ? 18 : 24, foregroundOnly: true)
+                DictusLogo(height: compact ? 18 : 24)
             } else {
                 Image(systemName: status.symbol).font(.system(size: compact ? 13 : 16, weight: .semibold))
             }

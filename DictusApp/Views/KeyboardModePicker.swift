@@ -2,193 +2,6 @@
 // Native pickers for keyboard defaults and interaction preferences.
 import SwiftUI
 import SyllivraKernel
-import DeviceKit
-
-/// Voice options owns recommendations; Models manages the installed inventory.
-/// Recommendations are applied explicitly; downloads remain a separate action.
-struct DictationSettingsAdvisor: View {
-    @ObservedObject var modelManager: ModelManager
-    @EnvironmentObject private var coordinator: DictationCoordinator
-    @State private var showsAdvice = false
-    private var phoneName: String {
-        switch DeviceCapabilities.current().deviceModelIdentifier {
-        case "iPhone19,2": return "iPhone 18 Pro"
-        case "iPhone18,4": return "iPhone Air"
-        default: return Device.current.realDevice.description
-        }
-    }
-
-    private func recommendedModel(_ recognizer: DictationRecognizer, profile: ModelSelectionProfile,
-                                  installed: Set<String>) -> ModelInfo? {
-        profile.resolvedIdentifier(
-            installed: installed,
-            osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-            capabilities: DeviceCapabilities.current(), recognizer: recognizer,
-            requiredLanguages: SpokenLanguagePreferences.load(from: AppGroup.defaults))
-            .flatMap(ModelInfo.forIdentifier)
-    }
-    private var usesRecommendation: Bool {
-        modelManager.selectionMode == .automatic && modelManager.selectionProfile == .recommended
-            && AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) == nil
-    }
-    var body: some View {
-        Section {
-            DisclosureGroup("View recommendation", isExpanded: $showsAdvice) {
-                recommendation("In Syllivra", recognizer: modelManager.recognizer, profile: .recommended)
-                recommendation("From your keyboard", recognizer: .whisper, profile: .balanced)
-                Text("For \(phoneName) and your spoken languages. Automatic selection uses installed models and adapts to heat and available memory.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(usesRecommendation ? "Recommended settings applied" : "Use recommended settings") {
-                modelManager.useRecommendedSettings()
-            }
-            .accessibilityIdentifier("dictation.useRecommendedSettings")
-            .disabled(usesRecommendation || !coordinator.canChangeSpeechRuntime)
-            if !coordinator.canChangeSpeechRuntime {
-                Text("Finish this dictation before changing voice settings.").font(.footnote)
-            }
-        } header: {
-            Text("Recommended settings")
-        } footer: {
-            Text("Applies voice model choices only. Your languages and writing options stay unchanged. No download starts.")
-        }
-        .accessibilityIdentifier("dictation.settingsAdvisor")
-    }
-    private func recommendation(_ title: LocalizedStringKey, recognizer: DictationRecognizer,
-                                profile: ModelSelectionProfile) -> some View {
-        let model = recommendedModel(recognizer, profile: profile, installed: Set(ModelInfo.downloadableIdentifiers))
-        let installed = recommendedModel(recognizer, profile: profile, installed: Set(modelManager.downloadedModels))
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
-            Text(model?.displayName ?? "No compatible recommendation")
-            if let model, !modelManager.downloadedModels.contains(model.identifier) {
-                Text(installed.map { "Automatic will use \($0.displayName) until you download this model in Models." }
-                     ?? "Download a compatible model in Models to get started.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            if model?.engine == .qwenASR {
-                Text("Keep Syllivra open for Streaming. The keyboard uses Whisper independently.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-struct DictationModelQuickPicker: View {
-    enum Scope { case app, keyboard, both }
-    var scope: Scope = .both
-    @ObservedObject var modelManager: ModelManager
-    @EnvironmentObject private var coordinator: DictationCoordinator
-    @Environment(\.dynamicTypeSize) private var textSize
-    @AppStorage(SharedKeys.dictationRealtimeText, store: AppGroup.defaults) private var realtime = false
-    private var selectedModel: String {
-        if modelManager.selectionMode == .automatic {
-            return modelManager.activeModel ?? modelManager.initialVoiceModel ?? "unavailable"
-        }
-        return modelManager.activeModel ?? AppGroup.defaults.string(forKey: modelManager.recognizer.modelPreferenceKey)
-            ?? modelManager.recognizer.defaultModelIdentifier
-    }
-    private var models: [ModelInfo] { availableModels(for: modelManager.recognizer) }
-    private func availableModels(for recognizer: DictationRecognizer) -> [ModelInfo] {
-        ModelInfo.allIncludingDeprecated.filter {
-            recognizer.contains($0)
-                && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
-                                        capabilities: DeviceCapabilities.current())
-                && (ModelInfo.downloadableIdentifiers.contains($0.identifier)
-                    || modelManager.downloadedModels.contains($0.identifier))
-        }.sorted { $0.sizeBytes < $1.sizeBytes }
-    }
-    var body: some View {
-        Group {
-            if scope != .keyboard {
-            if textSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Voice model").font(.subheadline).foregroundStyle(.secondary)
-                    Text(ModelInfo.forIdentifier(selectedModel)?.displayName ?? NSLocalizedString("No compatible model", comment: "Voice model readiness"))
-                }
-            } else {
-                LabeledContent("Voice model", value: ModelInfo.forIdentifier(selectedModel)?.displayName ?? NSLocalizedString("No compatible model", comment: "Voice model readiness"))
-            }
-            DisclosureGroup("Choose a voice model") {
-            if textSize.isAccessibilitySize {
-                recognizerPicker.pickerStyle(.menu)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Dictation engine").font(.subheadline)
-                    recognizerPicker.pickerStyle(.segmented)
-                }.padding(.vertical, 4)
-            }
-            Picker(modelManager.recognizer == .streaming ? "Streaming model" : "Whisper model",
-                   selection: Binding(get: { selectedModel }, set: modelManager.chooseDictationModel)) {
-                if selectedModel == "unavailable" { Text("No compatible recommendation").tag("unavailable") }
-                ForEach(models) { model in
-                    Text(textSize.isAccessibilitySize && model.engine == .qwenASR
-                         ? model.displayName.replacingOccurrences(of: "Qwen3-ASR", with: "Qwen")
-                         : model.displayName).tag(model.identifier)
-                }
-            }
-            .accessibilityValue(ModelInfo.forIdentifier(selectedModel)?.displayName ?? "Choose a model")
-            .accessibilityIdentifier("dictation.model")
-            }
-            if ModelInfo.forIdentifier(selectedModel)?.engine == .qwenASR {
-                Toggle("Realtime text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
-                Text("Words appear after pauses while you speak. Cleanup runs when you finish. Qwen runs while Syllivra is open; your keyboard uses its own model.")
-                    .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if selectedModel == "unavailable" {
-                Text("No compatible model covers your spoken languages on this iPhone. Change the languages, or select a model manually.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            } else if !modelManager.downloadedModels.contains(selectedModel) {
-                if let progress = modelManager.downloadProgress[selectedModel] {
-                    ProgressView("Downloading model", value: Double(progress))
-                    Button("Cancel download") { modelManager.cancelCatalogDownload(selectedModel) }
-                } else {
-                    Button("Download selected model") {
-                        modelManager.startCatalogDownload(selectedModel, onError: { _ in })
-                    }
-                }
-                if case .error(let message) = modelManager.modelStates[selectedModel] {
-                    Text(DictationProblem(message, downloading: true).message).font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-            let languages = SpokenLanguagePreferences.load(from: AppGroup.defaults)
-            if !languages.isEmpty, let model = ModelInfo.forIdentifier(selectedModel), !SpokenLanguagePreferences.accepts(model, languages: languages) {
-                Text("This model does not cover your selected spoken languages. Choose a compatible model or change your language preferences.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            }
-            if scope != .app {
-            Picker("Keyboard model", selection: Binding(
-                get: { AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic" },
-                set: modelManager.chooseKeyboardModel)) {
-                Text("Automatic").tag("automatic")
-                ForEach(modelManager.downloadedModels.filter { ModelInfo.forIdentifier($0)?.engine != .qwenASR }, id: \.self) { id in
-                    Text(ModelInfo.forIdentifier(id)?.displayName ?? id).tag(id)
-                }
-            }.accessibilityIdentifier("dictation.keyboardModel")
-            Text(modelManager.keyboardModel.flatMap(ModelInfo.forIdentifier).map {
-                "Keyboard dictation uses \($0.displayName), independently of your in-app choice."
-            } ?? "Download a Whisper model to enable dictation from your keyboard.")
-                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if !coordinator.canChangeSpeechRuntime {
-                Text("Finish this dictation before changing voice settings.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .disabled(!coordinator.canChangeSpeechRuntime)
-    }
-    private var recognizerPicker: some View {
-        Picker("Dictation engine", selection: Binding(get: { modelManager.recognizer }, set: modelManager.selectRecognizer)) {
-            ForEach(DictationRecognizer.allCases, id: \.self) { choice in
-                Text(choice.displayName).tag(choice)
-                    .disabled(choice == .streaming && availableModels(for: choice).isEmpty)
-            }
-        }.accessibilityIdentifier("dictation.recognizer")
-    }
-}
 
 struct SpokenLanguagesPicker: View {
     @ObservedObject var modelManager: ModelManager
@@ -199,11 +12,16 @@ struct SpokenLanguagesPicker: View {
         NavigationLink {
             List {
                 Section {
-                    Button("Broad language support") { update([]) }
-                    Text("Choose every language you speak, including mixed-language dictation. Recognition uses these choices, and model recommendations must cover them all. Broad language support allows automatic detection without a language limit.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    Button { update([]) } label: {
+                        LabeledContent("Any Language") {
+                            if languages.isEmpty { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                } footer: {
+                    Text("Syllivra detects the language as you speak. Choose every language you speak to limit recognition and model recommendations to them.")
                 }
-                Section("Spoken languages") {
+                Section {
                     ForEach(SpokenLanguagePreferences.availableCodes.filter {
                         query.isEmpty || ModelLanguageSupport.localizedLanguageName(for: $0).localizedCaseInsensitiveContains(query)
                     }, id: \.self) { code in
@@ -215,9 +33,9 @@ struct SpokenLanguagesPicker: View {
                 }
             }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Language")
-            .navigationTitle("Spoken languages")
+            .navigationTitle("Spoken Languages")
         } label: {
-            LabeledContent("Spoken languages", value: SpokenLanguagePreferences.summary(languages))
+            LabeledContent("Spoken Languages", value: SpokenLanguagePreferences.summary(languages))
         }
         .disabled(!DictationCoordinator.shared.canChangeSpeechRuntime)
         .onAppear { languages = SpokenLanguagePreferences.load(from: AppGroup.defaults) }
@@ -268,7 +86,7 @@ struct CleanupModelPicker: View {
 struct KeyboardHoldSpeedPicker: View {
     @AppStorage(SharedKeys.keyboardHoldSpeed, store: AppGroup.defaults) private var speed = KeyboardHoldSpeed.default.rawValue
     var body: some View {
-        Picker("Tap and hold speed", selection: $speed) {
+        Picker("Hold Speed", selection: $speed) {
             ForEach(KeyboardHoldSpeed.allCases, id: \.self) { Text($0.displayName).tag($0.rawValue) }
         }
         .onChange(of: speed) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
@@ -390,7 +208,7 @@ struct KeyboardHoldOptionsView: View {
                 }
             }
         }
-        .navigationTitle("Tap and hold options")
+        .navigationTitle("Tap and Hold Options")
         .onAppear { KeyboardVariantPreferences.reload() }
         .onChange(of: page) { _, _ in selectedKey = nil }
         .onChange(of: emojiCategoryID) { _, _ in selectedKey = nil }
@@ -405,8 +223,8 @@ struct DefaultKeyboardModePicker: View {
     private var selectedMode = DefaultKeyboardMode.dictationBoard.rawValue
 
     var body: some View {
-        LabeledContent("Default keyboard") {
-            Picker("Default keyboard", selection: $selectedMode) {
+        LabeledContent("Default Keyboard") {
+            Picker("Default Keyboard", selection: $selectedMode) {
                 ForEach(DefaultKeyboardMode.allCases, id: \.rawValue) { mode in
                     Text(mode.displayName).tag(mode.rawValue)
                 }
@@ -461,11 +279,11 @@ struct KeyboardMaterialPicker: View {
     private var insetEnabled = true
 
     var body: some View {
-        Toggle("Show top bar", isOn: $topBarEnabled)
+        Toggle("Show Top Bar", isOn: $topBarEnabled)
             .accessibilityIdentifier("keyboard-top-bar-setting")
             .accessibilityHint("Shows More, dictation power and the dictation board shortcut above typing pages.")
             .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-            Picker("Keyboard material", selection: $liquidGlassEnabled) {
+            Picker("Material", selection: $liquidGlassEnabled) {
                 Text("Liquid Glass").tag(true)
                 Text("Solid").tag(false)
             }
@@ -473,7 +291,7 @@ struct KeyboardMaterialPicker: View {
             .onChange(of: liquidGlassEnabled) { _, _ in
                 KeyboardInteractionPreferences.notifyChanged()
             }
-            Toggle("Keyboard inset", isOn: $insetEnabled)
+            Toggle("Background", isOn: $insetEnabled)
                 .accessibilityHint("Shows the shared background behind every keyboard page and its bottom bar, in either material.")
                 .onChange(of: insetEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
     }
@@ -485,20 +303,12 @@ struct DictationPresencePicker: View {
     @State private var selection = DictationPresenceMode.active
 
     var body: some View {
-        Picker("Dictation presence", selection: selectionBinding) {
-            ForEach(DictationPresenceMode.allCases, id: \.self) { mode in
-                Text(mode.displayName).tag(mode)
-            }
-        }
+        Toggle("Live Activity", isOn: Binding(
+            get: { selection.showsLiveActivity },
+            set: { apply($0 ? .liveActivity : .off) }
+        ))
         .onAppear { selection = DictationPresenceMode.active }
-        .accessibilityHint("Choose off or Live Activity.")
-    }
-
-    private var selectionBinding: Binding<DictationPresenceMode> {
-        Binding(
-            get: { selection },
-            set: { apply($0) }
-        )
+        .accessibilityHint("Shows dictation status on the Lock Screen and in the Dynamic Island.")
     }
 
     private func apply(_ mode: DictationPresenceMode) {
@@ -513,7 +323,7 @@ struct KeyPopupPicker: View {
     @State private var selection = KeyPopupMode.active
 
     var body: some View {
-        Picker("Key popups", selection: selectionBinding) {
+        Picker("Key Popups", selection: selectionBinding) {
             ForEach(KeyPopupMode.allCases, id: \.self) { mode in
                 Text(mode.displayName).tag(mode)
             }

@@ -202,9 +202,9 @@ struct LanguageMenuButton: UIViewRepresentable {
         let state = KeyboardState.shared
         var outputActions: [UIMenuElement] = [
             UIAction(
-                title: "AUTO",
-                subtitle: "Keep spoken language",
-                image: UIImage(systemName: state.selectedTranslationTarget == nil ? "checkmark.circle.fill" : "waveform"),
+                title: "Automatic",
+                subtitle: "Keep the spoken language",
+                image: UIImage(systemName: "waveform"),
                 state: state.selectedTranslationTarget == nil ? .on : .off
             ) { _ in
                 HapticFeedback.playInputClick()
@@ -220,8 +220,7 @@ struct LanguageMenuButton: UIViewRepresentable {
                 UIAction(
                     title: state.translationTargetMenuLabel(target),
                     subtitle: target.displayName,
-                    image: UIImage(systemName: selected ? "checkmark.circle.fill"
-                                    : targetStatus == .supportedNeedsDownload ? "arrow.down.circle"
+                    image: UIImage(systemName: targetStatus == .supportedNeedsDownload ? "arrow.down.circle"
                                     : targetStatus == .checking ? "ellipsis.circle" : "character.bubble"),
                     attributes: attributes,
                     state: selected ? .on : .off

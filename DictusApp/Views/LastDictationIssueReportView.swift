@@ -76,7 +76,7 @@ struct LastDictationIssueReportView: View {
                 }
             }
         }
-        .navigationTitle("Report an issue")
+        .navigationTitle("Report Last Dictation")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             snapshot = LastDictationIssueReport.load(from: AppGroup.defaults)

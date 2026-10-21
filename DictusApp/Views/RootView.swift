@@ -1,30 +1,21 @@
-// DictusApp/Views/MainTabView.swift
-// Root navigation container with native tabs and full-screen recording overlay.
+// DictusApp/Views/RootView.swift
+// Root navigation container with the full-screen recording overlay.
 import SwiftUI
 import SyllivraKernel
 
-/// Root view presenting Speak and Settings with one shared model owner.
-///
-/// WHY TabView instead of NavigationStack:
-/// The app's Speak and Settings sections are the root tabs. A TabView provides standard
-/// iOS navigation for this pattern.
-/// Each tab wraps its content in its own NavigationStack so push navigation works
-/// independently per tab.
+/// Root view: one navigation stack over the home list, with one shared model owner.
 ///
 /// WHY ZStack overlay for RecordingView:
 /// When dictation is active, the recording UI must cover the entire screen INCLUDING
-/// the tab bar. A ZStack overlay with ignoresSafeArea achieves this, while a sheet or
-/// fullScreenCover would leave the tab bar visible underneath on some iOS versions.
-struct MainTabView: View {
+/// the toolbar. A ZStack overlay with ignoresSafeArea achieves this.
+struct RootView: View {
     @EnvironmentObject var coordinator: DictationCoordinator
     @StateObject private var modelManager = ModelManager()
 
-    @State private var selectedTab: Int = 0
-
     /// In-memory flag: true after the first URL has been handled in this process.
     /// Resets naturally when iOS terminates the process (true cold start).
-    /// WHY static on MainTabView (not DictusApp): onOpenURL fires inner-to-outer in SwiftUI,
-    /// so MainTabView's handler fires BEFORE DictusApp's. We need the detection here.
+    /// WHY static on RootView (not DictusApp): onOpenURL fires inner-to-outer in SwiftUI,
+    /// so RootView's handler fires BEFORE DictusApp's. We need the detection here.
     private static var hasHandledURL = false
 
     /// Tracks whether the app was opened from the keyboard for cold start dictation.
@@ -43,18 +34,13 @@ struct MainTabView: View {
     /// `.onOpenURL` always rendered one frame of the home screen first. `ColdStartLaunch`
     /// reads the launch URL at scene connection, which happens before this view is built,
     /// so the very first frame is already the right one. Every other launch leaves the
-    /// intent nil and lands on the tab navigation with nothing added to the path.
+    /// intent nil and lands on the home list with nothing added to the path.
     init() {
         let launchIntent = ColdStartLaunch.intent
         _isColdStartMode = State(initialValue: launchIntent == .record)
         _preparingModelID = State(
             initialValue: launchIntent == .prepare ? Self.persistedActiveModelIdentifier : nil
         )
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--keyboard-settings-probe") {
-            _selectedTab = State(initialValue: 1)
-        }
-        #endif
     }
 
     /// The active model as persisted in the App Group, with the shipped default.
@@ -87,29 +73,12 @@ struct MainTabView: View {
                 // in a separate file follows "one file = one responsibility".
                 SwipeBackOverlayView()
             } else {
-                // Main tab navigation (normal launch path)
-                TabView(selection: $selectedTab) {
-                    // Tab 0: Home dashboard
-                    NavigationStack {
-                        HomeView(modelManager: modelManager)
-                    }
-                    .tabItem {
-                        Label("Speak", systemImage: "waveform")
-                    }
-                    .tag(0)
-
-                    // Tab 1: Settings
-                    NavigationStack {
-                        SettingsView(modelManager: modelManager)
-                    }
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape.fill")
-                    }
-                    .tag(1)
+                NavigationStack {
+                    HomeView(modelManager: modelManager)
                 }
             }
 
-            // Full-screen recording overlay covers everything including tab bar.
+            // Full-screen recording overlay covers everything including the toolbar.
             // WHY not shown in cold start mode: During cold start, the recording runs
             // in the background while the user sees the SwipeBackOverlayView. Showing
             // RecordingView would cover the swipe-back instructions.
@@ -117,7 +86,7 @@ struct MainTabView: View {
                 RecordingView(mode: .standalone)
             }
         }
-        // Detect cold start directly from URL params. MainTabView's onOpenURL fires
+        // Detect cold start directly from URL params. RootView's onOpenURL fires
         // BEFORE DictusApp's (SwiftUI propagates inner-to-outer), so we can't rely
         // on DictusApp having set the AppGroup flag yet.
         //
@@ -160,6 +129,6 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView()
+    RootView()
         .environmentObject(DictationCoordinator.shared)
 }

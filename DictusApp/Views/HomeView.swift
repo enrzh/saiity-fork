@@ -1,5 +1,5 @@
 // DictusApp/Views/HomeView.swift
-// Home dashboard showing real model readiness, dictation, and recent output.
+// The app's single root list: readiness, keyboard dictation, recent text and settings.
 import SwiftUI
 import AVFoundation
 import SyllivraKernel
@@ -7,10 +7,8 @@ import SyllivraKernel
 struct HomeView: View {
     @ObservedObject var modelManager: ModelManager
     @EnvironmentObject var coordinator: DictationCoordinator
-    @EnvironmentObject var proStatus: ProStatusManager
     @AppStorage(SharedKeys.appDictationModelReady, store: AppGroup.defaults) private var modelReady = false
 
-    @State private var showCopiedFeedback = false
     @ObservedObject private var replay = RecordingReplay.shared
     @State private var microphonePermission = MicrophonePermissionState.undetermined
     @State private var recentDictationItems: [RecentDictation] = []
@@ -20,54 +18,65 @@ struct HomeView: View {
     @AppStorage(SharedKeys.modelLoadState, store: AppGroup.defaults) private var modelLoadStateRaw = ModelLoadState.idle.rawValue
     @AppStorage(SharedKeys.modelLoadFailure, store: AppGroup.defaults) private var modelLoadFailure = ""
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         List {
-            Section {
-                readinessPanel
-                readinessAction
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+            if currentReadiness.action != .start {
+                Section { readinessRows }
             }
             Section {
-                NavigationLink { VoiceOptionsView(modelManager: modelManager) } label: {
-                    LabeledContent("Spoken languages", value: SpokenLanguagePreferences.summary(SpokenLanguagePreferences.load(from: AppGroup.defaults)))
-                }
-                .accessibilityIdentifier("home.voiceOptions")
-                .accessibilityHint("Choose spoken languages and voice models.")
-                keyboardPowerRow
+                Toggle("Keyboard Dictation", isOn: Binding(
+                    get: { serviceEnabled },
+                    set: { enabled in coordinator.setKeyboardDictationEnabled(enabled) }
+                ))
+                .accessibilityIdentifier("home.keyboardDictationToggle")
             } footer: {
-                if serviceEnabled && (coordinator.isPreparingKeyboardSession || !coordinator.keyboardSessionEnabled) {
-                    Text(LocalizedStringKey(coordinator.isPreparingKeyboardSession ? "Preparing the keyboard microphone…"
-                         : "Microphone needs preparation. Turn keyboard dictation off and on when you’re ready."))
-                }
+                Text(LocalizedStringKey(keyboardFooter))
             }
             if replay.available && coordinator.canChangeSpeechRuntime {
                 Section {
-                    Button(replay.playing ? "Stop replay" : replay.trimmed ? "Replay last 60 seconds" : "Replay last recording") { replay.toggle() }
-                    if let message = replay.message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                    Button(replay.playing ? "Stop Replay" : replay.trimmed ? "Replay Last 60 Seconds" : "Replay Last Recording") { replay.toggle() }
+                } footer: {
+                    if let message = replay.message { Text(message) }
                 }
             }
-            Section("Recent dictations") {
-                if !historyEnabled {
-                    Text("History is off. New dictations aren’t saved.").foregroundStyle(.secondary)
-                } else if recentDictationItems.isEmpty {
-                    Text("Your finished text will appear here.").foregroundStyle(.secondary)
+            if historyEnabled && !recentDictationItems.isEmpty {
+                Section("Recent") {
+                    ForEach(recentDictationItems) { recentRow($0) }
+                    NavigationLink("All Dictations") { DictationHistoryView() }
                 }
-                recentActivity(items: recentDictationItems)
-                NavigationLink("History", destination: DictationHistoryView())
+                .accessibilityIdentifier("home.recentActivity")
             }
-            .accessibilityIdentifier("home.recentActivity")
-
-            if PremiumFlags.paywallVisible {
-                Section { ProBannerView() }
+            Section {
+                NavigationLink("Dictation") { DictationSettingsView(modelManager: modelManager) }
+                    .accessibilityIdentifier("settings.dictation")
+                NavigationLink("Keyboard") { KeyboardSettingsView() }
+                    .accessibilityIdentifier("settings.keyboard")
+                NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
+                    LabeledContent("Models", value: activeModelName)
+                }
+                .accessibilityLabel("Models")
+                .accessibilityValue(activeModelName)
+                .accessibilityIdentifier("settings.models")
+            }
+            Section {
+                NavigationLink("Help") { HelpView() }
+                    .accessibilityIdentifier("settings.help")
+                NavigationLink("About") { AboutView() }
+                    .accessibilityIdentifier("settings.about")
             }
         }
-        .listStyle(.insetGrouped)
-        .textCase(nil)
-        .contentMargins(.bottom, 88, for: .scrollContent)
-        .navigationTitle("Speak")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("Syllivra")
+        .toolbar {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Spacer()
+                Button { coordinator.startDictation() } label: {
+                    Label("New Dictation", systemImage: "mic")
+                }
+                .disabled(currentReadiness.action != .start)
+                .accessibilityIdentifier("home.newDictation")
+            }
+        }
         .onDisappear { replay.stop() }
         .onAppear {
             replay.refreshAvailability()
@@ -86,145 +95,89 @@ struct HomeView: View {
         .onChange(of: recentDictationData) { _, _ in reloadRecentDictations() }
     }
 
-    private var readinessPanel: some View {
+    /// One problem, one sentence and one way forward.
+    @ViewBuilder
+    private var readinessRows: some View {
         let readiness = currentReadiness
-        return Label {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(readiness.title)
-                    .font(.headline)
-                    .fixedSize(horizontal: false, vertical: true)
-                if readiness.action != .start {
-                    Text(readinessSubtitle).font(.subheadline).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if readiness.action == .start && modelManager.recognizer == .streaming {
-                    Text("Keep Syllivra open while streaming.").font(.footnote).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(readiness.title).font(.headline)
+                if modelLoadStateRaw == ModelLoadState.loading.rawValue && readiness.action == .none {
+                    ProgressView()
                 }
             }
-        } icon: {
-            Image(systemName: readiness.symbol)
+            Text(readinessSubtitle).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 2)
+        switch readiness.action {
+        case .openSettings:
+            Button("Open Settings", action: openSystemSettings)
+        case .requestMicrophone:
+            Button("Allow Microphone", action: requestMicrophoneAccess)
+        case .models, .repairDownload:
+            NavigationLink("Models") { ModelManagerView(modelManager: modelManager) }
+        case .retry:
+            Button("Try Again") {
+                if modelLoadFailure.isEmpty { coordinator.startDictation() } else { retryModelLoad() }
+            }
+        case .none where !modelReady && modelLoadStateRaw != ModelLoadState.loading.rawValue:
+            NavigationLink("Choose a Voice Model") { ModelManagerView(modelManager: modelManager) }
+        case .none, .start:
+            EmptyView()
         }
     }
 
-    private var keyboardPowerRow: some View {
-        Toggle("Keyboard dictation", isOn: Binding(
-            get: { serviceEnabled },
-            set: { enabled in coordinator.setKeyboardDictationEnabled(enabled) }
-        ))
-        .accessibilityHint("Turning on prepares the microphone for your keyboard. Hold its microphone to record a dictation.")
-        .accessibilityIdentifier("home.keyboardDictationToggle")
+    private var keyboardFooter: String {
+        if !serviceEnabled { return "Turn on to dictate from the Syllivra keyboard in any app." }
+        if coordinator.isPreparingKeyboardSession { return "Preparing the keyboard microphone…" }
+        if !coordinator.keyboardSessionEnabled {
+            return "Microphone needs preparation. Turn keyboard dictation off and on when you’re ready."
+        }
+        return "Hold the microphone on the Syllivra keyboard to dictate."
+    }
+
+    private var activeModelName: String {
+        modelManager.activeModel.flatMap(ModelInfo.forIdentifier)?.displayName ?? ""
+    }
+
+    private func recentRow(_ item: RecentDictation) -> some View {
+        NavigationLink {
+            DictationHistoryEditView(item: item) { edited in
+                RecentDictations.update(edited, in: AppGroup.defaults)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.text).lineLimit(2)
+                Text(Self.shortDate(item.createdAt)).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityHint("Opens the full dictation")
+        .swipeActions(edge: .leading) {
+            Button("Copy", systemImage: "doc.on.doc") { copy(item) }.tint(.accentColor)
+        }
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") { copy(item) }
+            ShareLink(item: item.text)
+        }
+    }
+
+    /// Time for today, "Yesterday", then a short date.
+    static func shortDate(_ timestamp: TimeInterval) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        if Calendar.current.isDateInToday(date) { return date.formatted(date: .omitted, time: .shortened) }
+        if Calendar.current.isDateInYesterday(date) { return String(localized: "Yesterday") }
+        return date.formatted(date: .abbreviated, time: .omitted)
     }
 
     private func reloadRecentDictations() {
         recentDictationItems = Array(RecentDictations.load(from: AppGroup.defaults).prefix(3))
     }
 
-    @ViewBuilder
-    private var readinessAction: some View {
-        let readiness = currentReadiness
-        if readiness.action == .openSettings {
-            Button { openSystemSettings() } label: {
-                actionRow("Open Settings", systemImage: "arrow.up.right")
-            }
-        } else if readiness.action == .requestMicrophone {
-            Button { requestMicrophoneAccess() } label: {
-                actionRow("Allow microphone", systemImage: "mic.badge.plus")
-            }
-        } else if readiness.action == .models || readiness.action == .repairDownload {
-            NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
-                actionRow("Models & downloads", systemImage: "arrow.down.circle")
-            }
-        } else if !modelLoadFailure.isEmpty && readiness.action == .retry {
-            Button { retryModelLoad() } label: {
-                actionRow("Retry model load", systemImage: "arrow.clockwise")
-            }
-        } else if readiness.action == .retry {
-            Button { coordinator.startDictation() } label: {
-                actionRow("Try again", systemImage: "arrow.clockwise")
-            }
-        } else if readiness.action == .start {
-            newDictationButton
-        } else if modelLoadStateRaw == ModelLoadState.loading.rawValue {
-            HStack(spacing: 12) {
-                ProgressView()
-                Text("Preparing your model")
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
-            .frame(minHeight: 44)
-        } else if !modelReady && !DictationSessionLivenessPolicy.isActive(coordinator.status) {
-            NavigationLink {
-                ModelManagerView(modelManager: modelManager)
-            } label: {
-                Label("Choose a voice model", systemImage: "arrow.down.circle")
-            }
-        }
-    }
-
-    private func actionRow(_ title: LocalizedStringKey, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-    }
-
-    private var newDictationButton: some View {
-        Button {
-            coordinator.startDictation()
-        } label: {
-            Label("Start dictation", systemImage: "mic.fill")
-                .labelStyle(.titleAndIcon)
-        }
-        .accessibilityIdentifier("home.newDictation")
-    }
-
-    @ViewBuilder
-    private func recentActivity(items: [RecentDictation]) -> some View {
-        ForEach(items) { item in
-            let rowLayout = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-            rowLayout {
-                NavigationLink {
-                    DictationHistoryEditView(item: item) { edited in
-                        RecentDictations.update(edited, in: AppGroup.defaults)
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(item.text)
-                            .font(.body)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(Date(timeIntervalSince1970: item.createdAt).formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .accessibilityHint("Opens the full dictation")
-                Button { copy(item.text) } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                        .labelStyle(.iconOnly)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless).foregroundStyle(.secondary)
-            }
-            .frame(minHeight: 44)
-            .padding(.vertical, 4)
-        }
-        if showCopiedFeedback {
-            Label("Copied", systemImage: "checkmark.circle.fill")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .transition(.opacity)
-        }
-    }
-
-    private func copy(_ result: String) {
-        UIPasteboard.general.string = result
+    private func copy(_ item: RecentDictation) {
+        UIPasteboard.general.string = item.text
         HapticFeedback.recordingStopped()
-        showCopiedFeedback = true
         UIAccessibility.post(notification: .announcement, argument: "Copied")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showCopiedFeedback = false }
     }
 
     private var currentReadiness: DictationReadiness {
@@ -236,7 +189,7 @@ struct HomeView: View {
 
     private var readinessSubtitle: String {
         if currentReadiness.action == .retry, let error = DictationErrorChannel.current {
-            return userFacingError(error)
+            return DictationProblem(error).message
         }
         return currentReadiness.subtitle
     }
@@ -271,57 +224,12 @@ struct HomeView: View {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
-
-    private func userFacingError(_ message: String) -> String {
-        DictationProblem(message).message
-    }
-
 }
 
 #Preview {
     NavigationStack {
         HomeView(modelManager: ModelManager())
             .environmentObject(DictationCoordinator.shared)
-            .environmentObject(ProStatusManager())
-    }
-}
-
-/// Contextual access to the existing preferences and download manager.
-struct VoiceOptionsView: View {
-    @ObservedObject var modelManager: ModelManager
-
-    var body: some View {
-        List {
-            Section {
-                SpokenLanguagesPicker(modelManager: modelManager)
-            }
-            DictationSettingsAdvisor(modelManager: modelManager)
-            Section("In Syllivra") {
-                DictationModelQuickPicker(scope: .app, modelManager: modelManager)
-                Label(modelManager.isModelReady ? "Ready in Syllivra" : "Choose or install a voice model", systemImage: modelManager.isModelReady ? "checkmark.circle" : "arrow.down.circle")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("From your keyboard") {
-                DisclosureGroup("Choose a keyboard model") {
-                    DictationModelQuickPicker(scope: .keyboard, modelManager: modelManager)
-                }
-                Label(modelManager.keyboardModel == nil ? "Keyboard model needed" : "Keyboard model installed", systemImage: modelManager.keyboardModel == nil ? "arrow.down.circle" : "checkmark.circle")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                NavigationLink {
-                    ModelManagerView(modelManager: modelManager)
-                } label: {
-                    Label("Models & downloads", systemImage: "square.stack.3d.up")
-                }
-            } footer: {
-                Text("Voice model changes apply to your next dictation.")
-            }
-        }
-        .listStyle(.insetGrouped)
-        .textCase(nil)
-        .navigationTitle("Voice options")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -346,7 +254,6 @@ struct DictationHistoryView: View {
     @State private var items: [RecentDictation] = []
     @State private var searchText = ""
     @State private var showClearConfirmation = false
-    @AppStorage(SharedKeys.historyEnabled, store: AppGroup.defaults) private var historyEnabled = true
 
     private var filteredItems: [RecentDictation] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -356,17 +263,6 @@ struct DictationHistoryView: View {
 
     var body: some View {
         List {
-            Section {
-                Toggle("Save dictation history", isOn: $historyEnabled)
-                    .onChange(of: historyEnabled) { _, enabled in
-                        if !enabled {
-                            RecentDictations.disable(in: AppGroup.defaults)
-                        }
-                    }
-            } footer: {
-                Text("Saved text stays on this iPhone. Turning saving off keeps existing entries, stops adding new ones, and removes the transcript from the diagnostic snapshot.")
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             if filteredItems.isEmpty {
                 ContentUnavailableView(
                     searchText.isEmpty ? "No dictations yet" : "No matching dictations",
@@ -374,7 +270,7 @@ struct DictationHistoryView: View {
                     description: Text(searchText.isEmpty ? "Completed dictations will appear here." : "Try another search.")
                 )
             } else {
-                Section("Saved dictations") {
+                Section {
                     ForEach(filteredItems) { item in
                         historyRow(item)
                     }
@@ -384,8 +280,7 @@ struct DictationHistoryView: View {
         }
         .listStyle(.insetGrouped)
         .textCase(nil)
-        .contentMargins(.bottom, 88, for: .scrollContent)
-        .navigationTitle("History")
+        .navigationTitle("Dictations")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search dictations")
         .toolbar {
@@ -422,8 +317,8 @@ struct DictationHistoryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.text).font(.body).lineSpacing(3)
                     .lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
-                Text(Date(timeIntervalSince1970: item.createdAt).formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(HomeView.shortDate(item.createdAt))
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             .accessibilityHint("Opens the full dictation")
         }
@@ -500,7 +395,7 @@ struct DictationTranscriptResult: View {
                 TextEditor(text: $editingText)
                     .font(.body).padding(16)
                     .accessibilityLabel("Dictation text")
-                    .navigationTitle("Edit transcript")
+                    .navigationTitle("Edit Transcript")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isEditing = false } }

@@ -8,7 +8,7 @@ struct SwipeBackOverlayView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                DictusLogo(height: 32, foregroundOnly: true)
+                DictusLogo(height: 32)
                 SaiityPageHeader(title: "Dictation from your keyboard",
                                  subtitle: "Finish speaking here, then return to the app you were typing in.")
                 VStack(alignment: .leading, spacing: 20) {
@@ -42,6 +42,7 @@ struct SwipeBackOverlayView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
             }
+            .fullWidthButtons()
             .padding(24).frame(maxWidth: 620).frame(maxWidth: .infinity)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())

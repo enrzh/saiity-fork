@@ -167,7 +167,7 @@ struct RecordingView: View {
         .onAppear {
             // A failure this screen was never mounted for gets read here (#320). A cold
             // start that dies puts `.failed` in place while `SwipeBackOverlayView` owns
-            // the window; MainTabView inserts this view only once the overlay is gone, by
+            // the window; RootView inserts this view only once the overlay is gone, by
             // which time the status has stopped changing and `onChange` will never fire.
             // Reopening Speak restores its result; setup does not adopt an old dictation.
             if coordinator.status == .failed || (coordinator.status == .ready && mode == .standalone) {

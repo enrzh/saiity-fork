@@ -1,259 +1,142 @@
+// DictusApp/Views/SettingsView.swift
+// Settings pages pushed from the home list.
 import AVFoundation
 import SwiftUI
 import UIKit
 import SyllivraKernel
 
-struct SettingsView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(SharedKeys.polishEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var polishEnabled = true
-    @AppStorage(SharedKeys.transcriptionOutputMode, store: UserDefaults(suiteName: AppGroup.identifier)) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
-    @AppStorage(SharedKeys.writingStyle, store: UserDefaults(suiteName: AppGroup.identifier)) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
-    @AppStorage(SharedKeys.hapticIntensity, store: UserDefaults(suiteName: AppGroup.identifier)) private var hapticIntensityRaw = HapticIntensity.default.rawValue
-    @AppStorage(SharedKeys.keyContainersEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var keyContainersEnabled = true
-    @AppStorage(SharedKeys.recordingReplayEnabled, store: AppGroup.defaults) private var replayEnabled = false
-    @AppStorage(SharedKeys.autocorrectEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var autocorrectEnabled = true
-    @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: UserDefaults(suiteName: AppGroup.identifier)) private var adaptiveHitPredictionEnabled = true
-    @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
+struct DictationSettingsView: View {
     @ObservedObject var modelManager: ModelManager
-    @State private var diagnosticResult = AppGroupDiagnostic.run()
+    @AppStorage(SharedKeys.polishEnabled, store: AppGroup.defaults) private var polishEnabled = true
+    @AppStorage(SharedKeys.transcriptionOutputMode, store: AppGroup.defaults) private var transcriptionOutputModeRaw = TranscriptionOutputMode.defaultMode.storedValue
+    @AppStorage(SharedKeys.writingStyle, store: AppGroup.defaults) private var writingStyleRaw = WritingStyle.defaultStyle.rawValue
+    @AppStorage(SharedKeys.recordingReplayEnabled, store: AppGroup.defaults) private var replayEnabled = false
+    @AppStorage(SharedKeys.historyEnabled, store: AppGroup.defaults) private var historyEnabled = true
 
     var body: some View {
-        List {
+        Form {
             Section {
-                NavigationLink { dictationSettings } label: {
-                    Label("Dictation", systemImage: "mic.fill")
-                }
-                    .accessibilityIdentifier("settings.dictation")
-                NavigationLink { keyboardSettings } label: {
-                    Label("Keyboard", systemImage: "keyboard")
-                }
-                    .accessibilityIdentifier("settings.keyboard")
-                NavigationLink { ModelManagerView(modelManager: modelManager) } label: {
-                    Label("Models & downloads", systemImage: "arrow.down.circle")
-                }
-                    .accessibilityIdentifier("settings.models")
-            }
-            Section {
-                NavigationLink { DictationHistoryView() } label: {
-                    Label("History", systemImage: "clock.arrow.circlepath")
-                }
-                    .accessibilityIdentifier("settings.history")
-                NavigationLink { helpSettings } label: {
-                    Label("Help", systemImage: "questionmark.circle")
-                }
-                    .accessibilityIdentifier("settings.help")
-                NavigationLink { aboutSettings } label: {
-                    Label("About", systemImage: "info.circle")
-                }
-                    .accessibilityIdentifier("settings.about")
-            }
-        }
-        .listStyle(.insetGrouped)
-        .labelStyle(.titleAndIcon)
-        .symbolRenderingMode(.hierarchical)
-        .textCase(nil)
-        .contentMargins(.bottom, 88, for: .scrollContent)
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            microphonePermission = AVAudioSession.sharedInstance().recordPermission
-            diagnosticResult = AppGroupDiagnostic.run()
-            let intensity = HapticIntensity.load(from: UserDefaults(suiteName: AppGroup.identifier))
-            hapticIntensityRaw = intensity.rawValue
-            intensity.persist()
-            modelManager.loadState()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                microphonePermission = AVAudioSession.sharedInstance().recordPermission
-                diagnosticResult = AppGroupDiagnostic.run()
-            }
-        }
-    }
-
-    private func settingsPage<Content: View>(
-        _ title: LocalizedStringKey, @ViewBuilder content: () -> Content
-    ) -> some View {
-        Form { content() }
-            .textCase(nil)
-            .contentMargins(.bottom, 88, for: .scrollContent)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var dictationSettings: some View {
-        settingsPage("Dictation") {
-            Section {
-                if cleanupAvailable {
-                    Toggle("Automatic cleanup", isOn: $polishEnabled)
-                        .accessibilityHint("Cleans up dictation after speech recognition.")
-                }
-                Picker("Dictation output", selection: $transcriptionOutputModeRaw) {
+                SpokenLanguagesPicker(modelManager: modelManager)
+                Picker("Output", selection: $transcriptionOutputModeRaw) {
                     ForEach(TranscriptionOutputMode.allCases, id: \.rawValue) { mode in
                         Text(mode.displayName).tag(mode.storedValue)
                     }
                 }
+            } footer: {
+                Text(activeOutputMode.explanation)
+            }
+            Section {
+                if cleanupAvailable {
+                    Toggle("Clean Up Text", isOn: $polishEnabled)
+                        .accessibilityHint("Fixes punctuation and grammar after speech recognition.")
+                }
                 if polishEnabled && cleanupAvailable {
-                    Picker("Writing style", selection: $writingStyleRaw) {
+                    Picker("Writing Style", selection: $writingStyleRaw) {
                         ForEach(WritingStyle.allCases, id: \.rawValue) { style in
                             Text(style.displayName).tag(style.rawValue)
                         }
                     }
                 }
-            } header: {
-                Text("Writing")
             } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(activeOutputMode.explanation)
-                    if PolishAvailability.state != .available {
-                        polishStateFooter
+                if PolishAvailability.state != .available {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(PolishAvailability.guidance(for: PolishAvailability.state))
+                        if PolishAvailability.canOpenSystemSettings(for: PolishAvailability.state) {
+                            Button("Open iPhone Settings", action: openSystemSettings).font(.footnote.bold())
+                        }
                     }
+                } else {
+                    Text("Choose the processing model in Models.")
                 }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             }
             Section {
-                NavigationLink("Voice options") { VoiceOptionsView(modelManager: modelManager) }
-            }
-            Section("Advanced") {
-                Toggle("Keep last recording briefly", isOn: $replayEnabled)
+                DictationPresencePicker()
+                Toggle("Keep Last Recording", isOn: $replayEnabled)
                     .accessibilityIdentifier("dictation.replayPreference")
                     .onChange(of: replayEnabled) { _, enabled in if !enabled { RecordingReplay.shared.clear() } }
-                DisclosureGroup("About replay") {
-                    Text("Off by default. Keeps up to the last 60 seconds in memory for five minutes, until your next dictation, or until you leave the app. Audio is never saved or shared.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                DisclosureGroup("Models and Live Activity") {
-                    CleanupModelPicker(manager: modelManager)
-                    DictationPresencePicker()
-                }
-                .accessibilityIdentifier("settings.dictation.advanced")
+            } footer: {
+                Text("Keeps up to the last 60 seconds in memory for five minutes so you can replay it. Audio is never saved or shared.")
+            }
+            Section {
+                Toggle("Save History", isOn: $historyEnabled)
+                    .onChange(of: historyEnabled) { _, enabled in
+                        if !enabled { RecentDictations.disable(in: AppGroup.defaults) }
+                    }
+            } footer: {
+                Text("Saved text stays on this iPhone. Turning this off keeps existing entries and stops adding new ones.")
             }
         }
+        .navigationTitle("Dictation")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var keyboardSettings: some View {
-        settingsPage("Keyboard") {
+    private var activeOutputMode: TranscriptionOutputMode {
+        TranscriptionOutputMode(storedValue: transcriptionOutputModeRaw)
+    }
+
+    private var cleanupAvailable: Bool {
+        if modelManager.cleanupBackend != .appleIntelligence { return true }
+        return PolishAvailability.isAppleFMAvailable
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+struct KeyboardSettingsView: View {
+    @AppStorage(SharedKeys.hapticIntensity, store: AppGroup.defaults) private var hapticIntensityRaw = HapticIntensity.default.rawValue
+    @AppStorage(SharedKeys.keyContainersEnabled, store: AppGroup.defaults) private var keyContainersEnabled = true
+    @AppStorage(SharedKeys.autocorrectEnabled, store: AppGroup.defaults) private var autocorrectEnabled = true
+    @AppStorage(SharedKeys.adaptiveHitPredictionEnabled, store: AppGroup.defaults) private var adaptiveHitPredictionEnabled = true
+
+    var body: some View {
+        Form {
             Section {
-                LabeledContent("Keyboard layout") {
-                    TypingLanguagesPanel()
-                }
+                LabeledContent("Layout") { TypingLanguagesPanel() }
                 DefaultKeyboardModePicker()
                 Toggle("Autocorrection", isOn: $autocorrectEnabled)
                     .accessibilityHint("Corrects the last word when you press Space.")
-                    .onChange(of: autocorrectEnabled) { _, _ in
-                        KeyboardInteractionPreferences.notifyChanged()
-                    }
-            } header: {
-                Text("Typing")
+                    .onChange(of: autocorrectEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
             } footer: {
-                Text("Words in your keyboard and spoken languages stay unchanged. Mixed sentences use your selected keyboard language for corrections. Autocorrection and adaptive touch support English, German, French and Spanish. Other scripts, names, codes and web addresses stay unchanged.")
+                Text("Autocorrection supports English, German, French and Spanish, and uses your selected keyboard language for mixed sentences. Names, codes and web addresses stay unchanged.")
             }
-            Section("Appearance & feedback") {
+            Section {
                 KeyboardMaterialPicker()
-                Picker("Keyboard haptics", selection: hapticPresetBinding) {
+                Toggle("Key Containers", isOn: $keyContainersEnabled)
+                    .accessibilityHint("Shows opaque plates behind letters and symbols.")
+                    .onChange(of: keyContainersEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+                KeyPopupPicker()
+                Picker("Haptics", selection: hapticPresetBinding) {
                     ForEach(HapticIntensity.allCases, id: \.self) { preset in
                         Text(preset.displayName).tag(preset)
                     }
                 }
                 .accessibilityIdentifier("keyboard-haptics-setting")
-                .accessibilityHint("Choose Off, the default key vibration, or the stronger Snappy vibration.")
             }
             Section {
-                NavigationLink("Words & shortcuts") { wordsSettings }
+                NavigationLink("Vocabulary") { VocabularyView() }
                     .accessibilityIdentifier("settings.words")
-            }
-            Section("Press and hold") {
-                NavigationLink("Emoji & key variants") { KeyboardHoldOptionsView() }
+                NavigationLink("Text Replacements") { TextSnippetsView() }
+                NavigationLink("Tap and Hold Options") { KeyboardHoldOptionsView() }
                     .accessibilityIdentifier("settings.keyboard.variants")
-                Text("Hold the bottom-left 123 or ABC key to open dictation. On the dictation board, hold 123 to return to letters. A quick tap still switches letters and symbols.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
-            Section("Advanced") {
-                DisclosureGroup("Advanced keyboard options") {
-                    Toggle("Key containers", isOn: $keyContainersEnabled)
-                        .accessibilityHint("Shows opaque plates behind letters and symbols.")
-                        .onChange(of: keyContainersEnabled) { _, _ in
-                            KeyboardInteractionPreferences.notifyChanged()
-                        }
-                    Toggle("Adaptive hit prediction", isOn: $adaptiveHitPredictionEnabled)
-                        .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter. Off uses neutral seams.")
-                        .onChange(of: adaptiveHitPredictionEnabled) { _, _ in
-                            KeyboardInteractionPreferences.notifyChanged()
-                        }
-                    KeyPopupPicker()
-                    KeyboardHoldSpeedPicker()
-                }
-                .accessibilityIdentifier("settings.keyboard.advanced")
+            Section {
+                KeyboardHoldSpeedPicker()
+                Toggle("Adaptive Touch", isOn: $adaptiveHitPredictionEnabled)
+                    .accessibilityHint("Nudges the gap between adjacent keys toward the more likely next letter.")
+                    .onChange(of: adaptiveHitPredictionEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+            } footer: {
+                Text("Hold 123 or ABC to open the dictation board. On the board, hold 123 to return to letters.")
             }
         }
-    }
-
-    private var wordsSettings: some View {
-        settingsPage("Words & shortcuts") {
-            Section("Personalization") {
-                NavigationLink {
-                    VocabularyView()
-                } label: {
-                    Label("Vocabulary", systemImage: "character.book.closed")
-                }
-                NavigationLink {
-                    TextSnippetsView()
-                } label: {
-                    Label("Text replacements", systemImage: "text.badge.plus")
-                }
-            }
-        }
-    }
-
-    private var helpSettings: some View {
-        settingsPage("Setup & help") {
-            Section("Help") {
-                NavigationLink("Keyboard setup") {
-                    KeyboardSetupPage(onNext: {})
-                }
-                Button(action: openSystemSettings) {
-                    HStack {
-                        Label("Microphone", systemImage: "mic.fill")
-                        Spacer(minLength: 12)
-                        Text(permissionLabel)
-                            .foregroundStyle(permissionForeground)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens iPhone Settings")
-
-                NavigationLink { troubleshootingView } label: {
-                    Label("Troubleshooting", systemImage: "wrench.and.screwdriver")
-                }
-
-                if let supportURL = URL(string: "https://github.com/enrzh/saiity-fork/issues") {
-                    Link(destination: supportURL) {
-                        Label("Get support", systemImage: "questionmark.circle")
-                    }
-                }
-            }
-        }
-    }
-
-    private var aboutSettings: some View {
-        settingsPage("About") {
-            Section("About") {
-                NavigationLink { LicensesView() } label: {
-                    Label("Licenses", systemImage: "doc.text")
-                }
-
-                if let privacyURL = URL(string: "https://aiity.de/privacy") {
-                    Link(destination: privacyURL) {
-                        Label("Privacy Policy", systemImage: "hand.raised")
-                    }
-                }
-
-                LabeledContent("Version", value: appVersionText)
-                Text("Recognition runs on your iPhone. Installing models uses the network. Optional server cleanup sends text to the server you choose; history and diagnostics have separate local controls.")
-                    .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+        .navigationTitle("Keyboard")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            let intensity = HapticIntensity.load(from: AppGroup.defaults)
+            hapticIntensityRaw = intensity.rawValue
+            intensity.persist()
         }
     }
 
@@ -269,20 +152,58 @@ struct SettingsView: View {
             }
         )
     }
+}
 
-    private var activeOutputMode: TranscriptionOutputMode {
-        TranscriptionOutputMode(storedValue: transcriptionOutputModeRaw)
+struct HelpView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var microphonePermission = AVAudioSession.sharedInstance().recordPermission
+    @State private var diagnosticResult = AppGroupDiagnostic.run()
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink("Keyboard Setup") { KeyboardSetupPage() }
+                Button(action: openSystemSettings) {
+                    LabeledContent("Microphone") {
+                        Text(permissionLabel).foregroundStyle(microphonePermission == .denied ? Color(.systemRed) : .secondary)
+                    }
+                }
+                .foregroundStyle(.primary)
+                .accessibilityHint("Opens iPhone Settings")
+            }
+            Section("Troubleshooting") {
+                NavigationLink("Report Last Dictation") { LastDictationIssueReportView() }
+                NavigationLink("Diagnostics") { DiagnosticDetailView(result: diagnosticResult) }
+                NavigationLink("Debug Logs") { DebugLogView() }
+                NavigationLink("Cleanup Diagnostics") { PolishDebugView() }
+            }
+            Section("This iPhone") {
+                let device = DeviceCapabilities.current()
+                LabeledContent("Memory", value: "\(device.physicalMemoryGB) GB")
+                LabeledContent("Temperature", value: thermalLabel(device.thermalState))
+            }
+            if let supportURL = URL(string: "https://github.com/enrzh/saiity-fork/issues") {
+                Section { Link("Get Support", destination: supportURL) }
+            }
+        }
+        .navigationTitle("Help")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: refresh)
+        .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
-    private var cleanupAvailable: Bool {
-        if modelManager.cleanupBackend != .appleIntelligence { return true }
-        return PolishAvailability.isAppleFMAvailable
+    private func refresh() {
+        microphonePermission = AVAudioSession.sharedInstance().recordPermission
+        diagnosticResult = AppGroupDiagnostic.run()
     }
 
-    private var appVersionText: String {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-        return "\(short) (\(build))"
+    private var permissionLabel: String {
+        switch microphonePermission {
+        case .granted: return String(localized: "Allowed")
+        case .denied: return String(localized: "Off")
+        case .undetermined: return String(localized: "Not Set")
+        @unknown default: return String(localized: "Unknown")
+        }
     }
 
     private func thermalLabel(_ state: ProcessInfo.ThermalState) -> String {
@@ -295,68 +216,33 @@ struct SettingsView: View {
         }
     }
 
-    private var troubleshootingView: some View {
-        List {
-            Section("Setup") {
-                Button("Open iPhone Settings", action: openSystemSettings)
-                Text("Enable Syllivra under General → Keyboard → Keyboards. Allow microphone access for dictation.")
-                    .font(.caption)
-            }
-            Section("On this iPhone") {
-                let device = DeviceCapabilities.current()
-                LabeledContent("Device memory", value: "\(device.physicalMemoryGB) GB")
-                LabeledContent("Thermal condition", value: thermalLabel(device.thermalState))
-            }
-            Section("Diagnostics") {
-                NavigationLink("Report last dictation") { LastDictationIssueReportView() }
-                NavigationLink("Debug Logs") { DebugLogView() }
-                NavigationLink("Cleanup diagnostics") { PolishDebugView() }
-                NavigationLink("Diagnostics") { DiagnosticDetailView(result: diagnosticResult) }
-            }
-        }
-        .navigationTitle("Troubleshooting")
-    }
-
-    @ViewBuilder private var polishStateFooter: some View {
-        let state = PolishAvailability.state
-        if state != .available {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(polishStateMessage(for: state)).font(.caption).foregroundStyle(.secondary)
-                if PolishAvailability.canOpenSystemSettings(for: state) {
-                    Button("Open iPhone Settings", action: openSystemSettings).font(.caption.bold())
-                }
-            }
-        }
-    }
-
-    private var permissionLabel: String {
-        switch microphonePermission {
-        case .granted: return "Allowed"
-        case .denied: return "Denied"
-        case .undetermined: return "Not set"
-        @unknown default: return "Unknown"
-        }
-    }
-
-    private var permissionForeground: Color {
-        switch microphonePermission {
-        case .granted: return .secondary
-        case .denied: return Color(.systemRed)
-        case .undetermined: return Color(.systemOrange)
-        @unknown default: return .secondary
-        }
-    }
-
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
+}
 
-    private func polishStateMessage(for state: PolishAvailabilityState) -> String {
-        switch state {
-        case .available: return ""
-        default: return PolishAvailability.guidance(for: state)
+struct AboutView: View {
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Version", value: appVersionText)
+                NavigationLink("Licenses") { LicensesView() }
+                if let privacyURL = URL(string: "https://aiity.de/privacy") {
+                    Link("Privacy Policy", destination: privacyURL)
+                }
+            } footer: {
+                Text("Speech is recognized on this iPhone. Downloading models uses the network. Server cleanup, if you choose it, sends text to that server.")
+            }
         }
+        .navigationTitle("About")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var appVersionText: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(short) (\(build))"
     }
 }
 
@@ -387,7 +273,7 @@ struct VocabularyView: View {
                 Text("Words you add stay protected from autocorrection. Choose Use in dictation to approve a learned word as a hint.")
             }
 
-            Section("Learned words") {
+            Section {
                 if words.isEmpty {
                     Text("No custom words yet")
                         .foregroundStyle(.secondary)
@@ -421,14 +307,10 @@ struct VocabularyView: View {
                     }
                     .onDelete(perform: deleteWords)
                 }
-            }
-
-            Section {
-                DisclosureGroup("About dictation hints") {
-                    Text("Whisper uses approved spellings for recognition and cleanup. Parakeet uses them during cleanup. Learned words become hints only when you approve them.")
-                    Text("Server cleanup receives only hints already present in its transcript.")
-                    Text("Keep up to 32 hints, each under 65 characters and six words.")
-                }
+            } header: {
+                Text("Learned Words")
+            } footer: {
+                Text("Hints help Whisper recognize a word and help cleanup spell it. Keep up to 32, each under 65 characters and six words. Server cleanup receives only hints already in its transcript.")
             }
 
             if !words.isEmpty {
@@ -513,14 +395,14 @@ struct TextSnippetsView: View {
                     .autocorrectionDisabled()
                 TextField("Expanded text", text: $expansion, axis: .vertical)
                     .lineLimit(2...5)
-                Button("Add replacement", action: addSnippet)
+                Button("Add Replacement", action: addSnippet)
                     .disabled(shortcut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                               || expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } footer: {
                 Text("Type the shortcut and press Space. The expansion is inserted locally before the space.")
             }
 
-            Section("Your replacements") {
+            Section("Your Replacements") {
                 if snippets.isEmpty {
                     Text("No text replacements yet")
                         .foregroundStyle(.secondary)
@@ -539,7 +421,7 @@ struct TextSnippetsView: View {
                 }
             }
         }
-        .navigationTitle("Text replacements")
+        .navigationTitle("Text Replacements")
         .toolbar { EditButton() }
         .onAppear(perform: reload)
     }

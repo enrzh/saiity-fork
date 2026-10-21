@@ -20,7 +20,7 @@ final class DictationReadinessTests: XCTestCase {
         XCTAssertEqual(needed.action, .requestMicrophone)
 
         let missing = make()
-        XCTAssertEqual(missing.title, "Choose a local model")
+        XCTAssertEqual(missing.title, "Download a voice model")
         XCTAssertEqual(missing.action, .none)
 
         let loading = make(modelReady: true, modelLoadState: .loading)

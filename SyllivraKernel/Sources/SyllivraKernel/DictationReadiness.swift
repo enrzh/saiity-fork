@@ -31,11 +31,11 @@ public struct DictationReadiness: Equatable, Sendable {
         }
 
         if microphonePermission.isRecoverable {
-            self.init(title: "Microphone access is off", subtitle: microphonePermission.recoveryMessage ?? "Enable microphone access in Settings.", symbol: "mic.slash", action: .openSettings)
+            self.init(title: "Microphone access is off", subtitle: microphonePermission == .restricted ? microphonePermission.recoveryMessage ?? "" : "Allow Syllivra to use the microphone in Settings.", symbol: "mic.slash", action: .openSettings)
             return
         }
         if !microphonePermission.isAuthorized {
-            self.init(title: "Microphone access needed", subtitle: "Microphone access has not been granted yet.", symbol: "mic.badge.plus", action: .requestMicrophone)
+            self.init(title: "Microphone access needed", subtitle: "Syllivra listens only while you dictate.", symbol: "mic.badge.plus", action: .requestMicrophone)
             return
         }
         if let modelLoadFailure, !modelLoadFailure.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -53,11 +53,11 @@ public struct DictationReadiness: Equatable, Sendable {
             return
         }
         if modelLoadState == .loading && !DictationSessionLivenessPolicy.isActive(status) {
-            self.init(title: "Preparing your model", subtitle: "Your local model is preparing for offline dictation.", symbol: "arrow.triangle.2.circlepath", action: .none)
+            self.init(title: "Preparing your model", subtitle: "This takes a moment the first time.", symbol: "arrow.triangle.2.circlepath", action: .none)
             return
         }
         if !modelReady && !DictationSessionLivenessPolicy.isActive(status) {
-            self.init(title: "Choose a local model", subtitle: "Choose a local model to begin.", symbol: "arrow.down.circle", action: .none)
+            self.init(title: "Download a voice model", subtitle: "Speech is recognized on this iPhone, so Syllivra needs a voice model first.", symbol: "arrow.down.circle", action: .none)
             return
         }
 

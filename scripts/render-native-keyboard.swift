@@ -190,6 +190,12 @@ final class FixtureController: KeyboardViewController {
                                 guard let pager = emojiPager(in: controller.view) else {
                                     fatalError("Emoji lost its native canvas")
                                 }
+                                guard let surface = pager.superview as? KeyboardSurfaceView else {
+                                    fatalError("Emoji lost its shared native surface")
+                                }
+                                precondition(pager.frame.maxX + VoiceOnlyKeyboardPolicy.visibleControlGap
+                                             <= surface.emojiDelete.frame.minX + 0.5,
+                                             "Delete covers selectable emoji cells")
                                 // Use a full public category so a partly filled
                                 // Recents page cannot hide the last row.
                                 pager.selectCategory(at: 1)

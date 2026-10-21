@@ -21,29 +21,20 @@ struct MicPermissionPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            SaiityPageHeader(title: "Allow microphone access",
-                             subtitle: "Syllivra uses the microphone when you start a dictation.")
-            VStack(alignment: .leading, spacing: 20) {
-                Text("iOS will ask for microphone access. You can change it at any time in Settings.")
-                    .foregroundStyle(.secondary)
-                if permissionGranted == true {
-                    Label("Microphone authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-                } else if permissionGranted == false {
-                    Text("Dictation needs the microphone. You can finish setup and turn the microphone on later in Settings.")
-                        .foregroundStyle(.secondary)
-                }
+            SaiityPageHeader(title: "Allow microphone access", subtitle: subtitle)
+            if permissionGranted == true {
+                Label("Microphone allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             if permissionGranted == nil {
-                Button("Allow microphone", action: requestPermission)
+                Button("Allow Microphone", action: requestPermission)
                     .buttonStyle(.borderedProminent).controlSize(.large).disabled(isRequesting)
             } else if permissionGranted == true {
                 Button("Continue", action: onNext)
                     .buttonStyle(.borderedProminent).controlSize(.large)
             } else {
-                Button(action: openSettings) { Label("Open Settings", systemImage: "arrow.up.right") }
+                Button("Open Settings", action: openSettings)
                     .buttonStyle(.borderedProminent).controlSize(.large)
-                Button("Continue without microphone", action: onNext)
+                Button("Continue Without Microphone", action: onNext)
                     .buttonStyle(.bordered).controlSize(.large)
             }
         }
@@ -51,8 +42,14 @@ struct MicPermissionPage: View {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             refreshPermission()
-            UIAccessibility.post(notification: .announcement, argument: permissionGranted == true ? "Microphone authorized" : "Microphone permission still required")
+            UIAccessibility.post(notification: .announcement, argument: permissionGranted == true ? "Microphone allowed" : "Microphone permission still required")
         }
+    }
+
+    private var subtitle: LocalizedStringKey {
+        permissionGranted == false
+            ? "Dictation needs the microphone. Turn it on in Settings now, or later when you’re ready."
+            : "Syllivra listens only while you dictate. You can change this at any time in Settings."
     }
 
     // MARK: - Private

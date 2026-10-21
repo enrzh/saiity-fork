@@ -103,55 +103,30 @@ enum SoundFeedbackService {
     }
 
     /// Play the recording-start sound.
-    /// Default: "electronic_01f" (short distinct beep)
     static func playRecordStart() {
         guard isEnabled() else { return }
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        let name = defaults?.string(forKey: SharedKeys.recordStartSoundName) ?? "electronic_01f"
-        play(name)
+        play(soundName(for: SharedKeys.recordStartSoundName, default: "electronic_01f"))
     }
 
     /// Play the recording-stop sound.
-    /// Default: "electronic_02b"
     static func playRecordStop() {
         guard isEnabled() else { return }
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        let name = defaults?.string(forKey: SharedKeys.recordStopSoundName) ?? "electronic_02b"
-        play(name)
+        play(soundName(for: SharedKeys.recordStopSoundName, default: "electronic_02b"))
     }
 
     /// Play the recording-cancel sound.
-    /// Default: "electronic_03c"
     static func playRecordCancel() {
         guard isEnabled() else { return }
-        let defaults = UserDefaults(suiteName: AppGroup.identifier)
-        let name = defaults?.string(forKey: SharedKeys.recordCancelSoundName) ?? "electronic_03c"
-        play(name)
+        play(soundName(for: SharedKeys.recordCancelSoundName, default: "electronic_03c"))
     }
 
     // MARK: - Sound Catalog
 
-    /// All available sound file names (without extension), sorted alphabetically.
-    static func availableSounds() -> [String] {
-        [
-            "electronic_01a", "electronic_01b", "electronic_01c",
-            "electronic_01d", "electronic_01e", "electronic_01f",
-            "electronic_02a", "electronic_02b", "electronic_02c",
-            "electronic_02d", "electronic_02e", "electronic_02f",
-            "electronic_03a", "electronic_03b", "electronic_03c",
-            "electronic_03d", "electronic_03e", "electronic_03f",
-            "electronic_03g", "electronic_03h", "electronic_03i",
-            "electronic_04a", "electronic_04b", "electronic_04c",
-            "electronic_04d", "electronic_04e", "electronic_04f",
-            "electronic_04g",
-            "ui_chime_01"
-        ]
-    }
+    /// The bundled sounds. A different name saved by an older build plays the default.
+    private static let bundledSounds: Set = ["electronic_01f", "electronic_02b", "electronic_03c"]
 
-    /// Format a sound file name for display in the UI.
-    /// Example: "electronic_01a" -> "Electronic 01a"
-    static func displayName(for soundName: String) -> String {
-        let formatted = soundName.replacingOccurrences(of: "_", with: " ")
-        return formatted.prefix(1).uppercased() + formatted.dropFirst()
+    private static func soundName(for key: String, default name: String) -> String {
+        let stored = UserDefaults(suiteName: AppGroup.identifier)?.string(forKey: key)
+        return stored.flatMap { bundledSounds.contains($0) ? $0 : nil } ?? name
     }
 }

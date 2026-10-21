@@ -6,7 +6,7 @@ import SyllivraKernel
 /// The keyboard dictation intent this process was *launched with*, if any.
 ///
 /// WHY this exists (issue #264):
-/// `MainTabView` decided cold start inside `.onOpenURL`, and SwiftUI evaluates `body` at
+/// `RootView` decided cold start inside `.onOpenURL`, and SwiftUI evaluates `body` at
 /// least once before any URL handler runs. On a keyboard-launched cold start the home
 /// screen was therefore always drawn for a frame before the swipe-back overlay replaced
 /// it. Reading `SharedKeys.coldStartActive` does not help: that flag is written by
@@ -15,7 +15,7 @@ import SyllivraKernel
 ///
 /// The launch URL is the only source of truth that exists early enough. iOS hands it to
 /// the scene in `scene(_:willConnectTo:options:)`, before SwiftUI builds any view, so
-/// `MainTabView` can seed its state from it in `init`.
+/// `RootView` can seed its state from it in `init`.
 ///
 /// WHY this does NOT consume the URL:
 /// `.onOpenURL` still fires for the same launch URL and remains the only place that starts
@@ -24,11 +24,11 @@ import SyllivraKernel
 /// later engine-dead restart look like a warm start.
 ///
 /// THREADING: main thread only, by construction. The three call sites are
-/// `scene(_:willConnectTo:options:)`, `MainTabView.init` and the view's
+/// `scene(_:willConnectTo:options:)`, `RootView.init` and the view's
 /// `scenePhase` handler, all of which UIKit and SwiftUI run on the main thread.
 /// The target builds in Swift 5 language mode, so the invariant is documented
 /// rather than annotated: marking the enum `@MainActor` would make it
-/// unreachable from `MainTabView.init`, which is nonisolated. Enforcing it
+/// unreachable from `RootView.init`, which is nonisolated. Enforcing it
 /// belongs to a Swift 6 migration, not here.
 enum ColdStartLaunch {
     /// The intent carried by the launch URL. `nil` for every other launch path

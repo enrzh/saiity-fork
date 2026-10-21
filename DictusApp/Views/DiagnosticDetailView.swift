@@ -7,7 +7,7 @@ import SyllivraKernel
 ///
 /// WHY extracted from ContentView:
 /// This view was originally defined inline in ContentView. Now that ContentView is
-/// replaced by MainTabView + HomeView, DiagnosticView moves to its own file so it
+/// replaced by RootView + HomeView, DiagnosticView moves to its own file so it
 /// can be reused in Settings > A propos > Diagnostic (Plan 04-02).
 struct DiagnosticDetailView: View {
     let result: DiagnosticResult

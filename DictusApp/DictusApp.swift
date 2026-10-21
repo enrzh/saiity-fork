@@ -151,7 +151,7 @@ struct DictusApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            RootView()
                 .environmentObject(coordinator)
                 .environmentObject(proStatus)
                 .environmentObject(subscriptionManager)
@@ -285,7 +285,7 @@ struct DictusApp: App {
                     AppGroup.defaults.set(completed, forKey: SharedKeys.hasCompletedOnboarding)
                     AppGroup.defaults.synchronize()
                     // WHY this notification:
-                    // MainTabView's HomeView mounts BEHIND the fullScreenCover before
+                    // RootView's HomeView mounts BEHIND the fullScreenCover before
                     // onboarding completes. Its onAppear fires early with stale state.
                     // When onboarding finishes and the cover dismisses, onAppear does NOT
                     // re-fire. This notification tells HomeView to refresh model state.

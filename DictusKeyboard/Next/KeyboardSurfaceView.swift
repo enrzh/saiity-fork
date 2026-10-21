@@ -38,7 +38,8 @@ final class KeyboardSurfaceView: UIView {
         isHidden = next != .letters && next != .panel && next != .emoji
         bottomBar.show(next, layout: layout, inputHeight: inputHeight, fieldKeys: fieldKeys)
         let surface = layout.surfaceFrame
-        let pager = CGRect(x: surface.minX, y: surface.minY, width: surface.width,
+        let pager = CGRect(x: surface.minX, y: surface.minY,
+                           width: max(0, layout.boardDeleteFrame.minX - surface.minX - VoiceOnlyKeyboardPolicy.visibleControlGap),
                            height: max(0, layout.floatingEmojiCategoryFrame.minY - surface.minY))
         emoji.frame = layout.inputFrame(pager, inputViewHeight: inputHeight)
         emojiCategory.frame = layout.inputFrame(layout.floatingEmojiCategoryFrame, inputViewHeight: inputHeight)
@@ -68,7 +69,7 @@ final class KeyboardSurfaceView: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, isUserInteractionEnabled, alpha > 0.01,
               bounds.contains(point) else { return nil }
-        // Delete floats over the full-width pager. Category hit expansion only
+        // Delete owns its utility column beside the pager. Category hit expansion only
         // claims free space; it must not intercept the newly extended last row.
         for owner in [emojiDelete, bottomBar, emoji, emojiCategory] as [UIView] {
             guard !owner.isHidden, owner.isUserInteractionEnabled, owner.alpha > 0.01 else { continue }

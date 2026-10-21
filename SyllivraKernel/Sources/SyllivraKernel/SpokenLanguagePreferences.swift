@@ -60,7 +60,7 @@ public enum SpokenLanguagePreferences {
     }
 
     public static func summary(_ codes: [String]) -> String {
-        codes.isEmpty ? "Broad language support" : codes.map(displayName).joined(separator: ", ")
+        codes.isEmpty ? "Any Language" : codes.map(displayName).joined(separator: ", ")
     }
     public static func displayName(_ code: String) -> String { Locale.current.localizedString(forLanguageCode: code) ?? code }
 }

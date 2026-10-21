@@ -24,7 +24,7 @@ struct OnboardingView: View {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
                 ScrollView {
-                    stageContent.frame(maxWidth: 560).frame(maxWidth: .infinity)
+                    stageContent.fullWidthButtons().frame(maxWidth: 560).frame(maxWidth: .infinity)
                         .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 24)
                 }.scrollBounceBehavior(.basedOnSize)
             }
@@ -214,5 +214,12 @@ struct AvailabilityPage: View {
         modelManager.startCatalogDownload(recommendedModel) { detail in
             errorMessage = detail.isEmpty ? "Could not install the voice model. Try again." : detail
         }
+    }
+}
+
+extension View {
+    /// Buttons fill the column, as on Apple's own setup screens (iOS 26 and later).
+    @ViewBuilder func fullWidthButtons() -> some View {
+        if #available(iOS 26.0, *) { buttonSizing(.flexible) } else { self }
     }
 }

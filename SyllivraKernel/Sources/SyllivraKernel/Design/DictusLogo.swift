@@ -2,25 +2,17 @@
 import SwiftUI
 import UIKit
 
-/// The same Icon Composer artwork in the app, keyboard and Live Activity.
+/// The voice mark from the Icon Composer artwork, without its app-icon background,
+/// shared by the app, keyboard and Live Activity.
 public struct DictusLogo: View {
     public var height: CGFloat
-    public var foregroundOnly: Bool
     public var tint: Color
-    public init(height: CGFloat = 80, foregroundOnly: Bool = false, tint: Color = .saiityAction) {
+    public init(height: CGFloat = 80, tint: Color = .saiityAction) {
         self.height = height
-        self.foregroundOnly = foregroundOnly
         self.tint = tint
     }
     public var body: some View {
-        Group {
-            if foregroundOnly {
-                VoiceRibbons().fill(tint)
-            } else {
-                Image("SaiityBrand", bundle: .module).resizable().scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: height * 0.22))
-            }
-        }
+        VoiceRibbons().fill(tint)
             .frame(width: height, height: height)
             .accessibilityLabel("Syllivra")
     }

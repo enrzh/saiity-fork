@@ -17,6 +17,7 @@ struct ModelManagerView: View {
     @State private var customModelToDelete: CustomModel?
     @State private var searchText = ""
     @State private var showsProcessingModels = false
+    @AppStorage(SharedKeys.dictationRealtimeText, store: AppGroup.defaults) private var realtime = false
     @Environment(\.dynamicTypeSize) private var typeSize
     @EnvironmentObject private var coordinator: DictationCoordinator
 
@@ -139,8 +140,7 @@ struct ModelManagerView: View {
         modelList
             .listStyle(.insetGrouped)
             .textCase(nil)
-            .contentMargins(.bottom, 88, for: .scrollContent)
-        .navigationTitle("Models")
+            .navigationTitle("Models")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: showsProcessingModels ? "Processing model" : "Voice model or language")
     }
@@ -166,19 +166,18 @@ struct ModelManagerView: View {
                 dictationCleanupSection
             } else {
                 Section {
-                    currentModelRow("In app", keyboard: false)
+                    currentModelRow("In App", keyboard: false)
                     currentModelRow("Keyboard", keyboard: true)
-                    NavigationLink {
-                        VoiceOptionsView(modelManager: modelManager)
-                    } label: {
-                        Text("Voice options")
+                    if modelManager.activeModel.flatMap(ModelInfo.forIdentifier)?.engine == .qwenASR {
+                        Toggle("Realtime Text", isOn: $realtime).accessibilityIdentifier("dictation.realtime")
                     }
                 } header: {
-                    Text("In use")
+                    Text("In Use")
                 } footer: {
-                    Text("Choose from installed models. App and keyboard choices are independent.")
                     if !coordinator.canChangeSpeechRuntime {
                         Text("Finish this dictation before changing voice settings.")
+                    } else {
+                        Text("Automatic picks the best installed model for your languages and this iPhone.")
                     }
                 }
                 installedSection
@@ -191,7 +190,7 @@ struct ModelManagerView: View {
     private func currentModelRow(_ title: LocalizedStringKey, keyboard: Bool) -> some View {
         let identifier = keyboard
             ? AppGroup.defaults.string(forKey: SharedKeys.keyboardDictationModel) ?? "automatic"
-            : modelManager.activeModel ?? "unavailable"
+            : modelManager.selectionMode == .automatic ? "automatic" : modelManager.activeModel ?? "unavailable"
         let choices = ModelInfo.installedRows(from: ModelInfo.allIncludingDeprecated).filter {
             isInstalled($0) && (!keyboard || $0.engine != .qwenASR)
                 && $0.isRuntimeAvailable(onOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
@@ -201,14 +200,13 @@ struct ModelManagerView: View {
             get: { identifier },
             set: { selected in
                 if keyboard { modelManager.chooseKeyboardModel(selected) }
+                else if selected == "automatic" { modelManager.setSelectionProfile(.recommended) }
                 else { modelManager.selectModel(selected) }
             }
         )) {
-            if keyboard {
-                Text(modelManager.keyboardModel.flatMap(ModelInfo.forIdentifier).map {
-                    "Automatic (\($0.displayName))"
-                } ?? "Automatic").tag("automatic")
-            }
+            let automatic = keyboard ? modelManager.keyboardModel : modelManager.selectionMode == .automatic ? modelManager.activeModel : nil
+            Text(automatic.flatMap(ModelInfo.forIdentifier).map { "Automatic (\($0.displayName))" } ?? "Automatic")
+                .tag("automatic")
             if identifier != "automatic" && !choices.contains(where: { $0.identifier == identifier }) {
                 Text(ModelInfo.forIdentifier(identifier)?.displayName ?? String(localized: "No compatible model"))
                     .tag(identifier).disabled(true)
@@ -218,23 +216,18 @@ struct ModelManagerView: View {
             }
         }
         .pickerStyle(.menu)
-        .disabled(!coordinator.canChangeSpeechRuntime || (!keyboard && choices.isEmpty))
+        .disabled(!coordinator.canChangeSpeechRuntime)
         .accessibilityIdentifier(keyboard ? "models.keyboardModel" : "models.appModel")
     }
 
     @ViewBuilder
     private var installedSection: some View {
-        Section {
-            if installedModels.isEmpty {
-                Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No models installed. Download a voice model below." : "No matching installed models")
-                    .foregroundStyle(.secondary)
-            } else {
+        if !installedModels.isEmpty {
+            Section("Installed") {
                 ForEach(installedModels) { model in
                     modelRow(model)
                 }
             }
-        } header: {
-            Text("Installed")
         }
     }
 
@@ -253,9 +246,9 @@ struct ModelManagerView: View {
                 }
             }
         } header: {
-            Text("Downloads")
+            Text("Available")
         } footer: {
-            Text("Voice models run on this iPhone. Recommendations reflect compatibility, not measured accuracy or speed on your device.")
+            Text("Voice models run on this iPhone. Recommended means compatible with it and your languages.")
         }
     }
 

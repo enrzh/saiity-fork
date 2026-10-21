@@ -148,7 +148,7 @@ final class KeyboardRegressionTests: XCTestCase {
     func testLanguageIndicatorShowsBareOutputCode() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         let request = try source("SyllivraKernel/Sources/SyllivraKernel/DictationLanguageRequest.swift")
-        XCTAssertTrue(root.contains("title: \"AUTO\""))
+        XCTAssertTrue(root.contains("title: \"Automatic\""))
         XCTAssertTrue(request.contains("return \"Translate to \\(target.displayName)\""))
         XCTAssertFalse(root.contains("return target.shortCode"))
         XCTAssertFalse(root.contains("return \"->\\(target.shortCode)\""))

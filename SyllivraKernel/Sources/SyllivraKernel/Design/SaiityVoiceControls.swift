@@ -18,7 +18,7 @@ public struct SaiityVoiceSignal: View {
     }
 
     public var body: some View {
-        DictusLogo(height: height, foregroundOnly: true)
+        DictusLogo(height: height)
             .scaleEffect(x: 1, y: scale)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: scale)
             .accessibilityHidden(true)
