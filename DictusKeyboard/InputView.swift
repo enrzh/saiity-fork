@@ -94,11 +94,17 @@ class KeyboardInputView: UIInputView, UIInputViewAudioFeedback {
         return hit
     }
 
+    /// A remote keyboard only receives touches over painted pixels; a tap on a
+    /// fully clear point goes nowhere. This faint canvas covers the whole
+    /// keyboard, including the dictation board's top lane where More and power
+    /// sit, while the system keyboard backdrop still shows through.
+    static let touchCanvas = UIColor.secondarySystemBackground.withAlphaComponent(0.02)
+
     private func reassertTransparentBackdrop() {
-        backgroundColor = .clear
+        backgroundColor = Self.touchCanvas
         isOpaque = false
         clipsToBounds = false
         layer.masksToBounds = false
-        layer.backgroundColor = UIColor.clear.cgColor
+        layer.backgroundColor = Self.touchCanvas.resolvedColor(with: traitCollection).cgColor
     }
 }

@@ -100,6 +100,7 @@ struct KeyboardSettingsView: View {
                     .accessibilityIdentifier("keyboard-top-bar-setting")
                     .accessibilityHint("Shows More, dictation power and the dictation board shortcut above typing pages.")
                     .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
+                KeyPopupPicker()
                 Picker("Haptics", selection: hapticPresetBinding) {
                     ForEach(HapticIntensity.allCases, id: \.self) { preset in
                         Text(preset.displayName).tag(preset)

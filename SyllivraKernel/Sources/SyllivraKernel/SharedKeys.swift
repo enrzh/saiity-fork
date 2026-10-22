@@ -123,6 +123,10 @@ public enum SharedKeys {
     /// Retired styling preference. Kept for compatibility; current keyboards ignore it.
     public static let keyboardIOSStyling = "dictus.keyboardIOSStyling"
     public static let keyboardTopBarEnabled = "dictus.keyboardTopBarEnabled"
+    /// Whether long-press alternate-character popups are enabled, default true
+    public static let keyPopupsEnabled = "dictus.keyPopupsEnabled"
+    /// Off / popup / popout / one-shot key flash. Migrates from `keyPopupsEnabled`.
+    public static let keyPopupMode = "dictus.keyPopupMode"
     /// Off / Live Activity / Picture in Picture presence while dictating.
     public static let dictationPresenceMode = "dictus.dictationPresenceMode"
     /// JSON array of the last 30 successful dictations for the Home recents list.

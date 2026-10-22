@@ -100,8 +100,6 @@ class KeyboardViewController: UIInputViewController,
     /// keyboard's opener and reappearance does not depend on SwiftUI onAppear.
     var openContainingApp: ((URL, @escaping (Bool) -> Void) -> Void)?
     private var keyboardSurfaceView: KeyboardSurfaceView?
-    /// One passive inset behind every page and its bottom bar.
-    private let surfaceBackdrop = KeyboardNativeControlFace()
     private var actionControlsView: UIView?
     /// The single touch owner for the active key grid. It lives on the input view,
     /// not inside `actionControlsView`, because that overlay hides itself on the
@@ -349,7 +347,7 @@ class KeyboardViewController: UIInputViewController,
         // causes the view to collapse to zero width.
         // Reassert this after UIKit has constructed the keyboard-style input view;
         // otherwise the style can leave an opaque rectangular layer behind the
-        // inset SwiftUI surface.
+        // SwiftUI surface.
         kbInputView.isOpaque = false
         kbInputView.clipsToBounds = false
         kbInputView.layer.masksToBounds = false
@@ -378,7 +376,7 @@ class KeyboardViewController: UIInputViewController,
         // right and did not answer.
         //
         // Both that grid and this hand-off are gone. The SwiftUI surface keeps the
-        // bottom bar, the suggestion lane and the glass rim — the things that are not
+        // bottom bar and the suggestion lane — the things that are not
         // keys — and the grid draws and hit-tests the keys, so there is one of each.
         let rootView = KeyboardRootView(
             controllerID: controllerID,
@@ -1480,9 +1478,6 @@ class KeyboardViewController: UIInputViewController,
         keyGridOwner = keyOwner
         KeyGridTouchBus.attach(keyOwner)
 
-        surfaceBackdrop.accessibilityIdentifier = "keyboard-shared-inset"
-        surfaceBackdrop.layer.zPosition = -1
-        inputView.addSubview(surfaceBackdrop)
         let surface = KeyboardSurfaceView(frame: inputView.bounds)
         surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         surface.layer.zPosition = 200
@@ -1718,7 +1713,6 @@ class KeyboardViewController: UIInputViewController,
         func inputFrame(_ frame: CGRect) -> CGRect {
             layout.inputFrame(frame, inputViewHeight: inputView.bounds.height)
         }
-        surfaceBackdrop.configureInset(layout, inputHeight: inputView.bounds.height)
         // Keep subtracting the old lane until the host actually applies the new
         // window height. Repeated layout passes must not grow a hidden lane back.
         if abs(inputView.bounds.height - requestedHeight) < 0.5 {

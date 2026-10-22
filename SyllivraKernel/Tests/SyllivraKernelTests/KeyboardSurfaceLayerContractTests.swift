@@ -12,9 +12,10 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testInputControllerContainerDoesNotPaintASecondKeyboardBackdrop() throws {
         let source = try read("DictusKeyboard/InputView.swift")
 
-        XCTAssertTrue(source.contains("backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("touchCanvas = UIColor.secondarySystemBackground.withAlphaComponent(0.02)"),
+                      "a faint canvas lets touches reach the remote keyboard without a visible backdrop")
         XCTAssertTrue(source.contains("isOpaque = false"))
-        XCTAssertTrue(source.contains("layer.backgroundColor = UIColor.clear.cgColor"))
+        XCTAssertTrue(source.contains("layer.backgroundColor = Self.touchCanvas.resolvedColor(with: traitCollection).cgColor"))
     }
 
     func testInputControllerReassertsTransparencyAfterUIKitAttachmentAndLayout() throws {
@@ -68,7 +69,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         let categories = try read("DictusKeyboard/Views/EmojiCategoryBar.swift")
 
         XCTAssertTrue(root.contains("areaSurface(layout: layout, contentFrame: surfaceFrame)"))
-        XCTAssertTrue(try read("DictusKeyboard/KeyboardViewController.swift").contains("surfaceBackdrop.configureInset(layout"))
+        XCTAssertFalse(try read("DictusKeyboard/KeyboardViewController.swift").contains("surfaceBackdrop"))
         XCTAssertFalse(emoji.contains("view.backgroundView = material"))
         XCTAssertFalse(categories.contains("keyboardGlass(in: Capsule())"))
         XCTAssertFalse(categories.contains("contentOffset"))
@@ -93,13 +94,12 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
                       "the native emoji surface must reserve four rows")
     }
 
-    func testInsetSurfaceUsesOpaqueSystemFillForAccessibilityFallback() throws {
+    func testKeyPlatesUseOpaqueSystemFillsWithAccessibilityContrast() throws {
         let root = try read("DictusKeyboard/KeyboardRootView.swift")
         let plates = try read("DictusKeyboard/KeyboardKeyStyle.swift")
 
-        XCTAssertTrue(plates.contains("if reduceTransparency || accessibilityContrast == .increased"))
         XCTAssertTrue(plates.contains("role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)"))
-        XCTAssertTrue(plates.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertFalse(plates.contains("glassEffect("))
         XCTAssertTrue(plates.contains("case .input, .control: return .tertiarySystemBackground"))
         XCTAssertTrue(root.contains("background(Color.clear)"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("keyboardGlass(in: shape, role: role)"))
@@ -185,7 +185,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
         XCTAssertFalse(source.contains("Text(\"|\")"))
         XCTAssertTrue(source.contains("commandHitSize"))
         XCTAssertTrue(source.contains("Open letter keyboard"))
-        XCTAssertTrue(style.contains("glassEffect(.regular.interactive(), in: shape)"))
+        XCTAssertFalse(style.contains("glassEffect("))
         XCTAssertTrue(style.contains("case .input, .control: return .tertiarySystemBackground"))
         XCTAssertFalse(style.contains("systemGroupedBackground"),
                        "solid key plates use tertiary fill, not a grouped board slab")

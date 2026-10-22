@@ -31,7 +31,7 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Picker(\"Haptics\", selection: hapticPresetBinding)"))
         XCTAssertTrue(source.contains("Toggle(\"Show Top Bar\""))
         XCTAssertFalse(source.contains("Toggle(\"Key Containers\""))
-        XCTAssertFalse(source.contains("KeyPopupPicker()"))
+        XCTAssertTrue(source.contains("KeyPopupPicker()"))
         XCTAssertTrue(source.contains("DictationPresencePicker()"))
         XCTAssertTrue(source.contains("if polishEnabled && cleanupAvailable {"),
                       "writing style must not be offered when cleanup cannot run")

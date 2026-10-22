@@ -2,11 +2,10 @@ import SwiftUI
 import UIKit
 import SyllivraKernel
 
-/// Shared visual role used by both Solid and Liquid Glass keyboard faces.
+/// Shared visual role of a keyboard face.
 enum KeyboardChromeRole {
     case input
     case control
-    case board
     case accessory
     case popup
 
@@ -18,7 +17,6 @@ enum KeyboardChromeRole {
         switch self {
         case .input, .control: return .tertiarySystemBackground
         case .accessory: return .clear
-        case .board: return .secondarySystemBackground
         case .popup: return .tertiarySystemBackground
         }
     }
@@ -47,16 +45,17 @@ struct KeyboardDictationFaceStyle {
     }
 }
 
-/// A visual-only material component. Input belongs to `KeyboardKeyTouchControl`.
+/// The shared opaque plate behind keys and popups. Input belongs to
+/// `KeyboardKeyTouchControl`. Keys sit directly on the system keyboard backdrop,
+/// like the system keyboard: there is no board slab and no glass.
 struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     let shape: S
-    var interactive: Bool = true
     var role: KeyboardChromeRole = .control
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var accessibilityContrast: ColorSchemeContrast
 
     func body(content: Content) -> some View {
-        // Material is a background, never an input policy for its content.
+        // The plate is a background, never an input policy for its content.
         content.background {
             plate(Color.clear).allowsHitTesting(false)
         }
@@ -66,40 +65,11 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
     private func plate<Plate: View>(_ content: Plate) -> some View {
         if role == .accessory {
             content.allowsHitTesting(false)
-        } else if role != .board {
-            // Keys and popups are opaque, like the system keyboard. Glass over the
-            // extension's transparent backdrop renders light, which hid the white
-            // glyph of a dark-mode popup.
+        } else {
             content.background {
                 shape.fill(solidFill)
                     .shadow(color: .black.opacity(role == .popup ? 0.2 : 0), radius: 2, y: 1)
                     .allowsHitTesting(false)
-            }
-            .allowsHitTesting(false)
-        } else if reduceTransparency || accessibilityContrast == .increased {
-            content.background {
-                shape.fill(Color(uiColor: role.solidFill(increasedContrast: reduceTransparency || accessibilityContrast == .increased)))
-                    .allowsHitTesting(false)
-            }
-            .allowsHitTesting(false)
-        } else if #available(iOS 26, *) {
-            // WHY `.allowsHitTesting(false)` here and not only in `body`: on iOS
-            // 26 `glassEffect` installs a UIKit-backed material view. Relying on
-            // the modifier wrapping the result to switch it off is not enough —
-            // that layer can win the hit test on its own, and it did: Liquid Glass
-            // letter/number/symbol keys became untappable while the separate
-            // UIKit chrome buttons above the host kept working. Every branch now
-            // marks the material non-hit-testable at the point it is installed.
-            if interactive {
-                content.glassEffect(.regular.interactive(), in: shape)
-                    .allowsHitTesting(false)
-            } else {
-                content.glassEffect(.regular, in: shape)
-                    .allowsHitTesting(false)
-            }
-        } else {
-            content.background {
-                shape.fill(.regularMaterial).allowsHitTesting(false)
             }
             .allowsHitTesting(false)
         }
@@ -113,14 +83,9 @@ struct KeyboardGlassSurface<S: Shape>: ViewModifier {
 extension View {
     func keyboardGlass<S: Shape>(
         in shape: S,
-        interactive: Bool = true,
         role: KeyboardChromeRole = .control
     ) -> some View {
-        modifier(KeyboardGlassSurface(
-            shape: shape,
-            interactive: role == .board ? false : interactive,
-            role: role
-        ))
+        modifier(KeyboardGlassSurface(shape: shape, role: role))
     }
 
     func letterKeyPlate(cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.keyCornerRadius) -> some View {
@@ -128,10 +93,7 @@ extension View {
     }
 
     func commandKeyPlate(cornerRadius: CGFloat = VoiceOnlyKeyboardPolicy.commandKeyCornerRadius) -> some View {
-        keyboardGlass(
-            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-            interactive: false
-        )
+        keyboardGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
@@ -217,7 +179,7 @@ struct CommandKeyFace: View {
         .background {
             let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             if accented { shape.fill(Color.saiityAction).allowsHitTesting(false) }
-            else { Color.clear.keyboardGlass(in: shape, interactive: false, role: role) }
+            else { Color.clear.keyboardGlass(in: shape, role: role) }
         }
         // The numbers come from the shared command-key treatment, which the UIKit
         // grid reads too. Hardcoding them here is how the two drifted apart.
@@ -242,7 +204,6 @@ private struct LetterKeyPlateModifier: ViewModifier {
                 .fill(Color.clear)
                 .keyboardGlass(
                     in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                    interactive: false,
                     role: .input
                 )
                 .allowsHitTesting(false)

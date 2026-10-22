@@ -31,7 +31,7 @@ struct KeyboardRootView: View {
             let surfaceFrame = layout.surfaceFrame
             ZStack(alignment: .topLeading) {
                 // Keep the hosting canvas transparent so the native UIInputView
-                // backdrop is the only layer behind the inset surface.
+                // backdrop is the only layer behind the keys.
                 Color.clear
                     .allowsHitTesting(false)
                 embeddedSurface(

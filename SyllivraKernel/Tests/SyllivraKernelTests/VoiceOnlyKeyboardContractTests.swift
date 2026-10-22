@@ -640,7 +640,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         XCTAssertTrue(inputView.contains("inputViewStyle: .keyboard"))
-        XCTAssertTrue(inputView.contains("backgroundColor = .clear"))
+        XCTAssertTrue(inputView.contains("backgroundColor = Self.touchCanvas"))
         XCTAssertTrue(inputView.contains("isOpaque = false"))
         XCTAssertTrue(controller.contains("hosting.view.isOpaque = false"),
                       "the hosting view must not create a rectangular backdrop")
@@ -1220,7 +1220,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("button.tintColor = .label"))
     }
 
-    func testKeyboardRootUsesEmbeddedGlassSurfaceAndStableMicPlacement() throws {
+    func testKeyboardRootUsesEmbeddedSurfaceAndStableMicPlacement() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
 
         let plates = try source("DictusKeyboard/KeyboardKeyStyle.swift")
@@ -1229,8 +1229,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue((try relocatedKeyboardSource()).contains("keyboardGlass(in: shape, role: role)"))
         XCTAssertFalse(root.contains("glassEffect("),
                        "KeyboardRootView must use KeyboardGlassSurface instead of its own material branch")
-        XCTAssertTrue(plates.contains("glassEffect(.regular"))
-        XCTAssertTrue(plates.contains(".regularMaterial"))
+        XCTAssertFalse(plates.contains("glassEffect("), "keys sit on the transparent keyboard without glass")
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonBackground"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("KeyboardDictationFaceStyle"))
         XCTAssertTrue((try relocatedKeyboardSource()).contains("dictationButtonForeground"))
@@ -1369,7 +1368,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
     func testSwiftUIVoiceOwnershipDoesNotDependOnMaterial() throws {
         let root = try source("DictusKeyboard/KeyboardChrome.swift")
         let start = try XCTUnwrap(root.range(of: "var voiceBoardUsesUIKitHits"))
-        let end = try XCTUnwrap(root.range(of: "@ViewBuilder\n    func appleControlSurface", range: start.upperBound..<root.endIndex))
+        let end = try XCTUnwrap(root.range(of: "func appleControlSurface", range: start.upperBound..<root.endIndex))
         let body = String(root[start.lowerBound..<end.lowerBound])
 
         XCTAssertTrue(body.contains("state.areaMode == .keys || state.areaMode == .recording"))
@@ -1436,8 +1435,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       colors.contains(".secondarySystemBackground"),
                       "the shared background tokens must be system colors")
         XCTAssertTrue(plates.contains(".tertiarySystemFill") ||
-                      plates.contains(".regularMaterial"),
-                      "key plates must use a semantic system fill or material")
+                      plates.contains(".tertiarySystemBackground"),
+                      "key plates must use a semantic system fill")
         XCTAssertFalse(plates.contains("backgroundColor: .black"),
                        "dark keyboard background must not be a fixed black color")
     }
@@ -1541,7 +1540,8 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "keys and commands must use opaque semantic plates")
         XCTAssertFalse(plates.contains("UIColor.label.withAlphaComponent(0.035)"),
                        "key shapes must remain visible at rest")
-        XCTAssertTrue(chrome.contains("role.solidFill()"),
+        XCTAssertTrue(chrome.contains("keyboardGlass(in: shape, role: role)")
+                      && keyStyle.contains("role.solidFill(increasedContrast:"),
                       "the shared chrome fill must stay semantic")
         XCTAssertFalse(keyStyle.contains("activeText: .white"),
                        "pressed-key text must adapt to the current appearance")

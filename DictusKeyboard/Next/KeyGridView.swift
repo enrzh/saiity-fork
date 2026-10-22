@@ -136,6 +136,7 @@ final class KeyGridView: UIView {
     private var variantPopupHost: UIHostingController<KeyVariantPopup>?
     private var previewPopupHost: UIHostingController<KeyPressPreviewHost>?
     private var previewPopupIdentity: ObjectIdentifier?
+    private var previewPopupMode: KeyPopupMode?
     private var publishedCommandSpecs: [CommandSpec] = []
 
     /// Delete repeat, driven by the delegate so the timing lives in one place.
@@ -278,6 +279,7 @@ final class KeyGridView: UIView {
     }
 
     private func cancelActivePresses() {
+        clearKeyboardKeyFlashes()
         keypadVoice.cancelInteraction()
         keypadLetters.cancelInteraction()
         for press in presses.values {
@@ -371,7 +373,9 @@ final class KeyGridView: UIView {
     }
 
     private func heldPositions() -> Set<PlacedPosition> {
-        Set(presses.values.map { PlacedPosition(row: $0.row, column: $0.column) })
+        Set(presses.values.filter {
+            KeyboardInteractionPreferences.keyPopupMode != .flash || $0.key.isCommand
+        }.map { PlacedPosition(row: $0.row, column: $0.column) })
     }
 
     /// A plate that should be backed by real material.
@@ -680,18 +684,22 @@ final class KeyGridView: UIView {
     private func updatePressPreview(force: Bool = false) {
         guard let previewOwner, let press = presses[previewOwner],
               !press.popupVisible, let text = press.previewText,
-              let item = itemAt(row: press.row, column: press.column) else {
+              let item = itemAt(row: press.row, column: press.column),
+              KeyboardInteractionPreferences.keyPopupMode.showsPreview else {
             previewPopupHost?.view.isHidden = true
             previewPopupIdentity = nil
+            previewPopupMode = nil
             return
         }
-        guard force || previewPopupIdentity != previewOwner else { return }
+        let mode = KeyboardInteractionPreferences.keyPopupMode
+        guard force || previewPopupIdentity != previewOwner || previewPopupMode != mode else { return }
         let session = KeyPreviewSession(
             text: text, sourceFrame: item.plate,
             popupFrame: KeyPressPreviewHost.frame(for: item.plate, in: bounds.size)
         )
-        let content = KeyPressPreviewHost(session: .constant(session))
-        // Retain one host across key presses instead of allocating one per key.
+        let content = KeyPressPreviewHost(session: .constant(session), identity: UUID())
+        // Retain one host across key presses. Reset the popout's local animation
+        // with identity, without allocating another hosting controller per key.
         if let previewPopupHost {
             previewPopupHost.rootView = content
             previewPopupHost.view.frame = bounds
@@ -708,6 +716,7 @@ final class KeyGridView: UIView {
             previewPopupHost = host
         }
         previewPopupIdentity = previewOwner
+        previewPopupMode = mode
     }
 
     private func updateVariantPopup() {
@@ -750,6 +759,9 @@ final class KeyGridView: UIView {
             let identity = ObjectIdentifier(touch)
             commitPendingCharacter()
             let action = item.key.action
+            if KeyboardInteractionPreferences.keyPopupMode == .flash, !item.key.isCommand {
+                flashKeyboardKey(in: visualPlate(for: item), cornerRadius: cornerRadius(for: item.key))
+            }
 
             switch action {
             case .shift:

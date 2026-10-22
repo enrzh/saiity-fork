@@ -163,8 +163,9 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(popup.contains("cornerRadius"))
         XCTAssertFalse(popup.contains("fill(Color(uiColor: .systemBackground))"))
         XCTAssertTrue(popup.contains("struct KeyPreviewPopup"),
-                      "press previews sit above keys")
-        XCTAssertFalse(popup.contains("struct KeyPopoutPreview"))
+                      "press previews sit above keys when Key popups is popup")
+        XCTAssertTrue(popup.contains("struct KeyPopoutPreview"),
+                      "popout enlarges from the pressed key and fades")
         XCTAssertTrue(popup.contains("struct KeyPressPreviewHost"))
     }
 
@@ -516,15 +517,15 @@ final class KeyboardRegressionTests: XCTestCase {
                        "small pager jitter must not cancel a pending emoji hold")
     }
 
-    func testEmojiSurfaceKeepsTheSharedGlassInset() throws {
+    func testEmojiSurfaceSitsOnTheTransparentKeyboard() throws {
         let root = try source("DictusKeyboard/KeyboardRootView.swift")
         XCTAssertFalse(root.contains("withoutGlassRim"))
-        XCTAssertTrue(try source("DictusKeyboard/KeyboardViewController.swift")
-            .contains("surfaceBackdrop.configureInset(layout"), "One inset surrounds every page and its bottom bar")
-        XCTAssertTrue((try relocatedKeyboardSource()).contains("if state.areaMode == .emoji"),
-                      "emoji content needs the rounded inset clipping path")
+        XCTAssertFalse(try source("DictusKeyboard/KeyboardViewController.swift").contains("surfaceBackdrop"),
+                       "no inset slab behind the pages and bottom bar")
+        let picker = try source("DictusKeyboard/Views/EmojiPickerView.swift")
+        XCTAssertFalse(picker.contains("cornerRadius = 22"), "the emoji grid has no rounded inset to follow")
         XCTAssertTrue((try relocatedKeyboardSource()).contains(".clipShape(shape.inset(by: 2))"),
-                      "emoji glyphs must not render through the Liquid Glass edge")
+                      "emoji glyphs stop just inside the surface edge")
     }
 
     func testDictationBoardUsesABCAndSharedCommandGlassRadius() throws {

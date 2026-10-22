@@ -11,16 +11,12 @@ extension KeyboardRootView {
         let surfaceCornerRadius: CGFloat = 0
         let shape = RoundedRectangle(cornerRadius: surfaceCornerRadius, style: .continuous)
         // The content normally remains unclipped so key popups can rise above
-        // the top row. Emoji glyphs are the exception: their rectangular grid
-        // must stop at the same rounded edge as the Liquid Glass inset.
+        // the top row. Emoji glyphs are the exception: their grid stops just
+        // inside the surface edge.
         return ZStack(alignment: .topLeading) {
-            // The controller's shared native backdrop owns the inset on all pages.
             if state.areaMode == .emoji {
                 content
                     .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-                    // Keep emoji glyphs behind the glass edge. A full-size
-                    // clip still lets the rectangular collection view paint
-                    // over the inset rim at the rounded corners.
                     .clipShape(shape.inset(by: 2))
             } else {
                 content
@@ -31,31 +27,17 @@ extension KeyboardRootView {
     }
 
     var voiceBoardUsesUIKitHits: Bool {
-        // Material is visual only. UIKit owns the same voice-board hit layer for
-        // both glass and solid chrome so changing the preference cannot strand
-        // an old transparent overlay over the SwiftUI controls.
+        // UIKit owns the voice-board hit layer, so no transparent SwiftUI
+        // overlay can claim touches over the native controls.
         state.areaMode == .keys || state.areaMode == .recording
     }
 
-    @ViewBuilder
     func appleControlSurface<Content: View, S: Shape>(
         _ content: Content,
         in shape: S,
-        usesGlass: Bool = true,
         role: KeyboardChromeRole = .control
     ) -> some View {
-        if usesGlass {
-            content.keyboardGlass(in: shape, role: role)
-        } else if role == .board {
-            content
-        } else {
-            content
-                .background {
-                    shape.fill(Color(uiColor: role.solidFill()))
-                        .allowsHitTesting(false)
-                }
-                .allowsHitTesting(false)
-        }
+        content.keyboardGlass(in: shape, role: role)
     }
 
     @ViewBuilder

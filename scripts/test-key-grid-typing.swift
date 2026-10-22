@@ -215,6 +215,12 @@ defer {
 }
 defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
 defaults.set(true, forKey: SharedKeys.keyboardTopBarEnabled)
+let saved = defaults.object(forKey: SharedKeys.keyPopupMode)
+defer {
+    if let saved { defaults.set(saved, forKey: SharedKeys.keyPopupMode) }
+    else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
+}
+defaults.set(KeyPopupMode.off.rawValue, forKey: SharedKeys.keyPopupMode)
 let grid = KeyGridView(frame: CGRect(x: 0, y: 0, width: 402, height: 175))
 let recorder = Recorder()
 grid.delegate = recorder
@@ -267,6 +273,7 @@ if !\(baseline) {
     precondition(recorder.text == "a", "Accent hold must commit exactly one letter")
 }
 
+defaults.set(KeyPopupMode.popup.rawValue, forKey: SharedKeys.keyPopupMode)
 var samples: [Double] = []
 var hosts = Set<ObjectIdentifier>()
 for _ in 0..<100 {
@@ -290,15 +297,9 @@ if !\(baseline) {
         precondition(deletePlate.frame.size == layout.commandKeyVisualSize
                      && surface.emojiDelete.bounds.contains(deletePlate.frame),
                      "Emoji Delete must use the enlarged command face inside its touch target")
-        let inset = KeyboardNativeControlFace()
-        inset.configureInset(layout, inputHeight: 269)
         let collection = surface.emoji
-        precondition(inset.frame.contains(surface.bottomBar.frame), "Emoji inset excludes bottom bar")
-        precondition(!inset.isUserInteractionEnabled, "Shared inset steals touches")
         for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad, .keys] {
             surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: .standard)
-            inset.configureInset(layout, inputHeight: 269)
-            precondition(!inset.isHidden && inset.frame == layout.surfaceFrame)
             if [.letters, .panel, .emoji].contains(mode) {
                 let bar = surface.bottomBar
                 precondition(bar.frame.height == 54, "Shared bottom-row hit lane must match the native 54pt row")
@@ -404,7 +405,8 @@ if !\(baseline) {
     print("PASS: shared command heights and neighbour gaps in portrait and cramped landscape on all grid pages")
 
     do {
-        do {
+        for mode in [KeyPopupMode.popup, .popout] {
+            defaults.set(mode.rawValue, forKey: SharedKeys.keyPopupMode)
             for keyWidth in [34.0, 82.0] {
                 let size = CGSize(width: 852, height: 134)
                 let source = CGRect(x: 720, y: 10, width: keyWidth, height: 30)
@@ -436,7 +438,8 @@ if !\(baseline) {
     }
     grid.frame.size = CGSize(width: 402, height: 175)
     grid.layoutIfNeeded()
-    print("PASS: shared inset, category/Space centre, landscape preview and rotation cancellation")
+    defaults.set(KeyPopupMode.popup.rawValue, forKey: SharedKeys.keyPopupMode)
+    print("PASS: category/Space centre, both landscape preview styles and rotation cancellation")
 
     // Observe the actual UIKit generator calls without needing a simulator motor.
     let impact = class_getInstanceMethod(UIImpactFeedbackGenerator.self,
@@ -759,8 +762,11 @@ if !\(baseline) {
     do {
         let savedDictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed", "dictus.userDictionary.prunedTrieDuplicates"]
         let savedDictionary = savedDictionaryKeys.map { defaults.object(forKey: $0) }
+        let storedPopup = defaults.object(forKey: SharedKeys.keyPopupMode)
         let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
         defer {
+            if let storedPopup { defaults.set(storedPopup, forKey: SharedKeys.keyPopupMode) }
+            else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
             if let storedAutocorrect { defaults.set(storedAutocorrect, forKey: SharedKeys.autocorrectEnabled) }
             else { defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
             for (key, value) in zip(savedDictionaryKeys, savedDictionary) {
@@ -768,6 +774,25 @@ if !\(baseline) {
             }
             UserDictionary.shared.reload()
         }
+        defaults.set(KeyPopupMode.flash.rawValue, forKey: SharedKeys.keyPopupMode)
+        KeyboardState.shared.presentArea(.letters)
+        controller.viewDidLayoutSubviews()
+        let liveGrid = (controller.inputView as! KeyboardInputView).nativeTouchOwners.compactMap { $0 as? KeyGridView }.first!
+        let key = liveGrid.layout.placed.first { $0.key.resolvedLabel == "q" }!
+        let finger = Finger()
+        finger.point = CGPoint(x: key.plate.midX, y: key.plate.midY)
+        liveGrid.touchesBegan([finger], with: nil)
+        precondition(liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
+                     "Flash mode did not pulse the pressed key")
+        waitFor({ !liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" } },
+                message: "A held key kept flashing")
+        liveGrid.touchesEnded([finger], with: nil)
+        liveGrid.touchesBegan([finger], with: nil)
+        liveGrid.reset()
+        precondition(!liveGrid.subviews.contains { $0.accessibilityIdentifier == "key-container-flash" },
+                     "Cancelled/page-switched key retained a flash")
+        precondition(!KeyPopupMode.flash.showsPreview)
+
         defaults.set(false, forKey: SharedKeys.autocorrectEnabled)
         let suggestions = SuggestionState.shared
         suggestions.clear()
@@ -790,7 +815,7 @@ if !\(baseline) {
             RunLoop.current.run(until: Date().addingTimeInterval(0.03))
         }
         precondition(!UserDictionary.shared.isLearned("privatefixtureword"), "Secure text entered vocabulary")
-        print("PASS: Unicode vocabulary with autocorrect off and secure-field exclusion")
+        print("PASS: one-shot key flash, cancellation, Unicode vocabulary with autocorrect off and secure-field exclusion")
     }
     for native in [false, true] {
         defaults.set(native, forKey: SharedKeys.keyboardIOSStyling)
@@ -987,15 +1012,14 @@ if !\(baseline) {
             let traits = UITraitCollection(traitsFrom: [UITraitCollection(userInterfaceStyle: dark ? .dark : .light),
                                                        UITraitCollection(accessibilityContrast: increased ? .high : .normal)])
             let host = rgba(.secondarySystemBackground, traits)
-            let board = over(rgba(KeyboardChromeRole.board.solidFill(increasedContrast: increased), traits), host)
+            let board = host
             let input = over(rgba(KeyboardChromeRole.input.solidFill(increasedContrast: increased), traits), board)
             let command = over(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: increased), traits), board)
             precondition(rgba(KeyboardChromeRole.input.solidFill(increasedContrast: increased), traits)[3] == 1,
                          "Typing keys must use opaque plates")
             precondition(input != board, "Resting input plates disappeared into the board")
             if increased {
-                precondition(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: true), traits)[3] == 1
-                             && rgba(KeyboardChromeRole.board.solidFill(increasedContrast: true), traits)[3] == 1,
+                precondition(rgba(KeyboardChromeRole.control.solidFill(increasedContrast: true), traits)[3] == 1,
                              "Accessibility fallback must use opaque backgrounds")
             }
             for (foreground, background) in [(UIColor.label, input), (.label, command),

@@ -21,11 +21,18 @@ Where it came from:
 ## What changed for the user
 
 - The app is one native list: readiness, Keyboard Dictation, recent dictations, then Dictation, Keyboard, Models, Help and About. Models has one Voice Model picker (Automatic or a specific model).
-- Keyboard settings are Layout, Default Keyboard, Autocorrection, Show Top Bar, Haptics and Vocabulary. Material, Background, Key Containers, Key Popups, Hold Speed, Adaptive Touch and the per-key Tap and Hold editor are gone; everyone gets the former defaults (glass board, key plates, popup previews, every accent and skin tone, default hold timing, adaptive key targets).
+- Keyboard settings are Layout, Default Keyboard, Autocorrection, Show Top Bar, Key Popups, Haptics and Vocabulary. Material, Background, Key Containers, Hold Speed, Adaptive Touch and the per-key Tap and Hold editor are gone; everyone gets key plates, every accent and skin tone, the default hold timing and adaptive key targets. Key Popups (Off, Popup, Popout, Key flash) came back on 22 Oct at the owner's request.
+- There is no glass inset behind the keys any more (22 Oct, owner's request): keys sit directly on the system keyboard backdrop on every page.
 - Key popups and the accent row are opaque like the keys. As glass they rendered light grey, so a dark-mode popup showed a white letter on near-white.
 - The keyboard expands the text replacements from iPhone Settings › General › Keyboard › Text Replacement. Syllivra no longer has its own editor; snippets saved earlier still expand, win over iOS's for the same shortcut, and can be deleted under Keyboard › Syllivra Replacements, which appears only while any exist.
 - Autocorrect fixes swapped letters ("hte", "goign", "wrok", "taht", and in German "nciht", "acuh", "eigentlcih") and common English web typos ("teh", "adn", "becuase", "recieve", "definately", "seperate"). See "Autocorrect" below.
 - Replay, the "usable without editing?" buttons and the separate Cleanup Diagnostics screen are gone; cleanup events are under Help › Diagnostics.
+
+## More (•••) on the dictation board
+
+Owner report on 22 Oct: More works but is not very responsive. On the simulator, before the fix, taps a few points off the dots never reached the keyboard: the input view logged no touch at all. A remote keyboard only receives touches over painted pixels (also found on the phone earlier, see `docs/keyboard-ui-unification-plan.md`). The old glass inset started below the board's 32 pt top lane, so More and power sat on clear pixels and only taps on their glyphs arrived. `KeyboardInputView` now paints a 2% `secondarySystemBackground` canvas over the whole keyboard. Afterwards, six taps around the More square opened the menu every time in two fresh runs, where the same sequence had failed three of four times before. The canvas is not visible in light or dark mode. Whether this was the whole problem on the phone needs the owner's check.
+
+Tapping the app above the keyboard does not close a keyboard menu: those touches go to the app. A tap anywhere on the keyboard closes it.
 
 ## Autocorrect
 

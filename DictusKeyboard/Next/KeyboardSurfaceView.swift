@@ -16,8 +16,8 @@ final class KeyboardSurfaceView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // Remote keyboard hit regions need a painted native owner even when
-        // the optional inset and passive SwiftUI category face are absent.
+        // Remote keyboard hit regions need a painted native owner: the keyboard
+        // is transparent and the passive SwiftUI category face takes no touches.
         backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.02)
         isHidden = true
         addSubview(emoji)
@@ -219,7 +219,11 @@ final class KeyboardPeriodKeyView: UIView {
         PersistentLog.log(.keyboardPeriodKeyProbe(details: "began native=true frame=\(frame)"))
         HapticFeedback.playInputClick()
         onInsert?(".")
-        if let container = window ?? superview {
+        if KeyboardInteractionPreferences.keyPopupMode == .flash {
+            control.flashKeyboardKey(in: plate.frame, cornerRadius: CommandKeyStyle.cornerRadius)
+        }
+        let container = window ?? superview
+        if KeyboardInteractionPreferences.keyPopupMode.showsPreview, let container {
             let source = convert(bounds, to: container)
             let session = KeyPreviewSession(text: ".", sourceFrame: source,
                 popupFrame: KeyPressPreviewHost.frame(for: source, in: container.bounds.size))
@@ -283,6 +287,7 @@ final class KeyboardPeriodKeyView: UIView {
     }
 
     func cancelInteraction() {
+        control.clearKeyboardKeyFlashes()
         control.cancelInteraction()
         finish(cancelled: true)
     }

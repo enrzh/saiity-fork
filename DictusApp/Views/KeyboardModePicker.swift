@@ -121,3 +121,28 @@ struct DictationPresencePicker: View {
         LiveActivityManager.shared.applyPresenceMode(mode, isBackground: scenePhase == .background)
     }
 }
+
+/// Native picker for key-press preview behavior.
+struct KeyPopupPicker: View {
+    @State private var selection = KeyPopupMode.active
+
+    var body: some View {
+        Picker("Key Popups", selection: selectionBinding) {
+            ForEach(KeyPopupMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+        .onAppear { selection = KeyPopupMode.active }
+        .accessibilityHint("Choose off, popup, popout, or a brief flash of the tapped key container.")
+    }
+
+    private var selectionBinding: Binding<KeyPopupMode> {
+        Binding(
+            get: { selection },
+            set: {
+                selection = $0
+                $0.persist()
+            }
+        )
+    }
+}

@@ -339,7 +339,6 @@ final class EmojiPagerView: EmojiPagerCollectionView {
     }
 
     private func configure(force: Bool) {
-        layer.cornerRadius = 22
         guard bounds.width > 1, bounds.height > 1,
               force || configuredSize != bounds.size else { return }
         configuredSize = bounds.size
@@ -841,15 +840,12 @@ class EmojiPagerCollectionView: UICollectionView, UIGestureRecognizerDelegate {
             flow.sectionInset = .zero
         }
         let view = self
-        // Keep the remote keyboard's native canvas painted even without its
-        // decorative inset, including empty Recents and inter-emoji gaps.
+        // Keep the remote keyboard's native canvas painted on the transparent
+        // keyboard, including empty Recents and inter-emoji gaps, so blank
+        // swipes still belong to this collection.
         view.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.02)
-        // The shared surface draws the inset behind the pager AND bottom bar.
-        // Blank swipes still belong to this collection, never its background.
         view.isOpaque = false
         view.clipsToBounds = true
-        view.layer.cornerRadius = 22
-        view.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         view.isPagingEnabled = false
         view.isMultipleTouchEnabled = true
         view.isScrollEnabled = true
@@ -1287,6 +1283,14 @@ private final class EmojiKeyButton: UIButton {
         didSet {
             layer.cornerRadius = VoiceOnlyKeyboardPolicy.emojiHighlightCornerRadius
             layer.masksToBounds = true
+            if KeyboardInteractionPreferences.keyPopupMode == .flash {
+                backgroundColor = .clear
+                layer.borderWidth = 0
+                if isHighlighted && !oldValue {
+                    flashKeyboardKey(in: bounds, cornerRadius: VoiceOnlyKeyboardPolicy.emojiHighlightCornerRadius)
+                }
+                return
+            }
             backgroundColor = isHighlighted ? UIColor.label.withAlphaComponent(0.12) : .clear
             layer.borderWidth = isHighlighted ? 1 : 0
             layer.borderColor = isHighlighted ? UIColor.label.withAlphaComponent(0.16).cgColor : nil

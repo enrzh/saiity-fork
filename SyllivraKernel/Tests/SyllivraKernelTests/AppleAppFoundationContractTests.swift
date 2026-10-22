@@ -404,7 +404,8 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("Toggle(\"Autocorrection\""))
         XCTAssertTrue(settings.contains("Toggle(\"Show Top Bar\""))
         XCTAssertTrue(settings.contains("DictationPresencePicker()"))
-        for removed in ["KeyPopupPicker()", "KeyboardMaterialPicker()", "Toggle(\"Key Containers\"",
+        XCTAssertTrue(settings.contains("KeyPopupPicker()"))
+        for removed in ["KeyboardMaterialPicker()", "Toggle(\"Key Containers\"",
                         "KeyboardHoldSpeedPicker()", "Toggle(\"Adaptive Touch\"", "KeyboardHoldOptionsView()"] {
             XCTAssertFalse(settings.contains(removed), removed)
         }
@@ -672,7 +673,12 @@ final class AppleAppFoundationContractTests: XCTestCase {
     func testKeyboardKeepsOneLookWithoutAppearanceSettings() throws {
         let picker = try source("DictusApp/Views/KeyboardModePicker.swift")
         let kernel = try source("SyllivraKernel/Sources/SyllivraKernel/KeyboardInteractionPreferences.swift")
-        XCTAssertFalse(picker.contains("KeyPopupMode"))
+        let mode = try source("SyllivraKernel/Sources/SyllivraKernel/KeyPopupMode.swift")
+        XCTAssertTrue(picker.contains("struct KeyPopupPicker: View"))
+        XCTAssertTrue(picker.contains("ForEach(KeyPopupMode.allCases"))
+        for option in ["return \"Off\"", "return \"Popup\"", "return \"Popout\"", "return \"Key flash\""] {
+            XCTAssertTrue(mode.contains(option), option)
+        }
         XCTAssertFalse(picker.contains("Picker(\"Material\""))
         XCTAssertFalse(picker.contains("Toggle(\"Background\""))
         XCTAssertFalse(kernel.contains("liquidGlassEnabled"))

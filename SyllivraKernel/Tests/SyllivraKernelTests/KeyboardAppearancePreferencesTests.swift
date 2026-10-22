@@ -46,4 +46,17 @@ final class KeyboardAppearancePreferencesTests: XCTestCase {
         XCTAssertTrue(KeyboardInteractionPreferences.topBarEnabled)
         XCTAssertEqual(KeyboardInteractionPreferences.windowAccessoryHeight, 44)
     }
+
+    func testFlashModePreservesChoiceWithoutAnEnlargedPreview() throws {
+        let suite = "key-flash-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        KeyPopupMode.flash.persist(to: defaults)
+        XCTAssertEqual(KeyPopupMode.load(from: defaults), .flash)
+        XCTAssertEqual(KeyPopupMode.flash.displayName, "Key flash")
+        XCTAssertFalse(KeyPopupMode.flash.showsPreview)
+        XCTAssertFalse(defaults.bool(forKey: SharedKeys.keyPopupsEnabled))
+        XCTAssertTrue(KeyPopupMode.popup.showsPreview)
+        XCTAssertTrue(KeyPopupMode.popout.showsPreview)
+    }
 }

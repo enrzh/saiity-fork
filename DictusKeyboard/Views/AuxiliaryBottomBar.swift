@@ -206,8 +206,7 @@ struct AuxiliaryBottomBar: View {
             }
             .fixedSize(horizontal: true, vertical: true)
             .frame(width: plateWidth, height: visual.height)
-            .keyboardGlass(in: RoundedRectangle(cornerRadius: CommandKeyStyle.cornerRadius),
-                           interactive: false, role: .input)
+            .keyboardGlass(in: RoundedRectangle(cornerRadius: CommandKeyStyle.cornerRadius), role: .input)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(false)
             ImmediateVariantKey(

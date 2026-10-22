@@ -20,8 +20,8 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 
 ### 00:00–01:00 — More menu and board power
 
-- [ ] In Notes, focus an empty note and choose Syllivra with the globe. Hold the bottom-left 123/ABC key to open the dictation board. Tap the ellipsis at the top left with Show top bar Off; dismiss by tapping outside and repeat. Open Output language, return to the menu and choose Dismiss keyboard. Reopen the keyboard and toggle board power at the top right.
-- **Expected:** the ellipsis opens an iOS dropdown on each tap; menu items are usable and dismissal works. Ellipsis stays left, power stays right, and neither control starts dictation, deletes text or shifts into the other control's target. Power visibly reflects its state.
+- [ ] In Notes, focus an empty note and choose Syllivra with the globe. Hold the bottom-left 123/ABC key to open the dictation board. Tap the ellipsis at the top left with Show top bar Off, ten times at different spots inside its square (the dots, just above, below, left and right of them); dismiss each time by tapping an empty part of the keyboard. Tapping the app above the keyboard does not close the menu; note whether that bothers you. Open Output language, return to the menu and choose Dismiss keyboard. Reopen the keyboard and toggle board power at the top right.
+- **Expected:** the ellipsis opens an iOS dropdown on every one of the ten taps, not only on taps directly on the dots; menu items are usable and dismissal works. Power answers taps anywhere on its square the same way. Ellipsis stays left, power stays right, and neither control starts dictation, deletes text or shifts into the other control's target. Power visibly reflects its state.
 
 ### 01:00–03:00 — Emoji, skin tones and Delete
 

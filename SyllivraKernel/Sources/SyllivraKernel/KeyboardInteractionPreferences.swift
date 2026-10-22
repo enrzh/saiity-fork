@@ -18,6 +18,11 @@ public enum KeyboardInteractionPreferences {
         topBarEnabled ? VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight : 0
     }
 
+    /// Off, popup, popout, or a one-shot flash of the existing key face.
+    public static var keyPopupMode: KeyPopupMode {
+        KeyPopupMode.active
+    }
+
     /// Tell the keyboard extension to reload App Group interaction preferences.
     public static func notifyChanged() {
         DarwinNotificationCenter.post(DarwinNotificationName.keyboardPreferencesChanged)

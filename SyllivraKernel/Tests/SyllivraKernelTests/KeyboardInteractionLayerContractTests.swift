@@ -1,10 +1,12 @@
 import XCTest
 
 final class KeyboardInteractionLayerContractTests: XCTestCase {
-    func testGlassIsLimitedToTheBoardInEveryNativeVisualHost() throws {
+    func testKeysSitOnTheTransparentKeyboardWithoutGlass() throws {
         let style = try source("DictusKeyboard/KeyboardKeyStyle.swift")
         XCTAssertFalse(style.contains("keyboardLiquidGlassEnabled"))
-        XCTAssertTrue(style.contains("} else if role != .board {"), "only the board is glass; keys and popups are opaque")
+        XCTAssertFalse(style.contains("glassEffect("), "keys and popups are opaque plates")
+        XCTAssertFalse(style.contains("case board"), "there is no board slab behind the keys")
+        XCTAssertFalse(try source("DictusKeyboard/KeyboardViewController.swift").contains("configureInset"))
         for path in ["DictusKeyboard/Next/KeyboardSurfaceView.swift",
                      "DictusKeyboard/Next/NextKeyboardHost.swift",
                      "DictusKeyboard/Views/KeyVariantPopup.swift"] {
@@ -12,10 +14,10 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
         }
         let category = try source("DictusKeyboard/Views/EmojiCategoryBar.swift")
         XCTAssertFalse(category.contains("keyboardGlass(in: Capsule())"))
-        XCTAssertFalse(category.contains(".glassEffect("), "categories stay flat on the glass board")
+        XCTAssertFalse(category.contains(".glassEffect("), "categories stay flat")
         let native = try source("DictusKeyboard/KeyboardKeyInput.swift")
         XCTAssertFalse(native.contains("liquidGlassEnabled"))
-        XCTAssertTrue(native.contains("plate.effect = UIGlassEffect(style: .regular)"))
+        XCTAssertFalse(native.contains("UIGlassEffect"))
         XCTAssertTrue(native.contains("plate.isUserInteractionEnabled = false"))
     }
 
@@ -59,12 +61,12 @@ final class KeyboardInteractionLayerContractTests: XCTestCase {
     func testLiveGridShowsPopupsWithoutChangingTouchOwnership() throws {
         let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         let previews = try source("DictusKeyboard/Views/KeyVariantPopup.swift")
-        XCTAssertFalse(grid.contains("keyPopupMode"))
-        XCTAssertTrue(grid.contains("KeyPressPreviewHost(session: .constant(session))"))
+        XCTAssertTrue(grid.contains("KeyboardInteractionPreferences.keyPopupMode.showsPreview"))
+        XCTAssertTrue(grid.contains("KeyPressPreviewHost(session: .constant(session), identity:"))
         XCTAssertFalse(grid.contains("UIColor.secondarySystemBackground.setFill()"),
                        "the live preview must not paint an opaque UIKit plate")
         XCTAssertTrue(previews.contains("KeyPreviewPopup(text: preview.text"))
-        XCTAssertFalse(previews.contains("KeyPopoutPreview"))
+        XCTAssertTrue(previews.contains("KeyPopoutPreview("))
         XCTAssertTrue(previews.contains(".keyboardGlass("),
                       "popups use the same material as the key faces")
         XCTAssertTrue(grid.contains("updateVariantPopup()"))

@@ -13,6 +13,11 @@ final class SharedKeysExtensionTests: XCTestCase {
         XCTAssertEqual(SharedKeys.hapticIntensity, "dictus.hapticIntensity")
     }
 
+    func testKeyPopupKeysExist() {
+        XCTAssertEqual(SharedKeys.keyPopupsEnabled, "dictus.keyPopupsEnabled")
+        XCTAssertEqual(SharedKeys.keyPopupMode, "dictus.keyPopupMode")
+    }
+
     func testHasCompletedOnboardingKeyExists() {
         XCTAssertEqual(SharedKeys.hasCompletedOnboarding, "dictus.hasCompletedOnboarding")
     }

@@ -311,7 +311,7 @@ xcrun simctl shutdown <udid>
 
 **Never leave a touch down.** An `axe touch --down` without a matching `--up` blocks every later tap, swipe and Home press without an error. Shutting the device down and booting it again cleared it.
 
-**Do not hold Delete with `axe touch --down --up --delay`.** Twice on 2026-10-21 a 3-second hold on the keyboard's Delete left the same silent block even though the command released, and relaunching the app did not clear it; a reboot did. Holding letter keys for up to 2 seconds (press popup, accent row) was fine. To clear a field, tap Delete repeatedly.
+**Do not hold Delete with `axe touch --down --up --delay`.** Twice on 2026-10-21 a 3-second hold on the keyboard's Delete left the same silent block even though the command released, and relaunching the app did not clear it; a reboot did. Holding letter keys for up to 2 seconds (press popup, accent row) was fine. To clear a field, tap Delete repeatedly. On 2026-10-22 holding 123 to switch to the dictation board did the same once; after any hold that changes the page, check input with a harmless tap before trusting later results.
 
 **Tapping and typing are no longer on this list.** They were, until 2026-08-22, on the grounds that `simctl` has no touch injection. That is still true of `simctl` and was never true of the machine: see section 5. Do not re-derive the old limit from the `simctl` man page.
 

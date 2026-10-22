@@ -151,7 +151,9 @@ final class KeyboardAccessoryOrderPreferenceTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("touchCanvas = UIColor.secondarySystemBackground.withAlphaComponent(0.02)"),
+                      "the outer view only carries a faint touch canvas")
+        XCTAssertTrue(source.contains("backgroundColor = Self.touchCanvas"))
         XCTAssertTrue(source.contains("isOpaque = false"))
         XCTAssertFalse(source.contains("systemGroupedBackground"))
     }

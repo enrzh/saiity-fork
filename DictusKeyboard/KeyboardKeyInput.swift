@@ -2,6 +2,29 @@ import SwiftUI
 import UIKit
 import SyllivraKernel
 
+extension UIView {
+    /// One passive pulse on the existing plate; it never becomes a touch owner.
+    func flashKeyboardKey(in frame: CGRect, cornerRadius: CGFloat) {
+        subviews.filter { $0.accessibilityIdentifier == "key-container-flash" && $0.frame == frame }
+            .forEach { $0.removeFromSuperview() }
+        let flash = UIView(frame: frame)
+        flash.accessibilityIdentifier = "key-container-flash"
+        flash.isUserInteractionEnabled = false
+        flash.accessibilityElementsHidden = true
+        flash.backgroundColor = UIColor.label.withAlphaComponent(0.16)
+        flash.layer.cornerRadius = cornerRadius
+        addSubview(flash)
+        UIView.animate(withDuration: 0.16, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            flash.alpha = 0
+        } completion: { _ in flash.removeFromSuperview() }
+    }
+
+    func clearKeyboardKeyFlashes() {
+        subviews.filter { $0.accessibilityIdentifier == "key-container-flash" }
+            .forEach { $0.removeFromSuperview() }
+    }
+}
+
 /// Shared hold lifecycle for the grid, Period, emoji and native key controls.
 /// A cancelled or superseded finger can never fire a queued hold.
 final class KeyboardHoldSession {
@@ -80,8 +103,6 @@ final class KeyboardNativeControlFace: UIView {
     var isPrimary = false
     private var role: KeyboardChromeRole = .control
     private var isPressed = false
-    private enum Material: Equatable { case glass, solid, reduced, contrast }
-    private var material: Material?
     private var displayedSymbol: String?
     private var displayedHoldSymbol: String?
     private var displayedSymbolSize: CGFloat = 0
@@ -105,11 +126,6 @@ final class KeyboardNativeControlFace: UIView {
     }
 
     required init?(coder: NSCoder) { nil }
-
-    func configureInset(_ layout: VoiceOnlyKeyboardPolicy.Layout, inputHeight: CGFloat) {
-        frame = layout.inputFrame(layout.surfaceFrame, inputViewHeight: inputHeight)
-        configure(visualSize: layout.surfaceFrame.size, radius: 0, role: .board)
-    }
 
     func configure(text: String? = nil, symbol: String? = nil,
                    visualSize: CGSize? = nil, radius: CGFloat = CommandKeyStyle.cornerRadius,
@@ -183,23 +199,10 @@ final class KeyboardNativeControlFace: UIView {
     }
 
     func refreshAppearance() {
-        // A flat service face avoids glass's persistent halo after release.
-        let next: Material = role != .board || (tint != nil && !isPrimary) ? .solid
-            : UIAccessibility.isDarkerSystemColorsEnabled ? .contrast
-            : UIAccessibility.isReduceTransparencyEnabled ? .reduced : .glass
-        if material != next {
-            material = next
-            plate.effect = nil
-            if next == .glass {
-                if #available(iOS 26.0, *) { plate.effect = UIGlassEffect(style: .regular) }
-                else { plate.effect = UIBlurEffect(style: .systemMaterial) }
-            }
-        }
         plate.backgroundColor = .clear
-        plate.contentView.backgroundColor = tint.map {
-            next == .glass && !isPrimary ? $0.withAlphaComponent(0.86) : $0
-        } ?? (role == .accessory ? (isPressed ? UIColor.label.withAlphaComponent(0.10) : .clear)
-                : next == .glass ? .clear : role.solidFill(increasedContrast:
+        plate.contentView.backgroundColor = tint
+            ?? (role == .accessory ? (isPressed ? UIColor.label.withAlphaComponent(0.10) : .clear)
+                : role.solidFill(increasedContrast:
                     UIAccessibility.isDarkerSystemColorsEnabled || UIAccessibility.isReduceTransparencyEnabled))
     }
 
@@ -209,7 +212,7 @@ final class KeyboardNativeControlFace: UIView {
         let rect = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                           width: size.width, height: size.height)
         plate.frame = rect
-        plate.layer.cornerRadius = role == .board || isPrimary ? radius : KeyboardChromeRole.commandCornerRadius
+        plate.layer.cornerRadius = isPrimary ? radius : KeyboardChromeRole.commandCornerRadius
         if isPrimary, !image.isHidden, !label.isHidden {
             // A passive voice mark and readable action label keep the
             // 54pt hold target unchanged, including cancel and app recovery.
