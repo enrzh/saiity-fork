@@ -1,6 +1,6 @@
 # Slimmer, more native app and keyboard (21–22 Oct 2026)
 
-Branch `claude/slim-native`, nine commits on top of 6fc3b8ab (59e130bc to 4d39fcd2). Build number unchanged (243). No phone install, TestFlight, push or release.
+Branch `claude/slim-native`, nine commits on top of 6fc3b8ab (59e130bc to 4d39fcd2). Build number unchanged (243). On 22 Oct 2026, at the owner's request, 2770e1d7 was installed on their iPhone Air as a Release development build (signed with the team's development certificate). No TestFlight, push or release.
 
 ## Size
 
