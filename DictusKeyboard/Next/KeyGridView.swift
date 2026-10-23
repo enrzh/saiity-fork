@@ -315,11 +315,10 @@ final class KeyGridView: UIView {
             face.autoresizingMask = []
             face.frame = rect.offsetBy(dx: -letters.target.minX, dy: -letters.target.minY)
             face.configure(text: "ABC", visualSize: rect.size,
-                holdSymbol: KeyboardInteractionPreferences.topBarEnabled ? nil : "mic.fill")
+                holdSymbol: "mic.fill")
             keypadLetters.isHidden = false
         }
-        guard !KeyboardInteractionPreferences.topBarEnabled,
-              let delete = layout.placed.first(where: { $0.key.id == "pad-delete" }) else { return }
+        guard let delete = layout.placed.first(where: { $0.key.id == "pad-delete" }) else { return }
         let face = visualPlate(for: delete)
         let room = face.minX - KeyGridPlacement.keySpacing - delete.target.minX
         let height = min(44, delete.target.height)

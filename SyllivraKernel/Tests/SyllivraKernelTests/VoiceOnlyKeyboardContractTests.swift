@@ -40,7 +40,7 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
 
         XCTAssertFalse(keyboardSection.contains("Control order"))
         XCTAssertTrue(keyboardSection.contains("DefaultKeyboardModePicker()"))
-        XCTAssertTrue(keyboardSection.contains("Toggle(\"Show Top Bar\""))
+        XCTAssertTrue(keyboardSection.contains("KeyPopupPicker()"))
         XCTAssertFalse(keyboardSection.contains("ModelManagerView"))
     }
 

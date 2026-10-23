@@ -80,7 +80,6 @@ struct DictationSettingsView: View {
 
 struct KeyboardSettingsView: View {
     @AppStorage(SharedKeys.hapticIntensity, store: AppGroup.defaults) private var hapticIntensityRaw = HapticIntensity.default.rawValue
-    @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults) private var topBarEnabled = false
     @State private var hasSavedSnippets = false
 
     var body: some View {
@@ -90,10 +89,6 @@ struct KeyboardSettingsView: View {
                 DefaultKeyboardModePicker()
             }
             Section {
-                Toggle("Show Top Bar", isOn: $topBarEnabled)
-                    .accessibilityIdentifier("keyboard-top-bar-setting")
-                    .accessibilityHint("Shows More, dictation power and the dictation board shortcut above typing pages.")
-                    .onChange(of: topBarEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
                 KeyPopupPicker()
                 Picker("Haptics", selection: hapticPresetBinding) {
                     ForEach(HapticIntensity.allCases, id: \.self) { preset in

@@ -8,7 +8,6 @@ let products = derived + "/Build/Products/Debug-iphonesimulator"
 let extensionPath = products + "/DictusApp.app/PlugIns/DictusKeyboard.appex"
 let large = CommandLine.arguments.contains("--large")
 let emojiOnly = CommandLine.arguments.contains("--emoji")
-let topBar = CommandLine.arguments.contains("--top-bar")
 let keypadOnly = CommandLine.arguments.contains("--keypad")
 let shortcutsOnly = CommandLine.arguments.contains("--shortcuts")
 let program = #"""
@@ -36,7 +35,7 @@ final class FixtureController: KeyboardViewController {
         let keys = [SharedKeys.serviceEnabled, SharedKeys.dictationStatus,
                     SharedKeys.modelReady, SharedKeys.modelLoadState, SharedKeys.keyboardAudioReady,
                     SharedKeys.appProcessHeartbeat,
-                    SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled]
+                    SharedKeys.keyboardIOSStyling]
         let previous = Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
         defer {
             for key in keys {
@@ -45,7 +44,6 @@ final class FixtureController: KeyboardViewController {
             }
         }
         defaults.set(false, forKey: SharedKeys.serviceEnabled)
-        defaults.set(TOPBAR, forKey: SharedKeys.keyboardTopBarEnabled)
         try FileManager.default.createDirectory(atPath: "OUTPUT", withIntermediateDirectories: true)
         var geometry: [String: [String: String]] = [:]
         for dark in [false, true] {
@@ -53,7 +51,7 @@ final class FixtureController: KeyboardViewController {
                 for width: CGFloat in [320, 402] {
                     for landscape in [false, true] {
                         let size = landscape ? CGSize(width: width == 320 ? 667 : 852,
-                            height: TOPBAR ? 190 : 158)
+                            height: 158)
                                              : CGSize(width: width, height: 300)
                         for page in (SHORTCUTS ? ["letters", "symbols", "board", "ready-board"] : KEYPAD ? ["numbers", "decimal", "phone"] : ["letters", "symbols", "symbols2", "numbers", "phone", "emoji",
                                      "board", "ready-board", "listening", "processing", "failure"]) {
@@ -104,7 +102,7 @@ final class FixtureController: KeyboardViewController {
                             controller.view.layoutIfNeeded()
                             controller.viewDidLayoutSubviews()
                             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-                            if !landscape && !TOPBAR,
+                            if !landscape,
                                let height = controller.inputView?.constraints.first(where: {
                                    $0.firstAttribute == .height && $0.secondItem == nil
                                })?.constant {
@@ -156,7 +154,7 @@ final class FixtureController: KeyboardViewController {
                                 let spaceFrame = space.convert(space.bounds, to: controller.view)
                                 precondition(emojiFrame.maxX < spaceFrame.minX && lettersFrame.minX > spaceFrame.maxX,
                                              "Board Emoji/ABC did not swap around Space")
-                                if !TOPBAR {
+                                do {
                                     precondition(more.bounds.height >= 44 && more.bounds.width >= 44
                                                  && more.frame.minX <= 8 && more.frame.minY >= 0 && more.frame.minY <= 6,
                                                  "Hidden-bar More lost its full-size top-left target")
@@ -259,7 +257,6 @@ final class FixtureController: KeyboardViewController {
 }
 """#.replacingOccurrences(of: "OUTPUT", with: output).replacingOccurrences(of: "LARGE", with: String(large))
         .replacingOccurrences(of: "EMOJIONLY", with: String(emojiOnly))
-        .replacingOccurrences(of: "TOPBAR", with: String(topBar))
         .replacingOccurrences(of: "KEYPAD", with: String(keypadOnly))
         .replacingOccurrences(of: "SHORTCUTS", with: String(shortcutsOnly))
 let directory = FileManager.default.temporaryDirectory.appendingPathComponent("saiity-keyboard-fixtures-" + UUID().uuidString)

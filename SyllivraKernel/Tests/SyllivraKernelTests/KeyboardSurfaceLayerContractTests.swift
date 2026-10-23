@@ -285,8 +285,7 @@ final class KeyboardSurfaceLayerContractTests: XCTestCase {
     func testComputeKeyboardHeightUsesInputViewAndIgnoresControllerBounds() throws {
         let source = try read("DictusKeyboard/KeyboardViewController.swift")
 
-        XCTAssertTrue(source.contains("let observedInputViewHeight = inputView?.bounds.height ?? 0"))
-        XCTAssertTrue(source.contains("let inputViewHeight = max(0, observedInputViewHeight - previousAccessoryHeight)"))
+        XCTAssertTrue(source.contains("let inputViewHeight = inputView?.bounds.height ?? 0"))
         XCTAssertTrue(source.contains("VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight("))
         XCTAssertTrue(source.contains("inputViewHeight: Double(inputViewHeight)"))
         XCTAssertTrue(source.contains("controllerViewHeight: view.bounds.height > 0"))

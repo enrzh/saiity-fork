@@ -3,19 +3,10 @@ import Foundation
 
 /// Cross-process keyboard interaction preferences shared by the app and extension.
 public enum KeyboardInteractionPreferences {
-    public static var topBarEnabled: Bool {
-        AppGroup.defaults.bool(forKey: SharedKeys.keyboardTopBarEnabled)
-    }
-
+    /// Only the dictation board has a top lane, for More and power. Typing
+    /// pages have no top bar.
     public static func topBarHeight(for mode: KeyboardAreaMode) -> Double {
-        mode == .keys || mode == .recording || topBarEnabled
-            ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight : 0
-    }
-
-    /// The bar's window extension is present only while the top bar is on.
-    /// Dictation pages keep their lane through `topBarHeight(for:)`.
-    public static var windowAccessoryHeight: Double {
-        topBarEnabled ? VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight : 0
+        mode == .keys || mode == .recording ? VoiceOnlyKeyboardPolicy.suggestionLaneHeight : 0
     }
 
     /// Off, popup, popout, or a one-shot flash of the existing key face.

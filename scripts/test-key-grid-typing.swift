@@ -136,7 +136,7 @@ final class Recorder: KeyGridViewDelegate {
     func keyGridDidRequestDictation(_ view: KeyGridView) {}
 }
 let defaults = AppGroup.defaults
-let appearanceKeys = [SharedKeys.keyboardIOSStyling, SharedKeys.keyboardTopBarEnabled]
+let appearanceKeys = [SharedKeys.keyboardIOSStyling]
 let savedAppearance = appearanceKeys.map { defaults.object(forKey: $0) }
 defer {
     for (key, value) in zip(appearanceKeys, savedAppearance) {
@@ -145,7 +145,6 @@ defer {
     }
 }
 defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
-defaults.set(true, forKey: SharedKeys.keyboardTopBarEnabled)
 let saved = defaults.object(forKey: SharedKeys.keyPopupMode)
 defer {
     if let saved { defaults.set(saved, forKey: SharedKeys.keyPopupMode) }
@@ -599,22 +598,19 @@ if !\(baseline) {
         let boardDeletePlate = boardDelete.keyboardFace.subviews.compactMap { $0 as? UIVisualEffectView }.first!
         precondition(boardDeletePlate.frame.height == 45 && boardDeletePlate.frame.width >= 44
                      && boardDelete.bounds.contains(boardDeletePlate.frame), "Dictation-board Delete kept its compact face: plate=\\(boardDeletePlate.frame) bounds=\\(boardDelete.bounds)")
+        // More and power live only on the dictation board; typing pages have no top bar.
+        let toggle = namedControl("dictation-service-toggle", in: controller.view)!
+        precondition(!toggle.isHidden && toggle.isUserInteractionEnabled, "Board power is not reachable")
+        let more = namedControl("keyboard-more", in: controller.view) as! UIButton
+        precondition(more.buttonType == .system && more.showsMenuAsPrimaryAction && more.menu != nil
+                     && more.contextMenuInteraction != nil && more.configuration?.image != nil && !more.isHidden)
+        precondition(touchWindow.hitTest(more.convert(CGPoint(x: more.bounds.midX, y: more.bounds.midY), to: touchWindow), with: nil) === more)
         for mode in [KeyboardAreaMode.letters, .panel, .emoji, .numberPad] {
             KeyboardState.shared.presentArea(mode)
             controller.view.setNeedsLayout()
             controller.view.layoutIfNeeded()
             controller.viewDidLayoutSubviews()
-            let toggle = namedControl("dictation-service-toggle", in: controller.view)!
-            let board = namedControl("return-to-dictation-board", in: controller.view)!
-            precondition(!toggle.isHidden && toggle.isUserInteractionEnabled, "Service control must stay reachable on every page")
-            precondition(toggle.frame.midY == board.frame.midY && toggle.frame.maxX < board.frame.minX,
-                         "Service control must sit beside the dictation board control")
-            let point = CGPoint(x: toggle.bounds.midX, y: toggle.bounds.midY)
-            precondition(toggle.hitTest(point, with: nil) != nil, "Visible power control lost its native hit target")
-            let more = namedControl("keyboard-more", in: controller.view) as! UIButton
-            precondition(more.buttonType == .system && more.showsMenuAsPrimaryAction && more.menu != nil
-                         && more.contextMenuInteraction != nil && more.configuration?.image != nil && !more.isHidden)
-            precondition(touchWindow.hitTest(more.convert(CGPoint(x: more.bounds.midX, y: more.bounds.midY), to: touchWindow), with: nil) === more)
+            precondition(more.isHidden, "A typing page showed the top bar's More")
             precondition(namedControl("paste-clipboard", in: controller.view) == nil
                          && namedControl("dismiss-keyboard", in: controller.view) == nil,
                          "Minimal accessory row kept separate secondary controls")
@@ -719,7 +715,6 @@ if !\(baseline) {
     }
     for native in [false, true] {
         defaults.set(native, forKey: SharedKeys.keyboardIOSStyling)
-        defaults.set(false, forKey: SharedKeys.keyboardTopBarEnabled)
         touchWindow.frame.size = CGSize(width: 402, height: 300)
         parent.view.frame = touchWindow.bounds
         controller.view.frame = touchWindow.bounds
@@ -859,7 +854,6 @@ if !\(baseline) {
         }
     }
     defaults.set(false, forKey: SharedKeys.keyboardIOSStyling)
-    defaults.set(true, forKey: SharedKeys.keyboardTopBarEnabled)
     KeyboardState.shared.presentArea(.keys)
     controller.viewDidLayoutSubviews()
     print("PASS: retired style preference is ignored; hidden top bar, unchanged 45pt plates, tap/hold/release/cancellation and board return")
@@ -878,7 +872,7 @@ if !\(baseline) {
     RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     precondition(!KeyboardDictationService.isEnabled(in: defaults), "The native action did not disable dictation")
     precondition(service.accessibilityValue == "Off", "The native control kept a stale enabled appearance")
-    print("PASS: native service controls on every keyboard page")
+    print("PASS: More and power only on the dictation board; power toggles dictation")
     let hostKeys = HostFieldPolicy.LetterFieldKeys(leftInsert: "@", rightInsert: ".com", returnTitle: "Send")
     for mode in [KeyboardAreaMode.letters, .panel, .emoji] {
         surface.show(mode, layout: layout, inputHeight: 269, fieldKeys: hostKeys)

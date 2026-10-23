@@ -370,7 +370,7 @@ final class KeyboardRegressionTests: XCTestCase {
         XCTAssertTrue(controller.contains("keyboardSurfaceView?.emoji.selectCategory"))
         XCTAssertFalse(root.contains("bindEmojiCategoryScrubber()"))
         XCTAssertTrue(controller.contains("isExclusiveTouch = false"))
-        XCTAssertTrue(controller.contains("keyboardWindowAccessoryHeight"))
+        XCTAssertFalse(controller.contains("topBarEnabled"), "typing pages have no top bar")
         XCTAssertTrue(root.contains(".allowsHitTesting(false)"))
         let bar = try source("DictusKeyboard/Views/AuxiliaryBottomBar.swift")
         let keyStyle = try source("DictusKeyboard/KeyboardKeyStyle.swift")

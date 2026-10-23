@@ -26,7 +26,7 @@ struct KeyboardRootView: View {
                 surfaceHeight: Double(surfaceHeight),
                 controlOrder: KeyboardAccessoryOrder.current,
                 topAccessoryHeight: KeyboardInteractionPreferences.topBarHeight(for: state.areaMode),
-                compactChrome: !KeyboardInteractionPreferences.topBarEnabled
+                compactChrome: true
             )
             let surfaceFrame = layout.surfaceFrame
             ZStack(alignment: .topLeading) {

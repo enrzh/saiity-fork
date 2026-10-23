@@ -400,7 +400,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("Control order"))
         XCTAssertFalse(settings.contains("Transcript language"))
         XCTAssertFalse(settings.contains("Offer continuation after dictation"))
-        XCTAssertTrue(settings.contains("Toggle(\"Show Top Bar\""))
+        XCTAssertFalse(settings.contains("Toggle(\"Show Top Bar\""))
         XCTAssertTrue(settings.contains("DictationPresencePicker()"))
         XCTAssertTrue(settings.contains("KeyPopupPicker()"))
         for removed in ["KeyboardMaterialPicker()", "Toggle(\"Key Containers\"",

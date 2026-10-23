@@ -10,8 +10,8 @@ The owner performs these checks on their own iPhone. Use only new disposable Not
 - Have two Whisper models already downloaded (for example Base and Small). Downloads and initial installation are outside the 15-minute budget.
 - Confirm iPhone Settings > General > Keyboard > Text Replacement has at least one entry (English iPhones include `omw` → `On my way!`) and note its shortcut.
 - Prepare Notes and an unsent Messages conversation. Confirm Syllivra is enabled under iPhone Settings > General > Keyboard > Keyboards, and record the original Full Access/microphone permissions.
-- Record current model choices, spoken/output languages, writing style, Show top bar, haptics and presence settings so they can be restored. Set English as a typing/spoken language for the fixed English phrase.
-- Set Syllivra > Keyboard > Show Top Bar to Off. Have the iOS VoiceOver shortcut ready.
+- Record current model choices, spoken/output languages, writing style, key popups, haptics and presence settings so they can be restored. Set English as a typing/spoken language for the fixed English phrase.
+- Have the iOS VoiceOver shortcut ready.
 - Fill in: phone/OS ___; installed version/build ___; source revision ___; voice models ___; tester/date ___.
 
 For every item, record Pass, Fail or Blocked, the observed result and elapsed time. Mark a box only after the physical steps succeed. A missing control, unsupported feature or timeout is not a pass.
@@ -20,7 +20,7 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 
 ### 00:00–01:00 — More menu and board power
 
-- [ ] In Notes, focus an empty note and choose Syllivra with the globe. Hold the bottom-left 123/ABC key to open the dictation board. Tap the ellipsis at the top left with Show top bar Off, ten times at different spots inside its square (the dots, just above, below, left and right of them); dismiss each time by tapping an empty part of the keyboard. Tapping the app above the keyboard does not close the menu; note whether that bothers you. Open Output language, return to the menu and choose Dismiss keyboard. Reopen the keyboard and toggle board power at the top right.
+- [ ] In Notes, focus an empty note and choose Syllivra with the globe. Hold the bottom-left 123/ABC key to open the dictation board. Tap the ellipsis at the top left ten times at different spots inside its square (the dots, just above, below, left and right of them); dismiss each time by tapping an empty part of the keyboard. Tapping the app above the keyboard does not close the menu; note whether that bothers you. Open Output language, return to the menu and choose Dismiss keyboard. Reopen the keyboard and toggle board power at the top right.
 - **Expected:** the ellipsis opens an iOS dropdown on every one of the ten taps, not only on taps directly on the dots; menu items are usable and dismissal works. Power answers taps anywhere on its square the same way. Ellipsis stays left, power stays right, and neither control starts dictation, deletes text or shifts into the other control's target. Power visibly reflects its state.
 
 ### 01:00–03:00 — Emoji, skin tones and Delete
@@ -73,7 +73,7 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 
 Keep these separate and unchecked; 15 minutes cannot establish full release readiness:
 
-- [ ] Repeat More/emoji/landscape with top bar On, light and dark, large text, other screen sizes and additional host apps.
+- [ ] Repeat More/emoji/landscape in light and dark, large text, other screen sizes and additional host apps.
 - [ ] Exercise URL/search, numeric, secure and one-time-code fields; secure fields may correctly use the system keyboard. Confirm field-aware actions, default writing style and all denied/restored permission paths.
 - [ ] Use licensed/consented multilingual files and independent native-language review for English/German/Chinese switches, cleanup, translation meaning, Apple Translation pair availability and out-of-selection language handling. Text guards are not semantic proof.
 - [ ] Measure repeated cold/warm loads of the larger Whisper models, inference, sustained latency, memory/thermal pressure, interruption and foreground-loss recovery on the phone, including long recordings and cancellation during loading.

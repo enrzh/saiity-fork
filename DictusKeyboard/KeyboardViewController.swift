@@ -151,7 +151,6 @@ class KeyboardViewController: UIInputViewController,
 
     private var lastLayoutSize: CGSize?
     private var lastLayoutHeight: CGFloat?
-    private var lastWindowAccessoryHeight: CGFloat?
     private var lastLayoutMode: KeyboardAreaMode?
     private var lastLayoutAccessoryOrder: KeyboardAccessoryOrder?
     private var lastTypingLanguage: SupportedLanguage?
@@ -1086,21 +1085,17 @@ class KeyboardViewController: UIInputViewController,
     /// feeding the observed value back into the stability resolver.
     private func computeKeyboardHeight(for mode: KeyboardAreaMode) -> CGFloat {
         let nativeHeight = computeNativeKeyboardHeight()
-        let previousMode = lastLayoutMode ?? mode
-        let previousAccessoryHeight = lastWindowAccessoryHeight ?? CGFloat(keyboardWindowAccessoryHeight(for: previousMode))
-        let observedInputViewHeight = inputView?.bounds.height ?? 0
-        let inputViewHeight = max(0, observedInputViewHeight - previousAccessoryHeight)
+        let inputViewHeight = inputView?.bounds.height ?? 0
         let resolution = VoiceOnlyKeyboardPolicy.resolvedSurfaceHeight(
             inputViewHeight: Double(inputViewHeight),
-            controllerViewHeight: view.bounds.height > 0
-                ? Double(max(0, view.bounds.height - previousAccessoryHeight)) : nil,
+            controllerViewHeight: view.bounds.height > 0 ? Double(view.bounds.height) : nil,
             fallbackHeight: Double(nativeHeight),
             previousInputViewHeight: previousInputViewHeight,
             stableInputViewPasses: stableInputViewHeightPasses
         )
         previousInputViewHeight = resolution.observedInputViewHeight
         stableInputViewHeightPasses = resolution.stableInputViewPasses
-        return CGFloat(resolution.height) + CGFloat(keyboardWindowAccessoryHeight(for: mode))
+        return CGFloat(resolution.height)
     }
 
     // MARK: - Keyboard Area Mode Observation
@@ -1401,10 +1396,6 @@ class KeyboardViewController: UIInputViewController,
         KeyboardInteractionPreferences.topBarHeight(for: mode)
     }
 
-    private func keyboardWindowAccessoryHeight(for mode: KeyboardAreaMode) -> Double {
-        KeyboardInteractionPreferences.windowAccessoryHeight
-    }
-
     private var currentSuggestionLaneHeight: Double {
         suggestionLaneHeight(for: KeyboardState.shared.areaMode)
     }
@@ -1694,15 +1685,10 @@ class KeyboardViewController: UIInputViewController,
             surfaceHeight: Double(max(1, resolvedHeight)),
             controlOrder: KeyboardAccessoryOrder.current,
             topAccessoryHeight: currentSuggestionLaneHeight,
-            compactChrome: !KeyboardInteractionPreferences.topBarEnabled
+            compactChrome: true
         )
         func inputFrame(_ frame: CGRect) -> CGRect {
             layout.inputFrame(frame, inputViewHeight: inputView.bounds.height)
-        }
-        // Keep subtracting the old lane until the host actually applies the new
-        // window height. Repeated layout passes must not grow a hidden lane back.
-        if abs(inputView.bounds.height - requestedHeight) < 0.5 {
-            lastWindowAccessoryHeight = CGFloat(KeyboardInteractionPreferences.windowAccessoryHeight)
         }
         keyboardSurfaceView?.frame = inputView.bounds
         keyboardSurfaceView?.show(mode, layout: layout, inputHeight: inputView.bounds.height,
@@ -1710,7 +1696,7 @@ class KeyboardViewController: UIInputViewController,
         let isEmoji = mode == .emoji
         let isAuxiliary = mode == .panel || mode == .emoji || mode == .letters || mode == .numberPad
         let voiceBoardMode = mode == .keys || mode == .recording
-        let showsTopBar = voiceBoardMode || KeyboardInteractionPreferences.topBarEnabled
+        let showsTopBar = voiceBoardMode
 
         // The new keyboard grid. Mounted here, in the same place the frame is
         // computed, so the rectangle it draws into and the rectangle it resolves
@@ -1966,7 +1952,7 @@ class KeyboardViewController: UIInputViewController,
                 foreground: submit ? .saiityOnAction : button === voiceBoardButton ? .saiityAction : .label,
                 textPointSize: CommandKeyStyle.textSize,
                 textWeight: accessory ? .medium : .semibold, role: accessory ? .accessory : .control,
-                holdSymbol: button === numberButton && !KeyboardInteractionPreferences.topBarEnabled ? "keyboard" : nil)
+                holdSymbol: button === numberButton ? "keyboard" : nil)
         }
         if let spaceButton, !spaceButton.isHidden {
             spaceButton.keyboardFace.configure(

@@ -166,11 +166,6 @@ final class KeyboardAccessoryLaneTests: XCTestCase {
         XCTAssertEqual(layout.accessoryEmojiCategoryFrame.height, 32, accuracy: 0.001)
         XCTAssertGreaterThan(layout.accessoryEmojiCategoryFrame.width, 80)
         XCTAssertEqual(VoiceOnlyKeyboardPolicy.accessoryControlSize, 48)
-        XCTAssertEqual(VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight, 44)
-        XCTAssertGreaterThan(
-            VoiceOnlyKeyboardPolicy.keyboardWindowAccessoryHeight,
-            VoiceOnlyKeyboardPolicy.suggestionLaneHeight
-        )
     }
 
     func testPolicyCallsDefaultToNoTopAccessoryLane() {

@@ -422,7 +422,7 @@ final class KeyboardBottomBarView: UIView {
                             height: VoiceOnlyKeyboardPolicy.bottomBarVisualHeight)
         firstControl.keyboardFace.configure(text: mode == .panel ? "ABC" : "123",
             visualSize: commandSize, radius: CommandKeyStyle.cornerRadius,
-            holdSymbol: KeyboardInteractionPreferences.topBarEnabled ? nil : "mic.fill")
+            holdSymbol: "mic.fill")
         let second = fieldKeys.leftInsert ?? (mode == .emoji ? "ABC" : nil)
         secondControl.keyboardFace.configure(text: second, symbol: second == nil ? "face.smiling" : nil,
             visualSize: commandSize, radius: CommandKeyStyle.cornerRadius)

@@ -367,9 +367,6 @@ public enum VoiceOnlyKeyboardPolicy {
     public static let floatingEmojiCategoryBarMaxWidth: Double = 176
     /// Same as `railSpacing` so ABC, 123, and emoji delete share `boardDeleteFrame`.
     public static let chromeCommandRowGap: Double = railSpacing
-    /// Extra height added to the native keyboard window. Larger than the visual
-    /// lane so shrinking the bar enlarges the glass surface and the keys inside it.
-    public static let keyboardWindowAccessoryHeight: Double = 44
 
     /// Horizontal growth from full-bleed width vs the previous inset glass surface at the same width.
     public static func horizontalExpansionScale(for availableWidth: Double) -> Double {
