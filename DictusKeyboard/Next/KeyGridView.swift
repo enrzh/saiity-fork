@@ -49,8 +49,6 @@ final class KeyGridView: UIView {
 
     private(set) var page: KeyGridPage?
     private(set) var layout = KeyGridLayout()
-    private var neutralLayout = KeyGridLayout()
-    private var hitPrediction: NextCharacterProbabilities?
     private var fingerprint: String = ""
     private var solvedSize: CGSize = .zero
 
@@ -208,7 +206,6 @@ final class KeyGridView: UIView {
         fingerprint = next
         self.page = page
         solvedSize = .zero
-        neutralLayout = KeyGridLayout()
         layout = KeyGridLayout()
         setNeedsLayout()
         setNeedsDisplay()
@@ -224,10 +221,7 @@ final class KeyGridView: UIView {
         // Cancel only the fingers; keep Shift/Caps state across the resize.
         if solvedSize != .zero { cancelActivePresses() }
         solvedSize = bounds.size
-        neutralLayout = KeyGridPlacement.solve(page, in: bounds.size)
-        layout = page.id == "letters" && hitPrediction != nil
-            ? KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)
-            : neutralLayout
+        layout = KeyGridPlacement.solve(page, in: bounds.size)
         updateVariantPopup()
         updatePressPreview()
         logSolvedGeometry()
@@ -303,17 +297,6 @@ final class KeyGridView: UIView {
         updateVariantPopup()
         updatePressPreview(force: true)
         setNeedsDisplay()
-    }
-
-    /// A new prior only changes the target map; active fingers retain their
-    /// press identity and the visible plates are never re-solved or redrawn.
-    func updateHitPrediction(_ prediction: NextCharacterProbabilities?) {
-        let next = page?.id == "letters" ? prediction : nil
-        guard next != hitPrediction else { return }
-        hitPrediction = next
-        guard solvedSize == bounds.size, !neutralLayout.placed.isEmpty else { return }
-        layout = next == nil ? neutralLayout
-            : KeyGridPlacement.retarget(neutralLayout, probabilities: next)
     }
 
     // MARK: - Drawing

@@ -33,6 +33,7 @@
 		AA000011 /* SyllivraKernel in Frameworks */ = {isa = PBXBuildFile; productRef = AA900011 /* SyllivraKernel */; };
 		AA000020 /* DictusKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = AA200002 /* DictusKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA000030 /* InputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* InputView.swift */; };
+		AA0000D1 /* SpaceKeyHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D1 /* SpaceKeyHandler.swift */; };
 		AA000041 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* TranscriptionService.swift */; };
 		AA000042 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA900020 /* WhisperKit */; };
 		AA000043 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100043 /* RecordingView.swift */; };
@@ -59,8 +60,6 @@
 		AA0000B5 /* AuxiliaryBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B5 /* AuxiliaryBottomBar.swift */; };
 		AA0000B6 /* KeyVariantPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000B6 /* KeyVariantPopup.swift */; };
 		AA0000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1000C0 /* Assets.xcassets */; };
-		AA0000D0 /* TextPredictionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D0 /* TextPredictionEngine.swift */; };
-		AA0000D1 /* SuggestionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000D1 /* SuggestionState.swift */; };
 		AA0000E0 /* KeyboardModePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E0 /* KeyboardModePicker.swift */; };
 		AA0000E3 /* ModelCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E3 /* ModelCardView.swift */; };
 		AA0000E4 /* SwipeBackOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000E4 /* SwipeBackOverlayView.swift */; };
@@ -99,20 +98,6 @@
 		CC00000F /* DeviceKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC900001 /* DeviceKit */; };
 		CC000010 /* KeyboardLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100010 /* KeyboardLayouts.swift */; };
 		CC000040 /* HostInputTraits.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC100040 /* HostInputTraits.swift */; };
-		EE000001 /* dictus_trie.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE100001 /* dictus_trie.cpp */; };
-		EE000002 /* dictus_scorer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE100002 /* dictus_scorer.cpp */; };
-		EE000003 /* dictus_proximity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE100003 /* dictus_proximity.cpp */; };
-		EE000004 /* AOSPTrieBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = EE100004 /* AOSPTrieBridge.mm */; };
-		EE000005 /* AOSPTrieEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE100005 /* AOSPTrieEngine.swift */; };
-		EE000006 /* fr_spellcheck.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE100006 /* fr_spellcheck.dict */; };
-		EE000007 /* en_spellcheck.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE100007 /* en_spellcheck.dict */; };
-		EE000008 /* dictus_ngram.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE100008A /* dictus_ngram.cpp */; };
-		EE000009 /* fr_ngrams.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE100009A /* fr_ngrams.dict */; };
-		EE00000A /* en_ngrams.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE10000AA /* en_ngrams.dict */; };
-		EE0DE001 /* de_spellcheck.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE1DE001 /* de_spellcheck.dict */; };
-		EE0DE002 /* de_ngrams.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE1DE002 /* de_ngrams.dict */; };
-		EE0ES001 /* es_spellcheck.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE1ES001 /* es_spellcheck.dict */; };
-		EE0ES002 /* es_ngrams.dict in Resources */ = {isa = PBXBuildFile; fileRef = EE1ES002 /* es_ngrams.dict */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -199,12 +184,7 @@
 		AA1000B5 /* AuxiliaryBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuxiliaryBottomBar.swift; sourceTree = "<group>"; };
 		AA1000B6 /* KeyVariantPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyVariantPopup.swift; sourceTree = "<group>"; };
 		AA1000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AA1000D0 /* TextPredictionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPredictionEngine.swift; sourceTree = "<group>"; };
-		AA1000D1 /* SuggestionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionState.swift; sourceTree = "<group>"; };
-		AA1000D2 /* fr_frequency.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fr_frequency.json; sourceTree = "<group>"; };
-		AA1000D3 /* en_frequency.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = en_frequency.json; sourceTree = "<group>"; };
-		AA1000D5 /* es_frequency.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = es_frequency.json; sourceTree = "<group>"; };
-		AA1000D6 /* de_frequency.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = de_frequency.json; sourceTree = "<group>"; };
+		AA1000D1 /* SpaceKeyHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceKeyHandler.swift; sourceTree = "<group>"; };
 		AA1000E0 /* KeyboardModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModePicker.swift; sourceTree = "<group>"; };
 		AA1000E3 /* ModelCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCardView.swift; sourceTree = "<group>"; };
 		AA1000E4 /* SwipeBackOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeBackOverlayView.swift; sourceTree = "<group>"; };
@@ -246,28 +226,7 @@
 		CC100008 /* SystemKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemKeys.swift; sourceTree = "<group>"; };
 		CC100010 /* KeyboardLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayouts.swift; sourceTree = "<group>"; };
 		CC100040 /* HostInputTraits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostInputTraits.swift; sourceTree = "<group>"; };
-		EE100001 /* dictus_trie.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dictus_trie.cpp; sourceTree = "<group>"; };
-		EE100002 /* dictus_scorer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dictus_scorer.cpp; sourceTree = "<group>"; };
-		EE100003 /* dictus_proximity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dictus_proximity.cpp; sourceTree = "<group>"; };
-		EE100004 /* AOSPTrieBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AOSPTrieBridge.mm; sourceTree = "<group>"; };
-		EE100005 /* AOSPTrieEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AOSPTrieEngine.swift; sourceTree = "<group>"; };
-		EE100006 /* fr_spellcheck.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = fr_spellcheck.dict; sourceTree = "<group>"; };
-		EE100007 /* en_spellcheck.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = en_spellcheck.dict; sourceTree = "<group>"; };
-		EE100008 /* AOSPTrieBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AOSPTrieBridge.h; sourceTree = "<group>"; };
-		EE100008A /* dictus_ngram.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dictus_ngram.cpp; sourceTree = "<group>"; };
 		EE100009 /* DictusKeyboard-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DictusKeyboard-Bridging-Header.h"; sourceTree = "<group>"; };
-		EE100009A /* fr_ngrams.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = fr_ngrams.dict; sourceTree = "<group>"; };
-		EE10000A /* dictus_trie.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_trie.h; sourceTree = "<group>"; };
-		EE10000AA /* en_ngrams.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = en_ngrams.dict; sourceTree = "<group>"; };
-		EE10000B /* dictus_scorer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_scorer.h; sourceTree = "<group>"; };
-		EE10000C /* dictus_proximity.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_proximity.h; sourceTree = "<group>"; };
-		EE10000D /* dictus_trie_format.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_trie_format.h; sourceTree = "<group>"; };
-		EE10000E /* dictus_ngram.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_ngram.h; sourceTree = "<group>"; };
-		EE10000F /* dictus_ngram_format.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dictus_ngram_format.h; sourceTree = "<group>"; };
-		EE1DE001 /* de_spellcheck.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = de_spellcheck.dict; sourceTree = "<group>"; };
-		EE1DE002 /* de_ngrams.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = de_ngrams.dict; sourceTree = "<group>"; };
-		EE1ES001 /* es_spellcheck.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = es_spellcheck.dict; sourceTree = "<group>"; };
-		EE1ES002 /* es_ngrams.dict */ = {isa = PBXFileReference; lastKnownFileType = compiled; path = es_ngrams.dict; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -362,9 +321,8 @@
 				CC400001 /* Vendored */,
 				AA400005 /* Views */,
 				AA400006 /* Models */,
-				AA40000D /* TextPrediction */,
+				AA1000D1 /* SpaceKeyHandler.swift */,
 				AA400010 /* TouchHandling */,
-				AA40000E /* Resources */,
 				AA1000L2 /* Localizable.xcstrings */,
 				AA100006 /* DictusKeyboard.entitlements */,
 				AA100008 /* Info.plist */,
@@ -470,35 +428,6 @@
 			path = Onboarding;
 			sourceTree = "<group>";
 		};
-		AA40000D /* TextPrediction */ = {
-			isa = PBXGroup;
-			children = (
-				AA1000D0 /* TextPredictionEngine.swift */,
-				AA1000D1 /* SuggestionState.swift */,
-				EE100005 /* AOSPTrieEngine.swift */,
-			);
-			path = TextPrediction;
-			sourceTree = "<group>";
-		};
-		AA40000E /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				AA1000D2 /* fr_frequency.json */,
-				AA1000D3 /* en_frequency.json */,
-				AA1000D5 /* es_frequency.json */,
-				AA1000D6 /* de_frequency.json */,
-				EE100006 /* fr_spellcheck.dict */,
-				EE100007 /* en_spellcheck.dict */,
-				EE1ES001 /* es_spellcheck.dict */,
-				EE1DE001 /* de_spellcheck.dict */,
-				EE100009A /* fr_ngrams.dict */,
-				EE10000AA /* en_ngrams.dict */,
-				EE1ES002 /* es_ngrams.dict */,
-				EE1DE002 /* de_ngrams.dict */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
 		AA40000F /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -567,7 +496,6 @@
 				CC400002 /* Views */,
 				CC400003 /* Models */,
 				CC400004 /* Controllers */,
-				EE400001 /* AOSPTrie */,
 			);
 			path = Vendored;
 			sourceTree = "<group>";
@@ -596,49 +524,6 @@
 			children = (
 			);
 			path = Controllers;
-			sourceTree = "<group>";
-		};
-		EE400001 /* AOSPTrie */ = {
-			isa = PBXGroup;
-			children = (
-				EE400002 /* include */,
-				EE400003 /* src */,
-				EE400004 /* bridge */,
-			);
-			path = AOSPTrie;
-			sourceTree = "<group>";
-		};
-		EE400002 /* include */ = {
-			isa = PBXGroup;
-			children = (
-				EE10000A /* dictus_trie.h */,
-				EE10000B /* dictus_scorer.h */,
-				EE10000C /* dictus_proximity.h */,
-				EE10000D /* dictus_trie_format.h */,
-				EE10000E /* dictus_ngram.h */,
-				EE10000F /* dictus_ngram_format.h */,
-			);
-			path = include;
-			sourceTree = "<group>";
-		};
-		EE400003 /* src */ = {
-			isa = PBXGroup;
-			children = (
-				EE100001 /* dictus_trie.cpp */,
-				EE100002 /* dictus_scorer.cpp */,
-				EE100003 /* dictus_proximity.cpp */,
-				EE100008A /* dictus_ngram.cpp */,
-			);
-			path = src;
-			sourceTree = "<group>";
-		};
-		EE400004 /* bridge */ = {
-			isa = PBXGroup;
-			children = (
-				EE100008 /* AOSPTrieBridge.h */,
-				EE100004 /* AOSPTrieBridge.mm */,
-			);
-			path = bridge;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -677,7 +562,6 @@
 				AA600002 /* Sources */,
 				AA300002 /* Frameworks */,
 				AA600004 /* Resources */,
-				SL060002 /* Compact frequency resources */,
 				AA060011 /* Generate build info */,
 			);
 			buildRules = (
@@ -779,14 +663,6 @@
 			files = (
 				AA000P20 /* PrivacyInfo.xcprivacy in Resources */,
 				AA0000L2 /* Localizable.xcstrings in Resources */,
-				EE000006 /* fr_spellcheck.dict in Resources */,
-				EE000007 /* en_spellcheck.dict in Resources */,
-				EE0ES001 /* es_spellcheck.dict in Resources */,
-				EE0DE001 /* de_spellcheck.dict in Resources */,
-				EE000009 /* fr_ngrams.dict in Resources */,
-				EE00000A /* en_ngrams.dict in Resources */,
-				EE0ES002 /* es_ngrams.dict in Resources */,
-				EE0DE002 /* de_ngrams.dict in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -801,27 +677,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		SL060002 /* Compact frequency resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = ();
-			inputPaths = (
-				"$(SRCROOT)/scripts/slim-app-resources.py",
-				"$(SRCROOT)/DictusKeyboard/Resources",
-				"$(SRCROOT)/SyllivraKernel/Sources/SyllivraKernel/FrequencyDictionary.swift",
-			);
-			name = "Compact frequency resources";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/de_frequency.json",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/en_frequency.json",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/es_frequency.json",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/fr_frequency.json",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n/usr/bin/python3 \"$SRCROOT/scripts/slim-app-resources.py\" --kind keyboard --source \"$SRCROOT/DictusKeyboard/Resources\" --bundle \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n";
-		};
 		AA060010 /* Generate build info */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -950,14 +805,13 @@
 				AA000007 /* KeyboardState.swift in Sources */,
 				AA0000F7 /* KeyboardLifecycleProbe.swift in Sources */,
 				AA000030 /* InputView.swift in Sources */,
+				AA0000D1 /* SpaceKeyHandler.swift in Sources */,
 				AA0000B0 /* EmojiData.swift in Sources */,
 				AA0000B1 /* RecentEmojis.swift in Sources */,
 				AA0000B2 /* EmojiPickerView.swift in Sources */,
 				AA0000B3 /* EmojiCategoryBar.swift in Sources */,
 				AA0000B5 /* AuxiliaryBottomBar.swift in Sources */,
 				AA0000B6 /* KeyVariantPopup.swift in Sources */,
-				AA0000D0 /* TextPredictionEngine.swift in Sources */,
-				AA0000D1 /* SuggestionState.swift in Sources */,
 				CC000010 /* KeyboardLayouts.swift in Sources */,
 				CC000040 /* HostInputTraits.swift in Sources */,
 				CC000002 /* KeyDefinition.swift in Sources */,
@@ -965,12 +819,6 @@
 				CC000005 /* DeviceContext.swift in Sources */,
 				CC000006 /* KeyboardHeightProvider.swift in Sources */,
 				CC000008 /* SystemKeys.swift in Sources */,
-				EE000001 /* dictus_trie.cpp in Sources */,
-				EE000002 /* dictus_scorer.cpp in Sources */,
-				EE000003 /* dictus_proximity.cpp in Sources */,
-				EE000004 /* AOSPTrieBridge.mm in Sources */,
-				EE000005 /* AOSPTrieEngine.swift in Sources */,
-				EE000008 /* dictus_ngram.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1173,11 +1021,6 @@
 				CURRENT_PROJECT_VERSION = 243;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/DictusKeyboard/Vendored/AOSPTrie/include",
-					"$(SRCROOT)/DictusKeyboard/Vendored/AOSPTrie/bridge",
-				);
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
@@ -1201,11 +1044,6 @@
 				CURRENT_PROJECT_VERSION = 243;
 				DEVELOPMENT_TEAM = H8FW6W6K2D;
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/DictusKeyboard/Vendored/AOSPTrie/include",
-					"$(SRCROOT)/DictusKeyboard/Vendored/AOSPTrie/bridge",
-				);
 				INFOPLIST_FILE = DictusKeyboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;

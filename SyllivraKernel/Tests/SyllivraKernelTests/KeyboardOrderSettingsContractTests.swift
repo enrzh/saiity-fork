@@ -51,7 +51,7 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
         }
     }
 
-    func testAutocorrectionIsAUserSettingAndKeepsTheExistingDefault() throws {
+    func testKeyboardHasNoAutocorrection() throws {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -61,21 +61,14 @@ final class KeyboardOrderSettingsContractTests: XCTestCase {
             contentsOf: repository.appending(path: "DictusApp/Views/SettingsView.swift"),
             encoding: .utf8
         )
-
-        XCTAssertTrue(source.contains("private var autocorrectEnabled = true"))
-        XCTAssertTrue(source.contains("Toggle(\"Autocorrection\", isOn: $autocorrectEnabled)"))
-        XCTAssertTrue(source.contains("KeyboardInteractionPreferences.notifyChanged()"))
-
-        let suggestionState = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/TextPrediction/SuggestionState.swift"),
+        XCTAssertFalse(source.contains("Toggle(\"Autocorrection\""))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: repository.appending(path: "DictusKeyboard/TextPrediction").path))
+        let space = try String(
+            contentsOf: repository.appending(path: "DictusKeyboard/SpaceKeyHandler.swift"),
             encoding: .utf8
         )
-        XCTAssertTrue(suggestionState.contains("hostPolicy.autocorrectAllowed,\n           autocorrectEnabled"),
-                      "disabled autocorrection must skip space-time replacement")
-        XCTAssertTrue(suggestionState.contains("if self.autocorrectEnabled,"),
-                      "disabled autocorrection must skip async correction suggestions")
-        XCTAssertTrue(suggestionState.contains("guard enabled != lastAutocorrectEnabled else { return }"))
-        XCTAssertTrue(suggestionState.contains("guard !enabled else { return }"),
-                      "preference refresh must clear stale correction UI when disabled")
+        XCTAssertTrue(space.contains("AutocorrectReplacement.check(context: context, word: word)"),
+                      "a text replacement only rewrites the word it validated")
     }
 }

@@ -1,6 +1,5 @@
 // DictusKeyboard-Bridging-Header.h
 // Bridges ObjC++ types to Swift for the DictusKeyboard target.
-#import "AOSPTrieBridge.h"
 #import <UIKit/UIKit.h>
 
 // UIKit can return nil before its host document is attached. Keep that optional

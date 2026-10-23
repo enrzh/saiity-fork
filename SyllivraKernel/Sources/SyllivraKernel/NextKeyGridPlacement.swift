@@ -155,54 +155,6 @@ public enum KeyGridPlacement {
         return layout
     }
 
-    /// Recalculate only invisible targets; the drawn plates remain exactly where
-    /// the page solver placed them. An empty prior restores the neutral layout.
-    public static func retarget(
-        _ source: KeyGridLayout,
-        probabilities: NextCharacterProbabilities?
-    ) -> KeyGridLayout {
-        guard !source.placed.isEmpty, !source.bounds.isEmpty else { return source }
-        let labels = source.rows.map { row in
-            row.map { item -> String? in
-                guard !item.key.isCommand else { return nil }
-                let value: String
-                switch item.key.action {
-                case .insert(let text): value = text
-                case .character(let base, _): value = base
-                default: return nil
-                }
-                return value.count == 1 ? value : nil
-            }
-        }
-        let biased = probabilities.flatMap { $0.isEmpty ? nil : $0 }.map {
-            KeyboardKeyHitGeometry.contiguousTiles(
-                for: source.rows.map { row in row.map { item in
-                    item.key.isCommand
-                        ? item.plate.union(CommandKeyStyle.visualPlate(
-                            for: item.plate, surfaceWidth: source.bounds.width))
-                        : item.plate
-                } },
-                in: source.bounds,
-                labels: labels,
-                probabilities: $0
-            )
-        }
-        var result = source
-        result.placed = source.placed.map { item in
-            let target = biased.flatMap { rows in
-                rows.indices.contains(item.row) && rows[item.row].indices.contains(item.column)
-                    ? rows[item.row][item.column] : nil
-            } ?? widened(item, in: source.bounds, rows: source.placed).target
-            return PlacedKey(key: item.key, row: item.row, column: item.column,
-                             plate: item.plate, target: target)
-        }
-        result.rows = Array(repeating: [], count: source.rows.count)
-        for item in result.placed where result.rows.indices.contains(item.row) {
-            result.rows[item.row].append(item)
-        }
-        return result
-    }
-
     /// Whether a container is large enough to place keys honestly.
     ///
     /// Below these thresholds the only way to produce a layout would be to shrink a

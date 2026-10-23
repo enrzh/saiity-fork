@@ -1,20 +1,20 @@
-# sAiity for iOS
+# Syllivra for iOS
 
-sAiity is a privacy-first iOS keyboard for voice dictation. Hold the
+Syllivra is a privacy-first iOS keyboard for voice dictation. Hold the
 dictation control, speak naturally, and release to insert polished text into
 the active text field. Speech recognition runs locally through
-[WhisperKit](https://github.com/argmaxinc/WhisperKit), Parakeet or Qwen, with no account or
+[WhisperKit](https://github.com/argmaxinc/WhisperKit), with no account or
 required server.
 
 This project is based on [Dictus](https://github.com/getdictus/dictus-ios),
-an open-source iOS dictation keyboard released under the MIT License. sAiity
+an open-source iOS dictation keyboard released under the MIT License. Syllivra
 retains the original MIT attribution and builds on its keyboard, on-device
 model, and app-extension architecture.
 
 ## Features
 
 - Press-and-hold voice dictation from the system keyboard
-- On-device speech recognition and optional cleanup; configured server cleanup is an explicit choice
+- On-device speech recognition and optional Apple Intelligence cleanup
 - Multilingual model support with automatic language detection
 - App Group communication between the app and keyboard extension
 - No subscription, account, or cloud speech service required
@@ -34,7 +34,6 @@ remain in the containing app where iOS permits the required resources.
 
 - Xcode 27 for the current Apple Intelligence/runtime integration
 - iOS 17 or newer
-- Qwen and local MLX models require compatible physical iOS 18+ hardware and the foreground app
 - A physical iPhone is recommended for keyboard and microphone validation
 
 ## Build
@@ -50,9 +49,7 @@ cd SyllivraKernel
 swift test
 ```
 
-For a separate derived-data directory, resolve packages there and run
-`scripts/patch-fluidaudio-swift5.sh <derived-data>` before the Xcode build.
-Keep the checked-in runtime revisions and package pins. The local candidate
+Keep the checked-in package pins. The local candidate
 plan is [the October 9 product plan](docs/superpowers/plans/2026-10-09-product-quality-and-testflight.md).
 
 ## Attribution and license
@@ -62,9 +59,13 @@ licensed under the MIT License; see the original attribution and license
 notices included in this repository. sAiity changes are provided under the
 same MIT terms unless stated otherwise.
 
+The current shared package is the locally maintained `SyllivraKernel`;
+`DictusCore` is no longer linked by the app, keyboard or widget. Inherited app,
+keyboard and shared source still require the Dictus copyright and MIT notice.
+Replacing or renaming a module does not remove that source attribution.
+
 ## Privacy
 
-Recognition runs on the device. Model installation uses the network; choosing
-an Ollama cleanup model sends text to that configured endpoint. History,
-vocabulary, replay and diagnostics have separate controls. See [PRIVACY.md](PRIVACY.md)
-for storage, Full Access and sharing details.
+Recognition and cleanup run on the device; only installing models uses the
+network. History, vocabulary and diagnostics have separate controls. See
+[PRIVACY.md](PRIVACY.md) for storage, Full Access and sharing details.

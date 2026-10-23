@@ -27,10 +27,10 @@ The length-changing counterpart of the accent map: two-character sequences that 
 ### Adaptive accent key
 A French-specific feature of the AZERTY layout: the apostrophe/accent key on row 3 changes its label based on context (shows `é` after `e`, apostrophe after `qu`, etc.). **Not generalized to other languages.** Lives in `FrenchAdaptiveKey` (`SyllivraKernel/AccentedCharacters.swift`). Since #272 the layout no longer implies the language, so the key checks the active language and behaves as a plain apostrophe outside French. Other languages reach accents via standard long-press popups, as does French on a non-AZERTY layout — those grids have no adaptive key slot.
 
-### Seed bigrams
+### Seed bigrams (removed 23 Oct 2026 with the keyboard dictionaries)
 Hand-curated word pairs injected into the n-gram corpus by `tools/ngram_builder.py` to compensate for underrepresentation in encyclopedic sources (Wikipedia, Google Books). Required for splitting compound input like `pasmal → pas mal`. Per-language list in `SEED_BIGRAMS_BY_LANG`. Policy: empty for new languages onboarded by non-native maintainers; populated post-launch from native-speaker contributions. See ADR 0001.
 
-### Onboarding script (`tools/onboard_language.py`)
+### Onboarding script (`tools/onboard_language.py`, removed 23 Oct 2026)
 Phased command-line tool that handles the deterministic parts of language onboarding: `scaffold` (create `Languages/<Lang>.swift`, register stubs), `build-dicts` (run dictionary pipeline), `wire-xcode` (edit `project.pbxproj`), `verify` (run regression + per-language tests). Curated decisions (display name, layout, accent map, override population) stay manual and live in `docs/agents/language-onboarding.md`.
 
 ## Speech-to-text

@@ -1,5 +1,7 @@
 # Language onboarding
 
+> **Outdated since 23 Oct 2026.** The keyboard no longer autocorrects: its spelling and next-word dictionaries, the C++ trie and `tools/onboard_language.py`, `dict_builder.py`, `ngram_builder.py` and the `scripts/curate_*_dictionary.py` scripts were removed. The dictionary steps below no longer apply. A new language still needs its `Languages/<Lang>.swift` profile (layout and accents) and any cleanup prompt changes.
+
 How to add a new transcription language to Dictus end-to-end. Written after onboarding German (issue #109) — the workflow below is what actually shipped, not what was planned.
 
 The split between automated and curated work is deliberate: the maintainer authors a few small data files, and `tools/onboard_language.py` handles the mechanical Swift / Xcode / pipeline plumbing.

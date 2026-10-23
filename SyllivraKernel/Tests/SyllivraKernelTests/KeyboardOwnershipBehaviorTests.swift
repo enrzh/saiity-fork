@@ -95,45 +95,12 @@ final class KeyboardOwnershipBehaviorTests: XCTestCase {
         let placement = try String(
             contentsOf: repository.appending(path: "SyllivraKernel/Sources/SyllivraKernel/NextKeyGridPlacement.swift"),
             encoding: .utf8)
-        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("),
-                      "letter, symbol, and pad pages share one placement that publishes contiguous tiles")
         XCTAssertFalse(placement.contains("KeyboardKeyHitGeometry.growing("),
                        "the shared placement must not publish overlapping grown targets")
         for name in ["LetterKeyboardSurface", "SymbolKeyboardSurface", "NumberKeyboardSurface"] {
             XCTAssertFalse(FileManager.default.fileExists(
                 atPath: repository.appending(path: "DictusKeyboard/\(name).swift").path))
         }
-    }
-
-    /// Hit-target prediction must follow the word being typed.
-    ///
-    /// This used to assert the opposite — that the same fixed letter priors were
-    /// produced for "Schick" and for "Please send die Rechnung" — which is exactly
-    /// the defect: a next-key nudge that ignores context. The static table has been
-    /// deleted, and the letter grid now uses the real engine's contextual
-    /// probabilities, computed off the touch path.
-    func testLetterFrequencyFollowsTheWordBeingTyped() throws {
-        let repository = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let grid = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/Next/KeyGridView.swift"),
-            encoding: .utf8)
-        let controller = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"),
-            encoding: .utf8)
-        let state = try String(
-            contentsOf: repository.appending(path: "DictusKeyboard/TextPrediction/SuggestionState.swift"),
-            encoding: .utf8)
-
-        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"),
-                      "the letter grid must use the published contextual probabilities")
-        XCTAssertTrue(controller.contains("SuggestionState.shared.adaptiveTouchPrediction"),
-                      "the controller must hand those probabilities to the live grid")
-        XCTAssertTrue(state.contains("self.engine.nextCharacterProbabilities(\n                        for: partial, after: previousWords"),
-                      "the estimate must be conditioned on the partial word and the words before it")
     }
 
     func testRecoveryAllowsANewTapAfterThePreviousHandoffGoesStale() {

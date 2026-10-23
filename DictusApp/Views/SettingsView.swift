@@ -80,7 +80,6 @@ struct DictationSettingsView: View {
 
 struct KeyboardSettingsView: View {
     @AppStorage(SharedKeys.hapticIntensity, store: AppGroup.defaults) private var hapticIntensityRaw = HapticIntensity.default.rawValue
-    @AppStorage(SharedKeys.autocorrectEnabled, store: AppGroup.defaults) private var autocorrectEnabled = true
     @AppStorage(SharedKeys.keyboardTopBarEnabled, store: AppGroup.defaults) private var topBarEnabled = false
     @State private var hasSavedSnippets = false
 
@@ -89,11 +88,6 @@ struct KeyboardSettingsView: View {
             Section {
                 LabeledContent("Layout") { TypingLanguagesPanel() }
                 DefaultKeyboardModePicker()
-                Toggle("Autocorrection", isOn: $autocorrectEnabled)
-                    .accessibilityHint("Corrects the last word when you press Space.")
-                    .onChange(of: autocorrectEnabled) { _, _ in KeyboardInteractionPreferences.notifyChanged() }
-            } footer: {
-                Text("Autocorrection supports English, German, French and Spanish, and uses your selected keyboard language for mixed sentences. Names, codes and web addresses stay unchanged.")
             }
             Section {
                 Toggle("Show Top Bar", isOn: $topBarEnabled)
@@ -259,7 +253,7 @@ struct VocabularyView: View {
                         .disabled(newWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } footer: {
-                Text("Words you add stay protected from autocorrection. Choose Use in dictation to approve a learned word as a hint.")
+                Text("Words you add become dictation hints. For any other word below, choose Use in dictation.")
             }
 
             Section {
@@ -297,14 +291,14 @@ struct VocabularyView: View {
                     .onDelete(perform: deleteWords)
                 }
             } header: {
-                Text("Learned Words")
+                Text("Your Words")
             } footer: {
                 Text("Hints help Whisper recognize a word and help cleanup spell it. Keep up to 32, each under 65 characters and six words.")
             }
 
             if !words.isEmpty {
                 Section {
-                    Button("Reset learned words", role: .destructive) {
+                    Button("Remove All Words", role: .destructive) {
                         showingResetConfirmation = true
                     }
                 }
@@ -313,18 +307,18 @@ struct VocabularyView: View {
         .navigationTitle("Vocabulary")
         .toolbar { EditButton() }
         .confirmationDialog(
-            "Reset learned words?",
+            "Remove all words?",
             isPresented: $showingResetConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Reset", role: .destructive) {
+            Button("Remove", role: .destructive) {
                 UserDictionary.shared.resetAll()
                 DictationVocabulary.clear(in: AppGroup.defaults)
                 reload()
                 KeyboardInteractionPreferences.notifyVocabularyChanged()
             }
         } message: {
-            Text("This removes your learned words and approved dictation hints.")
+            Text("This removes your words and dictation hints.")
         }
         .alert("Vocabulary", isPresented: Binding(get: { vocabularyError != nil },
             set: { if !$0 { vocabularyError = nil } })) {

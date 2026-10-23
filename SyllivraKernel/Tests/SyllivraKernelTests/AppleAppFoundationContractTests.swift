@@ -146,8 +146,7 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertTrue(home.contains("DictationHistoryEditView(item: item)"),
                       "a recent row opens the transcript it names")
         let settings = try source("DictusApp/Views/SettingsView.swift")
-        XCTAssertTrue(settings.contains("Corrects the last word when you press Space."))
-        XCTAssertTrue(settings.contains("selected keyboard language"), "Mixed-language correction must explain its fallback language")
+        XCTAssertFalse(settings.contains("Toggle(\"Autocorrection\""), "the keyboard has no autocorrection")
         XCTAssertTrue(settings.contains("KeyboardInteractionPreferences.notifyChanged()"))
         let overlay = try source("DictusApp/Views/SwipeBackOverlayView.swift")
         XCTAssertTrue(overlay.contains("Ready to dictate"))
@@ -401,7 +400,6 @@ final class AppleAppFoundationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("Control order"))
         XCTAssertFalse(settings.contains("Transcript language"))
         XCTAssertFalse(settings.contains("Offer continuation after dictation"))
-        XCTAssertTrue(settings.contains("Toggle(\"Autocorrection\""))
         XCTAssertTrue(settings.contains("Toggle(\"Show Top Bar\""))
         XCTAssertTrue(settings.contains("DictationPresencePicker()"))
         XCTAssertTrue(settings.contains("KeyPopupPicker()"))

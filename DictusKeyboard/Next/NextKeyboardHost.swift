@@ -270,10 +270,6 @@ final class NextKeyboardHost: NSObject {
         gridView.refreshAppearance()
     }
 
-    func updateHitPrediction(_ prediction: NextCharacterProbabilities?) {
-        gridView.updateHitPrediction(prediction)
-    }
-
     // MARK: - Geometry
 
     /// The container rect the grid should occupy for a given surface.

@@ -11,7 +11,7 @@ The owner performs these checks on their own iPhone. Use only new disposable Not
 - Confirm iPhone Settings > General > Keyboard > Text Replacement has at least one entry (English iPhones include `omw` → `On my way!`) and note its shortcut.
 - Prepare Notes and an unsent Messages conversation. Confirm Syllivra is enabled under iPhone Settings > General > Keyboard > Keyboards, and record the original Full Access/microphone permissions.
 - Record current model choices, spoken/output languages, writing style, Show top bar, haptics and presence settings so they can be restored. Set English as a typing/spoken language for the fixed English phrase.
-- Set Syllivra > Keyboard > Show Top Bar to Off. Enable Autocorrection there. Have the iOS VoiceOver shortcut ready.
+- Set Syllivra > Keyboard > Show Top Bar to Off. Have the iOS VoiceOver shortcut ready.
 - Fill in: phone/OS ___; installed version/build ___; source revision ___; voice models ___; tester/date ___.
 
 For every item, record Pass, Fail or Blocked, the observed result and elapsed time. Mark a box only after the physical steps succeed. A missing control, unsupported feature or timeout is not a pass.
@@ -54,21 +54,20 @@ For every item, record Pass, Fail or Blocked, the observed result and elapsed ti
 - [ ] Turn on Syllivra > Dictation > Live Activity. Enable keyboard dictation, background the app and inspect Lock Screen/Dynamic Island where supported. Run a brief dictation, stop it and observe that recording state ends. Turn Live Activity off again.
 - **Expected:** the real system activity reflects standby/recording/finishing accurately, never remains stuck as Recording, and ends when the setting or the service is turned off.
 
-### 09:00–10:00 — Text replacements and autocorrect
+### 09:00–10:00 — Text replacements and plain typing
 
-- [ ] In a new Notes paragraph, type the iOS text replacement shortcut noted before the timer, then Space. Type `teh`, `goign` and `becuase`, each followed by Space.
-- **Expected:** the shortcut expands to its phrase followed by one space. The three words become `the`, `going` and `because`. If Syllivra Replacements appears under Syllivra > Keyboard (snippets from an earlier version), one of those shortcuts also expands.
+- [ ] In a new Notes paragraph, type the iOS text replacement shortcut noted before the timer, then Space. Type `teh adn helo` with a space after each word.
+- **Expected:** the shortcut expands to its phrase followed by one space. The typed words stay exactly as typed: the keyboard no longer autocorrects. If Syllivra Replacements appears under Syllivra > Keyboard (snippets from an earlier version), one of those shortcuts also expands.
 
 ### 10:00–12:00 — Voice model switch and foreground loss
 
 - [ ] Open Syllivra > Models and pick the second downloaded Whisper model in Voice Model. Measure time from selection to Ready. Tap New Dictation and say the fixed “Tomorrow at ten…” sentence; record first-result and final-result delays. Start another dictation, cancel before completion, then start again. During the last request, briefly background and reopen Syllivra. Set Voice Model back to its recorded choice.
 - **Expected:** the model reaches Ready or shows an actionable failure, without a crash or endless spinner, and the keyboard keeps working. Output keeps the sentence's meaning. Cancellation never delivers an old result into the next session. Foreground loss stops or recovers truthfully. Record actual timings; no speed or memory claim follows from this short check.
 
-### 12:00–15:00 — Intentional spelling overrides and restoration
+### 12:00–15:00 — Vocabulary hints and restoration
 
-- [ ] In a new Notes paragraph, type an unfamiliar spelling followed by Space. Try `bonjor`; if it is not corrected, choose another token that visibly autocorrects and record the typed/replacement pair. Backspace away the inserted space and correction, retype the original spelling at the same caret position, and press Space. Repeat the original spelling three times, dismiss/reopen the keyboard and type it once more.
-- [ ] Repeat one override in the unsent Messages draft. Move the caret to an earlier word and make a normal edit; confirm it does not unexpectedly rewrite trailing text. Check Syllivra > Keyboard > Vocabulary if the override appears as a learned word. Restore the initial model, permissions, language/style, top-bar, haptic and presence choices; leave no recording running.
-- **Expected:** deliberate restoration is respected immediately and is not repeatedly changed back by a cached correction. The chosen spelling remains protected after reopening and in the other app where learning applies. Unrelated text/caret edits remain intact. If no token autocorrected, the override path was not exercised: mark it blocked, not passed. Do not clear the entire dictionary to make this test work.
+- [ ] In Syllivra > Keyboard > Vocabulary, add an unusual name. Dictate a sentence containing it from the keyboard in Notes. Then remove the name again. Restore the initial model, permissions, language/style, top-bar, haptic and presence choices; leave no recording running.
+- **Expected:** the added word appears with its dictation hint on; dictation spells it as added, or close; removing it leaves the list as before.
 
 ## Follow-up gates this smoke check cannot close
 
@@ -82,4 +81,4 @@ Keep these separate and unchecked; 15 minutes cannot establish full release read
 
 ## Local verification
 
-On 22 Oct 2026, branch `claude/slim-native` (4d39fcd2): 1,811 kernel tests passed; `scripts/test-key-grid-typing.swift`, `scripts/test-multilingual-autocorrect.swift` and `scripts/test-autocorrect-overrides.swift` passed on the iOS 26.5 simulator; `scripts/test-aosp-trie-concurrency.mm` passed under ASan/UBSan and TSan. See `2026-10-21-slim-native.md`. These are Mac and simulator results, not physical acceptance.
+On 23 Oct 2026, branch `claude/slim-native`, after removing autocorrect: 1,659 kernel tests and `scripts/test-key-grid-typing.swift` on the iOS 26.5 simulator. See `2026-10-21-slim-native.md`. These are Mac and simulator results, not physical acceptance.

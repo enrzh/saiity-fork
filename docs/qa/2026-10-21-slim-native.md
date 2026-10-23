@@ -8,9 +8,11 @@ Unsigned Release device builds, measured with `du -sk`:
 
 | Part | 6fc3b8ab | After 5b0b85bd | Now (4d39fcd2) |
 | --- | ---: | ---: | ---: |
-| Whole app | 67,968 KiB | 58,000 KiB | 36,716 KiB |
-| Keyboard extension | 31,272 KiB | 25,220 KiB | 24,952 KiB |
-| Widget extension | 2,784 KiB | 1,664 KiB | 1,472 KiB |
+| Whole app | 67,968 KiB | 58,000 KiB | 36,716 KiB → 11,584 KiB on 23 Oct* |
+| Keyboard extension | 31,272 KiB | 25,220 KiB | 24,952 KiB → 2,288 KiB* |
+| Widget extension | 2,784 KiB | 1,664 KiB | 1,472 KiB → 1,432 KiB* |
+
+\* 23 Oct, after removing autocorrect; measured on the signed Release development build installed on the owner's phone.
 
 Where it came from:
 
@@ -25,7 +27,7 @@ Where it came from:
 - There is no glass inset behind the keys any more (22 Oct, owner's request): keys sit directly on the system keyboard backdrop on every page.
 - Key popups and the accent row are opaque like the keys. As glass they rendered light grey, so a dark-mode popup showed a white letter on near-white.
 - The keyboard expands the text replacements from iPhone Settings › General › Keyboard › Text Replacement. Syllivra no longer has its own editor; snippets saved earlier still expand, win over iOS's for the same shortcut, and can be deleted under Keyboard › Syllivra Replacements, which appears only while any exist.
-- Autocorrect fixes swapped letters ("hte", "goign", "wrok", "taht", and in German "nciht", "acuh", "eigentlcih") and common English web typos ("teh", "adn", "becuase", "recieve", "definately", "seperate"). See "Autocorrect" below.
+- Autocorrect is gone (23 Oct, owner's decision): it felt like it did nothing, the system keyboard does it far better, and its dictionaries were most of the keyboard's size. Space still expands iOS text replacements and saved Syllivra snippets. Adaptive key targets went with it; keys keep fixed targets. Vocabulary now only feeds dictation hints.
 - Replay, the "usable without editing?" buttons and the separate Cleanup Diagnostics screen are gone; cleanup events are under Help › Diagnostics.
 
 ## More (•••) on the dictation board
@@ -34,7 +36,7 @@ Owner report on 22 Oct: More works but is not very responsive. On the simulator,
 
 Tapping the app above the keyboard does not close a keyboard menu: those touches go to the app. A tap anywhere on the keyboard closes it.
 
-## Autocorrect
+## Autocorrect (removed 23 Oct; kept for the record)
 
 Two faults, both older than this branch:
 
@@ -43,7 +45,7 @@ Two faults, both older than this branch:
 
 Checks: the multilingual harness (`scripts/test-multilingual-autocorrect.swift`) gained these cases and passes; `scripts/test-aosp-trie-concurrency.mm` passes under ASan/UBSan and TSan; the builder still reproduces the German, French and Spanish dictionaries byte for byte. In Messages on the simulator, "i am goign home becuase teh weather is nice adn warm" now types as "i am going home because the weather is nice and warm" (before: unchanged).
 
-## Dictionary equivalence (NGRM v2)
+## Dictionary equivalence (NGRM v2; the dictionaries were removed on 23 Oct)
 
 - `tools/ngram_pack.py` decodes every v2 entry and compares it with the v1 entry before writing.
 - Old and new readers were given the same 38 million queries across de/en/es/fr with zero differences. 3,000 truncated or corrupted files loaded under ASan without a crash.

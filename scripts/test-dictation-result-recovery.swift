@@ -161,6 +161,6 @@ func run(_ args: [String], capture: Bool = false) throws -> String {
 }
 let sdk = try run(["--sdk", "iphonesimulator", "--show-sdk-path"], capture: true)
 _ = try run(["swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator", "-I", products,
-    "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", source.path, "DictusApp/Extensions/ModelInfo+Localized.swift", extensionPath + "/DictusKeyboard.debug.dylib",
+    source.path, "DictusApp/Extensions/ModelInfo+Localized.swift", extensionPath + "/DictusKeyboard.debug.dylib",
     "-Xlinker", "-rpath", "-Xlinker", extensionPath, "-o", binary.path])
 _ = try run(["simctl", "spawn", udid, binary.path])

@@ -458,9 +458,6 @@ class KeyboardState: ObservableObject {
     func refreshTypingLanguage() {
         let language = SupportedLanguage.active
         let isAutomatic = KeyboardLanguageSelection.load(from: defaults) == .automatic
-        if language != typingLanguage {
-            SuggestionState.shared.setLanguage(language.rawValue)
-        }
         typingLanguage = language
         typingLanguageIsAutomatic = isAutomatic
     }
@@ -719,20 +716,11 @@ class KeyboardState: ObservableObject {
             DispatchQueue.main.async {
                 HapticFeedback.refreshEnabledState()
                 self?.keyboardPreferenceRevision &+= 1
-                SuggestionState.shared.refreshPreferences()
             }
         }
 
         DarwinNotificationCenter.addObserver(for: DarwinNotificationName.keyboardFullAccessProbeRequested) { [weak self] in
             DispatchQueue.main.async { (self?.controller as? KeyboardViewController)?.publishFullAccessHandshake(force: true) }
-        }
-
-        DarwinNotificationCenter.addObserver(
-            for: DarwinNotificationName.keyboardVocabularyChanged
-        ) {
-            DispatchQueue.main.async {
-                SuggestionState.shared.refreshVocabulary()
-            }
         }
 
     }
@@ -1397,7 +1385,6 @@ class KeyboardState: ObservableObject {
         var timings = timings
         timings?.mark("proxyInserted")
         timings?.log()
-        SuggestionState.shared.clear(resetLanguage: false)
         PersistentLog.log(.keyboardTextInserted)
         HapticFeedback.textInserted()
 
@@ -1701,7 +1688,6 @@ class KeyboardState: ObservableObject {
             return
         }
         proxy.insertText(replacement)
-        SuggestionState.shared.clear(resetLanguage: false)
         onDictationUndone?()
         armDictationUndo(replacement)
         HapticFeedback.textInserted()
@@ -1769,7 +1755,6 @@ class KeyboardState: ObservableObject {
         }
         guard remaining > 0 else {
             isUndoingDictation = false
-            SuggestionState.shared.clear(resetLanguage: false)
             onDictationUndone?()
             logProbe("dictationUndoCompleted")
             return

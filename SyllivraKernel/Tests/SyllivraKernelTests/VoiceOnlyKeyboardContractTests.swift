@@ -955,22 +955,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
                       "release must cancel the shared clock so another tick cannot fire")
     }
 
-    func testPredictedLetterWinsOverlappingExpandedHitTargets() throws {
-        let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
-        let placement = try source("SyllivraKernel/Sources/SyllivraKernel/NextKeyGridPlacement.swift")
-        let geometry = try source("SyllivraKernel/Sources/SyllivraKernel/AdaptiveTouchRouting.swift")
-        let buttons = try source("DictusKeyboard/KeyboardKeyInput.swift")
-
-        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"))
-        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("))
-        XCTAssertTrue(geometry.contains("public enum KeyboardKeyHitGeometry"))
-        XCTAssertTrue(geometry.contains("maximumPredictionShift: CGFloat = 4"))
-        XCTAssertTrue(buttons.contains("bounds.contains(point)"),
-                      "the target control owns exactly its precomputed hit frame")
-        XCTAssertFalse(buttons.contains("keyClaims("),
-                       "key ownership must not depend on a global overlapping-frame registry")
-    }
-
     func testVoiceOnlyKeyboardHasNoLegacyBridgeWiring() throws {
         // These are source-contract checks only. They do not instantiate UIKit or
         // prove runtime keyboard behavior.
@@ -983,7 +967,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         let controller = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardViewController.swift"), encoding: .utf8)
         let root = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardRootView.swift"), encoding: .utf8)
         let state = try String(contentsOf: repository.appending(path: "DictusKeyboard/KeyboardState.swift"), encoding: .utf8)
-        let suggestionState = try String(contentsOf: repository.appending(path: "DictusKeyboard/TextPrediction/SuggestionState.swift"), encoding: .utf8)
         let settings = try String(contentsOf: repository.appending(path: "DictusApp/Views/SettingsView.swift"), encoding: .utf8)
         let project = try String(contentsOf: repository.appending(path: "Dictus.xcodeproj/project.pbxproj"), encoding: .utf8)
         let bridge = repository.appending(path: "DictusKeyboard/DictusKeyboardBridge.swift")
@@ -994,10 +977,9 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("legacyBody"))
         let grid = try source("DictusKeyboard/Next/KeyGridView.swift")
         let placement = try source("SyllivraKernel/Sources/SyllivraKernel/NextKeyGridPlacement.swift")
-        XCTAssertTrue(grid.contains("KeyGridPlacement.retarget(neutralLayout, probabilities: hitPrediction)"),
-                      "local prediction is used only for invisible key-area expansion")
-        XCTAssertTrue(placement.contains("KeyboardKeyHitGeometry.contiguousTiles("))
-        XCTAssertTrue(controller.contains("SuggestionState.shared.adaptiveTouchPrediction"))
+        XCTAssertFalse(grid.contains("retarget("), "keys keep fixed targets")
+        XCTAssertFalse(placement.contains("func retarget("))
+        XCTAssertFalse(controller.contains("SuggestionState"))
         XCTAssertFalse(root.contains("LetterKeyboardSurface("))
         XCTAssertFalse(root.contains("fullAreaToolbar"))
         XCTAssertFalse(root.contains("togglePanel"))
@@ -1077,19 +1059,10 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertFalse(root.contains("Insert suggestion:"))
         XCTAssertFalse(root.contains("postDictationSuggestion"))
         XCTAssertFalse(root.contains("routePostDictationSuggestion"))
-        XCTAssertFalse(suggestionState.contains("offerPostDictationSuggestion"))
-        XCTAssertFalse(suggestionState.contains("postDictationPredictionEnabled"))
         XCTAssertFalse(settings.contains("Offer continuation after dictation"))
         XCTAssertFalse(settings.contains("postDictationPredictionEnabled"))
-        XCTAssertTrue(suggestionState.contains("reconcilePendingAutocorrection"))
-        XCTAssertTrue(suggestionState.contains("UserDictionary.shared.learn(word)"),
-                      "a user replacement is persisted only after reconciliation")
-        XCTAssertTrue(suggestionState.contains("isSafeUserOverride"),
-                      "unsafe tokens must not be learned from autocorrection edits")
-        XCTAssertTrue(suggestionState.contains("after == pending.afterContext"),
-                      "caret moves away from the correction must invalidate learning")
         XCTAssertTrue(controller.contains("KeyboardShiftState.doubleTapWindow"))
-        XCTAssertTrue(controller.contains("SuggestionState.shared.handleSpace(proxy:"))
+        XCTAssertTrue(controller.contains("SpaceKeyHandler.shared.handleSpace(proxy:"))
         XCTAssertFalse(controller.contains("refreshTypingSuggestions()"))
         XCTAssertTrue(root.contains("UIDeferredMenuElement"))
         XCTAssertTrue(controller.contains("title: state.isOneTimeCodeField ? \"Insert one-time code\" : \"Paste\""))
@@ -1409,17 +1382,6 @@ final class VoiceOnlyKeyboardContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("LanguageMenuButton.menuItems()"),
                       "the more menu owns output language on every page")
         XCTAssertTrue(root.contains("title: \"Automatic\""))
-    }
-
-    func testKeyboardRuntimeLanguageDefaultsUseTheResolvedProductLanguage() throws {
-        let prediction = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
-        let emoji = try source("DictusKeyboard/Views/EmojiPickerView.swift")
-
-        XCTAssertTrue(prediction.contains(
-            "private var language: String = SupportedLanguage.active.rawValue"
-        ))
-        XCTAssertFalse(prediction.contains("private var language: String = \"fr\""))
-        XCTAssertFalse(emoji.contains("SharedKeys.language) ?? \"fr\""))
     }
 
     /// Dark-mode keyboard surfaces must come from semantic system colors.

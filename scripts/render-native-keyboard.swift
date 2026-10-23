@@ -280,7 +280,7 @@ func run(_ args: [String], capture: Bool = false) throws -> String {
 let sdk = try run(["--sdk", "iphonesimulator", "--show-sdk-path"], capture: true)
 _ = try run(["--sdk", "iphonesimulator", "swiftc", "-parse-as-library", "-sdk", sdk, "-target", "arm64-apple-ios17.0-simulator",
              "-I", products, "-I", derived + "/Build/Intermediates.noindex/Dictus.build/Debug-iphonesimulator/DictusKeyboard.build/Objects-normal/arm64",
-             "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", source.path,
+             source.path,
              extensionPath + "/DictusKeyboard.debug.dylib", "-Xlinker", "-rpath", "-Xlinker", extensionPath, "-o", binary.path])
 if CommandLine.arguments.contains("--compile-only") {
     print("COMPILED: native keyboard fixture; rendering was not run")

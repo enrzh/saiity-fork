@@ -41,15 +41,6 @@ final class GermanLanguageTests: XCTestCase {
                       "German ships with empty overrides per ADR 0001 — populated post-launch from native-speaker feedback on issue #109.")
     }
 
-    func test_german_applyOverride_returnsNilForCommonInputs() {
-        // No overrides means every input falls through to the trie/accent pipeline.
-        XCTAssertNil(applyOverride(profile: germanProfile, word: "schon"))
-        XCTAssertNil(applyOverride(profile: germanProfile, word: "uber"))
-        XCTAssertNil(applyOverride(profile: germanProfile, word: "madchen"))
-        XCTAssertNil(applyOverride(profile: germanProfile, word: "strasse"))
-        XCTAssertNil(applyOverride(profile: germanProfile, word: "ich"))
-    }
-
     // MARK: - Accent map (ä, ö, ü, ß)
 
     func test_germanProfile_accentMapMatchesSpec() {
@@ -284,54 +275,6 @@ final class GermanLanguageTests: XCTestCase {
     }
 
     // MARK: - The shipped German dictionary (issue #326)
-
-    /// Reads `DictusKeyboard/Resources/de_frequency.json` out of the source tree.
-    ///
-    /// WHY not `Bundle.module` the way `FrequencyDictionaryTests` does: those two
-    /// tests exercise the loader against a hand-written fixture, whereas these
-    /// guard the artifact the keyboard actually ships. A 600 KiB copy under
-    /// `Fixtures/` would be a second file free to drift from the real one, which
-    /// is the exact failure mode being guarded. `swift test` runs from this
-    /// source tree, so `#filePath` reaches the real resource.
-    private func shippedGermanFrequencies() throws -> [String: Int] {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Languages/
-            .deletingLastPathComponent()   // SyllivraKernelTests/
-            .deletingLastPathComponent()   // Tests/
-            .deletingLastPathComponent()   // SyllivraKernel/
-            .deletingLastPathComponent()   // repo root
-        let url = repoRoot.appendingPathComponent("DictusKeyboard/Resources/de_frequency.json")
-        let data = try Data(contentsOf: url)
-        return try JSONDecoder().decode([String: Int].self, from: data)
-    }
-
-    func test_shippedGermanDictionary_containsNoUmlautersatzForms() throws {
-        // Every entry here is a transliteration, not a German word in any context,
-        // and each one blocked its own correction until #326. Regenerating the
-        // dictionary must keep dropping them — if the corpus or the curation rule
-        // changes and one comes back, autocorrect silently stops firing for it.
-        let frequencies = try shippedGermanFrequencies()
-        for word in ["fuer", "koennen", "ueber", "muessen", "wuerde", "moechte",
-                     "waere", "zurueck", "natuerlich", "haette", "gehoert", "schoen",
-                     "tuer", "maedchen"] {
-            XCTAssertNil(frequencies[word],
-                         "\(word) is German Umlautersatz, not a word — curation must drop it (issue #326).")
-        }
-    }
-
-    func test_shippedGermanDictionary_keepsRealWordsContainingAeOeUe() throws {
-        // The counterpart guard. These are real German words that happen to
-        // contain `ae`, `oe` or `ue` as a genuine letter sequence. They survive
-        // curation on the 5x rule alone, without a second heuristic: their
-        // collapsed forms (`baür`, `feür`, `zünander`, `pöt`, `stür`) are not
-        // words and are absent from the corpus, so no umlaut variant is found.
-        let frequencies = try shippedGermanFrequencies()
-        for word in ["bauer", "bauern", "feuer", "zueinander", "poet", "steuer",
-                     "abenteuer", "treue", "frauen", "michael", "israel"] {
-            XCTAssertNotNil(frequencies[word],
-                            "\(word) is a real German word — curation must not drop it (issue #326).")
-        }
-    }
 
     // MARK: - Contractions (empty)
 

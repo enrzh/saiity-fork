@@ -139,7 +139,6 @@ class KeyboardViewController: UIInputViewController,
     private var areaModeCancellable: AnyCancellable?
     private var keyboardPreferenceCancellable: AnyCancellable?
     private var typingLanguageCancellable: AnyCancellable?
-    private var touchPredictionCancellable: AnyCancellable?
     private var emojiCategorySelectionCancellable: AnyCancellable?
     private var emojiCategoryJumpCancellable: AnyCancellable?
     private var modelPreparationCancellable: AnyCancellable?
@@ -147,7 +146,6 @@ class KeyboardViewController: UIInputViewController,
     private var micTouchActive = false
     private var micHoldTimer: Timer?
     private var micHoldRecognized = false
-    private var adaptiveContextGeneration: UInt = 0
     private var lastPublishedFullAccess: Bool?
     private var lastPublishedFullAccessProbe: String?
 
@@ -574,7 +572,7 @@ class KeyboardViewController: UIInputViewController,
         requestSupplementaryLexicon { lexicon in
             let replacements = SystemTextReplacements(
                 entries: lexicon.entries.map { ($0.userInput, $0.documentText) })
-            DispatchQueue.main.async { SuggestionState.shared.systemReplacements = replacements }
+            DispatchQueue.main.async { SpaceKeyHandler.shared.systemReplacements = replacements }
         }
         hasAppeared = true
         isAttached = true
@@ -610,11 +608,6 @@ class KeyboardViewController: UIInputViewController,
         typingLanguageCancellable = KeyboardState.shared.$typingLanguage
             .dropFirst()
             .sink { [weak self] _ in self?.refreshVisibleKeyboardLayoutIfNeeded() }
-        touchPredictionCancellable = SuggestionState.shared.$adaptiveTouchPrediction
-            .sink { [weak self] prediction in
-                guard let self, self.isAttached, self.isOnScreen else { return }
-                self.nextKeyboardHost?.updateHitPrediction(prediction)
-            }
         observeEmojiCategorySelection()
         observeEmojiCategoryJump()
         observeModelPreparationState()
@@ -870,10 +863,6 @@ class KeyboardViewController: UIInputViewController,
         // We are off screen from here on, whether or not we keep ownership below
         // (#260): a detached controller must not adopt an ownerless dictation.
         isAttached = false
-        adaptiveContextGeneration &+= 1
-        if KeyboardState.shared.activeControllerID == controllerID {
-            SuggestionState.shared.clearAdaptiveTouchPrediction()
-        }
 
         if KeyboardState.shared.controller === self {
             KeyboardState.shared.controller = nil
@@ -930,8 +919,6 @@ class KeyboardViewController: UIInputViewController,
         keyboardPreferenceCancellable = nil
         typingLanguageCancellable?.cancel()
         typingLanguageCancellable = nil
-        touchPredictionCancellable?.cancel()
-        touchPredictionCancellable = nil
         emojiCategorySelectionCancellable?.cancel()
         emojiCategorySelectionCancellable = nil
         emojiCategoryJumpCancellable?.cancel()
@@ -1322,7 +1309,6 @@ class KeyboardViewController: UIInputViewController,
         lastLayoutMode = mode
         lastLayoutHeight = liveHeight
 
-        refreshAdaptiveTouchContext()
         let oldHosting = hostingHeightConstraint?.constant ?? -1
         let status = KeyboardState.shared.dictationStatus.rawValue
         setVoiceActionControlsHidden(mode == .panel || mode == .letters || mode == .numberPad)
@@ -2070,7 +2056,6 @@ class KeyboardViewController: UIInputViewController,
         host.mount(in: inputView,
                    frame: layout.inputFrame(frame, inputViewHeight: inputView.bounds.height),
                    page: mode, commandRowCenterY: commandRowCenterY)
-        host.updateHitPrediction(SuggestionState.shared.adaptiveTouchPrediction)
     }
 
     private func unmountNextKeyboard() {
@@ -2085,7 +2070,6 @@ class KeyboardViewController: UIInputViewController,
         lastTypingLanguage = language
         lastTypingLayout = layout
         nextKeyboardHost?.refreshKeyLayout()
-        refreshAdaptiveTouchContext()
     }
 
     // MARK: - New keyboard host
@@ -2145,13 +2129,12 @@ class KeyboardViewController: UIInputViewController,
             return
         }
         nextKeyboardHost?.gridView.commitPendingCharacter()
-        defer { refreshAdaptiveTouchContext() }
         if command == .space {
             guard ownerAvailable else {
                 DictationErrorChannel.record("Keyboard input is unavailable. Please reopen the keyboard.", disposition: .requiresApp)
                 return
             }
-            SuggestionState.shared.handleSpace(proxy: textDocumentProxy)
+            SpaceKeyHandler.shared.handleSpace(proxy: textDocumentProxy)
             return
         }
         Self.routeProxyCommand(
@@ -2196,34 +2179,6 @@ class KeyboardViewController: UIInputViewController,
                 action: "proxyTextInserted_slow",
                 details: "textLength=\(text.count) insertMs=\(String(format: "%.1f", insertionMS))"
             ))
-        }
-        SuggestionState.shared.noteTypedCharacter(text)
-        refreshAdaptiveTouchContext()
-    }
-
-    /// Clear the previous word's targets immediately, then coalesce proxy reads
-    /// outside touch dispatch. The host can withhold context; nil stays static.
-    private func refreshAdaptiveTouchContext() {
-        guard KeyboardState.shared.activeControllerID == controllerID else { return }
-        adaptiveContextGeneration &+= 1
-        let generation = adaptiveContextGeneration
-        guard isAttached, isOnScreen, KeyboardState.shared.areaMode == .letters else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  self.adaptiveContextGeneration == generation,
-                  self.isAttached, self.isOnScreen,
-                  KeyboardState.shared.activeControllerID == self.controllerID,
-                  KeyboardState.shared.areaMode == .letters else { return }
-            let totalStart = CFAbsoluteTimeGetCurrent()
-            let policy = HostInputTraits.policy(for: self.textDocumentProxy)
-            let afterPolicy = CFAbsoluteTimeGetCurrent()
-            SuggestionState.shared.hostPolicy = policy
-            let context = policy.suggestionsAllowed
-                ? self.textDocumentProxy.documentContextBeforeInput.map { String($0.suffix(240)) }
-                : nil
-            let afterContext = CFAbsoluteTimeGetCurrent()
-            SuggestionState.shared.updateAdaptiveTouchPrediction(context: context)
-            let afterPredict = CFAbsoluteTimeGetCurrent()
         }
     }
 
@@ -2288,7 +2243,6 @@ class KeyboardViewController: UIInputViewController,
         for _ in 0..<length {
             textDocumentProxy.deleteBackward()
         }
-        refreshAdaptiveTouchContext()
     }
 
     // MARK: - Vendored keyboard owner
@@ -2376,7 +2330,6 @@ class KeyboardViewController: UIInputViewController,
                 } else {
                     HapticFeedback.cursorMoved()
                 }
-                refreshAdaptiveTouchContext()
             }
         }
     }
@@ -2420,8 +2373,6 @@ class KeyboardViewController: UIInputViewController,
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy)
-        SuggestionState.shared.reconcilePendingAutocorrection(proxy: textDocumentProxy)
-        refreshAdaptiveTouchContext()
         // Re-check the dictation undo offer against the changed document (#266).
         // Deliberately a re-check and not a clear: the keyboard's own insertion is
         // itself a text change, so clearing here would cancel the offer at the
@@ -2432,8 +2383,6 @@ class KeyboardViewController: UIInputViewController,
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         KeyboardState.shared.refreshHostInputTraits(from: textDocumentProxy)
-        SuggestionState.shared.noteSelectionChanged(proxy: textDocumentProxy)
-        refreshAdaptiveTouchContext()
         // A caret the user moved is a caret the insertion is no longer behind (#266).
         KeyboardState.shared.revalidateDictationUndo()
     }

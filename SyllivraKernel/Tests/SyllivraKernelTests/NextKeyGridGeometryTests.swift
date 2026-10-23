@@ -163,10 +163,6 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertEqual(trailing.size, emojiFace)
         XCTAssertTrue(pinned[0].target.contains(leading))
         XCTAssertTrue(pinned[8].target.contains(trailing))
-        let biased = KeyGridPlacement.retarget(layout,
-            probabilities: NextCharacterProbabilities(["a": 0.9]))
-        XCTAssertTrue(biased.rows[1][0].target.contains(leading))
-        XCTAssertTrue(biased.rows[1][8].target.contains(trailing))
     }
 
     private func lettersPage(rowCount: Int = 3, keysPerRow: Int = 10) -> KeyGridPage {
@@ -200,30 +196,6 @@ final class NextKeyGridGeometryTests: XCTestCase {
         XCTAssertFalse(layout.placed[1].key.isInvisiblePlate)
         XCTAssertTrue(layout.placed[2].key.isCommand)
     }
-
-    func testPredictionChangesOnlyInvisibleTargetsAndCanReturnToNeutral() {
-        let page = KeyGridPage(id: "letters", rows: [[
-            KeyGridKey(id: "r", action: .insert("r"), label: "r"),
-            KeyGridKey(id: "e", action: .insert("e"), label: "e"),
-            KeyGridKey(id: "delete", action: .delete, isCommand: true)
-        ]])
-        let neutral = KeyGridPlacement.solve(page, in: CGSize(width: 180, height: 65))
-        let biased = KeyGridPlacement.retarget(
-            neutral, probabilities: NextCharacterProbabilities(["e": 0.8, "r": 0.01])
-        )
-        XCTAssertEqual(biased.placed.map(\.plate), neutral.placed.map(\.plate))
-        XCTAssertLessThan(biased.rows[0][1].target.minX, neutral.rows[0][1].target.minX)
-        for item in biased.placed {
-            XCTAssertTrue(item.target.contains(item.plate), item.key.id)
-        }
-        for x in stride(from: CGFloat(0), to: CGFloat(180), by: 2) {
-            XCTAssertNotNil(biased.key(at: CGPoint(x: x, y: 32)))
-        }
-        let restored = KeyGridPlacement.retarget(neutral, probabilities: nil)
-        XCTAssertEqual(restored.placed.map(\.target), neutral.placed.map(\.target))
-    }
-
-    // MARK: - Rule 1: no key is ever reduced
 
     func testEveryTargetFullyContainsItsPlate() {
         for keysPerRow in [7, 10, 13] {

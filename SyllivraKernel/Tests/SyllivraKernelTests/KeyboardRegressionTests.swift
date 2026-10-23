@@ -49,8 +49,6 @@ final class KeyboardRegressionTests: XCTestCase {
                       "the accent popup must follow the finger on the letter page")
         XCTAssertTrue(grid.contains("KeyVariantPopup.selectedIndex("),
                       "the accent popup must share emoji's drag-selection geometry")
-        let engine = try source("DictusKeyboard/TextPrediction/TextPredictionEngine.swift")
-        XCTAssertTrue(engine.contains("func swipeWord(from path: String)"))
         let settings = try source("DictusApp/Views/SettingsView.swift")
         XCTAssertTrue(settings.contains("LastDictationIssueReportView()"))
         XCTAssertFalse(settings.contains("DragGesture(minimumDistance: 0)"))

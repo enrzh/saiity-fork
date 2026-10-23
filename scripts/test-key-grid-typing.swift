@@ -42,114 +42,45 @@ precondition(HostInputTraits.documentIdentifier(for: identityProxy) == nil)
 precondition(HostInputTraits.documentIdentifier(for: nil) == nil)
 print("PASS: nullable host identity survives absent, attached and detached document contexts")
 
-// Deliberately occupy the prediction queue: Space must not wait behind it.
-do {
-    let state = SuggestionState.shared
-    let queue = Mirror(reflecting: state).children.first { $0.label == "suggestionQueue" }!.value as! DispatchQueue
-    let stored = AppGroup.defaults.object(forKey: SharedKeys.autocorrectEnabled)
-    let dictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed"]
-    let savedDictionary = dictionaryKeys.map { AppGroup.defaults.object(forKey: $0) }
-    AppGroup.defaults.set(true, forKey: SharedKeys.autocorrectEnabled)
-    defer {
-        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
-        for (key, value) in zip(dictionaryKeys, savedDictionary) {
-            if let value { AppGroup.defaults.set(value, forKey: key) } else { AppGroup.defaults.removeObject(forKey: key) }
-        }
-        UserDictionary.shared.reload()
-        if let stored { AppGroup.defaults.set(stored, forKey: SharedKeys.autocorrectEnabled) }
-        else { AppGroup.defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
-        state.clear()
-    }
-    queue.sync {} // Finish the initial engine setup before the measured fixture.
-    waitFor({ !TextPredictionEngine.shared.dictionaryLoadInFlight },
-            message: "Initial dictionary load did not settle")
-    var samples: [Double] = []
-    for _ in 0..<5 {
-        state.clear(resetLanguage: false)
-        let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
-        queue.async { entered.signal(); release.wait() }
-        precondition(entered.wait(timeout: .now() + 2) == .success)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { release.signal() }
-        let proxy = VocabularyProxy()
-        proxy.autocorrectionType = .yes
-        proxy.text = "helo"
-        let began = CFAbsoluteTimeGetCurrent()
-        state.handleSpace(proxy: proxy)
-        samples.append((CFAbsoluteTimeGetCurrent() - began) * 1000)
-        release.signal()
-        queue.sync {}
-        if !\(baseline) { precondition(proxy.text == "helo ", "Unprepared correction changed the original") }
-    }
-    let median = samples.sorted()[samples.count / 2]
-    print("MEASURE: Space with prediction queue occupied, median=\\(median)ms (5 simulator samples; synthetic 100ms queue delay)")
-    if !\(baseline) { precondition(median < 30, "Space still waits for background prediction") }
-}
+// UIKit finishes connecting to the simulator's services on the main run loop;
+// creating views before it has turned once can block forever.
+RunLoop.current.run(until: Date().addingTimeInterval(1))
 
-if !\(baseline) {
-    let state = SuggestionState.shared, defaults = AppGroup.defaults
-    let storedLanguage = defaults.object(forKey: SharedKeys.language)
-    let storedSelection = defaults.object(forKey: SharedKeys.keyboardLanguageSelection)
-    let storedSpoken = defaults.object(forKey: SharedKeys.spokenLanguages)
-    let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
-    let dictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed"]
-    let savedDictionary = dictionaryKeys.map { defaults.object(forKey: $0) }
-    defer {
-        for (key, value) in [(SharedKeys.language, storedLanguage), (SharedKeys.keyboardLanguageSelection, storedSelection),
-                             (SharedKeys.spokenLanguages, storedSpoken),
-                             (SharedKeys.autocorrectEnabled, storedAutocorrect)] {
-            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-        }
-        for (key, value) in zip(dictionaryKeys, savedDictionary) {
-            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-        }
-        UserDictionary.shared.reload()
-        state.clear()
-        state.setLanguage(SupportedLanguage.active.rawValue)
+// A plain document stand-in: a UITextView would start the spelling service,
+// which never answers in this headless process.
+final class TextProxy: NSObject, UITextDocumentProxy {
+    var text = ""
+    var documentContextBeforeInput: String? { text }
+    var documentContextAfterInput: String? { "" }
+    var selectedText: String? { nil }
+    var documentInputMode: UITextInputMode? { nil }
+    let documentIdentifier = UUID()
+    var hasText: Bool { !text.isEmpty }
+    func insertText(_ value: String) { text += value }
+    func deleteBackward() { if !text.isEmpty { text.removeLast() } }
+    func adjustTextPosition(byCharacterOffset offset: Int) {}
+    func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
+    func unmarkText() {}
+}
+// Space only inserts a space, after expanding a text replacement.
+do {
+    let space = SpaceKeyHandler.shared
+    let saved = space.systemReplacements
+    defer { space.systemReplacements = saved }
+    space.systemReplacements = SystemTextReplacements(entries: [(userInput: "omw", documentText: "On my way!")])
+    let proxy = TextProxy()
+    for word in ["helo", "teh", "暮雪词汇", "Münchenzeta", "한국말이름"] {
+        proxy.text = word
+        space.handleSpace(proxy: proxy)
+        precondition(proxy.text == word + " ", "Space changed a typed word: \\(word)")
     }
-    defaults.set("fr", forKey: SharedKeys.language)
-    KeyboardLanguageSelection.explicit(.french).persist(to: defaults)
-    defaults.set(true, forKey: SharedKeys.autocorrectEnabled)
-    state.setLanguage("fr")
-    let queue = Mirror(reflecting: state).children.first { $0.label == "suggestionQueue" }!.value as! DispatchQueue
-    queue.sync {}
-    waitFor({ !TextPredictionEngine.shared.dictionaryLoadInFlight }, message: "Language switch did not settle")
-    let native = Mirror(reflecting: TextPredictionEngine.shared).children.first { $0.label == "aospTrieEngine" }!.value as! AOSPTrieEngine
-    var loaded = false
-    native.load(language: "fr", bundle: Bundle(path: "\(extensionPath)")!) { loaded = $0 }
-    waitFor({ loaded }, message: "Bundled spelling dictionary did not load")
-    UserDictionary.shared.forget("bonjor")
-    let expected = state.performSpellCheck("bonjor", previousWord: nil)!.correction
-    state.clear(resetLanguage: false)
-    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
-    let firstWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
-    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
-    let duplicateWork = Mirror(reflecting: state).children.first { $0.label == "adaptiveTouchWork" }!.value as! DispatchWorkItem?
-    precondition(firstWork === duplicateWork, "Duplicate context restarted the current prediction")
-    waitFor({
-        let commit = Mirror(reflecting: state).children.first { $0.label == "spaceCommit" }!.value
-        return !Mirror(reflecting: commit).children.isEmpty
-    }, message: "Background correction did not become available")
-    let proxy = VocabularyProxy()
-    proxy.autocorrectionType = .yes
-    proxy.text = "bonjor"
-    state.handleSpace(proxy: proxy)
-    precondition(proxy.text == expected + " ", "Ready correction was lost when synchronous fallback was removed")
-    state.updateAdaptiveTouchPrediction(context: "bonjor", policy: .allowed)
-    waitFor({
-        let commit = Mirror(reflecting: state).children.first { $0.label == "spaceCommit" }!.value
-        return !Mirror(reflecting: commit).children.isEmpty
-    }, message: "Correction did not settle before changing spoken languages")
-    let spokenBefore = SpokenLanguagePreferences.load(from: defaults)
-    defaults.set(spokenBefore == ["en"] ? [] : ["en"], forKey: SharedKeys.spokenLanguages)
-    proxy.text = "bonjor"
-    state.handleSpace(proxy: proxy)
-    precondition(proxy.text == "bonjor ", "Space committed an old language-configuration result")
-    state.refreshPreferences()
-    // A changed field must not reuse the preceding field's ready correction.
-    proxy.text = "otherfixtureword"
-    state.handleSpace(proxy: proxy)
-    precondition(proxy.text == "otherfixtureword ", "A stale correction changed another field")
-    print("PASS: language-aware correction commits from its ready cache, duplicate work is reused and changed context stays original")
+    proxy.text = "see you, omw"
+    space.handleSpace(proxy: proxy)
+    precondition(proxy.text == "see you, On my way! ", "Space did not expand an iOS text replacement")
+    proxy.text = "xomw"
+    space.handleSpace(proxy: proxy)
+    precondition(proxy.text == "xomw ", "A replacement matched inside another word")
+    print("PASS: Space keeps typed words and expands iOS text replacements")
 }
 
 final class MenuCheckController: KeyboardViewController {
@@ -760,19 +691,10 @@ if !\(baseline) {
     print("PASS: window-level Emoji taps and blank/empty Recents pan routing in both orientations")
 
     do {
-        let savedDictionaryKeys = ["dictus.userDictionary", "dictus.userDictionary.pending", "dictus.userDictionary.lastUsed", "dictus.userDictionary.prunedTrieDuplicates"]
-        let savedDictionary = savedDictionaryKeys.map { defaults.object(forKey: $0) }
         let storedPopup = defaults.object(forKey: SharedKeys.keyPopupMode)
-        let storedAutocorrect = defaults.object(forKey: SharedKeys.autocorrectEnabled)
         defer {
             if let storedPopup { defaults.set(storedPopup, forKey: SharedKeys.keyPopupMode) }
             else { defaults.removeObject(forKey: SharedKeys.keyPopupMode) }
-            if let storedAutocorrect { defaults.set(storedAutocorrect, forKey: SharedKeys.autocorrectEnabled) }
-            else { defaults.removeObject(forKey: SharedKeys.autocorrectEnabled) }
-            for (key, value) in zip(savedDictionaryKeys, savedDictionary) {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-            }
-            UserDictionary.shared.reload()
         }
         defaults.set(KeyPopupMode.flash.rawValue, forKey: SharedKeys.keyPopupMode)
         KeyboardState.shared.presentArea(.letters)
@@ -793,29 +715,7 @@ if !\(baseline) {
                      "Cancelled/page-switched key retained a flash")
         precondition(!KeyPopupMode.flash.showsPreview)
 
-        defaults.set(false, forKey: SharedKeys.autocorrectEnabled)
-        let suggestions = SuggestionState.shared
-        suggestions.clear()
-        defer { suggestions.clear() }
-        let proxy = VocabularyProxy()
-        for word in ["暮雪词汇", "françaiszeta", "Münchenzeta", "한국말이름"] {
-            UserDictionary.shared.forget(word)
-            for _ in 0..<2 {
-                proxy.text = word
-                suggestions.handleSpace(proxy: proxy)
-                RunLoop.current.run(until: Date().addingTimeInterval(0.03))
-                precondition(proxy.text == word + " ", "Learning rewrote multilingual typing")
-            }
-            precondition(UserDictionary.shared.isLearned(word), "Language or disabled autocorrect prevented learning")
-        }
-        proxy.isSecureTextEntry = true
-        for _ in 0..<2 {
-            proxy.text = "privatefixtureword"
-            suggestions.handleSpace(proxy: proxy)
-            RunLoop.current.run(until: Date().addingTimeInterval(0.03))
-        }
-        precondition(!UserDictionary.shared.isLearned("privatefixtureword"), "Secure text entered vocabulary")
-        print("PASS: one-shot key flash, cancellation, Unicode vocabulary with autocorrect off and secure-field exclusion")
+        print("PASS: one-shot key flash and cancellation")
     }
     for native in [false, true] {
         defaults.set(native, forKey: SharedKeys.keyboardIOSStyling)
@@ -1137,7 +1037,7 @@ let sdkPath = String(data: output.fileHandleForReading.readDataToEndOfFile(), en
     .trimmingCharacters(in: .whitespacesAndNewlines)
 try run(["swiftc", "-sdk", sdkPath, "-target", "arm64-apple-ios17.0-simulator",
          "-I", products, "-I", derived + "/Build/Intermediates.noindex/Dictus.build/Debug-iphonesimulator/DictusKeyboard.build/Objects-normal/arm64",
-         "-I", "DictusKeyboard/Vendored/AOSPTrie/bridge", input.path,
+         input.path,
          extensionPath + "/DictusKeyboard.debug.dylib", "-Xlinker", "-rpath", "-Xlinker", extensionPath,
          "-o", binary.path])
 if CommandLine.arguments.contains("--compile-only") {

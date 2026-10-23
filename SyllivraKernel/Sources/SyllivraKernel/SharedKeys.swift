@@ -150,10 +150,6 @@ public enum SharedKeys {
     /// Probe token echoed by the keyboard extension when it actually loads.
     public static let onboardingFullAccessAcknowledgedProbe = "dictus.onboardingFullAccessAcknowledgedProbe"
 
-    // Text prediction preferences (added for Phase 08)
-    /// Whether autocorrect is enabled, default true
-    public static let autocorrectEnabled = "dictus.autocorrectEnabled"
-
     // Autocorrect debug logging (DEBUG builds only - see AutocorrectDebugLog).
     /// Bool: when true, logs autocorrect decisions with the typed word + correction
     /// to the App Group persistent log for debugging. CONTAINS USER TEXT — never
