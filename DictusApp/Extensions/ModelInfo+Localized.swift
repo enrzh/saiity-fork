@@ -15,7 +15,9 @@ extension ModelInfo {
             return String(localized: "Preview export. Test accuracy and speed on your own recordings.")
         }
         switch identifier {
-        case "openai_whisper-tiny", "openai_whisper-base":
+        case "openai_whisper-tiny":
+            return String(localized: "The smallest and fastest model. Less accurate.")
+        case "openai_whisper-base":
             return String(localized: "A compact starting point for everyday dictation.")
         case "openai_whisper-tiny.en", "openai_whisper-base.en", "openai_whisper-small.en":
             return String(localized: "Specialized for English dictation.")

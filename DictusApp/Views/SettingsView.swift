@@ -204,7 +204,17 @@ struct AboutView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("Version", value: appVersionText)
+                VStack(spacing: 10) {
+                    DictusLogo(height: 64)
+                    Text("Syllivra").font(.title2.weight(.semibold))
+                    Text("Version \(appVersionText)").font(.subheadline).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .listRowBackground(Color.clear)
+                .accessibilityElement(children: .combine)
+            }
+            Section {
                 NavigationLink("Licenses") { LicensesView() }
                 if let privacyURL = URL(string: "https://aiity.de/privacy") {
                     Link("Privacy Policy", destination: privacyURL)

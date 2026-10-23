@@ -73,9 +73,12 @@ struct ModelCardView: View {
                 .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Label(model.languageSupport.coverage.localizedSummary, systemImage: "globe")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Every multilingual model covers the same languages; only a limit is news.
+            if model.languageSupport.coverage == .whisperEnglishOnly {
+                Label(model.languageSupport.coverage.localizedSummary, systemImage: "globe")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if model.isExperimental {
                 Label("Preview · validate on your iPhone", systemImage: "flask")
                     .font(.caption).foregroundStyle(.primary)

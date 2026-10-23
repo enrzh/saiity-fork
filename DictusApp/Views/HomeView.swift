@@ -60,12 +60,19 @@ struct HomeView: View {
         }
         .navigationTitle("Syllivra")
         .toolbar {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Spacer()
+            ToolbarItem(placement: .bottomBar) {
                 Button { coordinator.startDictation() } label: {
-                    Label("New Dictation", systemImage: "mic")
+                    // Toolbars show a Label as its icon alone; keep the word visible.
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.fill")
+                        Text("Dictate")
+                    }
+                    .font(.body.weight(.semibold))
+                    .padding(.horizontal, 12)
                 }
+                .primaryActionStyle()
                 .disabled(currentReadiness.action != .start)
+                .accessibilityLabel("New Dictation")
                 .accessibilityIdentifier("home.newDictation")
             }
         }
@@ -471,6 +478,18 @@ private struct DictationHistoryEditView: View {
                 }
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+    }
+}
+
+private extension View {
+    /// The home screen's one primary action: a filled capsule in the bottom bar.
+    @ViewBuilder
+    func primaryActionStyle() -> some View {
+        if #available(iOS 26, *) {
+            buttonStyle(.glassProminent)
+        } else {
+            buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
         }
     }
 }
