@@ -42,7 +42,6 @@ protocol KeyGridViewDelegate: AnyObject {
 final class KeyGridView: UIView {
 
     weak var delegate: KeyGridViewDelegate?
-    private let keypadVoice = KeyboardKeyTouchControl()
     private let keypadLetters = KeyboardKeyTouchControl()
 
     // MARK: - Page state
@@ -162,17 +161,6 @@ final class KeyGridView: UIView {
         isExclusiveTouch = false
         isAccessibilityElement = false
         contentMode = .redraw
-        keypadVoice.isHidden = true
-        keypadVoice.isAccessibilityElement = true
-        keypadVoice.accessibilityTraits = .button
-        keypadVoice.accessibilityLabel = "Open dictation board"
-        keypadVoice.accessibilityIdentifier = "pad-dictation-board"
-        keypadVoice.onBegan = { [weak self] _ in
-            guard let self, !self.keypadVoice.isHidden, self.page?.id == "numberPad" else { return }
-            HapticFeedback.playInputClick()
-            self.delegate?.keyGridDidRequestDictation(self)
-        }
-        addSubview(keypadVoice)
         keypadLetters.isHidden = true
         keypadLetters.isAccessibilityElement = true
         keypadLetters.accessibilityTraits = .button
@@ -274,7 +262,6 @@ final class KeyGridView: UIView {
 
     private func cancelActivePresses() {
         clearKeyboardKeyFlashes()
-        keypadVoice.cancelInteraction()
         keypadLetters.cancelInteraction()
         for press in presses.values {
             press.popupWork?.cancel()
@@ -301,10 +288,8 @@ final class KeyGridView: UIView {
 
     // MARK: - Drawing
 
-    /// A quiet route back to voice when a numeric host has no shared bottom bar.
-    /// It uses the blank part of Delete's wide cell, keeping digit plates intact.
+    /// The number pad's ABC key: tap for letters, hold for the dictation board.
     private func updateKeypadControls() {
-        keypadVoice.isHidden = true
         keypadLetters.isHidden = true
         guard page?.id == "numberPad" else { return }
         if let letters = layout.placed.first(where: { $0.key.id == "pad-letters" }) {
@@ -318,15 +303,6 @@ final class KeyGridView: UIView {
                 holdSymbol: "mic.fill")
             keypadLetters.isHidden = false
         }
-        guard let delete = layout.placed.first(where: { $0.key.id == "pad-delete" }) else { return }
-        let face = visualPlate(for: delete)
-        let room = face.minX - KeyGridPlacement.keySpacing - delete.target.minX
-        let height = min(44, delete.target.height)
-        guard room >= 44, height >= 28 else { return }
-        keypadVoice.frame = CGRect(x: delete.target.minX + (room - 44) / 2,
-                                  y: delete.target.midY - height / 2, width: 44, height: height)
-        keypadVoice.keyboardFace.configure(symbol: "mic.fill", role: .accessory)
-        keypadVoice.isHidden = false
     }
 
     override func setNeedsDisplay() {

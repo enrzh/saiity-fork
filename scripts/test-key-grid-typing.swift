@@ -743,16 +743,11 @@ if !\(baseline) {
                 KeyboardState.shared.presentArea(.numberPad)
                 controller.viewDidLayoutSubviews()
             }
-            let shortcut = namedControl("pad-dictation-board", in: keypad) as! KeyboardKeyTouchControl
-            let point = shortcut.convert(CGPoint(x: shortcut.bounds.midX, y: shortcut.bounds.midY), to: touchWindow)
-            precondition(touchWindow.hitTest(point, with: nil) === shortcut,
-                         "Hidden bar left a numeric host without a dictation route")
+            precondition(namedControl("pad-dictation-board", in: keypad) == nil,
+                         "The number pad shows no dictation board button; holding ABC opens the board")
             let delete = keypad.layout.placed.first { $0.key.id == "pad-delete" }!
             let deletePoint = keypad.convert(CGPoint(x: delete.plate.midX, y: delete.plate.midY), to: touchWindow)
-            precondition(touchWindow.hitTest(deletePoint, with: nil) === keypad,
-                         "Numeric voice shortcut intercepted Delete")
-            precondition(shortcut.accessibilityActivate())
-            precondition(KeyboardState.shared.areaMode == .keys, "Numeric voice action did not open the board")
+            precondition(touchWindow.hitTest(deletePoint, with: nil) === keypad, "Number pad Delete lost its touch")
         }
         for width: CGFloat in [667, 852] {
             touchWindow.frame.size = CGSize(width: width, height: 158)
