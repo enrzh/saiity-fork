@@ -400,8 +400,10 @@ final class KeyGridView: UIView {
     ///
     /// One rule, used by both the material and the fallback fill, so they cannot
     /// disagree about how big a key looks.
+    /// Command keys are narrowed to the shared command face, except on the
+    /// number pad, where ABC and Delete fill their cells like the digits.
     private func visualPlate(for item: PlacedKey) -> CGRect {
-        item.key.isCommand
+        item.key.isCommand && page?.id != "numberPad"
             ? CommandKeyStyle.visualPlate(for: item.plate, surfaceWidth: bounds.width,
                                          neighborGap: KeyGridPlacement.keySpacing)
             : item.plate

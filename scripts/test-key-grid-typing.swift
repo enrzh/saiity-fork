@@ -311,6 +311,10 @@ if !\(baseline) {
                 let commands = grid.layout.placed.filter { $0.key.isCommand && $0.key.id != "pad-letters" }
                 precondition(!commands.isEmpty && commandFaces.count == commands.count)
                 for (command, face) in zip(commands, commandFaces) {
+                    if page.id == "numberPad" {
+                        precondition(face.rect == command.plate, "Number pad Delete must fill its cell like the digits")
+                        continue
+                    }
                     let expected = min(45, command.plate.height)
                     precondition(face.rect.height == expected && command.target.contains(face.rect),
                                  "Command sizing failed: \\(page.id) \\(size) \\(command.key.id) expected=\\(expected) face=\\(face.rect) target=\\(command.target)")
